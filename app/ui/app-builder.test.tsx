@@ -21,6 +21,7 @@ const builderActions = vi.hoisted(() => ({
       updatedAt: "2030-01-01T00:00:00.000Z",
     }),
   ),
+  loadActiveBuilderDraft: vi.fn(async () => undefined),
   clearBuilderDraft: vi.fn(),
 }));
 const draftFetch = vi.hoisted(() =>
@@ -46,6 +47,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/actions/builder", () => builderActions);
 vi.mock("@/app/actions/builder-drafts", () => ({
   clearBuilderDraft: builderActions.clearBuilderDraft,
+  loadActiveBuilderDraft: builderActions.loadActiveBuilderDraft,
+  saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
 }));
 vi.stubGlobal("fetch", draftFetch);
 vi.mock("../../components/auth/user/user-button", () => ({
@@ -215,6 +218,7 @@ afterEach(async () => {
   builderActions.createBuilderHandoff.mockReset();
   builderActions.provisionBuilderProvider.mockReset();
   builderActions.reserveBuilderProvider.mockReset();
+  builderActions.loadActiveBuilderDraft.mockReset();
   draftFetch.mockClear();
 });
 
@@ -603,17 +607,67 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     await act(async () => vi.advanceTimersByTimeAsync(500));
 
-    const request = draftFetch.mock.calls.find(
-      ([url]) => url === "/api/builder/draft",
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 0,
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Keep this draft." }),
+          }),
+        }),
+      }),
     );
-    expect(request).toBeDefined();
-    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
-      expectedRevision: 0,
-      record: {
-        draft: { form: { brief: "Keep this draft." } },
-      },
-    });
     expect(view.textContent).toContain("Draft saved");
+  });
+
+  it("replaces locally edited RHF values with a newer server revision", async () => {
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+        durableDraftId="d1210e56-ded0-436d-a6b8-ae96ddec17e0"
+        durableDraftRevision={1}
+      />,
+    );
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "This local edit will be replaced.");
+    builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
+      draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
+      revision: 2,
+      updatedAt: "2030-01-01T00:00:02.000Z",
+      record: {
+        version: 1,
+        draft: {
+          version: 1,
+          form: {
+            appName: "Remote App",
+            repository: "remote-app",
+            brief: "Saved on another device.",
+            privateRepository: true,
+            buildDestination: "codex",
+            connections: [],
+            modelId: "openai/gpt-5.6-sol",
+          },
+          team: "vercel-pylee",
+          gitScope: "101",
+          model: "openai/gpt-5.6-sol",
+          zdrOnly: false,
+          showMoreConnections: false,
+          search: "",
+          connectedConnections: [],
+          storageProvider: "github",
+          deploymentProvider: null,
+          focusOrigin: "github",
+          appNameEditedByUser: false,
+          repositoryEditedByUser: false,
+        },
+      },
+    } as never);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(async () => undefined);
+
+    expect(brief.value).toBe("Saved on another device.");
+    expect(view.textContent).toContain("Updated from another device");
   });
 
   it("preserves a builder draft before a first-use provider connection", async () => {

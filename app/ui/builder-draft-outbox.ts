@@ -15,6 +15,8 @@ export type BuilderDraftOutbox<T> = {
   read(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
   write(entry: BuilderDraftOutboxEntry<T>): Promise<void>;
   clearIfMutationId(mutationId: string): Promise<boolean>;
+  /** Drops a snapshot superseded by an authoritative server revision. */
+  clear(): Promise<void>;
 };
 
 export type BuilderDraftOutboxOptions = {
@@ -162,6 +164,19 @@ export function createBuilderDraftOutbox<T>(
             if (entry?.mutationId !== mutationId) return false;
             memoryFallback.delete(options.key);
             return true;
+          },
+        ),
+      ),
+    clear: () =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            transaction.objectStore(storeName).delete(options.key);
+            await transactionResult(transaction);
+          },
+          () => {
+            memoryFallback.delete(options.key);
           },
         ),
       ),

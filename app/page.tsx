@@ -160,6 +160,7 @@ async function HomeContent({ searchParams }: PageProps) {
       }
       durableDraftId={durableDraft?.draftId}
       durableDraftRevision={durableDraft?.revision}
+      durableDraftUpdatedAt={durableDraft?.updatedAt}
     />
   );
 }

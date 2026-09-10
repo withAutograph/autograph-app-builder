@@ -52,6 +52,8 @@ export type BuilderDraftAutosave<T> = {
   restorePending(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
   /** Reads, queues, and sends a recovery snapshot. */
   resumePending(): Promise<void>;
+  /** Discards local work that a newer server revision has superseded. */
+  discardPending(): Promise<void>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -205,6 +207,16 @@ export function useBuilderDraftAutosave<T>(
 
   const retry = useCallback(() => flush("flush"), [flush]);
 
+  const discardPending = useCallback(async () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+    }
+    queued.current = undefined;
+    await options.outbox.clear();
+    updateStatus("saved");
+  }, [options.outbox, updateStatus]);
+
   useEffect(() => {
     const retryWhenOnline = () => void flush("flush");
     window.addEventListener("online", retryWhenOnline);
@@ -246,5 +258,6 @@ export function useBuilderDraftAutosave<T>(
     retry,
     restorePending,
     resumePending,
+    discardPending,
   };
 }

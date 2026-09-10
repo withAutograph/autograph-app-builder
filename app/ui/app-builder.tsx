@@ -15,7 +15,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import {
   useCallback,
   useEffect,
@@ -38,7 +38,11 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-import { clearBuilderDraft as clearDurableBuilderDraft } from "@/app/actions/builder-drafts";
+import {
+  clearBuilderDraft as clearDurableBuilderDraft,
+  loadActiveBuilderDraft,
+  saveActiveBuilderDraft,
+} from "@/app/actions/builder-drafts";
 import {
   builderDraftFormSchema,
   type BuilderDraftRecord,
@@ -1113,6 +1117,7 @@ export function Builder({
   resumeKey,
   durableDraftId,
   durableDraftRevision = 0,
+  durableDraftUpdatedAt,
 }: {
   initialBrief: string;
   generatedNameSeed: string;
@@ -1125,6 +1130,7 @@ export function Builder({
   resumeKey?: string;
   durableDraftId?: string;
   durableDraftRevision?: number;
+  durableDraftUpdatedAt?: string;
 }) {
   const router = useRouter();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -1169,13 +1175,20 @@ export function Builder({
     mode: "onChange",
     resolver: zodResolver(builderDraftFormSchema),
   });
-  const [form, setRenderedForm] = useState<BuilderForm>(initialForm);
+  const form = useWatch({
+    control: builderForm.control,
+    defaultValue: initialForm,
+  }) as BuilderForm;
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       const current = builderForm.getValues();
       const next = typeof update === "function" ? update(current) : update;
-      setRenderedForm(next);
-      builderForm.reset(next);
+      (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
+        builderForm.setValue(field, next[field], {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      });
     },
     [builderForm],
   );
@@ -1231,6 +1244,11 @@ export function Builder({
       initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
     );
   const draftRevision = useRef(durableDraftRevision);
+  const draftUpdatedAt = useRef(durableDraftUpdatedAt);
+  // A Server Action may stream a route update before its promise continuation
+  // runs. Remember its expected revision so that update is treated as an ack,
+  // never as a form replacement.
+  const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
   const focusOrigin = useRef<ProviderField>(
     initialDraft?.focusOrigin ?? "github",
   );
@@ -1261,25 +1279,31 @@ export function Builder({
           draft: snapshot,
         } satisfies BuilderDraftRecord,
       };
-      // Background Server Actions re-render the current route. That can
-      // replace a newer in-memory form with the previous server snapshot, so
-      // both ordinary and page-hide saves use the same authenticated handler.
-      const saved = await fetch("/api/builder/draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-        ...(keepalive ? { keepalive: true } : {}),
-      }).then(async (response) => {
-        if (!response.ok) throw new Error("builder-draft-save-failed");
-        return (await response.json()) as {
-          draftId: string;
-          revision: number;
-          updatedAt: string;
-        };
-      });
-      activeDraftId.current = saved.draftId;
-      draftRevision.current = saved.revision;
-      return { mutationId, savedAt: saved.updatedAt };
+      if (!keepalive)
+        pendingActionExpectedRevision.current = input.expectedRevision;
+      try {
+        const saved = keepalive
+          ? await fetch("/api/builder/draft", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(input),
+              keepalive: true,
+            }).then(async (response) => {
+              if (!response.ok) throw new Error("builder-draft-save-failed");
+              return (await response.json()) as {
+                draftId: string;
+                revision: number;
+                updatedAt: string;
+              };
+            })
+          : await saveActiveBuilderDraft(input);
+        activeDraftId.current = saved.draftId;
+        draftRevision.current = saved.revision;
+        draftUpdatedAt.current = saved.updatedAt;
+        return { mutationId, savedAt: saved.updatedAt };
+      } finally {
+        pendingActionExpectedRevision.current = undefined;
+      }
     },
     [],
   );
@@ -1288,7 +1312,13 @@ export function Builder({
     save: saveDraft,
     debounceMs: 500,
   });
+  const {
+    discardPending: discardPendingDraft,
+    restorePending,
+    resumePending,
+  } = autosave;
   const [draftSaveError, setDraftSaveError] = useState("");
+  const [draftSyncNotice, setDraftSyncNotice] = useState("");
   const initialAutosavePass = useRef(true);
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
@@ -1327,6 +1357,36 @@ export function Builder({
       team,
       zdrOnly,
     ],
+  );
+  const applyAuthoritativeDraft = useCallback(
+    async (remote: {
+      draftId: string;
+      revision: number;
+      updatedAt: string;
+      record: BuilderDraftRecord;
+    }) => {
+      if (remote.revision <= draftRevision.current) return;
+      draftRevision.current = remote.revision;
+      draftUpdatedAt.current = remote.updatedAt;
+      activeDraftId.current = remote.draftId;
+      const snapshot = remote.record.draft;
+      builderForm.reset(snapshot.form);
+      setTeam(snapshot.team);
+      setGitScope(snapshot.gitScope);
+      setModel(snapshot.model);
+      setZdrOnly(snapshot.zdrOnly);
+      setShowMoreConnections(snapshot.showMoreConnections);
+      setSearch(snapshot.search);
+      setConnectedConnections(snapshot.connectedConnections);
+      setStorageProvider(snapshot.storageProvider ?? null);
+      setDeploymentProvider(snapshot.deploymentProvider ?? null);
+      focusOrigin.current = snapshot.focusOrigin;
+      appNameEditedByUser.current = snapshot.appNameEditedByUser;
+      repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+      await discardPendingDraft();
+      setDraftSyncNotice("Updated from another device");
+    },
+    [builderForm, discardPendingDraft],
   );
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
@@ -1421,10 +1481,19 @@ export function Builder({
     resumedVercelConnection,
   ]);
   useEffect(() => {
-    void autosave.restorePending().then((entry) => {
+    void restorePending().then((entry) => {
       if (!entry) return;
+      // A recovery outbox is only useful when it is newer than the server
+      // snapshot rendered for this visit. Server revisions remain canonical.
+      if (
+        draftUpdatedAt.current &&
+        entry.createdAt <= Date.parse(draftUpdatedAt.current)
+      ) {
+        void discardPendingDraft();
+        return;
+      }
       const snapshot = entry.snapshot;
-      setForm(snapshot.form);
+      builderForm.reset(snapshot.form);
       setTeam(snapshot.team);
       setGitScope(snapshot.gitScope);
       setModel(snapshot.model);
@@ -1437,9 +1506,64 @@ export function Builder({
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-      void autosave.resumePending();
+      void resumePending();
     });
-  }, [autosave.restorePending, autosave.resumePending]);
+  }, [builderForm, discardPendingDraft, restorePending, resumePending]);
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const checkForServerDraft = async () => {
+      if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      try {
+        const remote = await loadActiveBuilderDraft();
+        if (disposed || !remote) return;
+        await applyAuthoritativeDraft(remote);
+      } catch {
+        // Autosave owns retry/error presentation; sync polling stays quiet.
+      }
+    };
+    const onVisible = () => void checkForServerDraft();
+    void checkForServerDraft();
+    timer = setInterval(() => void checkForServerDraft(), 10_000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      disposed = true;
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [applyAuthoritativeDraft]);
+  useEffect(() => {
+    if (durableDraftRevision <= draftRevision.current) return;
+    if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
+    if (
+      pendingActionExpectedRevision.current !== undefined &&
+      durableDraftRevision === pendingActionExpectedRevision.current + 1
+    ) {
+      activeDraftId.current = durableDraftId;
+      draftRevision.current = durableDraftRevision;
+      draftUpdatedAt.current = durableDraftUpdatedAt;
+      return;
+    }
+    void applyAuthoritativeDraft({
+      draftId: durableDraftId,
+      revision: durableDraftRevision,
+      updatedAt: durableDraftUpdatedAt,
+      record: { version: 1, draft: initialDraft },
+    });
+  }, [
+    applyAuthoritativeDraft,
+    durableDraftId,
+    durableDraftRevision,
+    durableDraftUpdatedAt,
+    initialDraft,
+  ]);
+  useEffect(() => {
+    if (!draftSyncNotice) return;
+    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [draftSyncNotice]);
   useEffect(() => {
     if (initialAutosavePass.current) {
       initialAutosavePass.current = false;
@@ -1504,6 +1628,8 @@ export function Builder({
         <p className={styles.draftStatus} role="status" aria-live="polite">
           {draftSaveError
             ? draftSaveError
+            : draftSyncNotice
+              ? draftSyncNotice
             : autosave.status === "saving"
               ? "Saving your draft…"
               : autosave.status === "saved"
@@ -2113,6 +2239,7 @@ export function AppBuilder({
   initialDurableDraft,
   durableDraftId,
   durableDraftRevision,
+  durableDraftUpdatedAt,
 }: {
   authenticated: boolean;
   generatedNameSeed?: string;
@@ -2125,6 +2252,7 @@ export function AppBuilder({
   initialDurableDraft?: BuilderDraft;
   durableDraftId?: string;
   durableDraftRevision?: number;
+  durableDraftUpdatedAt?: string;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
@@ -2214,6 +2342,7 @@ export function AppBuilder({
           resumeKey={providerResumeKey}
           durableDraftId={durableDraftId}
           durableDraftRevision={durableDraftRevision}
+          durableDraftUpdatedAt={durableDraftUpdatedAt}
           connectionsEnabled={connectionsEnabled}
           comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
