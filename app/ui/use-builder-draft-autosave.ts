@@ -199,7 +199,7 @@ export function useBuilderDraftAutosave<T>(
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
-    if (!entry || queued.current) return;
+    if (!mounted.current || !entry || queued.current) return;
     queued.current = entry;
     updateStatus(online() ? "saving" : "offline");
     await flush("flush");

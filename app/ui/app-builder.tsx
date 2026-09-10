@@ -1481,8 +1481,9 @@ export function Builder({
     resumedVercelConnection,
   ]);
   useEffect(() => {
+    let disposed = false;
     void restorePending().then((entry) => {
-      if (!entry) return;
+      if (disposed || !entry) return;
       // A recovery outbox is only useful when it is newer than the server
       // snapshot rendered for this visit. Server revisions remain canonical.
       if (
@@ -1506,8 +1507,11 @@ export function Builder({
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-      void resumePending();
+      if (!disposed) void resumePending();
     });
+    return () => {
+      disposed = true;
+    };
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
     let disposed = false;
@@ -1630,15 +1634,15 @@ export function Builder({
             ? draftSaveError
             : draftSyncNotice
               ? draftSyncNotice
-            : autosave.status === "saving"
-              ? "Saving your draft…"
-              : autosave.status === "saved"
-                ? "Draft saved"
-                : autosave.status === "offline"
-                  ? "Offline — your draft will retry when you’re back online."
-                  : autosave.status === "error"
-                    ? "Your latest edit is safe on this device and will retry."
-                    : "Your draft saves automatically."}
+              : autosave.status === "saving"
+                ? "Saving your draft…"
+                : autosave.status === "saved"
+                  ? "Draft saved"
+                  : autosave.status === "offline"
+                    ? "Offline — your draft will retry when you’re back online."
+                    : autosave.status === "error"
+                      ? "Your latest edit is safe on this device and will retry."
+                      : "Your draft saves automatically."}
           {autosave.status === "error" || draftSaveError ? (
             <button
               type="button"
