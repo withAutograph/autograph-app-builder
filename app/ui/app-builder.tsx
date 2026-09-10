@@ -1540,7 +1540,6 @@ export function Builder({
       }
     };
     const onVisible = () => void checkForServerDraft();
-    void checkForServerDraft();
     const timer = setInterval(() => void checkForServerDraft(), 10_000);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
