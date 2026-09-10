@@ -26,6 +26,11 @@ import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-r
 import { AppBuilder } from "./ui/app-builder";
 import type { BuilderDraft } from "./ui/builder-types";
 import { WorkspaceOnboarding } from "./ui/workspace-onboarding";
+import {
+  clearBuilderDraft,
+  loadActiveBuilderDraft,
+  saveActiveBuilderDraft,
+} from "./actions/builder-drafts";
 
 type PageProps = {
   searchParams: Promise<{
@@ -161,6 +166,9 @@ async function HomeContent({ searchParams }: PageProps) {
       durableDraftId={durableDraft?.draftId}
       durableDraftRevision={durableDraft?.revision}
       durableDraftUpdatedAt={durableDraft?.updatedAt}
+      saveActiveBuilderDraftAction={saveActiveBuilderDraft}
+      loadActiveBuilderDraftAction={loadActiveBuilderDraft}
+      clearBuilderDraftAction={clearBuilderDraft}
     />
   );
 }

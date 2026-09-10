@@ -39,13 +39,10 @@ import {
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import {
-  clearBuilderDraft as clearDurableBuilderDraft,
-  loadActiveBuilderDraft,
-  saveActiveBuilderDraft,
-} from "@/app/actions/builder-drafts";
-import {
   builderDraftFormSchema,
   type BuilderDraftRecord,
+  type BuilderDraftPageData,
+  type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
 import {
   createBuilderHandoff as createBuilderHandoffAction,
@@ -1118,6 +1115,8 @@ export function Builder({
   durableDraftId,
   durableDraftRevision = 0,
   durableDraftUpdatedAt,
+  saveActiveBuilderDraftAction,
+  loadActiveBuilderDraftAction,
 }: {
   initialBrief: string;
   generatedNameSeed: string;
@@ -1131,6 +1130,12 @@ export function Builder({
   durableDraftId?: string;
   durableDraftRevision?: number;
   durableDraftUpdatedAt?: string;
+  saveActiveBuilderDraftAction?: (
+    input: SaveActiveBuilderDraftInput,
+  ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
+  loadActiveBuilderDraftAction?: () => Promise<
+    BuilderDraftPageData | undefined
+  >;
 }) {
   const router = useRouter();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -1296,7 +1301,11 @@ export function Builder({
                 updatedAt: string;
               };
             })
-          : await saveActiveBuilderDraft(input);
+          : saveActiveBuilderDraftAction
+            ? await saveActiveBuilderDraftAction(input)
+            : await Promise.reject(
+                new Error("builder-draft-action-unavailable"),
+              );
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
@@ -1305,7 +1314,7 @@ export function Builder({
         pendingActionExpectedRevision.current = undefined;
       }
     },
-    [],
+    [saveActiveBuilderDraftAction],
   );
   const autosave = useBuilderDraftAutosave({
     outbox: draftOutbox,
@@ -1532,7 +1541,8 @@ export function Builder({
     const checkForServerDraft = async () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
       try {
-        const remote = await loadActiveBuilderDraft();
+        if (!loadActiveBuilderDraftAction) return;
+        const remote = await loadActiveBuilderDraftAction();
         if (disposed || !remote) return;
         await applyAuthoritativeDraft(remote);
       } catch {
@@ -1549,7 +1559,7 @@ export function Builder({
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [applyAuthoritativeDraft]);
+  }, [applyAuthoritativeDraft, loadActiveBuilderDraftAction]);
   useEffect(() => {
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
@@ -2256,6 +2266,9 @@ export function AppBuilder({
   durableDraftId,
   durableDraftRevision,
   durableDraftUpdatedAt,
+  saveActiveBuilderDraftAction,
+  loadActiveBuilderDraftAction,
+  clearBuilderDraftAction,
 }: {
   authenticated: boolean;
   generatedNameSeed?: string;
@@ -2269,6 +2282,13 @@ export function AppBuilder({
   durableDraftId?: string;
   durableDraftRevision?: number;
   durableDraftUpdatedAt?: string;
+  saveActiveBuilderDraftAction?: (
+    input: SaveActiveBuilderDraftInput,
+  ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
+  loadActiveBuilderDraftAction?: () => Promise<
+    BuilderDraftPageData | undefined
+  >;
+  clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("builder");
@@ -2359,6 +2379,8 @@ export function AppBuilder({
           durableDraftId={durableDraftId}
           durableDraftRevision={durableDraftRevision}
           durableDraftUpdatedAt={durableDraftUpdatedAt}
+          saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
+          loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
           connectionsEnabled={connectionsEnabled}
           comingSoonEnabled={comingSoonEnabled}
           integrations={integrations}
@@ -2402,7 +2424,7 @@ export function AppBuilder({
           onReady={(result) => {
             if (activeBuilderDraftId) {
               clearBuilderDraft(activeBuilderDraftId);
-              void clearDurableBuilderDraft(activeBuilderDraftId);
+              void clearBuilderDraftAction?.(activeBuilderDraftId);
             }
             persistActiveProvisioning({
               version: 1,

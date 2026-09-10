@@ -156,6 +156,9 @@ function AppBuilder(
       connectionsEnabled={connectionsEnabled}
       comingSoonEnabled={comingSoonEnabled}
       integrations={integrationState}
+      saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
+      loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
+      clearBuilderDraftAction={builderActions.clearBuilderDraft}
     />
   );
 }
@@ -681,6 +684,9 @@ describe("Vercel-faithful App Builder flow", () => {
           vercel: { status: "disconnected", scopes: [] },
           github: { status: "disconnected", scopes: [] },
         }}
+        saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
+        loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
+        clearBuilderDraftAction={builderActions.clearBuilderDraft}
       />,
     );
     await fill(
