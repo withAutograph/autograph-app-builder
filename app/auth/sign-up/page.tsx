@@ -40,21 +40,33 @@ async function RedirectAuthenticatedVisitor({
   return null;
 }
 
+function SignUpSurface() {
+  return (
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <AuthContinuity action="sign-up">
+        <SignUp socialPosition="top" />
+      </AuthContinuity>
+    </main>
+  );
+}
+
+async function SignUpContent({
+  searchParams,
+}: {
+  searchParams: Promise<AuthPageSearchParams>;
+}) {
+  await RedirectAuthenticatedVisitor({ searchParams });
+  return <SignUpSurface />;
+}
+
 export default function SignUpPage({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   return (
-    <>
-      <main className="flex min-h-svh items-center justify-center p-6">
-        <AuthContinuity action="sign-up">
-          <SignUp socialPosition="top" />
-        </AuthContinuity>
-      </main>
-      <Suspense fallback={null}>
-        <RedirectAuthenticatedVisitor searchParams={searchParams} />
-      </Suspense>
-    </>
+    <Suspense fallback={<SignUpSurface />}>
+      <SignUpContent searchParams={searchParams} />
+    </Suspense>
   );
 }
