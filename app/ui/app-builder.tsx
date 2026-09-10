@@ -1234,11 +1234,13 @@ export function Builder({
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
     null,
   );
-  const interactive = useSyncExternalStore(
+  const clientHydrated = useSyncExternalStore(
     subscribeToClientSnapshot,
     () => true,
     () => false,
   );
+  const [draftRecoveryComplete, setDraftRecoveryComplete] = useState(false);
+  const interactive = clientHydrated && draftRecoveryComplete;
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     initialDraft?.connectedConnections ?? [],
   );
@@ -1521,42 +1523,46 @@ export function Builder({
   useEffect(() => {
     let disposed = false;
     const recoveryStartVersion = localFormMutationVersion.current;
-    void restorePending().then((entry) => {
-      if (disposed || !entry) return;
-      // IndexedDB can resolve after the user has already started editing the
-      // hydrated form. Never let that older recovery snapshot replace those
-      // edits or reset the user-edited field markers. The new local snapshot
-      // will be queued by the normal autosave effect.
-      if (localFormMutationVersion.current !== recoveryStartVersion) {
-        void discardPendingDraft();
-        return;
-      }
-      // A recovery outbox is only useful when it is newer than the server
-      // snapshot rendered for this visit. Server revisions remain canonical.
-      if (
-        draftUpdatedAt.current &&
-        entry.createdAt <= Date.parse(draftUpdatedAt.current)
-      ) {
-        void discardPendingDraft();
-        return;
-      }
-      const snapshot = entry.snapshot;
-      builderForm.reset(snapshot.form);
-      setTeam(snapshot.team);
-      setGitScope(snapshot.gitScope);
-      setModel(snapshot.model);
-      setZdrOnly(snapshot.zdrOnly);
-      setShowMoreConnections(snapshot.showMoreConnections);
-      setSearch(snapshot.search);
-      setConnectedConnections(snapshot.connectedConnections);
-      setStorageProvider(snapshot.storageProvider ?? null);
-      setDeploymentProvider(snapshot.deploymentProvider ?? null);
-      focusOrigin.current = snapshot.focusOrigin;
-      appNameEditedByUser.current = snapshot.appNameEditedByUser;
-      repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-      autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
-      if (!disposed) void resumePending();
-    });
+    void restorePending()
+      .then((entry) => {
+        if (disposed || !entry) return;
+        // IndexedDB can resolve after the user has already started editing the
+        // hydrated form. Never let that older recovery snapshot replace those
+        // edits or reset the user-edited field markers. The new local snapshot
+        // will be queued by the normal autosave effect.
+        if (localFormMutationVersion.current !== recoveryStartVersion) {
+          void discardPendingDraft();
+          return;
+        }
+        // A recovery outbox is only useful when it is newer than the server
+        // snapshot rendered for this visit. Server revisions remain canonical.
+        if (
+          draftUpdatedAt.current &&
+          entry.createdAt <= Date.parse(draftUpdatedAt.current)
+        ) {
+          void discardPendingDraft();
+          return;
+        }
+        const snapshot = entry.snapshot;
+        builderForm.reset(snapshot.form);
+        setTeam(snapshot.team);
+        setGitScope(snapshot.gitScope);
+        setModel(snapshot.model);
+        setZdrOnly(snapshot.zdrOnly);
+        setShowMoreConnections(snapshot.showMoreConnections);
+        setSearch(snapshot.search);
+        setConnectedConnections(snapshot.connectedConnections);
+        setStorageProvider(snapshot.storageProvider ?? null);
+        setDeploymentProvider(snapshot.deploymentProvider ?? null);
+        focusOrigin.current = snapshot.focusOrigin;
+        appNameEditedByUser.current = snapshot.appNameEditedByUser;
+        repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+        autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
+        if (!disposed) void resumePending();
+      })
+      .finally(() => {
+        if (!disposed) setDraftRecoveryComplete(true);
+      });
     return () => {
       disposed = true;
     };
@@ -1566,10 +1572,20 @@ export function Builder({
     let wasHidden = document.visibilityState === "hidden";
     const checkForServerDraft = async () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      // A completed foreground action can become visible to this read before
+      // its acknowledgement advances draftRevision. Do not reinterpret that
+      // device-local save as a remote revision and replace edits made while
+      // the action was in flight.
+      if (pendingActionExpectedRevision.current !== undefined) return;
       try {
         if (!loadActiveBuilderDraftAction) return;
         const remote = await loadActiveBuilderDraftAction();
-        if (disposed || !remote) return;
+        if (
+          disposed ||
+          !remote ||
+          pendingActionExpectedRevision.current !== undefined
+        )
+          return;
         await applyAuthoritativeDraft(remote);
       } catch {
         // Autosave owns retry/error presentation; sync polling stays quiet.

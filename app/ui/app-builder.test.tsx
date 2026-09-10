@@ -698,6 +698,56 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Updated from another device");
   });
 
+  it("does not replace newer edits with its own in-flight autosave", async () => {
+    vi.useFakeTimers();
+    let resolveSave!: (saved: {
+      draftId: string;
+      revision: number;
+      updatedAt: string;
+    }) => void;
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(
+      (input: { draftId: string }) =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    const view = await render(
+      <AppBuilder
+        authenticated
+        user={{ name: "Taylor", email: "taylor@example.com" }}
+      />,
+    );
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "First local edit.");
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await fill(brief, "Newer local edit.");
+
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(builderActions.loadActiveBuilderDraft).not.toHaveBeenCalled();
+    expect(brief.value).toBe("Newer local edit.");
+
+    await act(async () => {
+      resolveSave({
+        draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
+        revision: 1,
+        updatedAt: "2030-01-01T00:00:01.000Z",
+      });
+      await Promise.resolve();
+    });
+  });
+
   it("preserves a builder draft before a first-use provider connection", async () => {
     const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(resumeKey);
