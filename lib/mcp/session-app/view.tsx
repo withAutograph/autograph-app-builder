@@ -370,7 +370,7 @@ export function SessionAppView({
                 />
               )}
             </SectionShell>
-          )
+          ),
         )}
       </div>
       {respondable.length && !onlyApproval ? (

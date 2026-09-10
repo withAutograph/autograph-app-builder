@@ -28,14 +28,12 @@ export const Default: Story = {
     await expect(
       canvas.getByText("Keep chatting to refine your app."),
     ).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Build app" })).toBeVisible();
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Make changes" }),
-    );
-    await expect(args.onAnswer).toHaveBeenCalledWith({ kind: "deny" });
-    await userEvent.click(
+    await expect(
       canvas.getByRole("button", { name: "Build app" }),
-    );
+    ).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Make changes" }));
+    await expect(args.onAnswer).toHaveBeenCalledWith({ kind: "deny" });
+    await userEvent.click(canvas.getByRole("button", { name: "Build app" }));
     await expect(args.onAnswer).toHaveBeenCalledWith({ kind: "approve" });
   },
 };
