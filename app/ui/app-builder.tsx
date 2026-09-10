@@ -15,7 +15,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import {
   useCallback,
   useEffect,
@@ -38,9 +38,7 @@ import {
 } from "react-icons/si";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-import {
-  clearBuilderDraft as clearDurableBuilderDraft,
-} from "@/app/actions/builder-drafts";
+import { clearBuilderDraft as clearDurableBuilderDraft } from "@/app/actions/builder-drafts";
 import {
   builderDraftFormSchema,
   type BuilderDraftRecord,
@@ -1171,11 +1169,12 @@ export function Builder({
     mode: "onChange",
     resolver: zodResolver(builderDraftFormSchema),
   });
-  const form = useWatch({ control: builderForm.control }) as BuilderForm;
+  const [form, setRenderedForm] = useState<BuilderForm>(initialForm);
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       const current = builderForm.getValues();
       const next = typeof update === "function" ? update(current) : update;
+      setRenderedForm(next);
       builderForm.reset(next);
     },
     [builderForm],
