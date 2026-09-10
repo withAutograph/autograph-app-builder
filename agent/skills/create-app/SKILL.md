@@ -8,6 +8,10 @@ description: Guide complete creation of a route-owned Next.js app in a supported
 Create one validated local app without crossing provider or deployment authority.
 Keep product acceptance separate from approval to mutate source and topology.
 
+For optional React 19.3 UI and security capabilities, follow
+[React 19.3 guidance](references/react-19-3.md). These capabilities are never
+implicit starter defaults.
+
 Use only discovered builder-owned tools. If the required identity, planning,
 prototype, apply, review, or publication operation is unavailable, stop at the
 last completed receipt and report that implementation gap. Never replace a

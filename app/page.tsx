@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 
 import { headers } from "next/headers";
 
@@ -146,7 +146,9 @@ function BuilderLoading() {
 export default function Home(props: PageProps) {
   return (
     <Suspense fallback={<BuilderLoading />}>
-      <HomeContent {...props} />
+      <ViewTransition>
+        <HomeContent {...props} />
+      </ViewTransition>
     </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 
 import { HandoffContent } from "./handoff-content";
 
@@ -13,7 +13,9 @@ export default function HandoffPage(props: {
 }) {
   return (
     <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
-      <HandoffContent {...props} />
+      <ViewTransition>
+        <HandoffContent {...props} />
+      </ViewTransition>
     </Suspense>
   );
 }
