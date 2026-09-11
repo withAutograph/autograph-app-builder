@@ -22,7 +22,7 @@
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
     "test:hosted-sandbox": "mise run test:hosted-sandbox --",
     "test:auth-e2e": "mise run auth-e2e:test",
-    "check": "mise run check",
+    "check": "ultracite check",
     "configure": "mise run package:configure --",
     "validate:plugin": "mise run package:validate",
     "validate:release": "mise run package:validate-release",
@@ -37,7 +37,7 @@
     "storybook": "mise run storybook:dev",
     "build-storybook": "mise run storybook:build",
     "test-storybook": "mise run storybook:test",
-    "fix": "mise run format"
+    "fix": "ultracite fix"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -118,6 +118,7 @@
     "oxlint": "1.82.0",
     "playwright": "latest",
     "postcss": "8.5.28",
+    "prettier": "3.9.6",
     "storybook": "^10.6.0",
     "tailwindcss": "4.3.3",
     "tar": "7.5.22",

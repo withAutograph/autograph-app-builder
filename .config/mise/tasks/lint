@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Lint repository sources with Oxlint"
+#MISE description="Lint and format-check repository sources with Ultracite"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher "$(mise which pnpm)" exec oxlint --config oxlint.config.ts .
+exec "$(mise which pnpm)" exec ultracite check

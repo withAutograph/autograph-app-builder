@@ -1,7 +1,5 @@
 #!/bin/sh
-#MISE description="Formatting checks deferred to follow-up"
+#MISE description="Check repository formatting and lint with Ultracite"
 set -eu
 
-# The repository-wide Oxfmt migration is intentionally deferred. Keep the
-# formatter task available for the follow-up without rewriting existing files.
-exit 0
+exec "$(mise which pnpm)" exec ultracite check
