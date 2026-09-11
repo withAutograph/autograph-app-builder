@@ -163,6 +163,12 @@ export async function waitForBuilderReady(page: Page) {
   await expect(page.getByLabel("App Name")).toBeEditable();
 }
 
+export async function waitForAnonymousBuilderReady(page: Page) {
+  // The anonymous composer is also a controlled client field. Its disabled
+  // state prevents an early DOM write from being lost while React hydrates.
+  await expect(page.getByLabel("What should this app do?")).toBeEditable();
+}
+
 export async function waitForHandoffContent(page: Page, appName: string) {
   // The handoff route streams its shell while request-fresh session and journal
   // data resolve on the server. Match the route navigation budget instead of
