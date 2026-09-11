@@ -55,29 +55,29 @@ export type GitHubUserCredential = {
 };
 
 export interface GitHubUserCredentialStore {
-  bind(input: {
+  bind: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
     providerLogin: string;
     tokens: GitHubUserTokenSet;
     now: Date;
-  }): Promise<GitHubUserCredential>;
-  read(input: {
+}) => Promise<GitHubUserCredential>;
+  read: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
-  }): Promise<GitHubUserCredential | undefined>;
-  rotate(input: {
+}) => Promise<GitHubUserCredential | undefined>;
+  rotate: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
     expectedRevision: number;
     tokens: GitHubUserTokenSet;
     now: Date;
-  }): Promise<GitHubUserCredential | undefined>;
-  deactivate(input: {
+}) => Promise<GitHubUserCredential | undefined>;
+  deactivate: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
     now: Date;
-  }): Promise<number>;
+}) => Promise<number>;
 }
 
 export function githubCredentialAssociatedData(input: {

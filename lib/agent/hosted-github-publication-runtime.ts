@@ -36,7 +36,7 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 }) => GitHubPublicationAdapter | Promise<GitHubPublicationAdapter>;
 
 export interface HostedGitHubPublicationRuntimeResolver {
-  resolve(sessionAuth: unknown): Promise<GitHubPublicationRuntime>;
+  resolve: (sessionAuth: unknown) => Promise<GitHubPublicationRuntime>;
 }
 
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
@@ -63,12 +63,11 @@ type PublicationStores = {
 };
 
 export type HostedGitHubPublicationRuntimeResolverDependencies = {
-  readPreparedHandoff(
-    sessionAuth: unknown,
-  ): Promise<
-    | (BuilderHandoffIntent & { providers?: { githubInstallationId?: string } })
-    | undefined
-  >;
+  readPreparedHandoff: (sessionAuth: unknown) => Promise<(BuilderHandoffIntent & {
+    providers?: {
+        githubInstallationId?: string;
+    };
+}) | undefined>;
   membership: (database: Database) => HostedWorkspaceMembership;
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (

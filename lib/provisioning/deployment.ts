@@ -24,16 +24,13 @@ const noStore = { "Cache-Control": "no-store" } as const;
 
 export function createBuilderProvisioningRouteHandler(input: {
   origin: string;
-  enabled(): Promise<boolean>;
-  authorityForRequest(request: Request): Promise<
-    | {
-        issuer: string;
-        audience: string;
-        workspaceId: string;
-        ownerUserId: string;
-      }
-    | undefined
-  >;
+  enabled: () => Promise<boolean>;
+  authorityForRequest: (request: Request) => Promise<{
+    issuer: string;
+    audience: string;
+    workspaceId: string;
+    ownerUserId: string;
+} | undefined>;
   execute: typeof executeBuilderProvisioning;
   read: typeof readBuilderProvisioning;
   dependencies: Parameters<

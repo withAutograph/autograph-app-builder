@@ -73,17 +73,17 @@ export const previewOAuthScopes = [
 const refreshTokenLifetimeSeconds = 60 * 60 * 8;
 
 export interface PreviewOAuthMembershipAuthority {
-  activeWorkspaceForUser(input: {
+  activeWorkspaceForUser: (input: {
     issuer: string;
     audience: string;
     ownerUserId: string;
-  }): Promise<string | undefined>;
-  isActiveMember(input: {
+}) => Promise<string | undefined>;
+  isActiveMember: (input: {
     issuer: string;
     audience: string;
     workspaceId: string;
     ownerUserId: string;
-  }): Promise<boolean>;
+}) => Promise<boolean>;
 }
 
 /**

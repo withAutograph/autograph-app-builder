@@ -144,7 +144,7 @@ describe("test capability preload", () => {
     }
     const activeHandles = () =>
       (
-        process as unknown as { _getActiveHandles(): readonly unknown[] }
+        process as unknown as { _getActiveHandles: () => readonly unknown[]; }
       )._getActiveHandles();
     const isMessagePort = (handle: unknown) =>
       typeof handle === "object" &&

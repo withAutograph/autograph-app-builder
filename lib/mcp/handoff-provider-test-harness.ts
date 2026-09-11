@@ -103,7 +103,7 @@ export function sessionEnvelope(
 export function preparedProviderFixture(input: {
   authority: HostedSessionTenantAuthority;
   handoffs: BuilderHandoffStore;
-  isActiveMember(authority: HostedSessionTenantAuthority): Promise<boolean>;
+  isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const privateKeyPem = privateKey

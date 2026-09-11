@@ -81,8 +81,8 @@ type ExactFile = FreshBootstrapFile & { bytes: Buffer };
 
 export type FreshBootstrapSourceWorkspace = {
   files: readonly PreparedSourceFile[];
-  readSourceFile(path: string): Promise<Uint8Array | null>;
-  reverify(): Promise<void>;
+  readSourceFile: (path: string) => Promise<Uint8Array | null>;
+  reverify: () => Promise<void>;
 };
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
@@ -648,8 +648,8 @@ process.stdin.resume();
 type Lease = {
   pid: number;
   markerDigest: string;
-  assertHeld(): void;
-  release(): Promise<void>;
+  assertHeld: () => void;
+  release: () => Promise<void>;
 };
 
 async function acquireLease(
@@ -796,7 +796,7 @@ async function quiesceAbandonedLease(
   capability: FreshBootstrapCapability,
   path: string,
   expectedActiveDigest: string,
-): Promise<{ markerDigest: string; release(): Promise<void> }> {
+): Promise<{ markerDigest: string; release: () => Promise<void>; }> {
   await assertContainedStatePath(capability, path, "absent-or-file");
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
@@ -970,7 +970,7 @@ async function exactResultTree(input: {
   capability: FreshBootstrapCapability;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactReviewedChangeSet(input.review);
@@ -1126,7 +1126,7 @@ export async function deriveFreshBootstrapProposal(input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   protectedPaths: readonly string[];
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<FreshBootstrapProposal> {
   const capability = await assertCapability(input.capability);
@@ -1228,7 +1228,7 @@ async function assertExactInputs(input: {
   proposal: FreshBootstrapProposal;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactFreshBootstrapProposal(input.proposal);
@@ -2135,7 +2135,7 @@ async function executeBootstrap(input: {
   review: ReviewedChangeSetReceipt;
   publishedByCallId: string;
   recoveryOfDigest?: string;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
   hooks?: FreshBootstrapFaultHooks;
 }): Promise<
@@ -2591,7 +2591,7 @@ export async function verifyFreshBootstrap(input: {
   receipt: FreshBootstrapSuccessReceipt;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<void> {
   const capability = await assertCapability(input.capability);

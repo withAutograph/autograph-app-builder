@@ -14,16 +14,16 @@ export type BuilderDraftOutboxEntry<T> = {
 };
 
 export type BuilderDraftOutbox<T> = {
-  read(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
-  write(entry: BuilderDraftOutboxEntry<T>): Promise<void>;
-  clearIfMutationId(mutationId: string): Promise<boolean>;
+  read: () => Promise<BuilderDraftOutboxEntry<T> | undefined>;
+  write: (entry: BuilderDraftOutboxEntry<T>) => Promise<void>;
+  clearIfMutationId: (mutationId: string) => Promise<boolean>;
   /** Clears only the snapshot represented by this server acknowledgement. */
   clearIfAcknowledged?(acknowledgement: {
     mutationId: string;
     revision: number;
   }): Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
-  clear(): Promise<void>;
+  clear: () => Promise<void>;
 };
 
 export type BuilderDraftOutboxOptions = {

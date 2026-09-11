@@ -20,8 +20,8 @@ export type GitHubPublicationProposal =
   FreshRepositoryProposal | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {
-  read(proposalDigest: string): Promise<GitHubPublicationProposal | undefined>;
-  save(proposal: GitHubPublicationProposal): Promise<void>;
+  read: (proposalDigest: string) => Promise<GitHubPublicationProposal | undefined>;
+  save: (proposal: GitHubPublicationProposal) => Promise<void>;
 }
 
 const proposalRowSchema = z

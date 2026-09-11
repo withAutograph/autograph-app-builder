@@ -71,17 +71,13 @@ const bindingSelection = {
 };
 
 export interface HostedGitHubInstallationStore {
-  read(
-    authority: HostedGitHubTenantAuthority,
-  ): Promise<HostedGitHubInstallationBinding | undefined>;
-  list?(
-    authority: HostedGitHubTenantAuthority,
-  ): Promise<HostedGitHubInstallationBinding[]>;
-  bind(input: {
+  read: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding | undefined>;
+  list?: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding[]>;
+  bind: (input: {
     authority: HostedGitHubTenantAuthority;
     binding: Omit<HostedGitHubInstallationBinding, "active" | "updatedAt">;
     now: Date;
-  }): Promise<HostedGitHubInstallationBinding>;
+}) => Promise<HostedGitHubInstallationBinding>;
 }
 
 export function createPostgresHostedGitHubInstallationStore(

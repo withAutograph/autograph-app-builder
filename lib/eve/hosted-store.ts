@@ -495,36 +495,33 @@ export type ReserveOperationResult = z.infer<
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
-  reserveOperation(
-    principal: z.infer<typeof hostedPrincipalSchema>,
-    candidate: HostedOperationRecord,
-  ): Promise<ReserveOperationResult>;
-  settleSucceeded(input: {
+  reserveOperation: (principal: z.infer<typeof hostedPrincipalSchema>, candidate: HostedOperationRecord) => Promise<ReserveOperationResult>;
+  settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
     requestDigest: string;
     result: z.infer<typeof eveSessionResultSchema>;
     session?: HostedSessionRecord;
     nowEpochMs: number;
-  }): Promise<HostedOperationRecord>;
-  settleUnsuccessful(input: {
+}) => Promise<HostedOperationRecord>;
+  settleUnsuccessful: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
     requestDigest: string;
     state: "submission_unknown" | "rejected";
     safeErrorCode: string;
     nowEpochMs: number;
-  }): Promise<HostedOperationRecord>;
-  getSession(
-    principal: z.infer<typeof hostedPrincipalSchema>,
-    sessionId: string,
-  ): Promise<HostedSessionRecord | null>;
-  listSessions(input: {
+}) => Promise<HostedOperationRecord>;
+  getSession: (principal: z.infer<typeof hostedPrincipalSchema>, sessionId: string) => Promise<HostedSessionRecord | null>;
+  listSessions: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     cursor: number;
     limit: number;
-  }): Promise<{ sessions: HostedSessionRecord[]; cursor: number }>;
-  observeSession?(input: {
+}) => Promise<{
+    sessions: HostedSessionRecord[];
+    cursor: number;
+}>;
+  observeSession?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     checkpoint: HostedSessionCheckpoint;
@@ -532,8 +529,8 @@ export interface HostedEveStore {
     resumability: z.infer<typeof publicSessionResumabilitySchema>;
     appId?: string;
     nowEpochMs: number;
-  }): Promise<HostedSessionRecord>;
-  replaceSessionAdapter?(input: {
+}) => Promise<HostedSessionRecord>;
+  replaceSessionAdapter?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     expectedAdapterGeneration: number;
@@ -544,7 +541,7 @@ export interface HostedEveStore {
     resumability: z.infer<typeof publicSessionResumabilitySchema>;
     appId?: string;
     nowEpochMs: number;
-  }): Promise<HostedSessionRecord>;
+}) => Promise<HostedSessionRecord>;
 }
 
 /** Test/local conformance store. Hosted deployment must supply durable storage. */

@@ -148,50 +148,15 @@ export type PreviewActivationReceipt = z.infer<
 >;
 
 export interface PreviewActivationStore {
-  provisionInvitedUser(
-    input: Extract<
-      PreviewActivationPlanRequest,
-      { action: "invited-user.provision" }
-    >,
-  ): Promise<
-    Pick<
-      z.infer<typeof effectsSchema>,
-      "userRowsAffected" | "accountRowsAffected" | "membershipRowsAffected"
-    >
-  >;
-  configureRuntimeRole(
-    input: Extract<
-      PreviewActivationPlanRequest,
-      { action: "runtime-role.configure" }
-    >,
-  ): Promise<
-    Pick<
-      z.infer<typeof effectsSchema>,
-      | "runtimeRoleCreated"
-      | "runtimeRoleLogin"
-      | "runtimeRoleCanConnect"
-      | "runtimeRoleCanUseSchema"
-      | "runtimeRoleCanCreateSchemaObjects"
-      | "runtimeRoleTablePrivilegesExact"
-      | "runtimeRoleSequencePrivilegesExact"
-      | "runtimeRoleAttributesExact"
-      | "runtimeRoleMembershipCount"
-    >
-  >;
-  initializeOAuth(
-    input: Extract<
-      PreviewActivationPlanRequest,
-      { action: "oauth.initialize" }
-    >,
-  ): Promise<
-    Pick<
-      z.infer<typeof effectsSchema>,
-      | "resourceRowsBefore"
-      | "resourceRowsAfter"
-      | "jwksRowsBefore"
-      | "jwksRowsAfter"
-    >
-  >;
+  provisionInvitedUser: (input: Extract<PreviewActivationPlanRequest, {
+    action: "invited-user.provision";
+}>) => Promise<Pick<z.infer<typeof effectsSchema>, "userRowsAffected" | "accountRowsAffected" | "membershipRowsAffected">>;
+  configureRuntimeRole: (input: Extract<PreviewActivationPlanRequest, {
+    action: "runtime-role.configure";
+}>) => Promise<Pick<z.infer<typeof effectsSchema>, "runtimeRoleCreated" | "runtimeRoleLogin" | "runtimeRoleCanConnect" | "runtimeRoleCanUseSchema" | "runtimeRoleCanCreateSchemaObjects" | "runtimeRoleTablePrivilegesExact" | "runtimeRoleSequencePrivilegesExact" | "runtimeRoleAttributesExact" | "runtimeRoleMembershipCount">>;
+  initializeOAuth: (input: Extract<PreviewActivationPlanRequest, {
+    action: "oauth.initialize";
+}>) => Promise<Pick<z.infer<typeof effectsSchema>, "resourceRowsBefore" | "resourceRowsAfter" | "jwksRowsBefore" | "jwksRowsAfter">>;
 }
 
 function canonicalRequest(request: PreviewActivationPlanRequest) {

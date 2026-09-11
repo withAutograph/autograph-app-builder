@@ -4,8 +4,8 @@ import { createConnection } from "node:net";
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  once(signal: DevelopmentSignal, listener: () => void): unknown;
-  off(signal: DevelopmentSignal, listener: () => void): unknown;
+  once: (signal: DevelopmentSignal, listener: () => void) => unknown;
+  off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
 export function createDevelopmentShutdown(

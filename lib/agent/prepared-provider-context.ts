@@ -122,10 +122,10 @@ async function boundedJson(response: Response): Promise<unknown> {
 export async function readPreparedVercelAccess(input: {
   intent: PreparedIntent;
   authority: Authority;
-  readCredential(input: {
+  readCredential: (input: {
     authority: Authority;
     installationId: string;
-  }): Promise<VercelCredential | undefined>;
+}) => Promise<VercelCredential | undefined>;
   fetch?: typeof fetch;
   apiOrigin?: string;
 }): Promise<PreparedVercelAccess> {
@@ -230,15 +230,9 @@ export async function readPreparedVercelAccess(input: {
 }
 
 export function createPreparedAppContextReader(input: {
-  readHandoff(sessionAuth: unknown): Promise<PreparedIntent | undefined>;
-  github(
-    sessionAuth: unknown,
-    input: RepositoryAccessToolInput,
-  ): Promise<RepositoryAccessResult>;
-  vercel(
-    sessionAuth: unknown,
-    intent: PreparedIntent,
-  ): Promise<PreparedVercelAccess>;
+  readHandoff: (sessionAuth: unknown) => Promise<PreparedIntent | undefined>;
+  github: (sessionAuth: unknown, input: RepositoryAccessToolInput) => Promise<RepositoryAccessResult>;
+  vercel: (sessionAuth: unknown, intent: PreparedIntent) => Promise<PreparedVercelAccess>;
 }) {
   return async (sessionAuth: unknown) => {
     // The trusted reader establishes tenant ownership before any provider work.

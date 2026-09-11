@@ -133,27 +133,22 @@ const acknowledgementSchema = z.discriminatedUnion("status", [
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;
 
 export interface GitHubAppInstallationProvider {
-  inspectInstallation(input: {
+  inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
-  }): Promise<unknown>;
-  inspectRepository(input: {
+}) => Promise<unknown>;
+  inspectRepository: (input: {
     repositoryId: string;
     ref: string;
-  }): Promise<unknown>;
-  inspectDestination(input: { owner: string; name: string }): Promise<unknown>;
-  inspectFreshRepositoryOutcome(
-    proposal: FreshRepositoryProposal,
-  ): Promise<unknown>;
-  createPrivateFreshHistoryRepository(
-    proposal: FreshRepositoryProposal,
-    content: GitHubFreshRepositoryContent,
-  ): Promise<unknown>;
-  inspectDraftPublication(proposal: DraftPullRequestProposal): Promise<unknown>;
-  publishDraftPullRequest(
-    proposal: DraftPullRequestProposal,
-    content: GitHubDraftPullRequestContent,
-  ): Promise<unknown>;
+}) => Promise<unknown>;
+  inspectDestination: (input: {
+    owner: string;
+    name: string;
+}) => Promise<unknown>;
+  inspectFreshRepositoryOutcome: (proposal: FreshRepositoryProposal) => Promise<unknown>;
+  createPrivateFreshHistoryRepository: (proposal: FreshRepositoryProposal, content: GitHubFreshRepositoryContent) => Promise<unknown>;
+  inspectDraftPublication: (proposal: DraftPullRequestProposal) => Promise<unknown>;
+  publishDraftPullRequest: (proposal: DraftPullRequestProposal, content: GitHubDraftPullRequestContent) => Promise<unknown>;
 }
 
 const hash = (value: unknown) =>

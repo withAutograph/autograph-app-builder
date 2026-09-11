@@ -73,13 +73,15 @@ export type GitHubPublicationFile = {
 };
 
 export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
-  inspectRepositoryByName(input: {
+  inspectRepositoryByName: (input: {
     owner: string;
     name: string;
-  }): Promise<unknown | undefined>;
-  acquireRepositoryReadCredential(input: {
+}) => Promise<unknown | undefined>;
+  acquireRepositoryReadCredential: (input: {
     repositoryId: string;
-  }): Promise<{ token: string }>;
+}) => Promise<{
+    token: string;
+}>;
 }
 
 type Fetch = typeof fetch;

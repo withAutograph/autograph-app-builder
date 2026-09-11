@@ -23,7 +23,6 @@ export default defineConfig({
     "promise/avoid-new": "off",
     "promise/prefer-await-to-callbacks": "off",
     "typescript/no-non-null-assertion": "off",
-    "typescript/method-signature-style": "off",
     "unicorn/consistent-function-scoping": "off",
     "unicorn/filename-case": "off",
     "unicorn/import-style": "off",

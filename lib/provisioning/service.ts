@@ -44,14 +44,11 @@ export interface BuilderProvisioningDependencies {
   /** Test-only seam; production always resolves the canonical clone. */
   loadStarterSource?: () => Promise<StarterSource>;
   vercelConfig: VercelIntegrationConfig;
-  readVercelCredential(input: {
+  readVercelCredential: (input: {
     authority: BuilderProvisionAuthority;
     installationId: string;
-  }): Promise<VercelCredential | undefined>;
-  deactivateVercelInstallation(
-    installationId: string,
-    now: Date,
-  ): Promise<number>;
+}) => Promise<VercelCredential | undefined>;
+  deactivateVercelInstallation: (installationId: string, now: Date) => Promise<number>;
   fetch?: typeof fetch;
   now?: () => number;
   leaseId?: () => string;

@@ -104,7 +104,7 @@ export type BuilderHandoffPageData = {
 
 export function createBuilderHandoffRouteHandler(input: {
   origin: string;
-  authorityForRequest(request: Request): Promise<Authority | undefined>;
+  authorityForRequest: (request: Request) => Promise<Authority | undefined>;
   journal: BuilderProvisionJournalStore;
   handoffs: HandoffService;
 }) {
@@ -242,10 +242,7 @@ function handoffErrorResponse(error: unknown) {
 }
 
 export function createBuilderHandoffStatusRouteHandler(input: {
-  pageData(
-    request: Request,
-    handoffId: string,
-  ): Promise<BuilderHandoffPageData | undefined>;
+  pageData: (request: Request, handoffId: string) => Promise<BuilderHandoffPageData | undefined>;
 }) {
   return async (request: Request, handoffId: string) => {
     try {
@@ -264,7 +261,7 @@ export function createBuilderHandoffStatusRouteHandler(input: {
 
 export function createBuilderHandoffRenewRouteHandler(input: {
   origin: string;
-  authorityForRequest(request: Request): Promise<Authority | undefined>;
+  authorityForRequest: (request: Request) => Promise<Authority | undefined>;
   handoffs: HandoffService;
 }) {
   const {origin} = new URL(input.origin);

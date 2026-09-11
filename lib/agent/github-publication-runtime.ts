@@ -52,34 +52,34 @@ export type GitHubPublicationRuntimeStatus = {
 };
 
 export interface GitHubPublicationRuntime {
-  status(): Promise<GitHubPublicationRuntimeStatus>;
-  resolveImmutableSource(input: {
+  status: () => Promise<GitHubPublicationRuntimeStatus>;
+  resolveImmutableSource: (input: {
     expectedInstallationId: string;
     repositoryId: string;
     ref: string;
     expectedSha: string;
     expectedTree: string;
     approvedByCallId: string;
-  }): Promise<ImmutableGitHubSourceReceipt>;
-  sealDraftPullRequestProposal(input: {
+}) => Promise<ImmutableGitHubSourceReceipt>;
+  sealDraftPullRequestProposal: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
     source: SourceReceiptEvidence;
     review: ReviewedChangeSetReceipt;
     title: string;
-  }): Promise<DraftPullRequestProposal>;
-  createFreshRepository(input: {
+}) => Promise<DraftPullRequestProposal>;
+  createFreshRepository: (input: {
     expectedProposalDigest: string;
     review: ReviewedChangeSetReceipt;
     contentSource: GitHubFreshRepositoryContentSource;
     approvedByCallId: string;
-  }): Promise<FreshRepositorySuccessReceipt>;
-  publishDraftPullRequest(input: {
+}) => Promise<FreshRepositorySuccessReceipt>;
+  publishDraftPullRequest: (input: {
     expectedProposalDigest: string;
     approvalReceipt: ApprovalReceipt;
     review: ReviewedChangeSetReceipt;
     contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
-  }): Promise<DraftPullRequestSuccessReceipt>;
+}) => Promise<DraftPullRequestSuccessReceipt>;
 }
 
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {

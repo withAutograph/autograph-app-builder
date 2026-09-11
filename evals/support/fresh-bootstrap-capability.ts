@@ -63,7 +63,7 @@ async function executableIdentity(path: string): Promise<ExecutableIdentity> {
 export async function createFreshBootstrapEvalCapability(): Promise<{
   capability: FreshBootstrapCapability;
   allowedRoot: string;
-  cleanup(): Promise<void>;
+  cleanup: () => Promise<void>;
 }> {
   if (
     process.env.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED === "1" &&

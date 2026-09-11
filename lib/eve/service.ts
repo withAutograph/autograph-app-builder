@@ -29,46 +29,55 @@ export class AdapterNotConfiguredError extends Error {
 }
 
 export interface EveSessionService {
-  start(input: {
+  start: (input: {
     prompt?: string;
     handoffId?: string;
     /** Internal only: set after authenticated handoff resolution, never by MCP input. */
     sourceHandoffId?: string;
     resumeSessionId?: string;
     clientRequestId: string;
-  }): Promise<EveSessionResult>;
+}) => Promise<EveSessionResult>;
   /** Internal lost-response recovery for an already-bound start operation. */
-  recoverStart?(input: {
+  /** Internal lost-response recovery for an already-bound start operation. */
+recoverStart?: (input: {
     sessionId: string;
     cursor: number;
     limit: number;
-  }): Promise<EveSessionResult>;
-  list(input: { cursor: number; limit: number }): Promise<EveSessionListResult>;
-  get(input: {
+}) => Promise<EveSessionResult>;
+  list: (input: {
+    cursor: number;
+    limit: number;
+}) => Promise<EveSessionListResult>;
+  get: (input: {
     sessionId: string;
     cursor: number;
     limit: number;
-  }): Promise<EveSessionResult>;
-  send(input: {
+}) => Promise<EveSessionResult>;
+  send: (input: {
     sessionId: string;
     message: string;
     clientRequestId: string;
-  }): Promise<EveSessionResult>;
-  respond(input: {
+}) => Promise<EveSessionResult>;
+  respond: (input: {
     sessionId: string;
     responses: Array<{
-      requestId: string;
-      response:
-        | { kind: "approve" }
-        | { kind: "deny" }
-        | { kind: "answer"; value: string; optionId?: string };
+        requestId: string;
+        response: {
+            kind: "approve";
+        } | {
+            kind: "deny";
+        } | {
+            kind: "answer";
+            value: string;
+            optionId?: string;
+        };
     }>;
     clientRequestId: string;
-  }): Promise<EveSessionResult>;
-  cancel(input: {
+}) => Promise<EveSessionResult>;
+  cancel: (input: {
     sessionId: string;
     turnId?: string;
-  }): Promise<EveSessionResult>;
+}) => Promise<EveSessionResult>;
 }
 
 export function toEveInputResponse(
@@ -99,7 +108,7 @@ export function toEveInputResponses(
 }
 
 type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
-  cancel(): Promise<unknown>;
+  cancel: () => Promise<unknown>;
 };
 
 type LocalEveRuntimeState = {

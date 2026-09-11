@@ -9,7 +9,7 @@ import {
 
 export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];
-  isActiveMember(authority: HostedSessionTenantAuthority): Promise<boolean>;
+  isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);

@@ -38,8 +38,8 @@ export async function provisionVercelProject(input: {
   githubSelected: boolean;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
-  persistCandidate(candidate: string): Promise<void>;
-  persistAbsent(candidate: string): Promise<void>;
+  persistCandidate: (candidate: string) => Promise<void>;
+  persistAbsent: (candidate: string) => Promise<void>;
   fetch?: typeof fetch;
   generateSuffix?: () => string;
 }): Promise<VercelProvisionResult> {

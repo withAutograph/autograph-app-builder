@@ -51,25 +51,25 @@ export function readVercelIntegrationEnvironment(
 }
 
 export type VercelAuthorizationStateStore = {
-  create(input: {
+  create: (input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
     createdAt: Date;
     expiresAt: Date;
     returnState: ProviderConnectionReturn;
-  }): Promise<void>;
-  consume(input: {
+}) => Promise<void>;
+  consume: (input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
     now: Date;
-  }): Promise<ProviderConnectionReturn | undefined>;
-  recover(input: {
+}) => Promise<ProviderConnectionReturn | undefined>;
+  recover: (input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
-  }): Promise<ProviderConnectionReturn | undefined>;
+}) => Promise<ProviderConnectionReturn | undefined>;
 };
 
 export class VercelInstallationAuthorizationError extends Error {
@@ -93,14 +93,14 @@ export type VercelInstallationBinding = {
 };
 
 export type VercelInstallationStore = {
-  list(authority: Authority): Promise<VercelInstallationBinding[]>;
-  bind(input: {
+  list: (authority: Authority) => Promise<VercelInstallationBinding[]>;
+  bind: (input: {
     authority: Authority;
     binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
     token: string;
     now: Date;
-  }): Promise<VercelInstallationBinding>;
-  deactivate(installationId: string, now: Date): Promise<number>;
+}) => Promise<VercelInstallationBinding>;
+  deactivate: (installationId: string, now: Date) => Promise<number>;
 };
 
 function digest(value: string) {
@@ -184,7 +184,7 @@ export function createVercelInstallationAuthorization(input: {
   config: VercelIntegrationConfig;
   states: VercelAuthorizationStateStore;
   installations: VercelInstallationStore;
-  membership: { isActiveMember(authority: Authority): Promise<boolean> };
+  membership: { isActiveMember: (authority: Authority) => Promise<boolean>; };
   fetch?: typeof fetch;
   now?: () => number;
   nonce?: () => string;

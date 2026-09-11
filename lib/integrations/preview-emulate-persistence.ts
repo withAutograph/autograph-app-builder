@@ -4,9 +4,9 @@ import postgres from "postgres";
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
 
 export type PreviewEmulateStateStore = {
-  read(namespace: string): Promise<string | undefined>;
-  write(namespace: string, state: string, now: Date): Promise<void>;
-  reset(namespace: string): Promise<number>;
+  read: (namespace: string) => Promise<string | undefined>;
+  write: (namespace: string, state: string, now: Date) => Promise<void>;
+  reset: (namespace: string) => Promise<number>;
 };
 
 function validateState(state: string) {

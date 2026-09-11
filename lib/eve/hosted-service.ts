@@ -76,41 +76,49 @@ export {
 export type { HostedEngineSnapshot } from "./hosted-projection";
 
 export interface HostedEveTransport {
-  start(input: {
+  start: (input: {
     principal: HostedPrincipal;
     operationId: string;
     prompt: string;
     sourceHandoffId?: string;
-  }): Promise<{ adapterSessionId: string; snapshot: HostedEngineSnapshot }>;
-  get(input: {
+}) => Promise<{
+    adapterSessionId: string;
+    snapshot: HostedEngineSnapshot;
+}>;
+  get: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
-  }): Promise<HostedEngineSnapshot>;
-  send(input: {
+}) => Promise<HostedEngineSnapshot>;
+  send: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     message: string;
     sourceHandoffId?: string;
-  }): Promise<HostedEngineSnapshot>;
-  respond(input: {
+}) => Promise<HostedEngineSnapshot>;
+  respond: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     responses: Array<{
-      requestId: string;
-      response:
-        | { kind: "approve" }
-        | { kind: "deny" }
-        | { kind: "answer"; value: string; optionId?: string };
+        requestId: string;
+        response: {
+            kind: "approve";
+        } | {
+            kind: "deny";
+        } | {
+            kind: "answer";
+            value: string;
+            optionId?: string;
+        };
     }>;
     sourceHandoffId?: string;
-  }): Promise<HostedEngineSnapshot>;
-  cancel(input: {
+}) => Promise<HostedEngineSnapshot>;
+  cancel: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     turnId?: string;
-  }): Promise<HostedEngineSnapshot>;
+}) => Promise<HostedEngineSnapshot>;
 }
 
 function assertNever(value: never): never {
@@ -507,10 +515,10 @@ export function createHostedEveSessionService(input: {
     request: T;
     sessionId?: string;
     resumeSessionId?: string;
-    dispatch(operationId: string): Promise<{
-      result: EveSessionResult;
-      newSession?: z.infer<typeof hostedSessionRecordSchema>;
-    }>;
+    dispatch: (operationId: string) => Promise<{
+    result: EveSessionResult;
+    newSession?: z.infer<typeof hostedSessionRecordSchema>;
+}>;
   }): Promise<EveSessionResult> {
     const requestDigest = digest({
       kind: options.kind,

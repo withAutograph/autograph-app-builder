@@ -73,51 +73,51 @@ export type AcquireSandboxLeaseResult =
     };
 
 export interface SandboxExecutionLeaseStore {
-  acquire(input: {
+  acquire: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     providerSandboxId: string;
     policy: SandboxExecutionPolicy;
     nowEpochMs: number;
-  }): Promise<AcquireSandboxLeaseResult>;
-  assertCurrent(input: {
+}) => Promise<AcquireSandboxLeaseResult>;
+  assertCurrent: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     providerSandboxId: string;
     epoch: number;
     policyDigest: string;
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease>;
-  heartbeat(input: {
+}) => Promise<SandboxExecutionLease>;
+  heartbeat: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     epoch: number;
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease>;
-  release(input: {
+}) => Promise<SandboxExecutionLease>;
+  release: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     epoch: number;
     reason: SandboxLeaseReleaseReason;
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease>;
-  releaseCurrent(input: {
+}) => Promise<SandboxExecutionLease>;
+  releaseCurrent: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     providerSandboxId: string;
     policyDigest: string;
     reason: SandboxLeaseReleaseReason;
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease | null>;
-  claimExpired(input: {
+}) => Promise<SandboxExecutionLease | null>;
+  claimExpired: (input: {
     nowEpochMs: number;
     limit: number;
-  }): Promise<readonly SandboxExecutionLease[]>;
-  settleRecovery(input: {
+}) => Promise<readonly SandboxExecutionLease[]>;
+  settleRecovery: (input: {
     lease: SandboxExecutionLease;
     providerOutcome: "stopped" | "stop-failed";
     nowEpochMs: number;
-  }): Promise<SandboxExecutionLease | null>;
+}) => Promise<SandboxExecutionLease | null>;
 }
 
 export function sandboxLeaseKey(
@@ -315,7 +315,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
 
 export async function reconcileExpiredSandboxLeases(input: {
   store: SandboxExecutionLeaseStore;
-  stopSandbox(providerSandboxId: string): Promise<void>;
+  stopSandbox: (providerSandboxId: string) => Promise<void>;
   nowEpochMs: number;
   limit?: number;
 }) {

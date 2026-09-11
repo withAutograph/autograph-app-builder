@@ -196,7 +196,7 @@ export function createPrototypePreviewRequestHandler(input: {
 }
 
 export function createServicePrototypePreviewResolver(input: {
-  serviceForRequest(request: Request): Promise<EveSessionService | undefined>;
+  serviceForRequest: (request: Request) => Promise<EveSessionService | undefined>;
 }): PrototypePreviewResolver {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);

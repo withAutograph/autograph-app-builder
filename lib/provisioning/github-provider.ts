@@ -155,8 +155,8 @@ export async function provisionGitHubRepository(input: {
   source: StarterSource;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
-  persistCandidate(candidate: string): Promise<void>;
-  persistAbsent(candidate: string): Promise<void>;
+  persistCandidate: (candidate: string) => Promise<void>;
+  persistAbsent: (candidate: string) => Promise<void>;
   fetch?: typeof fetch;
   now?: () => number;
   generateSuffix?: () => string;
