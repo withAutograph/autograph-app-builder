@@ -273,8 +273,12 @@ describe("Preview OAuth deployment handlers", () => {
     expect(signUp).toContain('className="flex flex-col gap-3"');
     expect(accountSettings).toContain("plugin.securityCards");
     expect(accountSettings).toContain("plugin.accountCards");
-    expect(passkeyButton).toContain("useSignInPasskey(authClient)");
-    expect(passkeyButton).toContain("useAddPasskey(authClient)");
+    expect(passkeyButton).toContain(
+      "useSignInPasskey(authClient, { retry: false })",
+    );
+    expect(passkeyButton).toContain(
+      "useAddPasskey(authClient, { retry: false })",
+    );
     expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
     expect(passkeyButton).toContain("await addPasskey.mutateAsync");
     expect(passkeyButton).toContain("passkeyClientError(result)");
