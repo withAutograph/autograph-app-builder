@@ -7,6 +7,7 @@ import {
   ProviderConnection,
   ProviderConnectionNotice,
 } from "@/app/ui/provider-connection";
+import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { Suspense } from "react";
 import { FaGithub } from "react-icons/fa";
 
@@ -52,7 +53,14 @@ async function GitHubInstallationsContent({ searchParams }: Props) {
 
 export default function GitHubInstallationsPage(props: Props) {
   return (
-    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+    <Suspense
+      fallback={
+        <ProviderConnectionLoadingShell
+          title="Connect a GitHub App installation"
+          description="Choose the repositories this workspace may inspect or update."
+        />
+      }
+    >
       <GitHubInstallationsContent {...props} />
     </Suspense>
   );

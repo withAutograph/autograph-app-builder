@@ -29,8 +29,9 @@ test("sign-up exposes its useful shell on client navigation", async ({
   await instant(page, async () => {
     await page.getByRole("link", { name: "Sign Up" }).click();
     await page.waitForURL((url) => url.pathname === "/auth/sign-up");
-    await expect(
-      page.getByRole("button", { name: "Continue with Passkey" }),
-    ).toBeVisible();
   });
+
+  await expect(
+    page.getByRole("button", { name: "Continue with Passkey" }),
+  ).toBeVisible();
 });

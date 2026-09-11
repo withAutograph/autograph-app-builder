@@ -1,8 +1,8 @@
-import { and, eq, gt, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
-import { builderHandoffs } from "../db/schema";
+import { builderHandoffs, builderProvisioningJournals } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   builderHandoffIntentSchema,
@@ -63,6 +63,42 @@ export function createPostgresBuilderHandoffStore(
     return rows[0] ? rowRecord(rows[0]) : undefined;
   };
 
+  const findLatestPending: NonNullable<
+    BuilderHandoffStore["findLatestPending"]
+  > = async ({ authority: authorityInput }) => {
+    const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+    const rows = await database
+      .select({ handoff: builderHandoffs })
+      .from(builderHandoffs)
+      .innerJoin(
+        builderProvisioningJournals,
+        and(
+          eq(builderProvisioningJournals.issuer, builderHandoffs.issuer),
+          eq(builderProvisioningJournals.audience, builderHandoffs.audience),
+          eq(
+            builderProvisioningJournals.workspaceId,
+            builderHandoffs.workspaceId,
+          ),
+          eq(
+            builderProvisioningJournals.ownerUserId,
+            builderHandoffs.ownerUserId,
+          ),
+          eq(
+            builderProvisioningJournals.requestId,
+            sql<string>`${builderHandoffs.intent}->>'provisioningRequestId'`,
+          ),
+          eq(builderProvisioningJournals.state, "pending"),
+        ),
+      )
+      .where(authorityPredicate(authority))
+      .orderBy(
+        desc(builderProvisioningJournals.updatedAt),
+        desc(builderHandoffs.createdAt),
+      )
+      .limit(1);
+    return rows[0] ? rowRecord(rows[0].handoff) : undefined;
+  };
+
   return {
     async reserve(recordInput) {
       const record = builderHandoffRecordSchema.parse(recordInput);
@@ -95,6 +131,7 @@ export function createPostgresBuilderHandoffStore(
       return { disposition: "existing", record: rowRecord(existing[0]) };
     },
     read,
+    findLatestPending,
     async renewExpired(input) {
       const updated = await database
         .update(builderHandoffs)
