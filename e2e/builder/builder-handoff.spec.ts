@@ -21,6 +21,7 @@ import {
   resetApplicationState,
   registerPasskey,
   waitForBuilderReady,
+  waitForHandoffContent,
 } from "../support/harness";
 
 // OAuth callbacks and browser cookies must not enter failure artifacts.
@@ -127,9 +128,7 @@ test("multiple handoffs reload independently without replacing saved app context
       await activePage.bringToFront();
       await activePage.reload();
       await expect(activePage).toHaveURL(handoff.url);
-      await expect(
-        activePage.getByRole("heading", { name, exact: true }),
-      ).toBeVisible();
+      await waitForHandoffContent(activePage, name);
       await activePage.getByText("Prepared brief", { exact: true }).click();
       await expect(activePage.getByText(brief, { exact: true })).toBeVisible();
       await expect(

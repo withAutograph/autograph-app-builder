@@ -163,6 +163,15 @@ export async function waitForBuilderReady(page: Page) {
   await expect(page.getByLabel("App Name")).toBeEditable();
 }
 
+export async function waitForHandoffContent(page: Page, appName: string) {
+  // The handoff route streams its shell while request-fresh session and journal
+  // data resolve on the server. Match the route navigation budget instead of
+  // treating Playwright's five-second assertion default as data readiness.
+  await expect(
+    page.getByRole("heading", { name: appName, exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
+}
+
 export async function registerPasskey(
   context: BrowserContext,
   page: Page,
