@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn, waitFor, within } from "storybook/test";
 import {
   storyForm,
   storyHandoff,
@@ -31,8 +31,10 @@ export const ProvisioningDisabled: Story = {
     await expect(
       within(canvasElement).getByRole("heading", { name: "Handoff" }),
     ).toBeVisible();
-    await expect(within(canvasElement).getByRole("status")).toHaveTextContent(
-      "Your secure handoff is ready. Opening your selected client.",
+    await waitFor(() =>
+      expect(within(canvasElement).getByRole("status")).toHaveTextContent(
+        "Your secure handoff is ready. Opening your selected client.",
+      ),
     );
   },
 };
