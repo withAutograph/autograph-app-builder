@@ -19,7 +19,6 @@ import {
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
@@ -54,7 +53,6 @@ import {
   type BuilderDraftPageData,
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
-import { continueBuilderHandoff } from "@/app/actions/builder";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
@@ -64,24 +62,19 @@ import autographIcon from "../../assets/autograph-icon.png";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import { persistBuilderDraft } from "./builder-session";
-import { Header, ProviderNotices } from "./builder-shell";
+import { ProviderNotices } from "./builder-shell";
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
 import { SearchCombobox, type ComboOption } from "./search-combobox";
+import { AutographMark } from "./autograph-mark";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-import type {
-  BuilderDraft,
-  BuilderForm,
-  DeploymentProvider,
-  ProviderField,
-  StorageProvider,
-} from "./builder-types";
+export { AutographMark } from "./autograph-mark";
 export type {
   BuilderDraft,
   BuilderForm,
@@ -139,11 +132,6 @@ const connectionDescriptions: Record<string, string> = {
 function connectionDescription(name: string) {
   return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
 }
-
-const suggestions = [
-  "Build a customer feedback portal",
-  "Create an internal operations dashboard",
-] as const;
 
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
@@ -272,15 +260,6 @@ function randomAppName(seed?: string) {
   const noun =
     randomNameNouns[Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length];
   return `${adjective} ${noun}`;
-}
-
-export function AutographMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className={styles.brand} data-compact={compact || undefined}>
-      <Image className={styles.brandMark} src={autographIcon} width={23} height={23} alt="" />
-      <span>Autograph</span>
-    </span>
-  );
 }
 
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
@@ -851,68 +830,6 @@ export function ConnectionDrawer({
   );
 }
 
-export function AnonymousBuilder({ onContinue }: { onContinue: (brief: string) => void }) {
-  const [brief, setBrief] = useState("");
-  const isInteractive = useSyncExternalStore(
-    subscribeToClientSnapshot,
-    () => true,
-    () => false,
-  );
-
-  return (
-    <main className={styles.anonymousPage} id="main-content">
-      <a className={styles.skipLink} href="#anonymous-brief">
-        Skip to content
-      </a>
-      <header className={styles.publicHeader}>
-        <AutographMark />
-        <span>New App</span>
-        <div>
-          <Link href="/docs">Docs</Link>
-          <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
-          <a className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
-            Sign Up
-          </a>
-        </div>
-      </header>
-      <section className={styles.promptCard}>
-        <div className={styles.cardTitle}>
-          <h1>Build an app</h1>
-          <AutographMark compact />
-        </div>
-        <label htmlFor="anonymous-brief">What should this app do?</label>
-        <div className={styles.promptField}>
-          <textarea
-            id="anonymous-brief"
-            name="app-brief"
-            autoComplete="off"
-            disabled={!isInteractive}
-            value={brief}
-            onChange={(event) => setBrief(event.target.value)}
-            placeholder="Help me create a customer portal, build an internal dashboard, or launch a new workflow…"
-          />
-          <button
-            type="button"
-            disabled={!isInteractive || !brief.trim()}
-            onClick={() => onContinue(brief)}
-          >
-            Continue
-          </button>
-        </div>
-        <div className={styles.suggestions}>
-          <span>Suggestions</span>
-          {suggestions.map((suggestion) => (
-            <button type="button" key={suggestion} onClick={() => setBrief(suggestion)}>
-              {suggestion}
-            </button>
-          ))}
-        </div>
-        <p>You’ll create or sign in to your Autograph account before building.</p>
-      </section>
-    </main>
-  );
-}
-
 export function Builder({
   initialBrief,
   generatedNameSeed,
@@ -1109,7 +1026,11 @@ export function Builder({
     new Map<
       string,
       {
-        resolve: (saved: { draftId: string; revision: number; updatedAt: string }) => void;
+        resolve: (saved: {
+          draftId: string;
+          revision: number;
+          updatedAt: string;
+        }) => void;
         reject: (error: Error) => void;
       }
     >(),
@@ -1428,7 +1349,7 @@ export function Builder({
           void discardPendingDraft();
           return;
         }
-        const { snapshot } = entry;
+        const {snapshot} = entry;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);
@@ -1778,125 +1699,5 @@ export function Builder({
         />
       ) : null}
     </main>
-  );
-}
-
-export function AppBuilder({
-  authenticated,
-  generatedNameSeed = "app-builder",
-  connectionsEnabled = false,
-  comingSoonEnabled = false,
-  provisioningEnabled = false,
-  integrations,
-  providerNotices = [],
-  providerResumeKey,
-  initialDurableDraft,
-  durableDraftId,
-  durableDraftRevision,
-  durableDraftUpdatedAt,
-  saveActiveBuilderDraftAction,
-  loadActiveBuilderDraftAction,
-  clearBuilderDraftAction,
-}: {
-  authenticated: boolean;
-  generatedNameSeed?: string;
-  connectionsEnabled?: boolean;
-  comingSoonEnabled?: boolean;
-  provisioningEnabled?: boolean;
-  integrations: BuilderIntegrationState;
-  providerNotices?: ProviderConnectionNotice[];
-  providerResumeKey?: string;
-  initialDurableDraft?: BuilderDraft;
-  durableDraftId?: string;
-  durableDraftRevision?: number;
-  durableDraftUpdatedAt?: string;
-  saveActiveBuilderDraftAction?: (
-    input: SaveActiveBuilderDraftInput,
-  ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
-  loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
-  clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
-}) {
-  const router = useRouter();
-  const [savedBrief, setSavedBrief] = useState("");
-  const activeDraftId = useRef<string | undefined>(undefined);
-  const completedHandoff = useRef<string | undefined>(undefined);
-  const [continuation, dispatchContinuation, continuationPending] = useActionState(
-    continueBuilderHandoff,
-    undefined,
-  );
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-  useEffect(() => {
-    if (!continuation || continuationPending) return;
-    if (continuation.status === "error") return;
-    if (completedHandoff.current === continuation.handoff.handoffId) return;
-    completedHandoff.current = continuation.handoff.handoffId;
-    if (activeDraftId.current) void clearBuilderDraftAction?.(activeDraftId.current);
-    router.replace(`/handoff/${continuation.handoff.handoffId}`);
-  }, [clearBuilderDraftAction, continuation, continuationPending, router]);
-  // The server draft is authoritative after provider return. Browser storage
-  // remains a write-only, short-lived redirect bridge and is never restored.
-  const resumedDraft = initialDurableDraft;
-  const builderKey = providerResumeKey
-    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
-    : savedBrief || "new";
-
-  if (!authenticated)
-    return (
-      <AnonymousBuilder
-        onContinue={(value) => {
-          sessionStorage.setItem("autograph-app-brief", value);
-          router.push("/auth/sign-in?callbackURL=%2F");
-        }}
-      />
-    );
-  return (
-    <div className={styles.appShell}>
-      <Header />
-      {continuationPending ? (
-        <main className={styles.flowPage} id="main-content">
-          <section className={styles.readyCard} aria-busy="true">
-            <h1>Preparing your handoff</h1>
-            <p>Your saved app is being prepared.</p>
-          </section>
-        </main>
-      ) : (
-        <Builder
-          key={builderKey}
-          initialBrief={savedBrief}
-          generatedNameSeed={generatedNameSeed}
-          initialDraft={resumedDraft}
-          resumeKey={providerResumeKey}
-          durableDraftId={durableDraftId}
-          durableDraftRevision={durableDraftRevision}
-          durableDraftUpdatedAt={durableDraftUpdatedAt}
-          saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
-          loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
-          connectionsEnabled={connectionsEnabled}
-          comingSoonEnabled={comingSoonEnabled}
-          integrations={integrations}
-          providerNotices={providerNotices}
-          onCreate={(form, draftId) => {
-            activeDraftId.current = draftId ?? durableDraftId;
-            startTransition(() =>
-              dispatchContinuation({
-                version: 1,
-                requestId: crypto.randomUUID(),
-                creationRequestId: crypto.randomUUID(),
-                provisioningEnabled,
-                form,
-              }),
-            );
-          }}
-        />
-      )}
-      {continuation?.status === "error" && !continuationPending ? (
-        <p role="alert">We couldn’t prepare your handoff. Your saved draft is still available.</p>
-      ) : null}
-    </div>
   );
 }

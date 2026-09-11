@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { AnonymousBuilder } from "./app-builder";
+import { AnonymousBuilder } from "./anonymous-builder";
 
 const meta = {
   title: "Create App/Flow/Anonymous Entry",

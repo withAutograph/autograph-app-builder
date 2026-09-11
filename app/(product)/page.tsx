@@ -27,8 +27,11 @@ import {
   loadActiveBuilderDraft,
   saveActiveBuilderDraft,
 } from "../actions/builder-drafts";
-import { AppBuilder } from "../ui/app-builder";
+import { AnonymousBuilder } from "../ui/anonymous-builder";
+import { AuthenticatedBuilder } from "../ui/authenticated-builder";
 import { BuilderLoadingShell } from "../ui/builder-loading-shell";
+import { Header } from "../ui/builder-shell";
+import styles from "../ui/app-builder.module.css";
 import type { BuilderDraft } from "../ui/builder-types";
 import { WorkspaceOnboarding } from "../ui/workspace-onboarding";
 
@@ -85,14 +88,7 @@ async function currentUser() {
 
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
-  const [query, user, connectionsEnabled, comingSoonEnabled, provisioningEnabled] =
-    await Promise.all([
-      searchParams,
-      currentUser(),
-      builderConnectionsFlag(),
-      builderComingSoonFlag(),
-      builderResourceProvisioningFlag(),
-    ]);
+  const [query, user] = await Promise.all([searchParams, currentUser()]);
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
@@ -125,55 +121,59 @@ async function HomeContent({ searchParams }: PageProps) {
 
   const authenticated = user.status === "ready";
   const resumeKey = parseProviderResumeKey(query.resume);
-  if (authenticated && mode !== "anonymous" && !resumeKey) {
+  if (!authenticated || mode === "anonymous") return <AnonymousBuilder />;
+
+  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
+    builderConnectionsFlag(),
+    builderComingSoonFlag(),
+    builderResourceProvisioningFlag(),
+  ]);
+
+  if (!resumeKey) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
       environment: process.env,
       headers: await headers(),
     });
     if (pendingHandoff) redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
   }
-  const durableDraft = authenticated
-    ? resumeKey
-      ? await readAuthenticatedBuilderDraft({
-          draftId: resumeKey,
-          environment: process.env,
-          headers: await headers(),
-        })
-      : await readAuthenticatedActiveBuilderDraft({
-          environment: process.env,
-          headers: await headers(),
-        })
-    : undefined;
+  const durableDraft = resumeKey
+    ? await readAuthenticatedBuilderDraft({
+        draftId: resumeKey,
+        environment: process.env,
+        headers: await headers(),
+      })
+    : await readAuthenticatedActiveBuilderDraft({
+        environment: process.env,
+        headers: await headers(),
+      });
   const integrations = await loadBuilderIntegrationState({
     environment: process.env,
-    ...(user.status === "ready"
-      ? {
-          authenticated: true as const,
-          organizationId: user.user.organizationId,
-          userId: user.user.id,
-          workspaceId: user.user.workspaceId,
-        }
-      : { authenticated: false as const }),
+    authenticated: true as const,
+    organizationId: user.user.organizationId,
+    userId: user.user.id,
+    workspaceId: user.user.workspaceId,
   });
 
   return (
-    <AppBuilder
-      authenticated={authenticated && mode !== "anonymous"}
-      generatedNameSeed={randomUUID()}
-      connectionsEnabled={connectionsEnabled}
-      comingSoonEnabled={comingSoonEnabled}
-      provisioningEnabled={provisioningEnabled}
-      integrations={integrations}
-      providerNotices={notices}
-      providerResumeKey={resumeKey}
-      initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
-      durableDraftId={durableDraft?.draftId}
-      durableDraftRevision={durableDraft?.revision}
-      durableDraftUpdatedAt={durableDraft?.updatedAt}
-      saveActiveBuilderDraftAction={saveActiveBuilderDraft}
-      loadActiveBuilderDraftAction={loadActiveBuilderDraft}
-      clearBuilderDraftAction={clearBuilderDraft}
-    />
+    <div className={styles.appShell}>
+      <Header />
+      <AuthenticatedBuilder
+        generatedNameSeed={randomUUID()}
+        connectionsEnabled={connectionsEnabled}
+        comingSoonEnabled={comingSoonEnabled}
+        provisioningEnabled={provisioningEnabled}
+        integrations={integrations}
+        providerNotices={notices}
+        providerResumeKey={resumeKey}
+        initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
+        durableDraftId={durableDraft?.draftId}
+        durableDraftRevision={durableDraft?.revision}
+        durableDraftUpdatedAt={durableDraft?.updatedAt}
+        saveActiveBuilderDraftAction={saveActiveBuilderDraft}
+        loadActiveBuilderDraftAction={loadActiveBuilderDraft}
+        clearBuilderDraftAction={clearBuilderDraft}
+      />
+    </div>
   );
 }
 
