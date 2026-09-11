@@ -1,4 +1,5 @@
 import { RefreshCw } from "@geist-ui/icons";
+import Link from "next/link";
 
 import styles from "./app-builder.module.css";
 
@@ -61,14 +62,7 @@ export function AppDetailsSection({
       </label>
       <p className={styles.helpText}>
         Define this app’s users, workflow, constraints, and desired outcome.{" "}
-        <a
-          href="https://github.com/withAutograph/autograph-app-builder"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Read the App Builder docs ↗
-        </a>
-        .
+        <Link href="/docs">Read the App Builder docs</Link>.
       </p>
     </fieldset>
   );

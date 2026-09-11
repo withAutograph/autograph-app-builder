@@ -12,6 +12,7 @@ import {
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
@@ -1016,6 +1017,7 @@ export function AnonymousBuilder({
         <AutographMark />
         <span>New App</span>
         <div>
+          <Link href="/docs">Docs</Link>
           <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
           <a className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
             Sign Up

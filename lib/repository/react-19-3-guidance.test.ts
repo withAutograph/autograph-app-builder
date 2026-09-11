@@ -7,8 +7,11 @@ const guidancePath = resolve(
   repositoryRoot,
   "agent/skills/create-app/references/react-19-3.md",
 );
-const homePagePath = resolve(repositoryRoot, "app/page.tsx");
-const handoffPagePath = resolve(repositoryRoot, "app/handoff/[id]/page.tsx");
+const homePagePath = resolve(repositoryRoot, "app/(product)/page.tsx");
+const handoffPagePath = resolve(
+  repositoryRoot,
+  "app/(product)/handoff/[id]/page.tsx"
+);
 
 describe("React 19.3 generated-app guidance", () => {
   const guidance = readFileSync(guidancePath, "utf8");

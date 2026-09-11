@@ -1,0 +1,20 @@
+Install Autograph App Builder from the Autograph marketplace, then begin a new Codex task. A new task makes sure Codex discovers the tools supplied by the plugin.
+
+```sh
+codex plugin marketplace add withAutograph/marketplace
+codex plugin add app-builder@autograph
+```
+
+## Confirm the installation
+
+Open a fresh Codex task and mention **@Autograph App Builder**. The task should offer Autograph as the app-building assistant. If you use another client that supports Agent Plugins, add Autograph through that client's plugin catalog or plugin-install flow.
+
+## Sign in when prompted
+
+On first use, Codex opens the Autograph sign-in and consent flow in your browser. Sign in with the account you want to use, approve the connection, and return to your task. You do not need to copy an access token into chat.
+
+## Update an existing installation
+
+Run the same marketplace and plugin commands again to refresh an existing installation. Then start a new task so Codex can load the updated plugin.
+
+Need help after installation? See [Troubleshooting](/docs/troubleshooting).

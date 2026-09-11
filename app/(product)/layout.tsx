@@ -6,7 +6,7 @@ import { GeistSans } from "geist/font/sans";
 import { AppShell } from "@/components/app-shell";
 import { passkeysFlag } from "@/lib/feature-flags";
 
-import "./globals.css";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "Autograph App Builder",
