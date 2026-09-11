@@ -1148,6 +1148,12 @@ export function Builder({
   // runs. Remember its expected revision so that update is treated as an ack,
   // never as a form replacement.
   const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
+  // The RSC payload for a local action can arrive after the action promise has
+  // settled. Remember the local edit version that initiated each revision so a
+  // delayed acknowledgement cannot replace a newer RHF edit. This only applies
+  // to this mounted builder; a provider-return route still hydrates directly
+  // from its server-rendered draft.
+  const localActionMutationVersions = useRef(new Map<number, number>());
   const focusOrigin = useRef<ProviderField>(
     initialDraft?.focusOrigin ?? "github",
   );
@@ -1258,8 +1264,13 @@ export function Builder({
           draft: snapshot,
         } satisfies BuilderDraftRecord,
       };
-      if (!keepalive)
+      if (!keepalive) {
         pendingActionExpectedRevision.current = input.expectedRevision;
+        localActionMutationVersions.current.set(
+          input.expectedRevision + 1,
+          localFormMutationVersion.current,
+        );
+      }
       try {
         const saved = keepalive
           ? await fetch("/api/builder/draft", {
@@ -1601,6 +1612,9 @@ export function Builder({
   useEffect(() => {
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
+    const actionMutationVersion = localActionMutationVersions.current.get(
+      durableDraftRevision,
+    );
     if (
       pendingActionExpectedRevision.current !== undefined &&
       durableDraftRevision === pendingActionExpectedRevision.current + 1
@@ -1610,6 +1624,18 @@ export function Builder({
       draftUpdatedAt.current = durableDraftUpdatedAt;
       return;
     }
+    if (
+      actionMutationVersion !== undefined &&
+      localFormMutationVersion.current !== actionMutationVersion
+    ) {
+      activeDraftId.current = durableDraftId;
+      draftRevision.current = durableDraftRevision;
+      draftUpdatedAt.current = durableDraftUpdatedAt;
+      localActionMutationVersions.current.delete(durableDraftRevision);
+      return;
+    }
+    if (actionMutationVersion !== undefined)
+      localActionMutationVersions.current.delete(durableDraftRevision);
     void applyAuthoritativeDraft({
       draftId: durableDraftId,
       revision: durableDraftRevision,
