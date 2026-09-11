@@ -66,6 +66,10 @@ export function SearchCombobox({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
+  // Provider scopes can stream in after the builder has mounted. Reflect an
+  // externally selected scope once it exists, but never replace text the user
+  // is actively filtering.
+  const displayedQuery = filtering ? query : (selected?.label ?? "");
   const restore = () => {
     setOpen(false);
     setQuery("");
