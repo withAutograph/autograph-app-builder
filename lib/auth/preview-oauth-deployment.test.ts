@@ -14,13 +14,13 @@ describe("Preview OAuth deployment handlers", () => {
     const managedAuthority = vi.fn(async () => false);
 
     await expect(
-      selfServiceSignupAuthority("local", managedAuthority)(),
+      selfServiceSignupAuthority("local", managedAuthority)()
     ).resolves.toBe(true);
     await expect(
-      selfServiceSignupAuthority("preview", managedAuthority)(),
+      selfServiceSignupAuthority("preview", managedAuthority)()
     ).resolves.toBe(false);
     await expect(
-      selfServiceSignupAuthority("production", managedAuthority)(),
+      selfServiceSignupAuthority("production", managedAuthority)()
     ).resolves.toBe(false);
     expect(managedAuthority).toHaveBeenCalledTimes(2);
   });
@@ -29,9 +29,9 @@ describe("Preview OAuth deployment handlers", () => {
     const getSession = vi.fn(async () => ({
       session: { activeOrganizationId: null },
       user: {
+        email: "person@example.com",
         id: "user_one",
         name: "Person",
-        email: "person@example.com",
       },
     }));
     const setActiveOrganization = vi.fn(async () => ({
@@ -47,24 +47,24 @@ describe("Preview OAuth deployment handlers", () => {
         auth: { api: { getSession, setActiveOrganization } },
         authority: { ensureOrganizationForVerifiedUser },
         headers: new Headers(),
-      }),
+      })
     ).resolves.toEqual({
-      user: {
-        id: "user_one",
-        name: "Person",
-        email: "person@example.com",
-      },
       organization: {
         organizationId: "organization_one",
         workspaceId: "workspace_one",
+      },
+      user: {
+        email: "person@example.com",
+        id: "user_one",
+        name: "Person",
       },
     });
     expect(ensureOrganizationForVerifiedUser).toHaveBeenCalledWith({
       userId: "user_one",
     });
     expect(setActiveOrganization).toHaveBeenCalledWith({
-      headers: expect.any(Headers),
       body: { organizationId: "organization_one" },
+      headers: expect.any(Headers),
     });
   });
 
@@ -81,9 +81,9 @@ describe("Preview OAuth deployment handlers", () => {
           getSession: vi.fn(async () => ({
             session: { activeOrganizationId: "organization_one" },
             user: {
+              email: "person@example.com",
               id: "user_one",
               name: "Person",
-              email: "person@example.com",
             },
           })),
           setActiveOrganization,
@@ -111,7 +111,7 @@ describe("Preview OAuth deployment handlers", () => {
         },
         authority: { ensureOrganizationForVerifiedUser },
         headers: new Headers(),
-      }),
+      })
     ).resolves.toBeUndefined();
     expect(ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
     expect(setActiveOrganization).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ describe("Preview OAuth deployment handlers", () => {
 
   it("mounts the Better Auth handler without eager runtime construction", async () => {
     const handler = vi.fn(async (request: Request) =>
-      Response.json({ path: new URL(request.url).pathname }),
+      Response.json({ path: new URL(request.url).pathname })
     );
     const getAuth = vi.fn(() => ({ handler }) as never);
     const requestHandler = createPreviewOAuthRequestHandler({
@@ -128,7 +128,7 @@ describe("Preview OAuth deployment handlers", () => {
     });
     expect(getAuth).not.toHaveBeenCalled();
     const response = await requestHandler(
-      new Request("https://builder.example.test/api/auth/jwks"),
+      new Request("https://builder.example.test/api/auth/jwks")
     );
     await expect(response.json()).resolves.toEqual({ path: "/api/auth/jwks" });
     expect(getAuth).toHaveBeenCalledTimes(1);
@@ -136,7 +136,7 @@ describe("Preview OAuth deployment handlers", () => {
 
   it("maps OAuth AS discovery to the mounted Better Auth endpoint", async () => {
     const handler = vi.fn(async (request: Request) =>
-      Response.json({ path: new URL(request.url).pathname }),
+      Response.json({ path: new URL(request.url).pathname })
     );
     const getAuth = vi.fn(() => ({ handler }) as never);
     const wellKnown = createPreviewOAuthWellKnownHandler({
@@ -145,8 +145,8 @@ describe("Preview OAuth deployment handlers", () => {
     });
     const response = await wellKnown(
       new Request(
-        "https://builder.example.test/.well-known/oauth-authorization-server/api/auth",
-      ),
+        "https://builder.example.test/.well-known/oauth-authorization-server/api/auth"
+      )
     );
     await expect(response.json()).resolves.toEqual({
       path: "/api/auth/.well-known/oauth-authorization-server",
@@ -161,12 +161,12 @@ describe("Preview OAuth deployment handlers", () => {
       }),
     });
     const response = await requestHandler(
-      new Request("https://builder.example.test/api/auth/jwks"),
+      new Request("https://builder.example.test/api/auth/jwks")
     );
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.text()).toBe(
-      JSON.stringify({ error: "preview_oauth_unavailable" }),
+      JSON.stringify({ error: "preview_oauth_unavailable" })
     );
   });
 
@@ -181,14 +181,14 @@ describe("Preview OAuth deployment handlers", () => {
       providerButton,
       settingUp,
     ] = await Promise.all([
-      readFile("next.config.ts", "utf8"),
-      readFile("lib/auth/preview-oauth-deployment.ts", "utf8"),
-      readFile("lib/auth/preview-oauth-runtime.ts", "utf8"),
-      readFile("components/providers.tsx", "utf8"),
-      readFile("lib/auth-client.ts", "utf8"),
-      readFile("components/auth/sign-in.tsx", "utf8"),
-      readFile("components/auth/provider-button.tsx", "utf8"),
-      readFile("app/auth/setting-up/page.tsx", "utf8"),
+      readFile("next.config.ts", "utf-8"),
+      readFile("lib/auth/preview-oauth-deployment.ts", "utf-8"),
+      readFile("lib/auth/preview-oauth-runtime.ts", "utf-8"),
+      readFile("components/providers.tsx", "utf-8"),
+      readFile("lib/auth-client.ts", "utf-8"),
+      readFile("components/auth/sign-in.tsx", "utf-8"),
+      readFile("components/auth/provider-button.tsx", "utf-8"),
+      readFile("app/(product)/auth/setting-up/page.tsx", "utf-8"),
     ]);
     expect(config).toContain('source: "/auth/:path*"');
     expect(config).toContain('{ key: "Cache-Control", value: "no-store" }');
@@ -213,15 +213,15 @@ describe("Preview OAuth deployment handlers", () => {
     expect(signIn).not.toContain("SignUp");
     expect(signIn).not.toContain("/oauth2/continue");
     expect(signIn).toContain(
-      '<ProviderButtons socialLayout={socialLayout} view="signIn" />',
+      '<ProviderButtons socialLayout={socialLayout} view="signIn" />'
     );
     expect(providerButton).not.toContain("Setting up your workspace…");
     expect(settingUp).toContain("Setting up your workspace…");
     await expect(
-      readFile("app/auth/workspace/page.tsx", "utf8"),
+      readFile("app/auth/workspace/page.tsx", "utf-8")
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
-      readFile("app/auth/workspace/workspace-form.tsx", "utf8"),
+      readFile("app/auth/workspace/workspace-form.tsx", "utf-8")
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -232,7 +232,7 @@ describe("Preview OAuth deployment handlers", () => {
         "lib/integrations/vercel-installation-deployment.ts",
         "lib/auth/github-app-installation-deployment.ts",
         "lib/mcp/browser-preview-deployment.ts",
-      ].map((path) => readFile(path, "utf8")),
+      ].map((path) => readFile(path, "utf-8"))
     );
 
     expect(builder).toContain("authenticated: true");
@@ -248,18 +248,18 @@ describe("Preview OAuth deployment handlers", () => {
   it("uses the Better Auth UI passkey registry surfaces", async () => {
     const [providers, signIn, signUp, accountSettings, passkeyButton] =
       await Promise.all([
-        readFile("components/providers.tsx", "utf8"),
-        readFile("components/auth/sign-in.tsx", "utf8"),
-        readFile("components/auth/sign-up.tsx", "utf8"),
+        readFile("components/providers.tsx", "utf-8"),
+        readFile("components/auth/sign-in.tsx", "utf-8"),
+        readFile("components/auth/sign-up.tsx", "utf-8"),
         readFile(
           "components/auth/settings/account/account-settings.tsx",
-          "utf8",
+          "utf-8"
         ),
-        readFile("components/auth/passkey/passkey-button.tsx", "utf8"),
+        readFile("components/auth/passkey/passkey-button.tsx", "utf-8"),
       ]);
 
     expect(providers).toContain(
-      'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"',
+      'import { passkeyPlugin } from "@/lib/auth/passkey-plugin"'
     );
     expect(providers).toContain("passkeysEnabled");
     expect(providers).toContain("passkeyUiPlugins(passkeysEnabled");
@@ -274,10 +274,10 @@ describe("Preview OAuth deployment handlers", () => {
     expect(accountSettings).toContain("plugin.securityCards");
     expect(accountSettings).toContain("plugin.accountCards");
     expect(passkeyButton).toContain(
-      "useSignInPasskey(authClient, { retry: false })",
+      "useSignInPasskey(authClient, { retry: false })"
     );
     expect(passkeyButton).toContain(
-      "useAddPasskey(authClient, { retry: false })",
+      "useAddPasskey(authClient, { retry: false })"
     );
     expect(passkeyButton).toContain("await awaitPasskeyResponse(");
     expect(passkeyButton).toContain("signInPasskey.mutateAsync({");
@@ -291,22 +291,22 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).not.toContain("setShowRegistration");
     expect(passkeyButton).not.toContain('if (view === "signUp") return null');
     expect(passkeyButton).toContain(
-      'fetch("/api/auth/passkey/onboarding-context"',
+      'fetch("/api/auth/passkey/onboarding-context"'
     );
   });
 
   it("keeps the OAuth provider choices visible during local development", async () => {
-    const layout = await readFile("app/layout.tsx", "utf8");
+    const layout = await readFile("app/(product)/layout.tsx", "utf-8");
 
     expect(layout).toContain(
-      'const showLocalAuthProviders = process.env.NODE_ENV === "development"',
+      'const showLocalAuthProviders = process.env.NODE_ENV === "development"'
     );
     expect(layout.match(/showLocalAuthProviders \|\|/g)).toHaveLength(2);
     expect(layout.match(/showPreviewEmulatedAuthProviders \|\|/g)).toHaveLength(
-      2,
+      2
     );
     expect(layout).toContain(
-      'process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1"',
+      'process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1"'
     );
     expect(layout).toContain("process.env.GITHUB_CLIENT_ID");
     expect(layout).toContain("process.env.VERCEL_AUTH_CLIENT_ID");

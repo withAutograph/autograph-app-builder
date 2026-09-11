@@ -21,7 +21,7 @@ vi.mock("./builder-shell", () => ({
   Header: () => <header>Autograph</header>,
 }));
 
-import { HandoffContent } from "../handoff/[id]/handoff-content";
+import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const params = Promise.resolve({ id });

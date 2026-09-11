@@ -1,0 +1,51 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
+
+import { getDocumentContent } from "../docs-content";
+import { docs, getDocument } from "../docs-registry";
+import { DocsShell } from "../docs-shell";
+
+type PageProps = { params: Promise<{ slug: string }> };
+
+export function generateStaticParams() {
+  return docs
+    .filter((document) => document.slug !== "overview")
+    .map((document) => ({ slug: document.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const document = getDocument(slug);
+  if (!document || document.slug === "overview") return {};
+  return {
+    title: document.title,
+    description: document.description,
+  };
+}
+
+async function DocumentContent({ params }: PageProps) {
+  const { slug } = await params;
+  const document = getDocument(slug);
+  if (!document || document.slug === "overview") notFound();
+  const Content = getDocumentContent(document);
+  return (
+    <DocsShell document={document}>
+      <Content />
+    </DocsShell>
+  );
+}
+
+function DocsLoading() {
+  return <main aria-busy="true" className="min-h-screen" />;
+}
+
+export default function DocumentPage(props: PageProps) {
+  return (
+    <Suspense fallback={<DocsLoading />}>
+      <DocumentContent {...props} />
+    </Suspense>
+  );
+}
