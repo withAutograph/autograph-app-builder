@@ -64,11 +64,20 @@ import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
+import {
+  appNameFromBrief,
+  randomAppName,
+  repositoryNameFromAppName,
+} from "./builder-names";
 import { SearchCombobox, type ComboOption } from "./search-combobox";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
+export {
+  appNameFromBrief,
+  repositoryNameFromAppName,
+} from "./builder-names";
 export { SearchCombobox, type ComboOption } from "./search-combobox";
 import type {
   BuilderDraft,
@@ -161,126 +170,7 @@ const briefExamples = [
   "# Vendor onboarding\n\nBuild a guided vendor onboarding app that collects company details, validates required documents, and shows approval progress. Include explicit review states, responsible owners, and audit-friendly history.",
 ] as const;
 
-const randomNameAdjectives = [
-  "Adaptive",
-  "Agile",
-  "Bright",
-  "Calm",
-  "Clever",
-  "Clear",
-  "Curious",
-  "Focused",
-  "Grounded",
-  "Guided",
-  "Helpful",
-  "Human",
-  "Intentional",
-  "Keen",
-  "Lucid",
-  "Modern",
-  "Nimble",
-  "Open",
-  "Ready",
-  "Reliable",
-  "Simple",
-  "Steady",
-  "Swift",
-  "Thoughtful",
-  "Trusted",
-  "Useful",
-  "Warm",
-] as const;
-const randomNameNouns = [
-  "App",
-  "Atlas",
-  "Beacon",
-  "Blueprint",
-  "Bridge",
-  "Builder",
-  "Canvas",
-  "Compass",
-  "Forge",
-  "Foundry",
-  "Flow",
-  "Grove",
-  "Harbor",
-  "Launch",
-  "Loom",
-  "Orbit",
-  "Path",
-  "Pilot",
-  "Portal",
-  "Prism",
-  "Relay",
-  "Signal",
-  "Spark",
-  "Stack",
-  "Studio",
-  "Thread",
-  "Waypoint",
-  "Workshop",
-] as const;
 const preferredModelId = activeBuilderModelId;
-
-export function repositoryNameFromAppName(appName: string) {
-  return appName
-    .normalize("NFKD")
-    .replaceAll(/[\u0300-\u036f]/gu, "")
-    .toLowerCase()
-    .replaceAll("&", " and ")
-    .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replaceAll(/^-+|-+$/gu, "")
-    .slice(0, 100)
-    .replaceAll(/-+$/gu, "");
-}
-
-export function appNameFromBrief(brief: string) {
-  const firstContentLine = brief
-    .split("\n")
-    .map((line) => line.replace(/^\s*#+\s*/u, "").trim())
-    .find(Boolean);
-  if (!firstContentLine) return "";
-
-  const words = firstContentLine
-    .replaceAll(/[*_`[\](){}]/gu, " ")
-    .replace(/^(?:build|create|design|launch|make)\s+(?:an?\s+|the\s+)?/iu, "")
-    .replaceAll(/[^\p{L}\p{N}'& -]+/gu, " ")
-    .trim()
-    .split(/\s+/u)
-    .slice(0, 5);
-  return words
-    .map((word) =>
-      word.length > 1
-        ? `${word[0]?.toUpperCase()}${word.slice(1).toLowerCase()}`
-        : word.toUpperCase(),
-    )
-    .join(" ")
-    .slice(0, 120)
-    .replace(/[\uD800-\uDBFF]$/u, "")
-    .trimEnd();
-}
-
-function randomAppName(seed?: string) {
-  if (!seed) {
-    const adjective =
-      randomNameAdjectives[
-        Math.floor(Math.random() * randomNameAdjectives.length)
-      ];
-    const noun =
-      randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
-    return `${adjective} ${noun}`;
-  }
-  const hash = [...seed].reduce(
-    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
-    0,
-  );
-  const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
-  const noun =
-    randomNameNouns[
-      Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length
-    ];
-  return `${adjective} ${noun}`;
-}
 
 export function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
