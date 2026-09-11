@@ -458,7 +458,7 @@ describe("Vercel-faithful App Builder flow", () => {
       buildWith.parentElement!.compareDocumentPosition(model.parentElement!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(view.querySelector('[aria-label="GPT 5.6 Sol"]')).not.toBeNull();
+    expect(view.querySelector('[aria-label="GPT 5.6 Terra"]')).not.toBeNull();
     expect(
       view.querySelector(
         'button[aria-label="Only use providers that support Zero Data Retention."]',

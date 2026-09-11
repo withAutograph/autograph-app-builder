@@ -16,7 +16,7 @@ const intent = {
   appName: "Stock",
   appId: "stock",
   brief: "Manage stock exceptions",
-  modelId: "openai/gpt-5.6-sol",
+  modelId: "openai/gpt-5.6-terra",
   repository: {
     requestedName: "stock",
     private: true,

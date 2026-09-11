@@ -6,6 +6,7 @@ import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { activeBuilderModelId } from "@/lib/integrations/active-model";
 
 export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
@@ -1827,7 +1828,7 @@ export default defineAgent({
       "@emulators/vercel",
     ],
   },
-  model: hasTestCapability("mock-model") ? testModel : "openai/gpt-5.6-sol",
+  model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
   ...(!hasTestCapability("mock-model")
     ? {
         modelOptions: {

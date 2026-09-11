@@ -119,7 +119,7 @@ compare exact PNG bytes.
 
 ## Review evidence
 
-The reviewer is `openai/gpt-5.6-sol`, authenticated through project-scoped
+The reviewer is `openai/gpt-6-astra`, authenticated through project-scoped
 Vercel OIDC. The report includes the design brief, viewport observations,
 measurements, and source-evidence coverage. Source coverage is reported as
 partial when `--source-dir` is omitted or the available source cannot support a
