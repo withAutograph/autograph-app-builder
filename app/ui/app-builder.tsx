@@ -1081,6 +1081,11 @@ export function Builder({
       const current = builderForm.getValues();
       const next = typeof update === "function" ? update(current) : update;
       (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
+        // RHF publishes each setValue to useWatch independently. Replaying an
+        // unchanged field from an older composite snapshot can otherwise
+        // arrive after a later input event and overwrite it (for example, a
+        // generated name replacing a manually edited name before OAuth).
+        if (Object.is(current[field], next[field])) return;
         builderForm.setValue(field, next[field], {
           shouldDirty: true,
           shouldValidate: true,
