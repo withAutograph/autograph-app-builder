@@ -68,12 +68,10 @@ import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
 import { SearchCombobox, type ComboOption } from "./search-combobox";
-import { AutographMark } from "./autograph-mark";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-export { AutographMark } from "./autograph-mark";
 export type {
   BuilderDraft,
   BuilderForm,
