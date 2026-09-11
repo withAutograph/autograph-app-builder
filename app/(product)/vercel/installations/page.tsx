@@ -7,6 +7,7 @@ import {
   ProviderConnection,
   ProviderConnectionNotice,
 } from "@/app/ui/provider-connection";
+import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { Suspense } from "react";
 import { SiVercel } from "react-icons/si";
 
@@ -47,7 +48,14 @@ async function VercelInstallationsContent({ searchParams }: Props) {
 
 export default function VercelInstallationsPage(props: Props) {
   return (
-    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+    <Suspense
+      fallback={
+        <ProviderConnectionLoadingShell
+          title="Connect a Vercel team"
+          description="Choose the Vercel account Autograph may use for projects and deployments."
+        />
+      }
+    >
       <VercelInstallationsContent {...props} />
     </Suspense>
   );
