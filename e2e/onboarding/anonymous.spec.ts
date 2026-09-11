@@ -106,6 +106,7 @@ for (const provider of ["GitHub", "Vercel"] as const) {
     await page.goto("/");
     await page.getByLabel("What should this app do?").fill(brief);
     await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await finishOAuth(page, provider);
     await page.goto("/");
     await expect(page.locator("#app-brief")).toHaveValue(brief);
