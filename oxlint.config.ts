@@ -5,6 +5,11 @@ export default defineConfig({
   extends: [core],
   ignorePatterns: core.ignorePatterns,
   rules: {
+    "import/consistent-type-specifier-style": "off",
+    "promise/param-names": "off",
+    "typescript/array-type": "off",
+    "typescript/consistent-type-definitions": "off",
+    "typescript/consistent-type-imports": "off",
     "eslint/curly": "off",
     "eslint/no-await-in-loop": "off",
     "eslint/no-bitwise": "off",
@@ -27,7 +32,10 @@ export default defineConfig({
     "unicorn/import-style": "off",
     "unicorn/no-array-sort": "off",
     "unicorn/no-await-expression-member": "off",
+    "unicorn/no-useless-undefined": "off",
+    "unicorn/numeric-separators-style": "off",
     "unicorn/prefer-event-target": "off",
     "unicorn/require-post-message-target-origin": "off",
+    "unicorn/text-encoding-identifier-case": "off",
   },
 });
