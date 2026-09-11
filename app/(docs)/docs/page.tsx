@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { getDocumentContent } from "./docs-content";
+import { DocsContent } from "./docs-content";
 import { docs } from "./docs-registry";
 import { DocsShell } from "./docs-shell";
 
@@ -12,10 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function DocsPage() {
-  const Content = getDocumentContent(overview);
   return (
     <DocsShell document={overview}>
-      <Content />
+      <DocsContent slug={overview.slug} />
     </DocsShell>
   );
 }

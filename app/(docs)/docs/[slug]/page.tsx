@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { getDocumentContent } from "../docs-content";
+import { DocsContent } from "../docs-content";
 import { docs, getDocument } from "../docs-registry";
 import { DocsShell } from "../docs-shell";
 
@@ -32,10 +32,9 @@ async function DocumentContent({ params }: PageProps) {
   const { slug } = await params;
   const document = getDocument(slug);
   if (!document || document.slug === "overview") notFound();
-  const Content = getDocumentContent(document);
   return (
     <DocsShell document={document}>
-      <Content />
+      <DocsContent slug={document.slug} />
     </DocsShell>
   );
 }
