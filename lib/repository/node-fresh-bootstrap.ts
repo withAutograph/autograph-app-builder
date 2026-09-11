@@ -1091,7 +1091,9 @@ async function inspectDestinationPrestate(input: {
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     if (input.expected !== "absent")
-      throw new Error("The expected empty destination is absent.");
+      throw new Error("The expected empty destination is absent.", {
+        cause: error,
+      });
     return { kind: "absent", destinationPath: destination, parent };
   }
   if (
@@ -1313,7 +1315,9 @@ async function assertPrestate(
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     if (proposal.destinationPrestate.kind !== "absent")
-      throw new Error("The approved empty destination disappeared.");
+      throw new Error("The approved empty destination disappeared.", {
+        cause: error,
+      });
     return;
   }
   if (proposal.destinationPrestate.kind !== "empty-directory")
@@ -1346,7 +1350,9 @@ async function createStage(
     await mkdir(proposal.stagingPath, { mode: 0o700 });
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST")
-      throw new Error("The deterministic bootstrap stage already exists.");
+      throw new Error("The deterministic bootstrap stage already exists.", {
+        cause: error,
+      });
     throw error;
   }
   const stageState = await lstat(proposal.stagingPath);
@@ -2529,6 +2535,7 @@ async function executeBootstrap(input: {
         if (durable === undefined)
           throw new Error(
             "The fresh-bootstrap lease was lost before durable intent; its quiesced marker requires a separate reset.",
+            { cause: error },
           );
         failure = failureReceipt({
           proposal: input.proposal,

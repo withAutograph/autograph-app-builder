@@ -139,7 +139,9 @@ try {
   await mkdir(args.output, { mode: 0o700 });
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code === "EEXIST")
-    throw new Error(`Release candidate already exists: ${args.output}`);
+    throw new Error(`Release candidate already exists: ${args.output}`, {
+      cause: error,
+    });
   throw error;
 }
 const output = await realpath(args.output);

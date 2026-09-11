@@ -437,7 +437,9 @@ async function acquirePublicationLock(
         throw createError;
       const state = await lstat(path);
       if (!state.isFile() || state.isSymbolicLink())
-        throw new Error("The OS publication lock path is not a regular file.");
+        throw new Error("The OS publication lock path is not a regular file.", {
+          cause: createError,
+        });
     }
   }
   const helper = existsSync("/usr/bin/flock")
@@ -923,6 +925,7 @@ async function createOrRepairExactWorktree(
       if (registration === undefined)
         throw new Error(
           "The unregistered publication path conflicts with durable intent.",
+          { cause: error },
         );
       await assertOwnedPartialWorktree(proposal);
       await rm(proposal.worktreePath, { recursive: true });

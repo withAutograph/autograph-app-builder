@@ -1123,7 +1123,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         };
       } catch (error) {
         if (error instanceof GitHubInstallationAuthorizationError) throw error;
-        throw new Error(FAILURE_MESSAGE);
+        throw new Error(FAILURE_MESSAGE, { cause: error });
       }
     },
   };

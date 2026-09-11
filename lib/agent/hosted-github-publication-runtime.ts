@@ -50,6 +50,7 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
           : error.code === "subject"
             ? "Hosted GitHub publication requires one exact forwarded user subject."
             : "Hosted GitHub publication requires exact forwarded user authority.",
+        { cause: error },
       );
     }
     throw error;

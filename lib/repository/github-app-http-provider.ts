@@ -291,7 +291,7 @@ export function createGitHubAppHttpProvider(input: {
               : "github",
           ),
         };
-      throw new Error("github-request-failed");
+      throw new Error("github-request-failed", { cause: error });
     }
   }
 
