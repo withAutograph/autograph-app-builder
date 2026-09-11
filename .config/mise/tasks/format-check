@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Reject whitespace errors without rewriting legacy source formatting"
+#MISE description="Check repository formatting and lint with Ultracite"
 set -eu
 
-exec git diff --check
+exec "$(mise which pnpm)" exec ultracite check

@@ -1,6 +1,5 @@
 #!/bin/sh
-#MISE description="Lint repository sources with ESLint"
+#MISE description="Lint and format-check repository sources with Ultracite"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/eslint/bin/eslint.js .
+exec "$(mise which pnpm)" exec ultracite check
