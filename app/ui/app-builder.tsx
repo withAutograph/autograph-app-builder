@@ -1957,11 +1957,9 @@ export function AppBuilder({
   // The server draft is authoritative after provider return. Browser storage
   // remains a write-only, short-lived redirect bridge and is never restored.
   const resumedDraft = initialDurableDraft;
-  // A provider return can stream a newer server draft after this client leaf
-  // has mounted. Keep its identity stable so revision reconciliation, rather
-  // than an unmount/remount, decides whether that authoritative snapshot
-  // replaces the open RHF form.
-  const builderKey = providerResumeKey ?? (savedBrief || "new");
+  const builderKey = providerResumeKey
+    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
+    : savedBrief || "new";
 
   if (!authenticated)
     return (
