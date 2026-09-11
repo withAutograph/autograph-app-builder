@@ -1,12 +1,4 @@
 export type BuildDestination = "web" | "codex" | "cursor";
-export type ClipboardState = "idle" | "copied" | "failed";
-export type HandoffAttempt = "idle" | "attempted" | "blocked" | "too-long";
-
-export type BuilderHandoffReference = {
-  version: 1;
-  handoffId: string;
-  expiresAt: string;
-};
 
 export type BuilderForm = {
   appName: string;

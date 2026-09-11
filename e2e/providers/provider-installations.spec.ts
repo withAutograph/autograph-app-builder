@@ -88,6 +88,13 @@ for (const provider of emulatedProviders) {
       `Keep this ${provider} brief through authorization.`,
     );
     await page.getByLabel("App Name").fill(`${provider} Restored App`);
+    // The provider checkpoint reads RHF's live values. Confirm the controlled
+    // input has received the final edit before leaving the page so this test
+    // exercises recovery, rather than racing React's input event with the
+    // navigation click.
+    await expect(page.getByLabel("App Name")).toHaveValue(
+      `${provider} Restored App`,
+    );
 
     await installProvider(page, provider);
     await expect(page.getByLabel("App Name")).toHaveValue(
@@ -186,6 +193,9 @@ for (const provider of emulatedProviders) {
       `Keep this ${provider} draft when leaving connections.`,
     );
     await page.getByLabel("App Name").fill(`${provider} Back Draft`);
+    await expect(page.getByLabel("App Name")).toHaveValue(
+      `${provider} Back Draft`,
+    );
 
     await openProviderConnection(page, provider);
     await page.getByRole("link", { name: "Back" }).click();
@@ -292,6 +302,8 @@ for (const provider of emulatedProviders) {
     await openBuilderPage(page);
     await page.getByLabel("App Name").fill(appName);
     await page.locator("#app-brief").fill(brief);
+    await expect(page.getByLabel("App Name")).toHaveValue(appName);
+    await expect(page.locator("#app-brief")).toHaveValue(brief);
     let callbackUrl = "";
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === descriptor.callbackPath)

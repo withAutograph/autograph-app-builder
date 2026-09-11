@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertCircle,
   Check,
   ChevronDown,
   ExternalLink,
@@ -49,14 +48,8 @@ import {
 } from "@/lib/builder-drafts/contracts";
 import {
   continueBuilderHandoff,
-  type BuilderHandoffContinuationInput,
 } from "@/app/actions/builder";
-import {
-  buildAppHandoffPrompt,
-  buildAppHandoffUrl,
-} from "../../lib/handoff/client";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
-import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
 import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
@@ -64,16 +57,8 @@ import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
-import {
-  persistActiveProvisioning,
-  persistBuilderDraft,
-} from "./builder-session";
+import { persistBuilderDraft } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
-import { BuilderNextSteps } from "./builder-next-steps";
-import { BuilderProvisionedResources } from "./builder-provisioned-resources";
-import { BuilderInstallInstructions } from "./builder-install-instructions";
-import { BuilderHandoffProgress } from "./builder-handoff-progress";
-import { ProvisioningProgress } from "./provisioning-progress";
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
@@ -88,80 +73,20 @@ export { SearchCombobox, type ComboOption } from "./search-combobox";
 import type {
   BuilderDraft,
   BuilderForm,
-  BuilderHandoffReference,
-  BuildDestination,
-  ClipboardState,
   DeploymentProvider,
-  HandoffAttempt,
   ProviderField,
   StorageProvider,
 } from "./builder-types";
 export type {
   BuilderDraft,
   BuilderForm,
-  BuilderHandoffReference,
-  BuildDestination,
-  ClipboardState,
   DeploymentProvider,
-  HandoffAttempt,
   ProviderField,
   StorageProvider,
 } from "./builder-types";
 
 export type ConnectionStage = "connect" | "configure" | "customize";
 export type ConnectionFlow = { name: string; stage: ConnectionStage };
-
-const maximumHandoffUrlLength = 8_000;
-
-export { buildAppHandoffPrompt } from "../../lib/handoff/client";
-
-function buildDestinationLabel(destination: BuildDestination) {
-  if (destination === "web") return "Web Chat";
-  return destination === "codex" ? "ChatGPT / Codex" : "Cursor";
-}
-
-function providerSetupMessage(
-  provider: "GitHub" | "Vercel",
-  result:
-    BuilderProvisionResponse["github"] | BuilderProvisionResponse["vercel"],
-) {
-  if (result.status === "succeeded" || result.code === "not_selected") return;
-  const reason = {
-    configuration_unavailable: "provider configuration is not active",
-    credential_unavailable: "the selected credential needs to be reconnected",
-    installation_inactive: "the selected installation is no longer active",
-    name_conflict: "all safe name candidates were already in use",
-    provider_rejected:
-      "the provider rejected the requested setup or Git access",
-    provider_unavailable: "the provider could not be reached",
-    source_unavailable: "the immutable starter artifact could not be loaded",
-    source_mismatch: "the immutable starter artifact failed verification",
-    postcondition_failed:
-      "provider read-back did not match the requested setup",
-    github_required:
-      "GitHub setup must succeed before a linked Vercel project can be created",
-    feature_disabled:
-      "resource provisioning is not active for this environment",
-  }[result.code];
-  return `${provider}: ${reason}.`;
-}
-
-function attemptAppHandoff(
-  destination: BuildDestination,
-  handoffId: string,
-  openedWindow?: Window | null,
-): HandoffAttempt {
-  if (destination === "web") return "blocked";
-  const url = buildAppHandoffUrl(destination, handoffId);
-  if (url.length > maximumHandoffUrlLength) return "too-long";
-  try {
-    if (openedWindow) openedWindow.location.href = url;
-    else window.open(url, "_blank", "noopener,noreferrer");
-    return "attempted";
-  } catch {
-    return "blocked";
-  }
-}
 
 const featuredConnections = [
   ["QuickBooks", "quickbooks"],
@@ -1967,310 +1892,6 @@ export function Builder({
           onConnected={completeConnection}
         />
       ) : null}
-    </main>
-  );
-}
-
-export function Handoff({
-  form,
-  requestId,
-  handoffCreationRequestId,
-  openedWindow,
-  provisioningEnabled,
-  continuationAction = continueBuilderHandoff,
-  onReady,
-}: {
-  form: BuilderForm;
-  requestId: string;
-  handoffCreationRequestId: string;
-  openedWindow?: Window | null;
-  provisioningEnabled: boolean;
-  continuationAction?: typeof continueBuilderHandoff;
-  onReady: (result: {
-    provisioning: BuilderProvisionResponse;
-    handoff: BuilderHandoffReference;
-    handoffAttempt: HandoffAttempt;
-    clipboardState: ClipboardState;
-  }) => void;
-}) {
-  const completedAttempt = useRef(-1);
-  const mounted = useRef(false);
-  const [attempt, setAttempt] = useState(0);
-  const [continuation, dispatchContinuation, continuationPending] =
-    useActionState(continuationAction, undefined);
-  const [streaming, setStreaming] = useState(false);
-  const [streamSnapshot, setStreamSnapshot] =
-    useState<BuilderProvisionResponse>();
-  const stages = [
-    ...(form.githubInstallationId ? ["Creating GitHub repository"] : []),
-    ...(form.vercelInstallationId ? ["Creating Vercel project"] : []),
-    "Preparing secure handoff",
-    "Opening selected client",
-  ];
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    mounted.current = true;
-    if (completedAttempt.current === attempt)
-      return () => {
-        mounted.current = false;
-      };
-    completedAttempt.current = attempt;
-    setStep(0);
-    setStreaming(
-      provisioningEnabled &&
-        Boolean(form.githubInstallationId || form.vercelInstallationId),
-    );
-    const input: BuilderHandoffContinuationInput = {
-      version: 1,
-      requestId,
-      creationRequestId: handoffCreationRequestId,
-      provisioningEnabled,
-      form,
-    };
-    startTransition(() => dispatchContinuation(input));
-    return () => {
-      mounted.current = false;
-    };
-  }, [
-    attempt,
-    continuationAction,
-    dispatchContinuation,
-    form,
-    handoffCreationRequestId,
-    onReady,
-    openedWindow,
-    provisioningEnabled,
-    requestId,
-    stages.length,
-  ]);
-  useEffect(() => {
-    if (!continuation || continuationPending) return;
-    if (continuation.status === "error") return;
-    const handoffAttempt = attemptAppHandoff(
-      form.buildDestination,
-      continuation.handoff.handoffId,
-      openedWindow,
-    );
-    const timer = window.setTimeout(() => {
-      if (!mounted.current) return;
-      setStep(stages.length);
-      onReady({
-        provisioning: continuation.provisioning,
-        handoff: continuation.handoff,
-        handoffAttempt,
-        clipboardState: "idle",
-      });
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [
-    continuation,
-    continuationPending,
-    form.buildDestination,
-    onReady,
-    openedWindow,
-    stages.length,
-  ]);
-  return (
-    <>
-      {streaming ? (
-        <ProvisioningProgress
-          requestId={requestId}
-          onSnapshot={setStreamSnapshot}
-          onSettled={setStreamSnapshot}
-        />
-      ) : null}
-      <BuilderHandoffProgress
-        stages={stages}
-        step={
-          streamSnapshot?.github.status === "succeeded" ||
-          streamSnapshot?.github.status === "failed"
-            ? Math.max(step, form.githubInstallationId ? 1 : 0)
-            : step
-        }
-        handoffError={continuation?.status === "error" && !continuationPending}
-        onRetry={() => setAttempt((value) => value + 1)}
-      />
-    </>
-  );
-}
-
-export function Ready({
-  form,
-  requestId,
-  initialHandoff,
-  initialProvisioning,
-  provisioningEnabled,
-  initialAttempt,
-  initialClipboardState,
-  onReset,
-}: {
-  form: BuilderForm;
-  requestId: string;
-  initialHandoff: BuilderHandoffReference;
-  initialProvisioning: BuilderProvisionResponse;
-  provisioningEnabled: boolean;
-  initialAttempt: HandoffAttempt;
-  initialClipboardState: ClipboardState;
-  onReset: () => void;
-}) {
-  const command = `codex plugin marketplace add withAutograph/marketplace --ref main
-codex plugin marketplace upgrade autograph
-codex plugin add app-builder@autograph`;
-  const [showInstall, setShowInstall] = useState(true);
-  const [retryClipboardState, setRetryClipboardState] =
-    useState<ClipboardState>("idle");
-  const [handoffAttempt, setHandoffAttempt] =
-    useState<HandoffAttempt>(initialAttempt);
-  const [provisioning, setProvisioning] = useState(initialProvisioning);
-  const [handoff, setHandoff] = useState(initialHandoff);
-  const [retryingProvider, setRetryingProvider] = useState<
-    "github" | "vercel"
-  >();
-  const [retryContinuation, dispatchRetryContinuation, retryPending] =
-    useActionState(continueBuilderHandoff, undefined);
-  const retryCreationRequestId = useRef<string | undefined>(undefined);
-  const retrying = retryPending ? retryingProvider : undefined;
-  const retryFailed = retryContinuation?.status === "error" && !retryPending;
-  const destination = buildDestinationLabel(form.buildDestination);
-  const hasProvisioningFailure = (["github", "vercel"] as const).some(
-    (provider) => {
-      const selected =
-        provider === "github"
-          ? Boolean(form.githubInstallationId)
-          : Boolean(form.vercelInstallationId);
-      return selected && provisioning[provider].status === "failed";
-    },
-  );
-  const continueState = retryFailed
-    ? "failed"
-    : retryClipboardState === "idle"
-      ? initialClipboardState
-      : retryClipboardState;
-  const openSelectedClient = () => {
-    try {
-      void navigator.clipboard
-        .writeText(
-          buildAppHandoffPrompt(
-            handoff.handoffId,
-            form.buildDestination === "cursor" ? "cursor" : "codex",
-          ),
-        )
-        .then(() => setRetryClipboardState("copied"))
-        .catch(() => setRetryClipboardState("failed"));
-    } catch {
-      setRetryClipboardState("failed");
-    }
-    setHandoffAttempt(
-      attemptAppHandoff(form.buildDestination, handoff.handoffId),
-    );
-  };
-  const retryProvider = (provider: "github" | "vercel") => {
-    setRetryingProvider(provider);
-    const creationRequestId = crypto.randomUUID();
-    retryCreationRequestId.current = creationRequestId;
-    startTransition(() =>
-      dispatchRetryContinuation({
-        version: 1,
-        requestId,
-        creationRequestId,
-        provisioningEnabled,
-        retryProvider: provider,
-        form,
-      }),
-    );
-  };
-  useEffect(() => {
-    if (
-      !retryContinuation ||
-      retryPending ||
-      retryContinuation.status === "error"
-    )
-      return;
-    const timer = window.setTimeout(() => {
-      setProvisioning(retryContinuation.provisioning);
-      setHandoff(retryContinuation.handoff);
-      persistActiveProvisioning({
-        version: 1,
-        requestId,
-        handoffCreationRequestId:
-          retryCreationRequestId.current ?? crypto.randomUUID(),
-        form,
-        phase: "ready",
-        provisioning: retryContinuation.provisioning,
-        handoff: retryContinuation.handoff,
-      });
-      setHandoffAttempt("attempted");
-      setRetryClipboardState("idle");
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [form, requestId, retryContinuation, retryPending]);
-  return (
-    <main className={styles.flowPage} id="main-content">
-      <section className={styles.readyCard}>
-        <h1>
-          {hasProvisioningFailure
-            ? "App created with an issue"
-            : "App Brief Ready!"}
-        </h1>
-        <p>
-          Your brief for <span className={styles.teamDot} />{" "}
-          <strong>{form.appName}</strong>{" "}
-          {hasProvisioningFailure
-            ? "is ready, but one provider still needs attention."
-            : "is ready."}
-        </p>
-        <div
-          className={styles.previewPane}
-          data-status={hasProvisioningFailure ? "attention" : "ready"}
-        >
-          <AutographMark compact />
-          <strong>{form.appName}</strong>
-          <span>
-            {hasProvisioningFailure ? (
-              <AlertCircle size={12} aria-hidden="true" />
-            ) : (
-              <i />
-            )}
-            {hasProvisioningFailure ? "Setup needs attention" : "Ready"}
-          </span>
-          <button type="button" onClick={openSelectedClient}>
-            Open in {destination}
-          </button>
-        </div>
-        <BuilderProvisionedResources
-          githubSelected={Boolean(form.githubInstallationId)}
-          vercelSelected={Boolean(form.vercelInstallationId)}
-          provisioning={provisioning}
-          provisioningEnabled={provisioningEnabled}
-          retrying={retrying}
-          onRetry={(provider) => void retryProvider(provider)}
-          providerSetupMessage={providerSetupMessage}
-        />
-        <p className={styles.continueStatus} role="status" aria-live="polite">
-          {handoffAttempt === "attempted"
-            ? `Launch requested for ${destination}. If your browser suppressed the custom link, you can retry above.`
-            : null}
-          {handoffAttempt === "too-long"
-            ? `This brief is too long to open automatically in ${destination}.`
-            : null}
-          {handoffAttempt === "blocked"
-            ? `The browser blocked ${destination}. You can open the client manually and paste the brief.`
-            : null}
-          {continueState === "copied"
-            ? " Your brief was copied as a fallback."
-            : null}
-          {continueState === "failed"
-            ? " Clipboard access was blocked. Retry after allowing clipboard access."
-            : null}
-        </p>
-        {form.buildDestination === "codex" && showInstall ? (
-          <BuilderInstallInstructions
-            command={command}
-            onDismiss={() => setShowInstall(false)}
-          />
-        ) : null}
-        <BuilderNextSteps onReset={onReset} />
-      </section>
     </main>
   );
 }

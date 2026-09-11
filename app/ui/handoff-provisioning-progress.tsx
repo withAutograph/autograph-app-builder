@@ -81,7 +81,6 @@ export function HandoffProvisioningProgress({
       return;
     let closed = false;
     let source: EventSource | undefined;
-    let reconnect: number | undefined;
     const connect = () => {
       if (closed || latestRevision.current <= 0) return;
       source = new EventSource(
@@ -102,21 +101,16 @@ export function HandoffProvisioningProgress({
       source.addEventListener("snapshot", receive);
       source.addEventListener("end", receive);
       source.onerror = () => {
-        if (
-          closed ||
-          snapshot.provisioning.status === "settled" ||
-          source?.readyState !== EventSource.CLOSED
-        )
-          return;
-        source.close();
-        reconnect = window.setTimeout(connect, 500);
+        if (closed) return;
+        // Keep this EventSource alive: its native reconnect sends the most
+        // recent SSE event id as Last-Event-ID. Replacing it here would lose
+        // that cursor and turn a transient disconnect into a full replay.
       };
     };
     connect();
     return () => {
       closed = true;
       source?.close();
-      if (reconnect !== undefined) window.clearTimeout(reconnect);
     };
   }, [snapshot.provisioning.requestId, snapshot.provisioning.status]);
 

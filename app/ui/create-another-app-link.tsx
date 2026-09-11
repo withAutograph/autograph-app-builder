@@ -1,12 +1,8 @@
-"use client";
-
 import Link from "next/link";
-
-import { clearActiveProvisioning } from "./builder-session";
 
 export function CreateAnotherAppLink() {
   return (
-    <Link href="/" onClick={clearActiveProvisioning}>
+    <Link href="/" prefetch={true}>
       Create another app
     </Link>
   );
