@@ -40,8 +40,12 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
-  const signInPasskey = useSignInPasskey(authClient);
-  const addPasskey = useAddPasskey(authClient);
+  // A completed WebAuthn ceremony cannot safely be replayed. In particular,
+  // retrying a transport failure can leave the UI pending after the assertion
+  // has already been accepted by the authenticator. Surface the recoverable
+  // failure immediately and let the person explicitly start a new ceremony.
+  const signInPasskey = useSignInPasskey(authClient, { retry: false });
+  const addPasskey = useAddPasskey(authClient, { retry: false });
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
 
