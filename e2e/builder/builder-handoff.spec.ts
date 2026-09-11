@@ -260,7 +260,9 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     .poll(() => page.evaluate(() => document.visibilityState))
     .toBe("visible");
   const continued = page.getByText("Continued in your app.", { exact: false });
-  expect((await browserBoundaryState(page)).opened).toHaveLength(1);
+  // The server-rendered handoff never initiates a custom-protocol navigation
+  // on arrival. Launching a client is an explicit, user-owned action.
+  expect((await browserBoundaryState(page)).opened).toHaveLength(0);
   await expect(continued).toHaveCount(0);
   const before = await getWithTransientRetry(page, handoff.statusPath);
   expect(before.ok()).toBe(true);
@@ -292,7 +294,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     expect(after.ok()).toBe(true);
     expect((await after.json()).status).toBe("continued");
     expect(mcpRequests).toBe(0);
-    expect((await browserBoundaryState(page)).opened).toHaveLength(1);
+    expect((await browserBoundaryState(page)).opened).toHaveLength(0);
   } finally {
     try {
       await sql`
@@ -418,10 +420,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await page.getByLabel("Private repository").uncheck();
   await completeHandoff(page);
 
-  const automaticallyOpened = await browserBoundaryState(page);
-  expect(automaticallyOpened.clipboard).toEqual([]);
-  expect(automaticallyOpened.opened).toHaveLength(1);
-  expect(automaticallyOpened.opened[0]).toMatch(/^codex:\/\/new\?prompt=/u);
+  const initialBrowserState = await browserBoundaryState(page);
+  expect(initialBrowserState).toEqual({ clipboard: [], opened: [] });
 
   const handoffUrl = page.url();
   await page.reload();
@@ -495,11 +495,8 @@ test("Cursor handoff carries the exact copied prompt", async ({
   await page.getByRole("radio", { name: "Cursor" }).check();
   await completeHandoff(page);
 
-  const automaticallyOpened = await browserBoundaryState(page);
-  expect(automaticallyOpened).toEqual({
-    clipboard: [],
-    opened: [expect.stringMatching(/^cursor:\/\//u)],
-  });
+  const initialBrowserState = await browserBoundaryState(page);
+  expect(initialBrowserState).toEqual({ clipboard: [], opened: [] });
   await expect(
     page.getByRole("radio", { name: "Cursor", exact: true }),
   ).toBeChecked();
