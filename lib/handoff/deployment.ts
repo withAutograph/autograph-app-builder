@@ -108,7 +108,7 @@ export function createBuilderHandoffRouteHandler(input: {
   journal: BuilderProvisionJournalStore;
   handoffs: HandoffService;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (
@@ -267,7 +267,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
   authorityForRequest(request: Request): Promise<Authority | undefined>;
   handoffs: HandoffService;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   return async (request: Request, handoffId: string) => {
     try {
       if (

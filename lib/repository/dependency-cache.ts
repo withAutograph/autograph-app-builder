@@ -698,7 +698,7 @@ function boundedOutput(stdout: string, stderr: string, label: string) {
 
 function commandPayload(output: string) {
   return output
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .replaceAll("\r", "");
 }
 

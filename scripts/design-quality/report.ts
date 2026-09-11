@@ -37,7 +37,7 @@ export function renderReport(report: {
 }) {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
-  const adherence = report.adherence;
+  const {adherence} = report;
   const pct = (n: number | null) =>
     n === null ? "Not assessed" : `${Math.round(n * 100) / 100}%`;
   const observations = adherence?.observations ?? [];

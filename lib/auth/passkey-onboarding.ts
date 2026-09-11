@@ -78,7 +78,7 @@ export function readPasskeyOnboardingConfig(
   const origin = exactOrigin(
     environment.BETTER_AUTH_URL ?? derivedPreviewIssuer,
   );
-  const hostname = new URL(origin).hostname;
+  const {hostname} = new URL(origin);
   if (environment.VERCEL_ENV === "production") {
     throw new Error("Passkey onboarding is unavailable in Production.");
   }
@@ -373,7 +373,7 @@ export function createPasskeyOnboardingPlugin(input: {
           metadata: { noStore: true },
         },
         async (ctx) => {
-          const config = input.config;
+          const {config} = input;
           if (!config) throw onboardingUnavailable();
           if (ctx.headers?.get("origin") !== config.origin) {
             throw invalidOnboardingAuthority();
@@ -457,7 +457,7 @@ export function createPasskeyPlugin(input: {
     registration: {
       requireSession: false,
       async resolveUser({ context }) {
-        const config = input.config;
+        const {config} = input;
         if (!config) throw onboardingUnavailable();
         const verified = verifyPasskeyOnboardingToken(context, config, now());
         if (!verified) throw invalidOnboardingAuthority();
@@ -474,7 +474,7 @@ export function createPasskeyPlugin(input: {
           context,
         );
         if (authenticatedRegistration) return authenticatedRegistration;
-        const config = input.config;
+        const {config} = input;
         if (!config) throw onboardingUnavailable();
         const verified = verifyPasskeyOnboardingToken(context, config, now());
         if (!verified) throw invalidOnboardingAuthority();

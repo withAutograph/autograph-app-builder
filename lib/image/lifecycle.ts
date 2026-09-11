@@ -619,7 +619,7 @@ export function parseRemoteIndexInspection(
     throw new Error(
       "Remote platform manifest does not match the inspected local image.",
     );
-  const annotations = attestationEntry.annotations;
+  const {annotations} = attestationEntry;
   if (
     !hasExactKeys(attestationEntry, [
       "annotations",
@@ -695,8 +695,8 @@ export function parseRemoteImageInspection(
     );
   const manifest = JSON.parse(manifestRaw) as RemoteManifest;
   const image = JSON.parse(imageRaw) as RemoteImage;
-  const config = manifest.config;
-  const layers = manifest.layers;
+  const {config} = manifest;
+  const {layers} = manifest;
   if (
     !hasExactKeys(manifest, [
       "config",

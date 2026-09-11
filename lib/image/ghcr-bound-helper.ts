@@ -148,7 +148,7 @@ export function parseGhAuthStatus(
     Object.keys(parsed).join(",") !== "hosts"
   )
     throw new Error("GitHub authentication status was malformed.");
-  const hosts = (parsed as { hosts?: unknown }).hosts;
+  const {hosts} = (parsed as { hosts?: unknown });
   if (
     typeof hosts !== "object" ||
     hosts === null ||

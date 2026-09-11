@@ -1,5 +1,17 @@
 "use client";
 
+import type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
+
 import {
   Check,
   ChevronDown,
@@ -74,6 +86,19 @@ import type {
   BuilderDraft,
   BuilderForm,
   DeploymentProvider,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
+||||||| parent of 5021535e (chore: remove safe ultracite rule overrides)
+export { SearchCombobox, type ComboOption } from "./builder-combobox";
+import type {
+  BuilderDraft,
+  BuilderForm,
+  BuilderHandoffReference,
+  BuildDestination,
+  ClipboardState,
+  DeploymentProvider,
+  HandoffAttempt,
   ProviderField,
   StorageProvider,
 } from "./builder-types";
@@ -1530,7 +1555,7 @@ export function Builder({
           void discardPendingDraft();
           return;
         }
-        const snapshot = entry.snapshot;
+        const {snapshot} = entry;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);

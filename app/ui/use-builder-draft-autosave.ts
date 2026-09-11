@@ -147,7 +147,7 @@ export function useBuilderDraftAutosave<T>(
             return false;
           }
 
-          const current = queued.current;
+          const {current} = queued;
           queued.current = undefined;
           updateStatus("saving");
           try {

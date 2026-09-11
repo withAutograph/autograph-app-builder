@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import type { SourceReceipt } from "../repository/source-receipt";
+import { freshBootstrapSourceWorkspace } from "./fresh-bootstrap-source";
 
 const mocks = vi.hoisted(() => ({
   inspectSourceBoundSandboxWorkspace: vi.fn(),
@@ -17,8 +18,6 @@ vi.mock("../repository/arrusted-template", () => ({
 vi.mock("../repository/supported-template", () => ({
   readPreparedSandboxSourceManifest: mocks.readPreparedSandboxSourceManifest,
 }));
-
-import { freshBootstrapSourceWorkspace } from "./fresh-bootstrap-source";
 
 const workspace: PreparedSandboxWorkspace = {
   workspaceId: "workspace-canonical",

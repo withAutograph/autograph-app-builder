@@ -72,7 +72,7 @@ export function createAuthorizedSandboxBackend<BO, SO>(input: {
       });
     },
     prewarm(prewarmInput) {
-      const bootstrap = prewarmInput.bootstrap;
+      const {bootstrap} = prewarmInput;
       return input.backend.prewarm({
         ...prewarmInput,
         bootstrap:

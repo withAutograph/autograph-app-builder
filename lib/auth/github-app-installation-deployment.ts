@@ -56,7 +56,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
     returnState: ProviderConnectionReturn;
   }): Promise<string | undefined>;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   const redirect = (
     status: "connected" | "failed",
     reason?: ProviderConnectionFailureReason,

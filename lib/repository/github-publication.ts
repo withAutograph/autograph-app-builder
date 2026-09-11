@@ -418,7 +418,11 @@ function safeBranch(value: unknown): value is string {
     !value.endsWith(".lock") &&
     !value.includes("..") &&
     !value.includes("@{") &&
-    !/[~^:?*[\\\s\x00-\x1f\x7f]/u.test(value) &&
+    !/[~^:?*[\\\s]/u.test(value) &&
+    !Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    }) &&
     value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
   );
 }
@@ -1254,7 +1258,10 @@ function safeTitle(value: string): boolean {
     value === value.trim() &&
     value.length > 0 &&
     value.length <= 120 &&
-    !/[\r\n\x00-\x1f\x7f]/u.test(value)
+    !Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
   );
 }
 

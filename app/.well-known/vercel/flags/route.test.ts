@@ -1,5 +1,6 @@
 import { createAccessProof } from "flags";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GET } from "./route";
 
 import {
   builderConnectionsFlag,
@@ -12,8 +13,6 @@ vi.mock("@flags-sdk/vercel", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@flags-sdk/vercel")>()),
   getProviderData,
 }));
-
-import { GET } from "./route";
 
 describe("Vercel Flags discovery route", () => {
   beforeEach(() => {

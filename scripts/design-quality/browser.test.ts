@@ -11,6 +11,7 @@ import {
 } from "./browser";
 import { collectCssRuleEvidence } from "./css-evidence";
 import { escapeHtml, renderReport } from "./report";
+
 describe("conservative design measurements", () => {
   it("keeps token references distinct from lookalikes", () => {
     expect(

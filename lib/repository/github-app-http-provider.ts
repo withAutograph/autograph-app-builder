@@ -211,8 +211,8 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key)))
     throw new Error("invalid-response");
-  const metadata = value.metadata;
-  const contents = value.contents;
+  const {metadata} = value;
+  const {contents} = value;
   const workflows = value.workflows ?? "none";
   const pullRequests = value.pull_requests ?? "none";
   const administration = value.administration ?? "none";

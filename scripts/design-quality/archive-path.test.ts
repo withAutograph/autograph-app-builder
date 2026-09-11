@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { captureFilename } from "./archive-path";
+
 it("archives desktop variants and retains historical names", () => {
   for (const name of [
     "desktop-0",

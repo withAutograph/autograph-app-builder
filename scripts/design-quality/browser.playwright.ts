@@ -1,6 +1,11 @@
 import { expect, test } from "playwright/test";
 import { capturePreview, measurePage, measureStyles } from "./browser";
 import { createServer } from "node:http";
+import {
+  collectClassTokenEvidence,
+  collectIntrinsicClassSignatures,
+} from "./class-evidence";
+import { collectCssRuleEvidence } from "./css-evidence";
 
 test("an unavailable preview is not captured or scored as an empty design", async () => {
   const server = createServer((_request, response) => {
@@ -23,12 +28,6 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
-import {
-  collectClassTokenEvidence,
-  collectIntrinsicClassSignatures,
-} from "./class-evidence";
-import { collectCssRuleEvidence } from "./css-evidence";
-
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
   page,

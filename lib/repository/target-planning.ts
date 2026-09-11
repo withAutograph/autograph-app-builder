@@ -217,7 +217,7 @@ function parseOutput<T>(
   label: string,
 ): T {
   const stdout = result.stdout
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .replace(/\r/gu, "")
     .trim();
   if (result.exitCode !== 0) {

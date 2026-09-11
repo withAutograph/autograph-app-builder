@@ -98,7 +98,7 @@ function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
     !attribute.initializer.expression
   )
     return undefined;
-  const expression = attribute.initializer.expression;
+  const {expression} = attribute.initializer;
   if (
     ts.isStringLiteral(expression) ||
     ts.isNoSubstitutionTemplateLiteral(expression)
@@ -127,7 +127,7 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   if (ts.isIdentifier(tag)) return tag.text;
   // TypeScript represents `<Icons.Check />` as a PropertyAccessExpression.
   if (!ts.isPropertyAccessExpression(tag)) return undefined;
-  let expression = tag.expression;
+  let {expression} = tag;
   while (ts.isPropertyAccessExpression(expression))
     expression = expression.expression;
   return ts.isIdentifier(expression) ? expression.text : undefined;
@@ -167,7 +167,7 @@ function literalKind(
     !attribute.initializer.expression
   )
     return undefined;
-  const expression = attribute.initializer.expression;
+  const {expression} = attribute.initializer;
   if (
     ts.isStringLiteral(expression) ||
     ts.isNoSubstitutionTemplateLiteral(expression)

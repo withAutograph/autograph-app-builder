@@ -564,7 +564,7 @@ export function createLocalEveSessionService(
       const { session, response } = await client.sessions.create({
         message: prompt,
       });
-      const sessionId = session.state.sessionId;
+      const {sessionId} = session.state;
       localRequests.set(key, sessionId);
       localSessionHandles.set(sessionId, session);
       const timestamp = Date.now();

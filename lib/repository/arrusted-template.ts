@@ -372,7 +372,7 @@ async function cloneCanonicalArrustedWorkspace(input: {
       "The canonical Arrusted workspace clone receipt is invalid.",
     );
   }
-  const workspaceDigest = observation.workspaceDigest;
+  const {workspaceDigest} = observation;
   if (
     typeof observation.sourceSha !== "string" ||
     !SHA.test(observation.sourceSha) ||

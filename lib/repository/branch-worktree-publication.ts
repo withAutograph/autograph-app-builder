@@ -214,7 +214,7 @@ export function proposalFromBranchJournal(
   journal: BranchWorktreePublicationJournal,
 ): BranchWorktreePublicationProposal {
   const proposalOnly = { ...journal } as Record<string, unknown>;
-  const proposalDigest = journal.proposalDigest;
+  const {proposalDigest} = journal;
   for (const key of [
     "proposalDigest",
     "status",

@@ -103,7 +103,7 @@ export function createBuilderDraftRouteHandler(input: {
   >;
   drafts: ReturnType<typeof createBuilderDraftService>;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (

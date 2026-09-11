@@ -84,7 +84,7 @@ export const hostedProofScenarioSchema = z
         message: "Each approval phase is required exactly once.",
       });
     for (const expected of scenario.approvalReceipts) {
-      const receipt = expected.receipt;
+      const {receipt} = expected;
       if (
         receipt.repositoryId !== scenario.target.repositoryId ||
         receipt.repository !== scenario.target.repository ||
@@ -584,7 +584,7 @@ async function pollUntilSettled(input: {
   permitApprovals: boolean;
   requestPrefix: string;
 }) {
-  let cursor = input.cursor;
+  let {cursor} = input;
   let allText = "";
   let responseCount = 0;
   let responseBatchCount = 0;

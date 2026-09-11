@@ -37,7 +37,7 @@ export function prototypePreviewRequestUrl(input: {
   environment: Environment;
   requestUrl: string;
 }): string {
-  const environment = input.environment;
+  const {environment} = input;
   const exactDevelopmentAdapter =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&

@@ -409,7 +409,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       expect(start.mock.calls[0][0]).toMatchObject({
         sourceHandoffId: handoffId,
       });
-      const principal = start.mock.calls[0][0].principal;
+      const {principal} = start.mock.calls[0][0];
       expect(
         await store.getSession(principal, result.structuredContent.sessionId),
       ).toMatchObject({ sourceHandoffId: handoffId });

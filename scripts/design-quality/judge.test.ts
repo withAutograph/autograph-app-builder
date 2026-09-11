@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { axes, judgeDesign, validateJudgment } from "./judge";
+
 const image = {
   name: "desktop-0",
   path: "unused.png",

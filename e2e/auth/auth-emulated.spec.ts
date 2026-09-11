@@ -177,7 +177,7 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
 }) => {
   let credentialRequests = 0;
   await page.addInitScript(() => {
-    const credentials = navigator.credentials;
+    const {credentials} = navigator;
     Object.defineProperty(navigator, "credentials", {
       configurable: true,
       value: {
@@ -227,7 +227,7 @@ for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
   }) => {
     let verificationRequests = 0;
     await page.addInitScript((name) => {
-      const credentials = navigator.credentials;
+      const {credentials} = navigator;
       Object.defineProperty(navigator, "credentials", {
         configurable: true,
         value: {
@@ -476,7 +476,7 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
   page,
 }) => {
   await page.addInitScript(() => {
-    const credentials = navigator.credentials;
+    const {credentials} = navigator;
     Object.defineProperty(navigator, "credentials", {
       configurable: true,
       value: {
@@ -511,7 +511,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   page,
 }) => {
   await page.addInitScript(() => {
-    const credentials = navigator.credentials;
+    const {credentials} = navigator;
     Object.defineProperty(navigator, "credentials", {
       configurable: true,
       value: {

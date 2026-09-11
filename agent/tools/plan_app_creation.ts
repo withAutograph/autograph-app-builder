@@ -43,7 +43,7 @@ export default defineTool({
       getSandbox: () => ctx.getSandbox(),
     });
     const current: DependencyReadyState = prepared.state;
-    const sandbox = prepared.sandbox;
+    const {sandbox} = prepared;
     const execution = targetExecutionBinding(undefined, process.env);
     if (
       current.phase === "planned" ||

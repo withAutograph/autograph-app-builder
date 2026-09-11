@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HandoffContent } from "../handoff/[id]/handoff-content";
 
 const server = vi.hoisted(() => ({
   load: vi.fn(),

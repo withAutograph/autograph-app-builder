@@ -1,4 +1,5 @@
 import { defineConfig } from "playwright/test";
+
 export default defineConfig({
   testDir: "./scripts/design-quality",
   testMatch: "**/*.playwright.ts",

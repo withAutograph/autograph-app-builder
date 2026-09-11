@@ -4,6 +4,11 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  appNameFromBrief,
+  AppBuilder as AppBuilderComponent,
+  repositoryNameFromAppName,
+} from "./app-builder";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -110,12 +115,6 @@ vi.stubGlobal("fetch", draftFetch);
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
-
-import {
-  appNameFromBrief,
-  AppBuilder as AppBuilderComponent,
-  repositoryNameFromAppName,
-} from "./app-builder";
 
 const integrationState = {
   vercel: {

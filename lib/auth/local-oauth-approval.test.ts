@@ -64,7 +64,7 @@ describe("local OAuth approval", () => {
   });
 
   it("signs a short-lived approval bound to provider and origin", () => {
-    const authorization = parseLocalOAuthAuthorization(base).authorization;
+    const {authorization} = parseLocalOAuthAuthorization(base);
     const approval = signLocalOAuthApproval(
       {
         provider: "github",

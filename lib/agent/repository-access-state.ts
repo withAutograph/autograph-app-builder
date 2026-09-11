@@ -148,7 +148,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
   source: ImmutableGitHubSourceReceipt;
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
-  const repository = input.source.repository;
+  const {repository} = input.source;
   if (
     repository.repositoryId !== access.repository.repositoryId ||
     repository.owner !== access.repository.owner ||

@@ -2174,7 +2174,7 @@ async function executeBootstrap(input: {
       existingJournal !== undefined &&
       existingJournal.status !== "succeeded"
     ) {
-      const layout = existingJournal.layout;
+      const {layout} = existingJournal;
       if (layout.phase === "intent") {
         if ((await pathState(input.proposal.stagingPath)) !== "absent")
           throw new Error(

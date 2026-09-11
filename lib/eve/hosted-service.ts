@@ -37,8 +37,6 @@ import {
   projectHostedSnapshot,
   type HostedEngineSnapshot,
 } from "./hosted-projection";
-
-const projectSnapshot = projectHostedSnapshot;
 import {
   eveSessionResultSchema,
   publicInputRequestSchema,
@@ -59,6 +57,8 @@ import {
 } from "./hosted-errors";
 import { recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
+
+const projectSnapshot = projectHostedSnapshot;
 
 export {
   HostedAdapterSessionUnavailableError,
@@ -200,7 +200,7 @@ function checkpointInputRequest(
       id,
       label: truncateUtf8(label, profile.optionLabelBytes),
     }));
-  const authorization = request.authorization;
+  const {authorization} = request;
   const repositoryAccess = authorization?.repositoryAccess;
   return publicInputRequestSchema.parse({
     requestId: request.requestId,
@@ -982,7 +982,7 @@ export function createHostedEveSessionService(input: {
       }
       if (request.prompt === undefined)
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
-      const prompt = request.prompt;
+      const {prompt} = request;
       return mutate({
         kind: "start",
         request,

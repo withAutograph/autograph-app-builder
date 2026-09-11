@@ -57,7 +57,7 @@ function parseBuilderDraft(
           draft.deploymentProvider === "vercel" ? "vercel" : null,
       } as BuilderDraft,
     };
-    const acknowledgedRevision = parsed.acknowledgedRevision;
+    const {acknowledgedRevision} = parsed;
     if (
       typeof acknowledgedRevision === "number" &&
       Number.isSafeInteger(acknowledgedRevision) &&

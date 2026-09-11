@@ -155,7 +155,7 @@ export function evaluatePrototypeQuality(input: {
   html: string;
   appSpec: string;
 }): PrototypeQualityReport {
-  const prototype = input.scenario.expected.prototype;
+  const {prototype} = input.scenario.expected;
   if (prototype === undefined)
     throw new Error("This product-quality scenario has no prototype contract.");
   const hardFailures: string[] = [];

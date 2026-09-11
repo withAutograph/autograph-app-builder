@@ -55,7 +55,7 @@ const PROVIDER_RETRY_DELAY_MS = 250;
 
 function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  const status = (error as Error & { status?: unknown }).status;
+  const {status} = (error as Error & { status?: unknown });
   if (typeof status === "number" && (status === 429 || status >= 500))
     return true;
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
@@ -65,7 +65,7 @@ function retryableProviderFailure(error: unknown): boolean {
 
 function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) return "unknown";
-  const cause = (error as Error & { cause?: unknown }).cause;
+  const {cause} = (error as Error & { cause?: unknown });
   const code =
     cause &&
     typeof cause === "object" &&

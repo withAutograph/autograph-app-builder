@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { continueBuilderHandoff } from "./builder";
 
 const calls = vi.hoisted(() => [] as string[]);
 
@@ -72,8 +73,6 @@ vi.mock("@/lib/handoff/deployment", () => ({
   }),
   getBuilderHandoffPageData: vi.fn(),
 }));
-
-import { continueBuilderHandoff } from "./builder";
 
 afterEach(() => calls.splice(0));
 

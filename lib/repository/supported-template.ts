@@ -649,7 +649,7 @@ export function inspectSupportedTemplateSnapshot(
   input: SupportedTemplateSnapshot,
 ): EligibilityResult {
   const failures = [...(input.failures ?? [])];
-  const contents = input.contents;
+  const {contents} = input;
   const planningCompatibility = inspectPlanningCompatibility(contents);
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
     if (
@@ -1000,7 +1000,7 @@ async function verifyDevelopmentSandboxWorkspace(
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
   });
   const normalizedStdout = inspection.stdout
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||

@@ -93,8 +93,7 @@ export function createVercelInstallationDeploymentHandler(
   return async (request: Request) => {
     const startedAt = Date.now();
     const resolvedEnvironment = providerEmulationEnvironment(environment);
-    const origin = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url)
-      .origin;
+    const {origin} = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url);
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,

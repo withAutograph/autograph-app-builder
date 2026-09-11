@@ -40,7 +40,7 @@ export function createBuilderProvisioningRouteHandler(input: {
     typeof executeBuilderProvisioning
   >[0]["dependencies"];
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (new URL(request.url).origin !== origin)

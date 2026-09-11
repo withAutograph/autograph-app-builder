@@ -3,7 +3,7 @@ import type { DurableHostedSessionRecord } from "./hosted-store";
 export function recoveryPromptForSession(
   record: DurableHostedSessionRecord,
 ): string | undefined {
-  const checkpoint = record.checkpoint;
+  const {checkpoint} = record;
   if (checkpoint === undefined) return undefined;
   const messages = checkpoint.events
     .filter(

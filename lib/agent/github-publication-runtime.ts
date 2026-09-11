@@ -157,9 +157,9 @@ export function composeGitHubPublicationRuntime(input: {
       "GitHub publication cannot be enabled without its typed adapter and durable stores.",
     );
   }
-  const adapter = input.adapter;
-  const proposals = input.proposals;
-  const receipts = input.receipts;
+  const {adapter} = input;
+  const {proposals} = input;
+  const {receipts} = input;
   return {
     async status() {
       return runtimeStatus(true);
