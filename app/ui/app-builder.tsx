@@ -1439,9 +1439,22 @@ export function Builder({
       revision: number;
       updatedAt: string;
       record: BuilderDraftRecord;
-    }) => {
+    }, expectedLocalMutationVersion?: number) => {
+      // A polling request can begin before a user edit and return a server
+      // snapshot that predates that edit. It is not an incoming concurrent
+      // draft and must never reset the newer RHF state.
+      if (
+        expectedLocalMutationVersion !== undefined &&
+        localFormMutationVersion.current !== expectedLocalMutationVersion
+      )
+        return;
       if (remote.revision <= draftRevision.current) return;
       await discardSupersededByRemoteRevision(remote.revision);
+      if (
+        expectedLocalMutationVersion !== undefined &&
+        localFormMutationVersion.current !== expectedLocalMutationVersion
+      )
+        return;
       draftRevision.current = remote.revision;
       draftUpdatedAt.current = remote.updatedAt;
       activeDraftId.current = remote.draftId;
@@ -1621,6 +1634,7 @@ export function Builder({
     let wasHidden = document.visibilityState === "hidden";
     const checkForServerDraft = async () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      const localMutationVersion = localFormMutationVersion.current;
       // A completed foreground action can become visible to this read before
       // its acknowledgement advances draftRevision. Do not reinterpret that
       // device-local save as a remote revision and replace edits made while
@@ -1632,10 +1646,11 @@ export function Builder({
         if (
           disposed ||
           !remote ||
-          pendingActionExpectedRevision.current !== undefined
+          pendingActionExpectedRevision.current !== undefined ||
+          localFormMutationVersion.current !== localMutationVersion
         )
           return;
-        await applyAuthoritativeDraft(remote);
+        await applyAuthoritativeDraft(remote, localMutationVersion);
       } catch {
         // Autosave owns retry/error presentation; sync polling stays quiet.
       }
