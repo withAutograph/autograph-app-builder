@@ -542,7 +542,7 @@ describe("offline dependency cache", () => {
     expect(producer).toContain('process.platform !== "linux" || process.arch !== "x64"');
     expect(producer).toContain('["vp", "../vite-plus/bin/vp"]');
     expect(producer).toContain('["turbo", "../turbo/bin/turbo"]');
-    expect(producer).toContain('"@autograph",\n    "vite-config"');
+    expect(producer).toMatch(/"@autograph",\s+"vite-config"/u);
     expect(producer).toContain('scope: "builder-execution"');
     expect(producer).toContain('platform: "linux/x86_64"');
     expect(producer).toContain("rootVersions.set(dependency, dependencyVersion)");
