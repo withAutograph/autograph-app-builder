@@ -10,10 +10,10 @@ import {
 } from "./github-user-credential";
 
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 };
 
 describe("GitHub user credential envelope", () => {
@@ -34,24 +34,24 @@ describe("GitHub user credential envelope", () => {
       refreshTokenExpiresAt: "2027-02-26T12:00:00.000Z",
     };
     const encrypted = encryptGitHubUserTokens({
-      tokens,
-      key: config.key,
       associatedData,
+      key: config.key,
+      tokens,
     });
     expect(JSON.stringify(encrypted)).not.toContain(tokens.accessToken);
     expect(
       decryptGitHubUserTokens({
         ...encrypted,
-        key: config.key,
         associatedData,
-      }),
+        key: config.key,
+      })
     ).toEqual(tokens);
     expect(() =>
       decryptGitHubUserTokens({
         ...encrypted,
-        key: config.key,
         associatedData: `${associatedData}-other-tenant`,
-      }),
+        key: config.key,
+      })
     ).toThrow();
   });
 });

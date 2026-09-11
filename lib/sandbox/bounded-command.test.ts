@@ -1,26 +1,28 @@
+import type { SandboxProcess } from "eve/sandbox";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SandboxProcess } from "eve/sandbox";
 import { runBoundedSandboxCommand } from "./bounded-command";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 const stream = (...chunks: string[]) =>
   new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const chunk of chunks) controller.enqueue(bytes(chunk));
+      for (const chunk of chunks) {
+        controller.enqueue(bytes(chunk));
+      }
       controller.close();
     },
   });
 
 function processFixture(stdout: string[], stderr: string[] = []) {
-  const kill = vi.fn(async () => undefined);
+  const kill = vi.fn(async () => {});
   const process = {
-    stdout: stream(...stdout),
-    stderr: stream(...stderr),
-    wait: vi.fn(async () => ({ exitCode: 0 })),
     kill,
+    stderr: stream(...stderr),
+    stdout: stream(...stdout),
+    wait: vi.fn(async () => ({ exitCode: 0 })),
   } as unknown as SandboxProcess;
-  return { process, kill };
+  return { kill, process };
 }
 
 describe("bounded sandbox command", () => {
@@ -31,13 +33,13 @@ describe("bounded sandbox command", () => {
       return fixture.process;
     });
     await expect(
-      runBoundedSandboxCommand({ spawn }, { command: "mise run check" }),
-    ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
+      runBoundedSandboxCommand({ spawn }, { command: "mise run check" })
+    ).resolves.toEqual({ exitCode: 0, stderr: "warning", stdout: "hello" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: "mise run check",
         abortSignal: expect.any(AbortSignal),
-      }),
+        command: "mise run check",
+      })
     );
   });
 
@@ -47,11 +49,11 @@ describe("bounded sandbox command", () => {
       runBoundedSandboxCommand(
         { spawn: async () => fixture.process },
         { command: "generate" },
-        { outputBytes: 6 },
-      ),
+        { outputBytes: 6 }
+      )
     ).rejects.toMatchObject({
-      name: "SandboxCommandLimitError",
       code: "output-limit",
+      name: "SandboxCommandLimitError",
     });
     expect(fixture.kill).toHaveBeenCalledOnce();
   });
@@ -62,27 +64,27 @@ describe("bounded sandbox command", () => {
       runBoundedSandboxCommand(
         { spawn: async () => fixture.process },
         { command: "generate" },
-        { outputBytes: 6 },
-      ),
+        { outputBytes: 6 }
+      )
     ).rejects.toMatchObject({ code: "output-limit" });
     expect(fixture.kill).toHaveBeenCalledOnce();
   });
 
   it("kills a command that produces no output before its wall timeout", async () => {
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
-    const kill = vi.fn(async () => undefined);
+    const kill = vi.fn(async () => {});
     const process = {
-      stdout: idle(),
-      stderr: idle(),
-      wait: () => new Promise<never>(() => undefined),
       kill,
+      stderr: idle(),
+      stdout: idle(),
+      wait: () => new Promise<never>(() => undefined),
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
         { spawn: async () => process },
         { command: "idle" },
-        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
-      ),
+        { noOutputTimeoutMs: 10, timeoutMs: 1000 }
+      )
     ).rejects.toMatchObject({ code: "no-output-timeout" });
     expect(kill).toHaveBeenCalledOnce();
   });
@@ -95,32 +97,32 @@ describe("bounded sandbox command", () => {
         },
       });
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
-    const kill = vi.fn(async () => undefined);
+    const kill = vi.fn(async () => {});
     const process = {
-      stdout: oneThenIdle(),
-      stderr: idle(),
-      wait: () => new Promise<never>(() => undefined),
       kill,
+      stderr: idle(),
+      stdout: oneThenIdle(),
+      wait: () => new Promise<never>(() => undefined),
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
         { spawn: async () => process },
         { command: "progress-then-idle" },
-        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
-      ),
+        { noOutputTimeoutMs: 10, timeoutMs: 1000 }
+      )
     ).rejects.toMatchObject({ code: "no-output-timeout" });
     expect(kill).toHaveBeenCalledOnce();
   });
 
   it("does not let a hung provider kill replace the original limit error", async () => {
     const fixture = processFixture(["too much output"]);
-    fixture.process.kill = vi.fn(() => new Promise<never>(() => undefined));
+    fixture.process.kill = vi.fn(() => new Promise<never>(() => {}));
     await expect(
       runBoundedSandboxCommand(
         { spawn: async () => fixture.process },
         { command: "generate" },
-        { outputBytes: 2, killCleanupTimeoutMs: 10 },
-      ),
+        { killCleanupTimeoutMs: 10, outputBytes: 2 }
+      )
     ).rejects.toMatchObject({ code: "output-limit" });
   });
 
@@ -132,7 +134,7 @@ describe("bounded sandbox command", () => {
     });
     await runBoundedSandboxCommand(
       { spawn },
-      { command: "true", env: { SAFE_INPUT: "exact" } },
+      { command: "true", env: { SAFE_INPUT: "exact" } }
     );
     expect((spawn.mock.calls[0]?.[0] as { env?: unknown }).env).toEqual({
       SAFE_INPUT: "exact",

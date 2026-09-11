@@ -4,36 +4,36 @@ import type { GitHubProvisionResult } from "./contracts";
 import { provisionVercelProject } from "./vercel-provider";
 
 const github = {
-  status: "succeeded",
-  installationId: "101",
-  repositoryId: "202",
-  owner: "withAutograph",
-  name: "vendor-portal",
-  fullName: "withAutograph/vendor-portal",
-  url: "https://github.com/withAutograph/vendor-portal",
-  scope: { type: "organization", id: "88", login: "withAutograph" },
-  visibility: "private",
   defaultBranch: "main",
+  fullName: "withAutograph/vendor-portal",
   headSha: "a".repeat(40),
   headTree: "b".repeat(40),
+  installationId: "101",
+  name: "vendor-portal",
+  owner: "withAutograph",
+  repositoryId: "202",
+  scope: { id: "88", login: "withAutograph", type: "organization" },
   starter: {
+    archiveBytes: 100,
+    archiveSha256: "d".repeat(64),
+    manifestSha256: "e".repeat(64),
     sourceSha: "c".repeat(40),
     sourceTree: "b".repeat(40),
-    archiveSha256: "d".repeat(64),
-    archiveBytes: 100,
-    manifestSha256: "e".repeat(64),
   },
+  status: "succeeded",
+  url: "https://github.com/withAutograph/vendor-portal",
+  visibility: "private",
 } satisfies GitHubProvisionResult;
 
 function installation(scopeType: "team" | "user") {
   return {
+    active: true,
+    displayName: "Autograph",
     installationId: "icfg_1",
+    plan: "pro",
     scopeId: scopeType === "team" ? "team_1" : "user_1",
     scopeType,
-    displayName: "Autograph",
     slug: "autograph",
-    plan: "pro",
-    active: true,
     updatedAt: new Date(),
   } as const;
 }
@@ -51,82 +51,82 @@ describe("Vercel project provisioning", () => {
           created = true;
           const body = JSON.parse(String(init.body));
           expect(body).toMatchObject({
-            name: "apps-vendor-portal",
             framework: "nextjs",
-            rootDirectory: "apps/vendor-portal",
             gitRepository: {
-              type: "github",
               repo: "withAutograph/vendor-portal",
+              type: "github",
             },
+            name: "apps-vendor-portal",
+            rootDirectory: "apps/vendor-portal",
           });
           return Response.json({ id: "prj_1" }, { status: 201 });
         }
         return created
           ? Response.json({
-              id: "prj_1",
-              name: "apps-vendor-portal",
               framework: "nextjs",
-              rootDirectory: "apps/vendor-portal",
+              id: "prj_1",
               link: {
-                type: "github",
                 org: "withAutograph",
                 repo: "vendor-portal",
+                type: "github",
               },
+              name: "apps-vendor-portal",
+              rootDirectory: "apps/vendor-portal",
             })
           : Response.json({}, { status: 404 });
       });
       const candidates: string[] = [];
       const absent: string[] = [];
       const result = await provisionVercelProject({
-        installation: installation(scopeType),
-        token: "vercel-token",
         appId: "vendor-portal",
-        github,
-        githubSelected: true,
-        persistedCandidates: [],
-        persistedAbsentCandidates: [],
-        persistCandidate: async (value) => void candidates.push(value),
-        persistAbsent: async (value) => void absent.push(value),
         fetch: request,
         generateSuffix: () => "a1b2c3",
+        github,
+        githubSelected: true,
+        installation: installation(scopeType),
+        persistAbsent: async (value) => void absent.push(value),
+        persistCandidate: async (value) => void candidates.push(value),
+        persistedAbsentCandidates: [],
+        persistedCandidates: [],
+        token: "vercel-token",
       });
       expect(result).toMatchObject({
-        status: "succeeded",
-        projectId: "prj_1",
         linkedGitHubRepository: "withAutograph/vendor-portal",
+        projectId: "prj_1",
+        status: "succeeded",
       });
       expect(candidates[0]).toBe("apps-vendor-portal");
       expect(absent).toEqual(["apps-vendor-portal"]);
       expect(
         request.mock.calls.every(
-          ([url]) => !String(url).includes("deployments"),
-        ),
+          ([url]) => !String(url).includes("deployments")
+        )
       ).toBe(true);
-    },
+    }
   );
 
   it("skips a paired Vercel operation when GitHub did not succeed", async () => {
     const request = vi.fn<typeof fetch>();
     const result = await provisionVercelProject({
-      installation: installation("team"),
-      token: "vercel-token",
       appId: "vendor-portal",
+      fetch: request,
       github: {
-        status: "failed",
         code: "provider_rejected",
         retryable: true,
+        status: "failed",
       },
       githubSelected: true,
-      persistedCandidates: [],
-      persistedAbsentCandidates: [],
-      persistCandidate: vi.fn(),
+      installation: installation("team"),
       persistAbsent: vi.fn(),
-      fetch: request,
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "vercel-token",
     });
     expect(result).toEqual({
-      status: "skipped",
       code: "github_required",
       retryable: false,
+      status: "skipped",
     });
     expect(request).not.toHaveBeenCalled();
   });
@@ -138,27 +138,27 @@ describe("Vercel project provisioning", () => {
         bodies.push(JSON.parse(String(init.body)));
         return Response.json(
           { error: { code: "repo_not_found" } },
-          { status: 400 },
+          { status: 400 }
         );
       }
       return Response.json({}, { status: 404 });
     });
     const result = await provisionVercelProject({
-      installation: installation("team"),
-      token: "vercel-token",
       appId: "vendor-portal",
-      github,
-      githubSelected: true,
-      persistedCandidates: [],
-      persistedAbsentCandidates: [],
-      persistCandidate: vi.fn(),
-      persistAbsent: vi.fn(),
       fetch: request,
       generateSuffix: () => "a1b2c3",
+      github,
+      githubSelected: true,
+      installation: installation("team"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "vercel-token",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_rejected",
+      status: "failed",
     });
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toHaveProperty("gitRepository");
@@ -177,38 +177,39 @@ describe("Vercel project provisioning", () => {
         created = true;
         return Response.json({ id: "prj_2" }, { status: 201 });
       }
-      if (path.endsWith("/apps-vendor-portal"))
+      if (path.endsWith("/apps-vendor-portal")) {
         return Response.json({ id: "unrelated" });
+      }
       return created
         ? Response.json({
+            framework: "nextjs",
             id: "prj_2",
             name: "apps-vendor-portal-a1b2c3",
-            framework: "nextjs",
             rootDirectory: "apps/vendor-portal",
           })
         : Response.json({}, { status: 404 });
     });
     const result = await provisionVercelProject({
-      installation: installation("user"),
-      token: "vercel-token",
       appId: "vendor-portal",
-      github: {
-        status: "skipped",
-        code: "not_selected",
-        retryable: false,
-      },
-      githubSelected: false,
-      persistedCandidates: [],
-      persistedAbsentCandidates: [],
-      persistCandidate: async (value) => void candidates.push(value),
-      persistAbsent: async (value) => void absent.push(value),
       fetch: request,
       generateSuffix: () => "a1b2c3",
+      github: {
+        code: "not_selected",
+        retryable: false,
+        status: "skipped",
+      },
+      githubSelected: false,
+      installation: installation("user"),
+      persistAbsent: async (value) => void absent.push(value),
+      persistCandidate: async (value) => void candidates.push(value),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "vercel-token",
     });
     expect(result).toMatchObject({
-      status: "succeeded",
-      projectId: "prj_2",
       name: "apps-vendor-portal-a1b2c3",
+      projectId: "prj_2",
+      status: "succeeded",
     });
     expect(result).not.toHaveProperty("linkedGitHubRepository");
     expect(candidates.slice(0, 2)).toEqual([

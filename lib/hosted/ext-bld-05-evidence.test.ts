@@ -8,55 +8,55 @@ import {
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
 const reference = (value: string) => ({
-  receiptDigest: digest(value),
   accepted: true as const,
+  receiptDigest: digest(value),
 });
 const input = {
-  version: 1 as const,
-  source: { sha: "a".repeat(40), tree: "b".repeat(40) },
+  disclosureScan: {
+    ...reference("5"),
+    findings: 0,
+    providerLogBytesScanned: 4_096,
+    publicResponsesScanned: 12,
+  },
   environment: "preview" as const,
   lifecycle: {
     ...reference("1"),
-    exactFiveTools: true,
-    twoDistinctSubjects: true,
-    twoDistinctWorkspaces: true,
-    mutualTenantDenial: true,
     completeInputBatchesRespondedAtomically: true,
     discardedStartResponseRecovered: true,
+    exactFiveTools: true,
+    mutualTenantDenial: true,
+    twoDistinctSubjects: true,
+    twoDistinctWorkspaces: true,
     unknownSubmissionRedispatched: false,
   },
   membershipRevocation: {
     ...reference("2"),
-    nextRequestDenied: true,
-    maximumResidualTokenWindowSeconds: 300,
     immediateTokenRevocationClaimed: false,
+    maximumResidualTokenWindowSeconds: 300,
+    nextRequestDenied: true,
   },
   retention: {
     ...reference("3"),
+    reservedOperationsPreserved: true,
     terminalOperationRowsDeleted: 2,
     unreferencedSessionRowsDeleted: 1,
-    reservedOperationsPreserved: true,
+  },
+  source: { sha: "a".repeat(40), tree: "b".repeat(40) },
+  sourceValidation: {
+    ...reference("6"),
+    continuationCredential: "not-applicable-canonical-session-id-only" as const,
+    evePackageVersion: "0.43.0" as const,
+    expiredSessionDeniedBeforeTransport: true,
+    expiredSessionsExcludedFromActiveCompute: true,
+    idleTimeoutSeconds: 1_800,
+    maximumLifetimeSeconds: 86_400,
   },
   tenantDeletion: {
     ...reference("4"),
-    revocationDrainSeconds: 300,
     membershipRowsDeleted: 1,
+    revocationDrainSeconds: 300,
   },
-  disclosureScan: {
-    ...reference("5"),
-    publicResponsesScanned: 12,
-    providerLogBytesScanned: 4_096,
-    findings: 0,
-  },
-  sourceValidation: {
-    ...reference("6"),
-    idleTimeoutSeconds: 1_800,
-    maximumLifetimeSeconds: 86_400,
-    expiredSessionDeniedBeforeTransport: true,
-    expiredSessionsExcludedFromActiveCompute: true,
-    evePackageVersion: "0.43.0" as const,
-    continuationCredential: "not-applicable-canonical-session-id-only" as const,
-  },
+  version: 1 as const,
 };
 
 describe("EXT-BLD-05 evidence", () => {
@@ -64,21 +64,21 @@ describe("EXT-BLD-05 evidence", () => {
     const receipt = buildExtBld05EvidenceReceipt(input);
     expect(buildExtBld05EvidenceReceipt(input)).toEqual(receipt);
     expect(receipt).toMatchObject({
-      format: "autograph-ext-bld-05-evidence-v1",
-      source: input.source,
       claims: {
-        mutualTenantDenial: true,
         completeInputBatchesRespondedAtomically: true,
-        discardedStartResponseRecovered: true,
-        membershipRevocationDeniedNextRequest: true,
-        maximumResidualTokenWindowSeconds: 300,
-        immediateTokenRevocationClaimed: false,
         continuationCredential: "not-applicable-canonical-session-id-only",
+        discardedStartResponseRecovered: true,
+        immediateTokenRevocationClaimed: false,
+        maximumResidualTokenWindowSeconds: 300,
+        membershipRevocationDeniedNextRequest: true,
+        mutualTenantDenial: true,
         productionReadinessClaimed: false,
       },
+      format: "autograph-ext-bld-05-evidence-v1",
+      source: input.source,
     });
     expect(receipt.componentReceiptDigests).toEqual(
-      ["1", "2", "3", "4", "5", "6"].map(digest),
+      ["1", "2", "3", "4", "5", "6"].map(digest)
     );
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain("workspace");
@@ -111,7 +111,7 @@ describe("EXT-BLD-05 evidence", () => {
       { ...input, ambientCredential: "secret" },
     ]) {
       expect(extBld05EvidenceInputSchema.safeParse(candidate).success).toBe(
-        false,
+        false
       );
     }
   });
@@ -127,7 +127,7 @@ describe("EXT-BLD-05 evidence", () => {
       extBld05EvidenceReceiptSchema.parse({
         ...receipt,
         claims: { ...receipt.claims, productionReadinessClaimed: true },
-      }),
+      })
     ).toThrow();
   });
 });

@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it } from "vitest";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 
 const secret = "github-webhook-secret-that-is-long-enough";
@@ -14,35 +14,35 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
     .update(bytes)
     .digest("hex")}`;
   return new Request("https://builder.example.test/api/github/webhooks", {
-    method: "POST",
+    body: bytes,
     headers: {
       "content-type": "application/json",
       "x-github-event": event,
       "x-hub-signature-256": signature,
     },
-    body: bytes,
+    method: "POST",
   });
 }
 
 function database() {
   const updates: unknown[] = [];
-  type FakeDatabase = {
+  interface FakeDatabase {
     update(table: unknown): {
       set(): { where(): Promise<undefined> };
     };
     transaction<T>(
-      operation: (transaction: FakeDatabase) => Promise<T>,
+      operation: (transaction: FakeDatabase) => Promise<T>
     ): Promise<T>;
-  };
+  }
   const value: FakeDatabase = {
+    async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
+      return operation(value);
+    },
     update(table: unknown) {
       updates.push(table);
       return {
         set: () => ({ where: async () => undefined }),
       };
-    },
-    async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
-      return operation(value);
     },
   };
   return {
@@ -56,24 +56,24 @@ describe("GitHub provisioning revocation webhook", () => {
     const store = database();
     const handler = createGitHubProvisioningWebhookHandler({
       database: store.value,
-      secret,
       now: () => Date.parse("2026-08-30T12:00:00.000Z"),
+      secret,
     });
     expect(
       await handler(
         signedRequest("github_app_authorization", {
           action: "revoked",
           sender: { id: 77 },
-        }),
-      ),
+        })
+      )
     ).toMatchObject({ status: 202 });
     expect(
       await handler(
         signedRequest("installation", {
           action: "deleted",
           installation: { id: 101 },
-        }),
-      ),
+        })
+      )
     ).toMatchObject({ status: 202 });
     expect(store.updates).toHaveLength(3);
   });
@@ -88,8 +88,8 @@ describe("GitHub provisioning revocation webhook", () => {
       signedRequest(
         "github_app_authorization",
         { action: "revoked", sender: { id: 77 } },
-        "different-webhook-secret-that-is-long-enough",
-      ),
+        "different-webhook-secret-that-is-long-enough"
+      )
     );
     expect(response.status).toBe(401);
     expect(store.updates).toHaveLength(0);

@@ -20,21 +20,16 @@ import acceptAppSpec from "./accept_app_spec";
 export default defineTool({
   description:
     "Record internal product decisions and implementation design without pausing for approval. Use record_ui_preview for visual content composed from Arrusted components; never author replacement HTML controls here. A complete design continues into planning automatically.",
-  inputSchema: z.object({
-    path: z.string().regex(prototypeArtifactPathPattern),
-    mediaType: z.enum(prototypeArtifactMediaTypes),
-    content: z.string().min(1).max(262144),
-  }),
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype artifact recording");
     if (current.phase === "empty")
       throw new Error(
-        "Prepare a workspace before recording prototype artifacts.",
+        "Prepare a workspace before recording prototype artifacts."
       );
     if (current.phase === "validation_pending")
       throw new Error(
-        `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
+        `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`
       );
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
@@ -93,7 +88,7 @@ export default defineTool({
           expectedArtifactDigest: buildReadyAppSpec.digest,
           expectedArtifactRevision: buildReadyAppSpec.revision,
         },
-        ctx,
+        ctx
       );
     }
     return {
@@ -105,4 +100,9 @@ export default defineTool({
         : { implementationPlanReady: true }),
     };
   },
+  inputSchema: z.object({
+    path: z.string().regex(prototypeArtifactPathPattern),
+    mediaType: z.enum(prototypeArtifactMediaTypes),
+    content: z.string().min(1).max(262144),
+  }),
 });

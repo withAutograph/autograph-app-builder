@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                              |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title, filters, exception list, selected-record identity, evidence, and replenishment action form a clear task sequence. Severity pills, selected-row treatment, days of cover, and the prominent projected quantity make risk and outcomes easy to scan.                                                  |
-| layout         | 3/4   | The two-column composition is consistently aligned and comfortably spaced at 1024–1920 px, with readable detail rows and well-grouped confirmation cards. At the constrained 700 px detail view, repeated page context, navigation, and record identity consume substantial vertical space before the task content. |
-| typography     | 4/4   | Heading levels, labels, values, metadata, and explanatory text are visually consistent and readable. Large quantity values are appropriately emphasized, while supporting assumptions remain subordinate without becoming illegible.                                                                                |
-| responsive     | 4/4   | The interface successfully changes from side-by-side list/detail at 1024–1920 px to deferred list and detail views at 700 px. Filters expand cleanly, detail controls remain usable, a clear Back action appears, and the supplied captures show no horizontal overflow or clipped controls.                        |
-| productClarity | 4/4   | The purpose is explicit, location and severity filters are understandable, exception rows expose the decision evidence, and record details include both stock and supplier information. The mock action clearly previews 18 + 96 = 114 units and repeatedly states that inventory and orders remain unchanged.      |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title, filters, exception list, selected-record identity, evidence, and replenishment action form a clear task sequence. Severity pills, selected-row treatment, days of cover, and the prominent projected quantity make risk and outcomes easy to scan. |
+| layout | 3/4 | The two-column composition is consistently aligned and comfortably spaced at 1024–1920 px, with readable detail rows and well-grouped confirmation cards. At the constrained 700 px detail view, repeated page context, navigation, and record identity consume substantial vertical space before the task content. |
+| typography | 4/4 | Heading levels, labels, values, metadata, and explanatory text are visually consistent and readable. Large quantity values are appropriately emphasized, while supporting assumptions remain subordinate without becoming illegible. |
+| responsive | 4/4 | The interface successfully changes from side-by-side list/detail at 1024–1920 px to deferred list and detail views at 700 px. Filters expand cleanly, detail controls remain usable, a clear Back action appears, and the supplied captures show no horizontal overflow or clipped controls. |
+| productClarity | 4/4 | The purpose is explicit, location and severity filters are understandable, exception rows expose the decision evidence, and record details include both stock and supplier information. The mock action clearly previews 18 + 96 = 114 units and repeatedly states that inventory and orders remain unchanged. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/271) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/271) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/271) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/140) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/292) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/164) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/70)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/78)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/74)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/140) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/292) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/164) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/70) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/78) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/74) |
 
 ## Latest-run screenshots
 

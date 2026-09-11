@@ -5,7 +5,7 @@ import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 function isReviewedPhase(
-  state: ReturnType<typeof appBuilderWorkflowState.get>,
+  state: ReturnType<typeof appBuilderWorkflowState.get>
 ): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
@@ -39,7 +39,6 @@ function isReviewedPhase(
 export default defineTool({
   description:
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty")
@@ -50,7 +49,7 @@ export default defineTool({
       };
     if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
       throw new Error(
-        "Prototype artifact state belongs to a different session.",
+        "Prototype artifact state belongs to a different session."
       );
     return {
       version: state.version,
@@ -232,4 +231,5 @@ export default defineTool({
           : {}),
     };
   },
+  inputSchema: z.object({}),
 });

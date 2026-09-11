@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title and purpose lead clearly into filters, the exception list, and the selected record. Product name, severity, stock deficit, key quantities, and the replenishment action are consistently prioritized; the three large quantity cards make the modeled outcome especially easy to scan.                                                                                                |
-| layout         | 3/4   | The two-column review layout is well aligned and comfortably dense at 1024–1920px, with consistent card boundaries, row spacing, and right-aligned actions. The constrained 700px composition appropriately switches to list or detail, though the initial list retains a selected-row treatment before its detail is visible, and the fixed-width wide composition leaves substantial unused space. |
-| typography     | 3/4   | Heading levels, field labels, values, and explanatory copy are consistent and readable, with large modeled quantities providing useful emphasis. The 12px muted labels above those quantities are slightly marginal against the white cards—the supplied audit reports a 4.47:1 ratio—so they are less robust than the rest of the typography.                                                       |
-| responsive     | 4/4   | The interface remains coherent at 1920, 1440, and 1024px, then changes to a focused list/detail flow at 700px with a visible Back to exceptions control. Controls fit without horizontal overflow, actions remain available, and the expanded supplier section uses ordinary vertical space rather than compressing content.                                                                         |
-| productClarity | 4/4   | Location and severity filtering, record selection, stock and supplier review, and the mock replenishment are immediately understandable. Confirmation and result states explicitly say that no order is placed and inventory is unchanged, while current, added, and projected quantities make the modeled effect clear.                                                                             |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title and purpose lead clearly into filters, the exception list, and the selected record. Product name, severity, stock deficit, key quantities, and the replenishment action are consistently prioritized; the three large quantity cards make the modeled outcome especially easy to scan. |
+| layout | 3/4 | The two-column review layout is well aligned and comfortably dense at 1024–1920px, with consistent card boundaries, row spacing, and right-aligned actions. The constrained 700px composition appropriately switches to list or detail, though the initial list retains a selected-row treatment before its detail is visible, and the fixed-width wide composition leaves substantial unused space. |
+| typography | 3/4 | Heading levels, field labels, values, and explanatory copy are consistent and readable, with large modeled quantities providing useful emphasis. The 12px muted labels above those quantities are slightly marginal against the white cards—the supplied audit reports a 4.47:1 ratio—so they are less robust than the rest of the typography. |
+| responsive | 4/4 | The interface remains coherent at 1920, 1440, and 1024px, then changes to a focused list/detail flow at 700px with a visible Back to exceptions control. Controls fit without horizontal overflow, actions remain available, and the expanded supplier section uses ordinary vertical space rather than compressing content. |
+| productClarity | 4/4 | Location and severity filtering, record selection, stock and supplier review, and the mock replenishment are immediately understandable. Confirmation and result states explicitly say that no order is placed and inventory is unchanged, while current, added, and projected quantities make the modeled effect clear. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/139) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/287) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/162) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/69)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/77)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/73)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/139) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/287) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/162) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/69) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/77) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/73) |
 
 ## Latest-run screenshots
 

@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                      |
-| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page establishes a strong sequence from title and filters to severity-grouped exceptions, selected record, suggested order, and action. Selection outlines and bold cover values scan well, though delivery-risk assessments such as the 1.9-day gap rely mainly on bold neutral text and could stand out more clearly.                                 |
-| layout         | 4/4   | Alignment is disciplined across the filter row, grouped record cards, and detail panel. The centered maximum-width composition remains balanced at 1920px, while the 1024px view uses available space efficiently without overlap; spacing within detail sections and footer actions is consistently structured.                                            |
-| typography     | 4/4   | Heading levels, labels, values, and explanatory copy are visually consistent and readable across all supplied sizes. Product names and suggested quantities receive appropriate emphasis, while compact secondary text remains legible without competing with primary information.                                                                          |
-| responsive     | 4/4   | The composition adapts effectively from a side-by-side master/detail workspace at 1024–1920px to dedicated list and detail views at 700px. Filters, tabs, detail fields, navigation, and mock-action controls remain visible and usable; the 1024px initial state requires only a small amount of document scrolling.                                       |
-| productClarity | 4/4   | The workflow is immediately understandable: filter by location and severity, choose an exception, inspect stock or supplier information, and simulate a suggested replenishment. Quantity rationale, delivery assumptions, preview-only language, and the post-action “Stock unchanged” confirmation clearly distinguish the mock action from a real order. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page establishes a strong sequence from title and filters to severity-grouped exceptions, selected record, suggested order, and action. Selection outlines and bold cover values scan well, though delivery-risk assessments such as the 1.9-day gap rely mainly on bold neutral text and could stand out more clearly. |
+| layout | 4/4 | Alignment is disciplined across the filter row, grouped record cards, and detail panel. The centered maximum-width composition remains balanced at 1920px, while the 1024px view uses available space efficiently without overlap; spacing within detail sections and footer actions is consistently structured. |
+| typography | 4/4 | Heading levels, labels, values, and explanatory copy are visually consistent and readable across all supplied sizes. Product names and suggested quantities receive appropriate emphasis, while compact secondary text remains legible without competing with primary information. |
+| responsive | 4/4 | The composition adapts effectively from a side-by-side master/detail workspace at 1024–1920px to dedicated list and detail views at 700px. Filters, tabs, detail fields, navigation, and mock-action controls remain visible and usable; the 1024px initial state requires only a small amount of document scrolling. |
+| productClarity | 4/4 | The workflow is immediately understandable: filter by location and severity, choose an exception, inspect stock or supplier information, and simulate a suggested replenishment. Quantity rationale, delivery assumptions, preview-only language, and the post-action “Stock unchanged” confirmation clearly distinguish the mock action from a real order. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/227) |
-| desktop-0                | typography | 0/0                         | 0% (0/557) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/137) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/227) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/227) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/198) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/489) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/265) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/99)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/119) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/105) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/227) |
+| desktop-0 | typography | 0/0 | 0% (0/557) |
+| desktop-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/137) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/227) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/137) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/227) |
+| desktop-window-0 | typography | 0/0 | 0% (0/557) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/137) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/198) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/489) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/265) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/99) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/119) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/105) |
 
 ## Latest-run screenshots
 

@@ -1,9 +1,8 @@
 import type { SandboxSession } from "eve/sandbox";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import type { SourceReceipt } from "../repository/source-receipt";
+import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 
 const mocks = vi.hoisted(() => ({
   inspectSourceBoundSandboxWorkspace: vi.fn(),
@@ -21,46 +20,46 @@ vi.mock("../repository/supported-template", () => ({
 import { freshBootstrapSourceWorkspace } from "./fresh-bootstrap-source";
 
 const workspace: PreparedSandboxWorkspace = {
-  workspaceId: "workspace-canonical",
-  workspacePath: "/workspace/repository",
+  adapter: "arrusted-development-v0",
+  eligibilityDigest: "d".repeat(64),
   sourcePath: "/workspace/repository",
   sourceSha: "a".repeat(40),
   sourceTree: "b".repeat(40),
   workspaceDigest: "c".repeat(64),
-  adapter: "arrusted-development-v0",
-  eligibilityDigest: "d".repeat(64),
+  workspaceId: "workspace-canonical",
+  workspacePath: "/workspace/repository",
 };
 
 const canonicalReceipt = {
-  version: 4,
+  adapter: workspace.adapter,
+  contractDigest: "e".repeat(64),
+  digest: "f".repeat(64),
+  eligibilityDigest: workspace.eligibilityDigest,
+  provenance: {
+    method: "git-clone-v1",
+    readinessDigest: "1".repeat(64),
+    ref: "refs/heads/main",
+    repository: "https://github.com/withAutograph/arrusted-development.git",
+  },
+  releaseEnabled: false,
   sourceKind: "fresh-template",
   sourcePath: "/workspace/repository",
   sourceSha: workspace.sourceSha,
   sourceTree: workspace.sourceTree,
-  adapter: workspace.adapter,
-  eligibilityDigest: workspace.eligibilityDigest,
-  contractDigest: "e".repeat(64),
-  releaseEnabled: false,
-  digest: "f".repeat(64),
-  provenance: {
-    repository: "https://github.com/withAutograph/arrusted-development.git",
-    ref: "refs/heads/main",
-    method: "git-clone-v1",
-    readinessDigest: "1".repeat(64),
-  },
+  version: 4,
 } satisfies SourceReceipt;
 
 const legacyReceipt = {
   ...canonicalReceipt,
-  version: 3,
   provenance: undefined,
+  version: 3,
 } as unknown as SourceReceipt;
 
 function sandboxFixture() {
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path === "repository/assets/payload.bin"
       ? Buffer.from([0, 255, 17, 128])
-      : null,
+      : null
   );
   return {
     readBinaryFile,
@@ -71,7 +70,7 @@ function sandboxFixture() {
 describe("fresh bootstrap source workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue(undefined);
+    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue();
     mocks.readPreparedSandboxSourceManifest.mockResolvedValue([
       {
         mode: "100644",
@@ -87,10 +86,10 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: legacyReceipt,
+        sandbox,
         workspace,
-      }),
+      })
     ).resolves.toBeUndefined();
 
     expect(mocks.inspectSourceBoundSandboxWorkspace).not.toHaveBeenCalled();
@@ -110,34 +109,34 @@ describe("fresh bootstrap source workspace", () => {
     const { sandbox } = sandboxFixture();
 
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
 
     expect(source).toBeDefined();
     expect(calls).toEqual(["reverify", "manifest"]);
     expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
-      sandbox,
-      receipt: canonicalReceipt,
       expectedWorkspace: workspace,
+      receipt: canonicalReceipt,
+      sandbox,
     });
     expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(
       sandbox,
-      workspace,
+      workspace
     );
   });
 
   it("reads repository-relative source paths as binary data", async () => {
     const { readBinaryFile, sandbox } = sandboxFixture();
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
 
     await expect(source?.readSourceFile("assets/payload.bin")).resolves.toEqual(
-      Buffer.from([0, 255, 17, 128]),
+      Buffer.from([0, 255, 17, 128])
     );
     expect(readBinaryFile).toHaveBeenCalledWith({
       path: "repository/assets/payload.bin",
@@ -151,10 +150,10 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: canonicalReceipt,
+        sandbox,
         workspace,
-      }),
+      })
     ).rejects.toBe(reverifyError);
     expect(mocks.readPreparedSandboxSourceManifest).not.toHaveBeenCalled();
     expect(readBinaryFile).not.toHaveBeenCalled();
@@ -167,10 +166,10 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: canonicalReceipt,
+        sandbox,
         workspace,
-      }),
+      })
     ).rejects.toBe(manifestError);
     expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledOnce();
     expect(readBinaryFile).not.toHaveBeenCalled();
@@ -179,8 +178,8 @@ describe("fresh bootstrap source workspace", () => {
   it("propagates drift discovered by the returned re-verification hook", async () => {
     const { sandbox } = sandboxFixture();
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
     const driftError = new Error("canonical workspace changed after capture");

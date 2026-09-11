@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title and task description establish purpose immediately, while the two-pane composition creates a clear exceptions-to-detail progression. Selected-row treatment, severity pills, section headings, and emphasized mock action make priorities highly scannable across review, confirmation, and result states.                                                                      |
-| layout         | 3/4   | Alignment is disciplined: filters share a row, exception metadata follows a repeatable grid, and detail labels and values remain consistently aligned. The centered composition scales cleanly at 1440 and 1920 pixels, though the wide capture leaves substantial unused canvas and the independently scrolling detail panel can temporarily hide important context when sections expand.     |
-| typography     | 4/4   | Heading levels, field labels, values, supporting copy, and button text are visually consistent and readable. Product names and quantities receive appropriate emphasis without excessive type variation, and dense inventory evidence remains legible at the 1024-pixel window.                                                                                                                |
-| responsive     | 3/4   | The interface remains usable at 1920, 1440, 1024, and 700-pixel desktop widths. It appropriately changes from simultaneous list-detail to constrained detail with a Back action at 700 pixels, and action footers remain visible. Minor nested scrolling appears at shorter widths, and the narrow initial capture requires leaving detail before filters or other exceptions can be accessed. |
-| productClarity | 4/4   | The task is explicit: filter exceptions, select a product, inspect stock and supplier evidence, and simulate replenishment. Confirmation explains the 96-unit calculation before acting, and the result clearly states that no order was placed and inventory is unchanged. Reset and cancel affordances make the mock workflow reversible and understandable.                                 |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title and task description establish purpose immediately, while the two-pane composition creates a clear exceptions-to-detail progression. Selected-row treatment, severity pills, section headings, and emphasized mock action make priorities highly scannable across review, confirmation, and result states. |
+| layout | 3/4 | Alignment is disciplined: filters share a row, exception metadata follows a repeatable grid, and detail labels and values remain consistently aligned. The centered composition scales cleanly at 1440 and 1920 pixels, though the wide capture leaves substantial unused canvas and the independently scrolling detail panel can temporarily hide important context when sections expand. |
+| typography | 4/4 | Heading levels, field labels, values, supporting copy, and button text are visually consistent and readable. Product names and quantities receive appropriate emphasis without excessive type variation, and dense inventory evidence remains legible at the 1024-pixel window. |
+| responsive | 3/4 | The interface remains usable at 1920, 1440, 1024, and 700-pixel desktop widths. It appropriately changes from simultaneous list-detail to constrained detail with a Back action at 700 pixels, and action footers remain visible. Minor nested scrolling appears at shorter widths, and the narrow initial capture requires leaving detail before filters or other exceptions can be accessed. |
+| productClarity | 4/4 | The task is explicit: filter exceptions, select a product, inspect stock and supplier evidence, and simulate replenishment. Confirmation explains the 96-unit calculation before acting, and the result clearly states that no order was placed and inventory is unchanged. Reset and cancel affordances make the mock workflow reversible and understandable. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
 
 ## Latest-run screenshots
 

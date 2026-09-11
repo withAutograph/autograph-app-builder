@@ -1,12 +1,9 @@
 import type { ComponentType, ReactNode } from "react";
 
-import {
-  ChoiceCard,
-  SectionShell,
-  type CreateAppSectionId,
-} from "./choice-card";
+import { ChoiceCard, SectionShell } from "./choice-card";
+import type { CreateAppSectionId } from "./choice-card";
 
-export type ProviderChoice<Provider extends string> = {
+export interface ProviderChoice<Provider extends string> {
   available: boolean;
   icon: ComponentType<{
     "aria-hidden"?: boolean | "true" | "false";
@@ -14,7 +11,7 @@ export type ProviderChoice<Provider extends string> = {
   }>;
   name: string;
   provider: Provider;
-};
+}
 
 export function ProviderChoiceSection<Provider extends string>({
   children,
@@ -57,12 +54,12 @@ export function ProviderChoiceSection<Provider extends string>({
             <ChoiceCard
               key={option.provider}
               dataProvider={option.provider}
-              className={!option.available ? unavailableClassName : undefined}
+              className={option.available ? undefined : unavailableClassName}
               disabled={!option.available}
               checked={option.available && selected === option.provider}
               name={name}
               value={option.provider}
-              badge={!option.available ? "Coming soon" : undefined}
+              badge={option.available ? undefined : "Coming soon"}
               icon={<Icon size={18} aria-hidden="true" />}
               onChange={() => onChange(option.provider)}
             >

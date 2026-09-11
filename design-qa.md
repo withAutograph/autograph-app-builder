@@ -23,11 +23,7 @@ The source image was available and inspected. The selected in-app browser does s
 
 ## Findings
 
-- [P1] Rendered fidelity is not yet evidenced.
-  Location: Storybook approval-request story.
-  Evidence: source image is available; the live selected-browser story exposes the expected copy and controls, but no implementation image could be captured for the required side-by-side visual comparison.
-  Impact: typography, responsive action placement, visible affordance, focus states, and dark-theme contrast cannot be verified against the source.
-  Fix: restore mise trusted-config write access, run `mise run storybook:dev`, capture the Unanswered story at a matching desktop viewport and a narrow viewport, then compare both captures with the source in a single composite.
+- [P1] Rendered fidelity is not yet evidenced. Location: Storybook approval-request story. Evidence: source image is available; the live selected-browser story exposes the expected copy and controls, but no implementation image could be captured for the required side-by-side visual comparison. Impact: typography, responsive action placement, visible affordance, focus states, and dark-theme contrast cannot be verified against the source. Fix: restore mise trusted-config write access, run `mise run storybook:dev`, capture the Unanswered story at a matching desktop viewport and a narrow viewport, then compare both captures with the source in a single composite.
 
 ## Open questions
 

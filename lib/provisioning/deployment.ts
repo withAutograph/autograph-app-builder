@@ -37,20 +37,22 @@ export function createBuilderProvisioningRouteHandler(input: {
     typeof executeBuilderProvisioning
   >[0]["dependencies"];
 }) {
-  const origin = new URL(input.origin).origin;
+  const { origin } = new URL(input.origin);
   return async (request: Request) => {
     try {
-      if (new URL(request.url).origin !== origin)
+      if (new URL(request.url).origin !== origin) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
-          { status: 401, headers: noStore },
+          { status: 401, headers: noStore }
         );
+      }
       if (request.method === "GET") {
         const requestId = z
           .string()
@@ -58,14 +60,14 @@ export function createBuilderProvisioningRouteHandler(input: {
           .parse(new URL(request.url).searchParams.get("requestId"));
         const result = await input.read({
           authority,
-          requestId,
           journal: input.dependencies.journal,
+          requestId,
         });
         return result
           ? Response.json(result, { headers: noStore })
           : Response.json(
               { error: "provisioning_not_found" },
-              { status: 404, headers: noStore },
+              { headers: noStore, status: 404 }
             );
       }
       if (
@@ -73,35 +75,38 @@ export function createBuilderProvisioningRouteHandler(input: {
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/json"
-      )
+      ) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
-      if (!(await input.enabled()))
+      }
+      if (!(await input.enabled())) {
         return Response.json(
           { error: "feature_disabled" },
-          { status: 503, headers: noStore },
+          { status: 503, headers: noStore }
         );
+      }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384))
+      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
+      }
       const body = builderProvisionRequestSchema.parse(await request.json());
       if (new URL(request.url).searchParams.get("mode") === "reserve") {
         const reserved = await input.dependencies.journal.reserve({
           authority,
-          request: body,
           now: new Date(),
+          request: body,
         });
         return Response.json(reserved.record.response, { headers: noStore });
       }
       const result = await input.execute({
         authority,
-        request: body,
         dependencies: input.dependencies,
+        request: body,
       });
       return Response.json(result, { headers: noStore });
     } catch (error) {
@@ -112,7 +117,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         {
           error: conflict ? "request_id_conflict" : "provisioning_unavailable",
         },
-        { status: conflict ? 409 : 503, headers: noStore },
+        { headers: noStore, status: conflict ? 409 : 503 }
       );
     }
   };
@@ -121,27 +126,30 @@ export function createBuilderProvisioningRouteHandler(input: {
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
 export function getBuilderProvisioningDeploymentHandler(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
-  if (handler) return handler;
+  if (handler) {
+    return handler;
+  }
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const vercelConfig = readVercelIntegrationEnvironment(environment);
   const vercelInstallations = createPostgresVercelInstallationStore({
-    database,
     config: vercelConfig,
+    database,
   });
   const dependencies: Parameters<
     typeof executeBuilderProvisioning
   >[0]["dependencies"] = {
-    journal: createPostgresBuilderProvisionJournalStore(database),
-    githubInstallations: createPostgresHostedGitHubInstallationStore(database),
+    deactivateVercelInstallation: (installationId, now) =>
+      vercelInstallations.deactivate(installationId, now),
+    githubConfig: readGitHubProvisioningEnvironment(environment),
     githubCredentials: createPostgresGitHubUserCredentialStore({
       database,
       config: readGitHubUserCredentialEnvironment(environment),
     }),
-    githubConfig: readGitHubProvisioningEnvironment(environment),
-    vercelConfig,
+    githubInstallations: createPostgresHostedGitHubInstallationStore(database),
+    journal: createPostgresBuilderProvisionJournalStore(database),
     readVercelCredential: ({ authority, installationId }) =>
       readActiveVercelInstallationToken({
         database,
@@ -149,12 +157,9 @@ export function getBuilderProvisioningDeploymentHandler(
         authority,
         installationId,
       }),
-    deactivateVercelInstallation: (installationId, now) =>
-      vercelInstallations.deactivate(installationId, now),
+    vercelConfig,
   };
   handler = createBuilderProvisioningRouteHandler({
-    origin: new URL(preview.issuer).origin,
-    enabled: builderResourceProvisioningFlag,
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment,
@@ -169,9 +174,11 @@ export function getBuilderProvisioningDeploymentHandler(
           }
         : undefined;
     },
-    execute: executeBuilderProvisioning,
-    read: readBuilderProvisioning,
     dependencies,
+    enabled: builderResourceProvisioningFlag,
+    execute: executeBuilderProvisioning,
+    origin: new URL(preview.issuer).origin,
+    read: readBuilderProvisioning,
   });
   return handler;
 }

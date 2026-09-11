@@ -9,36 +9,36 @@ describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
     const files = implementationFilesSchema.parse([
       {
-        path: "apps/stock-exceptions/app/page.tsx",
         content: "export default null",
+        path: "apps/stock-exceptions/app/page.tsx",
       },
     ]);
-    const writeTextFile = vi.fn(async () => undefined);
+    const writeTextFile = vi.fn(async () => {});
     const executor = vi.fn(async () => ({
       exitCode: 0,
-      stdout: "receipt",
       stderr: "",
+      stdout: "receipt",
     }));
     const wrapped = withImplementationFiles(executor, files);
 
     await expect(
       wrapped({
-        sandbox: { writeTextFile } as never,
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
-        proposalPath: "/workspace/proposal.json",
         proposal: {} as never,
-      }),
-    ).resolves.toEqual({ exitCode: 0, stdout: "receipt", stderr: "" });
+        proposalPath: "/workspace/proposal.json",
+        sandbox: { writeTextFile } as never,
+      })
+    ).resolves.toEqual({ exitCode: 0, stderr: "", stdout: "receipt" });
 
     expect(writeTextFile).toHaveBeenCalledWith({
-      path: "repository/apps/stock-exceptions/app/page.tsx",
       content: "export default null",
+      path: "repository/apps/stock-exceptions/app/page.tsx",
     });
     expect(
       implementationFilesSchema.safeParse([
-        { path: "../outside.ts", content: "nope" },
-      ]).success,
+        { content: "nope", path: "../outside.ts" },
+      ]).success
     ).toBe(false);
   });
 });

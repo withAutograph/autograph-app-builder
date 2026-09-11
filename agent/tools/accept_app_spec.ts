@@ -1,11 +1,13 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import {
   appSpecRepairDiagnostic,
   normalizeBuildReadyAppSpec,
   validateBuildReadyAppSpec,
 } from "@/lib/agent/app-spec-validation";
+import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -13,8 +15,6 @@ import {
   updateExactWorkflow,
   validAppId,
 } from "@/lib/agent/workflow-state";
-import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
-import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 
 import planAppCreation from "./plan_app_creation";
 
@@ -29,11 +29,19 @@ import planAppCreation from "./plan_app_creation";
  */
 async function planAcceptedAppSpec(
   ctx: Parameters<typeof planAppCreation.execute>[1],
-  existingAppChanges?: { path: string; content: string }[],
+  existingAppChanges?: { path: string; content: string }[]
 ) {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
     phase: latest.phase,
+    plan: async () => {
+      await planAppCreation.execute(
+        {
+          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
+        },
+        ctx
+      );
+    },
     planComplete:
       latest.phase === "planned" ||
       latest.phase === "apply_failed" ||
@@ -42,32 +50,12 @@ async function planAcceptedAppSpec(
       latest.phase === "validation_failed" ||
       latest.phase === "validated" ||
       latest.phase === "reviewed",
-    plan: async () => {
-      await planAppCreation.execute(
-        {
-          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
-        },
-        ctx,
-      );
-    },
   });
 }
 
 export default defineTool({
   description:
     "Silently turn the current product design into internal planning state and continue planning. It repairs routine internal document gaps itself and never requires a source receipt, workspace receipt, or approval receipt. It does not publish or otherwise change an external repository.",
-  inputSchema: z.strictObject({
-    appId: z.string().min(1),
-    expectedArtifactDigest: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
-    expectedArtifactRevision: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
-    existingAppChanges: existingAppChangesSchema.optional(),
-  }),
   async execute(
     {
       appId,
@@ -75,14 +63,14 @@ export default defineTool({
       expectedArtifactRevision,
       existingAppChanges,
     },
-    ctx,
+    ctx
   ) {
     if (!validAppId(appId))
       throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty")
       throw new Error(
-        "Start a workspace before creating an implementation plan.",
+        "Start a workspace before creating an implementation plan."
       );
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = current.artifacts.find(
@@ -92,11 +80,11 @@ export default defineTool({
         (expectedArtifactDigest === undefined ||
           candidate.digest === expectedArtifactDigest) &&
         (expectedArtifactRevision === undefined ||
-          candidate.revision === expectedArtifactRevision),
+          candidate.revision === expectedArtifactRevision)
     );
     if (artifact === undefined)
       throw new Error(
-        "Create a product design before creating its implementation plan.",
+        "Create a product design before creating its implementation plan."
       );
     if (artifact.mediaType !== "text/markdown")
       throw new Error("The accepted AppSpec artifact media type is invalid.");
@@ -151,4 +139,16 @@ export default defineTool({
     await planAcceptedAppSpec(ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
+  inputSchema: z.strictObject({
+    appId: z.string().min(1),
+    expectedArtifactDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    expectedArtifactRevision: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    existingAppChanges: existingAppChangesSchema.optional(),
+  }),
 });

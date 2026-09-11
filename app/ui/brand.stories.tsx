@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
+
 import { AutographMark } from "./app-builder";
 
 const meta = {
-  title: "Components/Create App/Primitives/Brand",
   component: AutographMark,
   decorators: [
     (Story) => (
@@ -12,6 +13,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Primitives/Brand",
 } satisfies Meta<typeof AutographMark>;
 export default meta;
 type Story = StoryObj<typeof meta>;

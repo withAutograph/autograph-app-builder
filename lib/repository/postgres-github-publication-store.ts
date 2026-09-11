@@ -2,22 +2,25 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
-  type DraftPullRequestProposal,
-  type FreshRepositoryProposal,
-  type GitHubPublicationReceiptStore,
 } from "./github-publication";
-import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
+import type {
+  DraftPullRequestProposal,
+  FreshRepositoryProposal,
+  GitHubPublicationReceiptStore,
+} from "./github-publication";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
+import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type GitHubPublicationProposal =
-  FreshRepositoryProposal | DraftPullRequestProposal;
+  | FreshRepositoryProposal
+  | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {
   read(proposalDigest: string): Promise<GitHubPublicationProposal | undefined>;
@@ -26,16 +29,16 @@ export interface GitHubPublicationProposalStore {
 
 const proposalRowSchema = z
   .object({
-    proposalDigest: z.string(),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
-    idempotencyKey: z.string(),
-    proposal: z.unknown(),
     createdAt: z.date(),
+    idempotencyKey: z.string(),
+    kind: z.enum(["fresh-repository", "draft-pull-request"]),
+    proposal: z.unknown(),
+    proposalDigest: z.string(),
   })
   .strict();
 
 function proposalKind(
-  proposal: GitHubPublicationProposal,
+  proposal: GitHubPublicationProposal
 ): "fresh-repository" | "draft-pull-request" {
   return proposal.intendedOutcome === "create-private-fresh-history-repository"
     ? "fresh-repository"
@@ -56,7 +59,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
 }
 
 export function parseGitHubPublicationProposalRow(
-  input: unknown,
+  input: unknown
 ): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);
@@ -66,7 +69,7 @@ export function parseGitHubPublicationProposalRow(
     row.idempotencyKey !== proposal.idempotencyKey
   ) {
     throw new Error(
-      "GitHub publication proposal row is not canonically bound.",
+      "GitHub publication proposal row is not canonically bound."
     );
   }
   return proposal;
@@ -74,11 +77,11 @@ export function parseGitHubPublicationProposalRow(
 
 function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
   return {
-    proposalDigest: proposal.digest,
-    kind: proposalKind(proposal),
-    idempotencyKey: proposal.idempotencyKey,
-    proposal,
     createdAt: now,
+    idempotencyKey: proposal.idempotencyKey,
+    kind: proposalKind(proposal),
+    proposal,
+    proposalDigest: proposal.digest,
   };
 }
 
@@ -90,7 +93,7 @@ function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
 export function createPostgresGitHubPublicationStores(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,
-  now: () => Date = () => new Date(),
+  now: () => Date = () => new Date()
 ): {
   proposals: GitHubPublicationProposalStore;
   receipts: GitHubPublicationReceiptStore;
@@ -100,7 +103,7 @@ export function createPostgresGitHubPublicationStores(
     eq(hostedGitHubPublicationProposals.issuer, authority.issuer),
     eq(hostedGitHubPublicationProposals.audience, authority.audience),
     eq(hostedGitHubPublicationProposals.workspaceId, authority.workspaceId),
-    eq(hostedGitHubPublicationProposals.ownerUserId, authority.ownerUserId),
+    eq(hostedGitHubPublicationProposals.ownerUserId, authority.ownerUserId)
   );
   const proposals: GitHubPublicationProposalStore = {
     async read(proposalDigest) {
@@ -110,8 +113,8 @@ export function createPostgresGitHubPublicationStores(
         .where(
           and(
             tenantPredicate,
-            eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest),
-          ),
+            eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest)
+          )
         )
         .limit(1);
       return rows[0] === undefined

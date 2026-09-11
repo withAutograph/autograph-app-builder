@@ -6,13 +6,12 @@ describe("development advisory lock", () => {
   it("holds the macOS lock across the exact development command", () => {
     expect(
       developmentLockInvocation({
-        platform: "darwin",
-        lockPath: "/private/dev/development.lock",
-        command: "/mise/node",
         args: ["--import", "tsx", "scripts/development.mts"],
-      }),
+        command: "/mise/node",
+        lockPath: "/private/dev/development.lock",
+        platform: "darwin",
+      })
     ).toEqual({
-      command: "/usr/bin/lockf",
       args: [
         "-t",
         "0",
@@ -23,19 +22,19 @@ describe("development advisory lock", () => {
         "scripts/development.mts",
       ],
       busyExitCode: 75,
+      command: "/usr/bin/lockf",
     });
   });
 
   it("uses a distinct lock-contention exit on Linux", () => {
     expect(
       developmentLockInvocation({
-        platform: "linux",
-        lockPath: "/private/dev/development.lock",
-        command: "/mise/node",
         args: ["scripts/development.mts"],
-      }),
+        command: "/mise/node",
+        lockPath: "/private/dev/development.lock",
+        platform: "linux",
+      })
     ).toEqual({
-      command: "/usr/bin/flock",
       args: [
         "-E",
         "73",
@@ -45,6 +44,7 @@ describe("development advisory lock", () => {
         "scripts/development.mts",
       ],
       busyExitCode: 73,
+      command: "/usr/bin/flock",
     });
   });
 });

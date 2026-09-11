@@ -1,13 +1,12 @@
 "use client";
 
-import {
-  type AdditionalField as AdditionalFieldConfig,
-  resolveInputType,
-} from "@better-auth-ui/core";
+import { resolveInputType } from "@better-auth-ui/core";
+import type { AdditionalField as AdditionalFieldConfig } from "@better-auth-ui/core";
 import { useAuth, useCopyToClipboard } from "@better-auth-ui/react";
 import { format } from "date-fns";
 import { CalendarIcon, Check, ChevronDownIcon, Copy } from "lucide-react";
-import { type ComponentType, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import type { ComponentType } from "react";
 import { toast } from "sonner";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -51,17 +50,19 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-export type AdditionalFieldProps = {
+export interface AdditionalFieldProps {
   name: string;
   field: AdditionalFieldConfig;
   isPending?: boolean;
   /** Complete suffix appended to labels for fields that are not required. */
   optionalLabel?: string;
-};
+}
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
 function toDate(value: unknown): Date | undefined {
-  if (value instanceof Date) return value;
+  if (value instanceof Date) {
+    return value;
+  }
   if (typeof value === "string") {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
@@ -95,7 +96,9 @@ function CopyButton({
 
   async function handleCopy() {
     const value = getValue();
-    if (!value) return;
+    if (!value) {
+      return;
+    }
 
     await copy(value);
   }
@@ -278,7 +281,7 @@ export function AdditionalField({
         <Select
           name={name}
           defaultValue={
-            field.defaultValue != null ? String(field.defaultValue) : undefined
+            field.defaultValue == null ? undefined : String(field.defaultValue)
           }
           required={field.required}
           disabled={isPending || field.readOnly}
@@ -310,7 +313,7 @@ export function AdditionalField({
           items={field.options ?? []}
           name={name}
           defaultValue={
-            field.defaultValue != null ? String(field.defaultValue) : undefined
+            field.defaultValue == null ? undefined : String(field.defaultValue)
           }
           required={field.required}
           disabled={isPending || field.readOnly}
@@ -461,7 +464,7 @@ function SliderField({ name, field, isPending }: AdditionalFieldProps) {
     <Field>
       <div className="flex items-center justify-between gap-2">
         <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-        <span className="text-sm text-muted-foreground tabular-nums">
+        <span className="text-muted-foreground text-sm tabular-nums">
           {formatter.format(value)}
         </span>
       </div>
@@ -493,10 +496,10 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
   const isDateTime = inputType === "datetime";
 
   const [date, setDate] = useState<Date | undefined>(
-    toDate(field.defaultValue),
+    toDate(field.defaultValue)
   );
   const [time, setTime] = useState<string>(
-    isDateTime && date ? formatTime(date) : "",
+    isDateTime && date ? formatTime(date) : ""
   );
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string>();
@@ -555,7 +558,7 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
             className={cn(
               buttonVariants({ variant: "outline" }),
               "flex-1 justify-between font-normal",
-              "data-[empty=true]:text-muted-foreground",
+              "data-[empty=true]:text-muted-foreground"
             )}
           >
             {date ? format(date, "PPP") : <span>{field.placeholder}</span>}
@@ -571,8 +574,12 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
               captionLayout="dropdown"
               onSelect={(value) => {
                 setDate(value);
-                if (value) setError(undefined);
-                if (!isDateTime) setOpen(false);
+                if (value) {
+                  setError(undefined);
+                }
+                if (!isDateTime) {
+                  setOpen(false);
+                }
               }}
             />
           </PopoverContent>
@@ -591,7 +598,7 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
               value={time}
               onChange={(e) => setTime(e.target.value)}
               disabled={isPending || field.readOnly}
-              className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+              className="bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
             />
           </Field>
         )}

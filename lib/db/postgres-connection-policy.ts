@@ -1,37 +1,37 @@
 import { z } from "zod";
 
 export const hostedRuntimePostgresOptions = {
-  max: 5,
   connect_timeout: 5,
-  idle_timeout: 20,
-  max_lifetime: 300,
-  prepare: false,
   connection: {
-    statement_timeout: 30_000,
-    lock_timeout: 5_000,
     idle_in_transaction_session_timeout: 30_000,
+    lock_timeout: 5_000,
+    statement_timeout: 30_000,
   },
+  idle_timeout: 20,
+  max: 5,
+  max_lifetime: 300,
   onnotice: () => undefined,
+  prepare: false,
 } as const;
 
 export const hostedTaskPostgresOptions = {
-  max: 1,
   connect_timeout: 5,
-  idle_timeout: 5,
-  max_lifetime: 60,
-  prepare: false,
   connection: {
-    statement_timeout: 15_000,
-    lock_timeout: 5_000,
     idle_in_transaction_session_timeout: 15_000,
+    lock_timeout: 5_000,
+    statement_timeout: 15_000,
   },
+  idle_timeout: 5,
+  max: 1,
+  max_lifetime: 60,
   onnotice: () => undefined,
+  prepare: false,
 } as const;
 
 const databaseUrlSchema = z
   .string()
   .min(1)
-  .max(8_192)
+  .max(8192)
   .refine((value) => !/[\0\r\n]/u.test(value), "Malformed database URL.")
   .transform((value, context) => {
     let url: URL;

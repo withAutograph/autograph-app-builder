@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   signLocalVercelRelay,
   verifyLocalVercelRelay,
@@ -9,21 +10,21 @@ describe("local Vercel OAuth relay", () => {
     const secret = "s".repeat(32);
     const value = signLocalVercelRelay(
       {
-        state: "a".repeat(32),
         configurationId: "icfg_1",
-        teamId: "team_1",
-        origin: "https://branch-one.vercel.app",
         expiresAt: 2_000,
+        origin: "https://branch-one.vercel.app",
+        state: "a".repeat(32),
+        teamId: "team_1",
       },
-      secret,
+      secret
     );
     expect(
       verifyLocalVercelRelay(
         value,
         secret,
-        1_000,
-        "https://branch-one.vercel.app",
-      ),
+        1000,
+        "https://branch-one.vercel.app"
+      )
     ).toMatchObject({
       teamId: "team_1",
     });
@@ -31,11 +32,11 @@ describe("local Vercel OAuth relay", () => {
       verifyLocalVercelRelay(
         value,
         secret,
-        1_000,
-        "https://branch-two.vercel.app",
-      ),
+        1000,
+        "https://branch-two.vercel.app"
+      )
     ).toThrow("origin");
-    expect(() => verifyLocalVercelRelay(`${value}x`, secret, 1_000)).toThrow();
-    expect(() => verifyLocalVercelRelay(value, secret, 2_000)).toThrow();
+    expect(() => verifyLocalVercelRelay(`${value}x`, secret, 1000)).toThrow();
+    expect(() => verifyLocalVercelRelay(value, secret, 2000)).toThrow();
   });
 });

@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title, filter controls, exception list, selected-record header, evidence, and replenishment action form a clear progression. Selection is visibly distinguished, severity and days-of-cover values are easy to scan, and confirmation/result states replace the main evidence area with prominent state-specific headings.                                                                                  |
-| layout         | 3/4   | The two-column composition is consistently aligned and comfortably dense from 1024 to 1920 pixels, with compact 86-pixel list rows and well-grouped detail sections. A minor weakness is vertical fit in the 1024-pixel result state, where the footer action falls below the 768-pixel viewport, while the 1440-pixel result uses a nearly unnecessary internal scroll region.                                      |
-| typography     | 4/4   | Heading levels, field labels, values, metadata, and status pills are visually consistent and readable throughout. Bold labels support quick evidence review without overwhelming body text, and long product and supplier strings remain legible at the supplied desktop widths.                                                                                                                                     |
-| responsive     | 3/4   | The interface adapts from a wide master-detail layout to a focused detail panel at 700 pixels, provides a clear Back to exceptions control, and keeps confirmation actions usable. However, the constrained initial capture opens directly on a preselected record rather than the filter/list task, and scroll ownership varies between internal detail scrolling at 1440 pixels and page scrolling at 1024 pixels. |
-| productClarity | 4/4   | The task is explicit: review low-stock evidence and model replenishment without changing inventory. Location and severity filters are labeled, list rows expose location, deficit, severity, and cover, supplier facts are discoverable, and both confirmation and result states repeatedly clarify that the action is a simulation and no order is placed.                                                          |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title, filter controls, exception list, selected-record header, evidence, and replenishment action form a clear progression. Selection is visibly distinguished, severity and days-of-cover values are easy to scan, and confirmation/result states replace the main evidence area with prominent state-specific headings. |
+| layout | 3/4 | The two-column composition is consistently aligned and comfortably dense from 1024 to 1920 pixels, with compact 86-pixel list rows and well-grouped detail sections. A minor weakness is vertical fit in the 1024-pixel result state, where the footer action falls below the 768-pixel viewport, while the 1440-pixel result uses a nearly unnecessary internal scroll region. |
+| typography | 4/4 | Heading levels, field labels, values, metadata, and status pills are visually consistent and readable throughout. Bold labels support quick evidence review without overwhelming body text, and long product and supplier strings remain legible at the supplied desktop widths. |
+| responsive | 3/4 | The interface adapts from a wide master-detail layout to a focused detail panel at 700 pixels, provides a clear Back to exceptions control, and keeps confirmation actions usable. However, the constrained initial capture opens directly on a preselected record rather than the filter/list task, and scroll ownership varies between internal detail scrolling at 1440 pixels and page scrolling at 1024 pixels. |
+| productClarity | 4/4 | The task is explicit: review low-stock evidence and model replenishment without changing inventory. Location and severity filters are labeled, list rows expose location, deficit, severity, and cover, supplier facts are discoverable, and both confirmation and result states repeatedly clarify that the action is a simulation and no order is placed. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
 
 ## Latest-run screenshots
 

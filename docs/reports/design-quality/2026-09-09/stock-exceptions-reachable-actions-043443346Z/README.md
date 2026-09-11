@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected product, stock decision, and replenishment action form a clear task sequence. Selection highlighting and severity labels support scanning, though supplier information is visually de-emphasized in a collapsed section despite being a core review requirement.                                                                                                                                                                                           |
-| layout         | 3/4   | Alignment and spacing are consistent, with a balanced list-detail split at 1024–1440px and comfortably sized controls. At 1920px the composition stretches almost edge to edge, producing very wide cards, long reading lines, and substantial unused space below the content.                                                                                                                                                                                                                               |
-| typography     | 3/4   | Headings, product names, labels, and values use a consistent hierarchy and remain readable across captures. Several secondary labels and compact status details are very small and muted; automated evidence repeatedly flags marginal contrast for metadata and status text, so those details may be harder to read even though the palette is preserved.                                                                                                                                                   |
-| responsive     | 4/4   | The composition adapts effectively across the supplied 1920px, 1440px, 1024px, and 700px desktop windows. Wide and medium windows retain list-detail context, while the 700px panel switches to a focused detail view with a clear Back to exceptions control; filters and actions remain usable, and the longer result state scrolls vertically without horizontal overflow.                                                                                                                                |
-| productClarity | 3/4   | The interface clearly identifies low-stock exceptions, supports location and severity filtering, synchronizes selection, explains that replenishment is reversible and will not contact the supplier, and provides explicit success and reset states. Empty-filter messaging is also clear. Supplier review is less immediate because Supplier details is collapsed in every populated capture, and the initial compact-panel view begins on a selected detail rather than showing the available exceptions. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected product, stock decision, and replenishment action form a clear task sequence. Selection highlighting and severity labels support scanning, though supplier information is visually de-emphasized in a collapsed section despite being a core review requirement. |
+| layout | 3/4 | Alignment and spacing are consistent, with a balanced list-detail split at 1024–1440px and comfortably sized controls. At 1920px the composition stretches almost edge to edge, producing very wide cards, long reading lines, and substantial unused space below the content. |
+| typography | 3/4 | Headings, product names, labels, and values use a consistent hierarchy and remain readable across captures. Several secondary labels and compact status details are very small and muted; automated evidence repeatedly flags marginal contrast for metadata and status text, so those details may be harder to read even though the palette is preserved. |
+| responsive | 4/4 | The composition adapts effectively across the supplied 1920px, 1440px, 1024px, and 700px desktop windows. Wide and medium windows retain list-detail context, while the 700px panel switches to a focused detail view with a clear Back to exceptions control; filters and actions remain usable, and the longer result state scrolls vertically without horizontal overflow. |
+| productClarity | 3/4 | The interface clearly identifies low-stock exceptions, supports location and severity filtering, synchronizes selection, explains that replenishment is reversible and will not contact the supplier, and provides explicit success and reset states. Empty-filter messaging is also clear. Supplier review is less immediate because Supplier details is collapsed in every populated capture, and the initial compact-panel view begins on a selected detail rather than showing the available exceptions. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/223) |
-| desktop-0                | typography | 0/0                         | 0% (0/507) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/280) |
-| desktop-0                | radius     | 0/0                         | 0% (0/115) |
-| desktop-0                | border     | 0/0                         | 0% (0/131) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/223) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/507) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/280) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/115) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/131) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/223) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/507) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/280) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/115) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/131) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/178) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/447) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/215) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/91)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/97)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/91)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/223) |
+| desktop-0 | typography | 0/0 | 0% (0/507) |
+| desktop-0 | spacing | 0/0 | 0% (0/280) |
+| desktop-0 | radius | 0/0 | 0% (0/115) |
+| desktop-0 | border | 0/0 | 0% (0/131) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/223) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/507) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/280) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/115) |
+| desktop-wide-0 | border | 0/0 | 0% (0/131) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/223) |
+| desktop-window-0 | typography | 0/0 | 0% (0/507) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/280) |
+| desktop-window-0 | radius | 0/0 | 0% (0/115) |
+| desktop-window-0 | border | 0/0 | 0% (0/131) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/178) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/447) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/215) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/91) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/97) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/91) |
 
 ## Latest-run screenshots
 

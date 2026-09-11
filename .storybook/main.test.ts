@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runs = vi.hoisted(() => ({
-  connections: vi.fn(),
   comingSoon: vi.fn(),
+  connections: vi.fn(),
   provisioning: vi.fn(),
 }));
 
 vi.mock("../lib/feature-flags.ts", () => ({
-  builderConnectionsFlag: { run: runs.connections },
   builderComingSoonFlag: { run: runs.comingSoon },
+  builderConnectionsFlag: { run: runs.connections },
   builderResourceProvisioningFlag: { run: runs.provisioning },
 }));
 
@@ -30,8 +30,8 @@ describe("Storybook feature flags", () => {
     runs.provisioning.mockResolvedValue(true);
 
     await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
-      connectionsEnabled: true,
       comingSoonEnabled: false,
+      connectionsEnabled: true,
       provisioningEnabled: true,
     });
     for (const run of Object.values(runs)) {
@@ -49,8 +49,8 @@ describe("Storybook feature flags", () => {
     runs.provisioning.mockResolvedValue(false);
 
     await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
-      connectionsEnabled: true,
       comingSoonEnabled: false,
+      connectionsEnabled: true,
       provisioningEnabled: false,
     });
   });
@@ -59,8 +59,8 @@ describe("Storybook feature flags", () => {
     vi.stubEnv("FLAGS", "");
 
     await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
-      connectionsEnabled: false,
       comingSoonEnabled: false,
+      connectionsEnabled: false,
       provisioningEnabled: false,
     });
     expect(runs.connections).not.toHaveBeenCalled();

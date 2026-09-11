@@ -1,6 +1,6 @@
-type PlatformAuthenticatorCapability = {
+interface PlatformAuthenticatorCapability {
   isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
-};
+}
 
 /**
  * Prefer the device authenticator when the browser confirms one is available.
@@ -8,10 +8,10 @@ type PlatformAuthenticatorCapability = {
  */
 export async function preferredPasskeyAuthenticatorAttachment(
   capability:
-    PlatformAuthenticatorCapability | undefined = typeof PublicKeyCredential ===
-  "undefined"
+    | PlatformAuthenticatorCapability
+    | undefined = typeof PublicKeyCredential === "undefined"
     ? undefined
-    : PublicKeyCredential,
+    : PublicKeyCredential
 ): Promise<"platform" | undefined> {
   if (!capability?.isUserVerifyingPlatformAuthenticatorAvailable) {
     return undefined;

@@ -3,9 +3,10 @@ import { FaGithub } from "react-icons/fa";
 import { SiVercel } from "react-icons/si";
 
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
+
 import styles from "./app-builder.module.css";
 
-type ProvisionedResourcesProps = {
+interface ProvisionedResourcesProps {
   githubSelected: boolean;
   vercelSelected: boolean;
   provisioning: BuilderProvisionResponse;
@@ -15,9 +16,10 @@ type ProvisionedResourcesProps = {
   providerSetupMessage: (
     provider: "GitHub" | "Vercel",
     result:
-      BuilderProvisionResponse["github"] | BuilderProvisionResponse["vercel"],
+      | BuilderProvisionResponse["github"]
+      | BuilderProvisionResponse["vercel"]
   ) => string | undefined;
-};
+}
 
 export function BuilderProvisionedResources({
   githubSelected,
@@ -34,7 +36,9 @@ export function BuilderProvisionedResources({
         const result = provisioning[provider];
         const selected =
           provider === "github" ? githubSelected : vercelSelected;
-        if (!selected) return null;
+        if (!selected) {
+          return null;
+        }
         const label = provider === "github" ? "GitHub" : "Vercel";
         return (
           <article key={provider} data-status={result.status}>

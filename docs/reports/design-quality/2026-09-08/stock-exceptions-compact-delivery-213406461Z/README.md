@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, review count, filters, severity groups, selected row, and detail card form a clear scan path. Selected items receive a strong outline and the replenishment action is isolated at the lower right. Critical and Warning rows remain visually very similar, however, so urgency depends heavily on reading group headings and small pill text.                                                                     |
-| layout         | 4/4   | The master-detail composition is consistently aligned, with filters matching the list column and detail values using clean label/value alignment. Spacing remains balanced from 900px through 1920px, and the centered maximum-width treatment prevents the wide view from becoming overly stretched.                                                                                                                             |
-| typography     | 4/4   | Product names, section headings, metadata, quantities, and explanatory copy use a restrained and consistent hierarchy. Labels and secondary text remain readable at every provided size, while bold numeric values support quick comparison without excessive typographic variation.                                                                                                                                              |
-| responsive     | 3/4   | The two-column workflow remains usable at 900, 1024, 1440, and 1920 pixels; controls resize, copy wraps cleanly, and buttons remain visible without horizontal overflow. At the 1024-by-768 capture, the full page reaches 802px and therefore requires modest vertical scrolling, and no narrower desktop panel state was supplied to show how the composition adapts when two columns can no longer fit comfortably.            |
-| productClarity | 3/4   | The interface clearly communicates that users should filter exceptions, select a product, inspect stock or supplier information, and run a non-destructive simulation. Counts update after filtering, selected records remain obvious, and the completed state explicitly says no order was sent. On the Supplier details tab, however, the action quantity is presented without the suggested-order row that explains its basis. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, review count, filters, severity groups, selected row, and detail card form a clear scan path. Selected items receive a strong outline and the replenishment action is isolated at the lower right. Critical and Warning rows remain visually very similar, however, so urgency depends heavily on reading group headings and small pill text. |
+| layout | 4/4 | The master-detail composition is consistently aligned, with filters matching the list column and detail values using clean label/value alignment. Spacing remains balanced from 900px through 1920px, and the centered maximum-width treatment prevents the wide view from becoming overly stretched. |
+| typography | 4/4 | Product names, section headings, metadata, quantities, and explanatory copy use a restrained and consistent hierarchy. Labels and secondary text remain readable at every provided size, while bold numeric values support quick comparison without excessive typographic variation. |
+| responsive | 3/4 | The two-column workflow remains usable at 900, 1024, 1440, and 1920 pixels; controls resize, copy wraps cleanly, and buttons remain visible without horizontal overflow. At the 1024-by-768 capture, the full page reaches 802px and therefore requires modest vertical scrolling, and no narrower desktop panel state was supplied to show how the composition adapts when two columns can no longer fit comfortably. |
+| productClarity | 3/4 | The interface clearly communicates that users should filter exceptions, select a product, inspect stock or supplier information, and run a non-destructive simulation. Counts update after filtering, selected records remain obvious, and the completed state explicitly says no order was sent. On the Supplier details tab, however, the action quantity is presented without the suggested-order row that explains its basis. |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/221) |
-| desktop-0                | typography | 0/0                         | 0% (0/557) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/298) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/142) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/221) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/298) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/142) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/221) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/298) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/142) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-900x900-0 | color      | 0/0                         | 0% (0/221) |
-| desktop-custom-900x900-0 | typography | 0/0                         | 0% (0/557) |
-| desktop-custom-900x900-0 | spacing    | 0/0                         | 0% (0/298) |
-| desktop-custom-900x900-0 | radius     | 0/0                         | 0% (0/114) |
-| desktop-custom-900x900-0 | border     | 0/0                         | 0% (0/142) |
-| desktop-custom-900x900-0 | shadow     | 0/0                         | 0% (0/120) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/221) |
+| desktop-0 | typography | 0/0 | 0% (0/557) |
+| desktop-0 | spacing | 0/0 | 0% (0/298) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/142) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/221) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/298) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/142) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/221) |
+| desktop-window-0 | typography | 0/0 | 0% (0/557) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/298) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/142) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-900x900-0 | color | 0/0 | 0% (0/221) |
+| desktop-custom-900x900-0 | typography | 0/0 | 0% (0/557) |
+| desktop-custom-900x900-0 | spacing | 0/0 | 0% (0/298) |
+| desktop-custom-900x900-0 | radius | 0/0 | 0% (0/114) |
+| desktop-custom-900x900-0 | border | 0/0 | 0% (0/142) |
+| desktop-custom-900x900-0 | shadow | 0/0 | 0% (0/120) |
 
 ## Latest-run screenshots
 

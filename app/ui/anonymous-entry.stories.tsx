@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+
 import { AnonymousBuilder } from "./app-builder";
 
 const meta = {
-  title: "Create App/Flow/Anonymous Entry",
-  component: AnonymousBuilder,
   args: { onContinue: fn() },
+  component: AnonymousBuilder,
   parameters: { layout: "fullscreen" },
+  title: "Create App/Flow/Anonymous Entry",
 } satisfies Meta<typeof AnonymousBuilder>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -16,11 +17,11 @@ export const ContinueAction: Story = {
     const canvas = within(canvasElement);
     await userEvent.type(
       canvas.getByLabelText("What should this app do?"),
-      "Create a vendor portal",
+      "Create a vendor portal"
     );
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(args.onContinue).toHaveBeenCalledWith(
-      "Create a vendor portal",
+      "Create a vendor portal"
     );
   },
 };
@@ -28,10 +29,10 @@ export const SuggestionAction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      canvas.getByRole("button", { name: "Build a customer feedback portal" }),
+      canvas.getByRole("button", { name: "Build a customer feedback portal" })
     );
     await expect(canvas.getByLabelText("What should this app do?")).toHaveValue(
-      "Build a customer feedback portal",
+      "Build a customer feedback portal"
     );
   },
 };

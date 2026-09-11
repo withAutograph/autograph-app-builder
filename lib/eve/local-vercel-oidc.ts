@@ -7,13 +7,13 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-type LinkedVercelProject = {
+interface LinkedVercelProject {
   projectId: string;
   orgId: string;
   projectName: string;
-};
+}
 
-type VercelOidcClaims = {
+interface VercelOidcClaims {
   iss: string;
   aud: string;
   sub: string;
@@ -25,7 +25,7 @@ type VercelOidcClaims = {
   project: string;
   project_id: string;
   environment: string;
-};
+}
 
 function assertOwnerNonWritable(path: string): void {
   const stat = statSync(path);
@@ -75,7 +75,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   ) {
     throw new Error("Installed Eve did not use the expected pnpm layout.");
   }
-  const rawTarget = readlinkSync(packageLink, "utf8");
+  const rawTarget = readlinkSync(packageLink, "utf-8");
   if (
     isAbsolute(rawTarget) ||
     rawTarget.split("/").includes("..") ||
@@ -114,8 +114,8 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Installed Eve CLI was not an exact executable file.");
   }
   const metadata = closedObject(
-    JSON.parse(readFileSync(metadataPath, "utf8")) as unknown,
-    "Installed Eve package",
+    JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown,
+    "Installed Eve package"
   );
   const bin = closedObject(metadata.bin, "Installed Eve bin");
   if (
@@ -127,13 +127,13 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   }
   const rootMetadata = closedObject(
     JSON.parse(
-      readFileSync(join(repositoryRoot, "package.json"), "utf8"),
+      readFileSync(join(repositoryRoot, "package.json"), "utf-8")
     ) as unknown,
-    "Repository package",
+    "Repository package"
   );
   const dependencies = closedObject(
     rootMetadata.dependencies,
-    "Repository dependencies",
+    "Repository dependencies"
   );
   if (dependencies.eve !== "0.44.4") {
     throw new Error("Repository Eve dependency was not pinned to 0.44.4.");
@@ -159,7 +159,7 @@ function requiredString(value: Record<string, unknown>, key: string): string {
 function requiredInteger(value: Record<string, unknown>, key: string): number {
   const candidate = value[key];
   if (!Number.isSafeInteger(candidate)) {
-    throw new Error(`Required ${key} was unavailable.`);
+    throw new TypeError(`Required ${key} was unavailable.`);
   }
   return candidate as number;
 }
@@ -167,8 +167,8 @@ function requiredInteger(value: Record<string, unknown>, key: string): number {
 export function parseLinkedVercelProject(source: string): LinkedVercelProject {
   const value = closedObject(JSON.parse(source) as unknown, "Vercel project");
   return {
-    projectId: requiredString(value, "projectId"),
     orgId: requiredString(value, "orgId"),
+    projectId: requiredString(value, "projectId"),
     projectName: requiredString(value, "projectName"),
   };
 }
@@ -177,7 +177,7 @@ export function readOwnerBoundLocalFile(
   path: string,
   input: { confidential: boolean; ownerId?: number } = {
     confidential: false,
-  },
+  }
 ): string {
   const stat = lstatSync(path);
   const ownerId = input.ownerId ?? process.getuid?.();
@@ -191,7 +191,7 @@ export function readOwnerBoundLocalFile(
   ) {
     throw new Error("Local credential input was not an owner-bound file.");
   }
-  return readFileSync(path, "utf8");
+  return readFileSync(path, "utf-8");
 }
 
 export function parseLocalVercelOidcToken(source: string): string {
@@ -217,26 +217,28 @@ export function parseLocalVercelOidcToken(source: string): string {
 
 function decodeClaims(token: string): VercelOidcClaims {
   const payload = token.split(".")[1];
-  if (payload === undefined) throw new Error("OIDC payload was unavailable.");
+  if (payload === undefined) {
+    throw new Error("OIDC payload was unavailable.");
+  }
   let decoded: unknown;
   try {
-    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     throw new Error("OIDC payload was malformed.");
   }
   const claims = closedObject(decoded, "OIDC claims");
   return {
-    iss: requiredString(claims, "iss"),
     aud: requiredString(claims, "aud"),
-    sub: requiredString(claims, "sub"),
-    iat: requiredInteger(claims, "iat"),
-    nbf: requiredInteger(claims, "nbf"),
+    environment: requiredString(claims, "environment"),
     exp: requiredInteger(claims, "exp"),
+    iat: requiredInteger(claims, "iat"),
+    iss: requiredString(claims, "iss"),
+    nbf: requiredInteger(claims, "nbf"),
     owner: requiredString(claims, "owner"),
     owner_id: requiredString(claims, "owner_id"),
     project: requiredString(claims, "project"),
     project_id: requiredString(claims, "project_id"),
-    environment: requiredString(claims, "environment"),
+    sub: requiredString(claims, "sub"),
   };
 }
 
@@ -293,14 +295,14 @@ export function validateLocalVercelOidcClaims(input: {
     throw new Error("OIDC token was not current and bounded.");
   }
   return {
-    issuerMode: claims.iss === "https://oidc.vercel.com" ? "global" : "team",
     audienceBound: true,
-    subjectBound: true,
+    environment: "development",
+    expiresAt: claims.exp,
+    issuedAt: claims.iat,
+    issuerMode: claims.iss === "https://oidc.vercel.com" ? "global" : "team",
+    notBefore: claims.nbf,
     ownerBound: true,
     projectBound: true,
-    environment: "development",
-    issuedAt: claims.iat,
-    notBefore: claims.nbf,
-    expiresAt: claims.exp,
+    subjectBound: true,
   };
 }

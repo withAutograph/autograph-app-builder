@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| hierarchy      | 4/4   | The page title and filters establish context, the exception list emphasizes severity and days of cover, and the selected row is clearly distinguished. Detail states give the modeled quantities strong prominence while keeping supplier facts and calculation derivation secondary in disclosures.                                                                                                                                                   |
-| layout         | 3/4   | The centered two-pane composition is consistently aligned and comfortably dense at 1024–1920 px, while the 700 px view switches cleanly between list and detail. Minor inefficiencies remain: constrained detail headers use a relatively tall band for identity and right-aligned actions, and the wide view leaves substantial unused space around a fairly small result set.                                                                        |
-| typography     | 4/4   | Heading levels, labels, values, helper text, and status pills are visually consistent and highly readable. Large quantity figures such as 18, 96, and 114 units support rapid comparison without overwhelming the record identity or action labels.                                                                                                                                                                                                    |
-| responsive     | 4/4   | The composition remains usable across the provided 1920, 1440, 1024, and 700 px desktop captures. At 700 px it intentionally defers detail until selection, provides a clear Back to exceptions control, preserves full-width filters, and keeps review actions and disclosures usable without horizontal overflow.                                                                                                                                    |
-| productClarity | 3/4   | The workflow is immediately understandable: filter exceptions, select a product, inspect stock and supplier evidence, review a modeled quantity, confirm the mock, and reset it. Repeated Simulation only messaging clearly prevents confusion with a real order, though the reason for the 96-unit recommendation is initially hidden and list-row opening is mostly communicated through instructional copy rather than a persistent row affordance. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title and filters establish context, the exception list emphasizes severity and days of cover, and the selected row is clearly distinguished. Detail states give the modeled quantities strong prominence while keeping supplier facts and calculation derivation secondary in disclosures. |
+| layout | 3/4 | The centered two-pane composition is consistently aligned and comfortably dense at 1024–1920 px, while the 700 px view switches cleanly between list and detail. Minor inefficiencies remain: constrained detail headers use a relatively tall band for identity and right-aligned actions, and the wide view leaves substantial unused space around a fairly small result set. |
+| typography | 4/4 | Heading levels, labels, values, helper text, and status pills are visually consistent and highly readable. Large quantity figures such as 18, 96, and 114 units support rapid comparison without overwhelming the record identity or action labels. |
+| responsive | 4/4 | The composition remains usable across the provided 1920, 1440, 1024, and 700 px desktop captures. At 700 px it intentionally defers detail until selection, provides a clear Back to exceptions control, preserves full-width filters, and keeps review actions and disclosures usable without horizontal overflow. |
+| productClarity | 3/4 | The workflow is immediately understandable: filter exceptions, select a product, inspect stock and supplier evidence, review a modeled quantity, confirm the mock, and reset it. Repeated Simulation only messaging clearly prevents confusion with a real order, though the reason for the 96-unit recommendation is initially hidden and list-row opening is mostly communicated through instructional copy rather than a persistent row affordance. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/267) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/126) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/267) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/126) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/267) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/126) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/144) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/302) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/169) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/72)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/80)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/76)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/126) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/126) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/126) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/144) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/302) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/169) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/72) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/80) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/76) |
 
 ## Latest-run screenshots
 

@@ -1,7 +1,6 @@
+import type { RuntimeSandboxSession } from "eve/sandbox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RuntimeSandboxSession } from "eve/sandbox";
-import { InMemorySandboxExecutionLeaseStore } from "./execution-lease";
 import {
   acquireHostedSandboxExecutionLease,
   assertHostedSandboxCommandAuthority,
@@ -10,6 +9,7 @@ import {
   sandboxCleanupEvidence,
   setHostedSandboxExecutionLeaseDependenciesForTest,
 } from "./deployment-execution-lease";
+import { InMemorySandboxExecutionLeaseStore } from "./execution-lease";
 
 const forwarded = () => ({
   attributes: {
@@ -25,7 +25,7 @@ const forwarded = () => ({
 });
 const sessionAuth = () => ({ current: forwarded(), initiator: forwarded() });
 
-function sandboxFixture(stop = vi.fn(async () => undefined)) {
+function sandboxFixture(stop = vi.fn(async () => {})) {
   return {
     id: "provider_session_1",
     stop,
@@ -35,8 +35,8 @@ function sandboxFixture(stop = vi.fn(async () => undefined)) {
 function install(store: InMemorySandboxExecutionLeaseStore, member = true) {
   setHostedSandboxExecutionLeaseDependenciesForTest({
     enabled: () => true,
-    store: () => store,
     isMember: async () => member,
+    store: () => store,
   });
 }
 
@@ -48,42 +48,42 @@ describe("hosted sandbox turn lease lifecycle", () => {
     install(store);
     const firstSandbox = sandboxFixture();
     const first = await acquireHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
-      sandbox: firstSandbox,
       nowEpochMs: 1_000,
+      sandbox: firstSandbox,
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     });
     expect(first?.epoch).toBe(1);
     await expect(
       assertHostedSandboxCommandAuthority({
-        sessionId: "session_1",
         nowEpochMs: 1_001,
-      }),
+        sessionId: "session_1",
+      })
     ).resolves.toMatchObject({ epoch: 1, state: "active" });
     await expect(
       releaseHostedSandboxExecutionLease({
-        sessionId: "session_1",
-        sessionAuth: sessionAuth(),
-        sandbox: firstSandbox,
-        reason: "turn-completed",
         nowEpochMs: 2_000,
-      }),
-    ).resolves.toMatchObject({ released: true, lease: { state: "released" } });
+        reason: "turn-completed",
+        sandbox: firstSandbox,
+        sessionAuth: sessionAuth(),
+        sessionId: "session_1",
+      })
+    ).resolves.toMatchObject({ lease: { state: "released" }, released: true });
 
     const secondSandbox = sandboxFixture();
     const second = await acquireHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
-      sandbox: secondSandbox,
       nowEpochMs: 3_000,
+      sandbox: secondSandbox,
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     });
     expect(second?.epoch).toBe(2);
     await releaseHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
-      sandbox: secondSandbox,
-      reason: "turn-cancelled",
       nowEpochMs: 4_000,
+      reason: "turn-cancelled",
+      sandbox: secondSandbox,
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     });
     expect(firstSandbox.stop).toHaveBeenCalledOnce();
     expect(secondSandbox.stop).toHaveBeenCalledOnce();
@@ -94,84 +94,84 @@ describe("hosted sandbox turn lease lifecycle", () => {
     install(store);
     const sandbox = sandboxFixture();
     await acquireHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
-      sandbox,
       nowEpochMs: 1_000,
+      sandbox,
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     });
     clearHostedSandboxExecutionLeaseCacheForTest();
     install(store);
     await expect(
-      assertHostedSandboxCommandAuthority({ sessionId: "session_1" }),
+      assertHostedSandboxCommandAuthority({ sessionId: "session_1" })
     ).rejects.toThrow("authority is unavailable");
     await expect(
       releaseHostedSandboxExecutionLease({
-        sessionId: "session_1",
-        sessionAuth: sessionAuth(),
-        sandbox,
-        reason: "turn-failed",
         nowEpochMs: 2_000,
-      }),
-    ).resolves.toMatchObject({ released: true, lease: { epoch: 1 } });
+        reason: "turn-failed",
+        sandbox,
+        sessionAuth: sessionAuth(),
+        sessionId: "session_1",
+      })
+    ).resolves.toMatchObject({ lease: { epoch: 1 }, released: true });
     const reacquired = await acquireHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
-      sandbox: sandboxFixture(),
       nowEpochMs: 3_000,
+      sandbox: sandboxFixture(),
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     });
     expect(reacquired?.epoch).toBe(2);
   });
 
   it("stops compute on authority, membership, database, and acquire failures", async () => {
-    const cases: Array<{
+    const cases: {
       auth: unknown;
       member: boolean;
       store: () => InMemorySandboxExecutionLeaseStore;
       message: string;
-    }> = [
+    }[] = [
       {
         auth: {},
         member: true,
-        store: () => new InMemorySandboxExecutionLeaseStore(),
         message: "Hosted session authority is invalid",
+        store: () => new InMemorySandboxExecutionLeaseStore(),
       },
       {
         auth: sessionAuth(),
         member: false,
-        store: () => new InMemorySandboxExecutionLeaseStore(),
         message: "membership is not active",
+        store: () => new InMemorySandboxExecutionLeaseStore(),
       },
       {
         auth: sessionAuth(),
         member: true,
+        message: "database unavailable",
         store: () => {
           throw new Error("database unavailable");
         },
-        message: "database unavailable",
       },
       {
         auth: sessionAuth(),
         member: true,
+        message: "acquire failed",
         store: () =>
           ({
             acquire: async () => {
               throw new Error("acquire failed");
             },
           }) as never,
-        message: "acquire failed",
       },
     ];
     for (const candidate of cases) {
-      const stop = vi.fn(async () => undefined);
+      const stop = vi.fn(async () => {});
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled: () => true,
-        store: candidate.store,
         isMember: async () => candidate.member,
+        store: candidate.store,
       });
       const rejection = await acquireHostedSandboxExecutionLease({
-        sessionId: "session_1",
-        sessionAuth: candidate.auth,
         sandbox: sandboxFixture(stop),
+        sessionAuth: candidate.auth,
+        sessionId: "session_1",
       }).catch((error: unknown) => error);
       expect(rejection).toBeInstanceOf(Error);
       expect((rejection as Error).message).toContain(candidate.message);
@@ -188,18 +188,18 @@ describe("hosted sandbox turn lease lifecycle", () => {
     const original = new Error("database unavailable");
     setHostedSandboxExecutionLeaseDependenciesForTest({
       enabled: () => true,
+      isMember: async () => true,
       store: () => {
         throw original;
       },
-      isMember: async () => true,
     });
     const stop = vi.fn(async () => {
       throw new Error("provider unavailable");
     });
     const rejection = await acquireHostedSandboxExecutionLease({
-      sessionId: "session_1",
-      sessionAuth: sessionAuth(),
       sandbox: sandboxFixture(stop),
+      sessionAuth: sessionAuth(),
+      sessionId: "session_1",
     }).catch((error: unknown) => error);
     expect(rejection).toBe(original);
     expect(sandboxCleanupEvidence(rejection)).toEqual({

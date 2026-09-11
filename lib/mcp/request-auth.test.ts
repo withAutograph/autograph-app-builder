@@ -9,17 +9,17 @@ import {
 } from "./request-auth";
 
 const config = hostedMcpAuthConfigSchema.parse({
-  issuer: "https://builder.example.test/api/auth",
-  audience: "https://builder.example.test/mcp",
-  jwksUrl: "https://builder.example.test/api/auth/jwks",
   algorithm: "ES256",
+  audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
+  jwksUrl: "https://builder.example.test/api/auth/jwks",
   resourceUrl: "https://builder.example.test/mcp",
 });
 
 describe("hosted MCP request authentication", () => {
   it("accepts only one strict RFC 6750 Bearer value", () => {
     expect(parseStrictBearerAuthorization("Bearer abc.DEF_-/~+==")).toBe(
-      "abc.DEF_-/~+==",
+      "abc.DEF_-/~+=="
     );
     for (const value of [
       null,
@@ -40,33 +40,33 @@ describe("hosted MCP request authentication", () => {
       hostedMcpAuthConfigSchema.parse({
         ...config,
         algorithm: "HS256",
-      }),
+      })
     ).toThrow();
     expect(() =>
       hostedMcpAuthConfigSchema.parse({
         ...config,
         jwksUrl: "http://identity.example.test/jwks",
-      }),
+      })
     ).toThrow();
     expect(() =>
       hostedMcpAuthConfigSchema.parse({
         ...config,
         jwksUrl: `${config.jwksUrl}?tenant=one`,
-      }),
+      })
     ).toThrow();
     expect(() =>
       hostedMcpAuthConfigSchema.parse({
         ...config,
         audience: "https://another.example.test/mcp",
-      }),
+      })
     ).toThrow("audience must equal");
   });
 
   it("publishes closed protected-resource metadata", () => {
     expect(protectedResourceMetadata(config)).toEqual({
-      resource: config.resourceUrl,
       authorization_servers: [config.issuer],
       bearer_methods_supported: ["header"],
+      resource: config.resourceUrl,
       scopes_supported: [
         "autograph:session",
         "autograph:start",
@@ -80,9 +80,8 @@ describe("hosted MCP request authentication", () => {
 
   it("verifies exact issuer, audience, algorithm, kid, time, scope, and workspace claims", async () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
-    const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
-    const fetchCalls: Array<[string | URL | Request, RequestInit | undefined]> =
-      [];
+    const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
+    const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
     const fetchImplementation: typeof fetch = async (url, options) => {
       fetchCalls.push([url, options]);
       return Response.json({ keys: [jwk] });
@@ -106,13 +105,13 @@ describe("hosted MCP request authentication", () => {
       .sign(privateKey);
 
     await expect(
-      verifier.verify({ token, nowEpochSeconds: now }),
+      verifier.verify({ nowEpochSeconds: now, token })
     ).resolves.toEqual({
-      issuer: config.issuer,
       audience: config.audience,
+      issuer: config.issuer,
+      scopes: ["autograph:session", "autograph:get"],
       subject: "user-one",
       workspaceId: "workspace-one",
-      scopes: ["autograph:session", "autograph:get"],
     });
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.[0]).toBe(config.jwksUrl);
@@ -139,7 +138,7 @@ describe("hosted MCP request authentication", () => {
     ["missing key id", { kid: undefined }],
   ])("rejects %s", async (_name, override) => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
-    const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
+    const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
     const verifier = createRemoteJwksAccessTokenVerifier({
       config,
       fetchImplementation: async () => Response.json({ keys: [jwk] }),
@@ -162,7 +161,7 @@ describe("hosted MCP request authentication", () => {
       .setExpirationTime(override.expirationTime ?? now + 60);
     const token = await signer.sign(privateKey);
     await expect(
-      verifier.verify({ token, nowEpochSeconds: now }),
+      verifier.verify({ nowEpochSeconds: now, token })
     ).rejects.toThrow();
   });
 
@@ -172,8 +171,8 @@ describe("hosted MCP request authentication", () => {
       config,
       fetchImplementation: async () =>
         new Response(null, {
-          status: 302,
           headers: { location: "https://other.example.test/jwks" },
+          status: 302,
         }),
     });
     const token = await new SignJWT({
@@ -189,7 +188,7 @@ describe("hosted MCP request authentication", () => {
       .setExpirationTime(2_000_000_060)
       .sign(privateKey);
     await expect(
-      verifier.verify({ token, nowEpochSeconds: 2_000_000_000 }),
+      verifier.verify({ nowEpochSeconds: 2_000_000_000, token })
     ).rejects.toThrow("redirects");
   });
 });

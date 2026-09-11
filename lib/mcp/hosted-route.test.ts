@@ -1,7 +1,7 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import {
   createDeploymentMcpRequestHandler,
@@ -11,17 +11,17 @@ import {
 const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
 
 const environment = {
-  EVE_HOSTED_ADAPTER: "1",
-  VERCEL_ENV: "preview",
-  EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
-  EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
-  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
   DATABASE_URL: "postgresql://user:password@database.example.test/eve",
-  MCP_OAUTH_ISSUER: "https://builder.example.test/api/auth",
-  MCP_OAUTH_AUDIENCE: "https://builder.example.test/mcp",
-  MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
+  EVE_HOSTED_ADAPTER: "1",
+  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+  EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+  EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
   MCP_OAUTH_ALGORITHM: "ES256",
+  MCP_OAUTH_AUDIENCE: "https://builder.example.test/mcp",
+  MCP_OAUTH_ISSUER: "https://builder.example.test/api/auth",
+  MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
   MCP_RESOURCE_URL: "https://builder.example.test/mcp",
+  VERCEL_ENV: "preview",
 };
 
 const workloadIdentity: HostedWorkloadIdentity = {
@@ -34,17 +34,17 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 function request() {
   return new Request(environment.MCP_RESOURCE_URL, {
-    method: "POST",
-    headers: {
-      accept: "application/json, text/event-stream",
-      "content-type": "application/json",
-    },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
       params: { name: "autograph_get", arguments: {} },
     }),
+    headers: {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    },
+    method: "POST",
   });
 }
 
@@ -52,12 +52,12 @@ describe("hosted route composition", () => {
   it("accepts an exact Production runtime binding without changing its authority shape", () => {
     const productionEnvironment = {
       ...environment,
-      VERCEL_ENV: "production",
       EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+      VERCEL_ENV: "production",
     };
     const config = readHostedDeploymentConfig(productionEnvironment);
     expect(config.forwarderSubject).toBe(
-      "owner:withautograph:project:autograph-app-builder:environment:production",
+      "owner:withautograph:project:autograph-app-builder:environment:production"
     );
   });
 
@@ -65,9 +65,9 @@ describe("hosted route composition", () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     expect(openDatabase).not.toHaveBeenCalled();
@@ -88,9 +88,9 @@ describe("hosted route composition", () => {
       const openDatabase = vi.fn(() => ({}) as unknown as Database);
       const handler = createDeploymentMcpRequestHandler({
         environment: invalidEnvironment,
-        workloadIdentity,
-        openDatabase,
         now: () => nowEpochMs,
+        openDatabase,
+        workloadIdentity,
       });
 
       const response = await handler(request());
@@ -106,22 +106,22 @@ describe("hosted route composition", () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     const wrongOrigin = await handler(
       new Request("https://other.example.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
           method: "tools/call",
           params: { name: "autograph_get", arguments: {} },
         }),
-      }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      })
     );
     expect(wrongOrigin.status).toBe(503);
     expect(openDatabase).not.toHaveBeenCalled();
@@ -133,9 +133,9 @@ describe("hosted route composition", () => {
         await handler(
           new Request(`${environment.MCP_RESOURCE_URL}?unexpected=1`, {
             method: "POST",
-          }),
+          })
         )
-      ).status,
+      ).status
     ).toBe(503);
     expect(openDatabase).toHaveBeenCalledTimes(1);
   });
@@ -146,9 +146,9 @@ describe("hosted route composition", () => {
     });
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     const response = await handler(request());
@@ -158,7 +158,7 @@ describe("hosted route composition", () => {
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {
     expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(
-      environment.DATABASE_URL,
+      environment.DATABASE_URL
     );
     for (const databaseUrl of [
       "mysql://database.example.test/eve",
@@ -169,21 +169,21 @@ describe("hosted route composition", () => {
         readHostedDeploymentConfig({
           ...environment,
           DATABASE_URL: databaseUrl,
-        }),
+        })
       ).toThrow();
     }
     expect(readHostedDeploymentConfig(environment).eve).toEqual({
       baseUrl: "https://builder.example.test",
     });
     expect(readHostedDeploymentConfig(environment).forwarderSubject).toBe(
-      "owner:withautograph:project:autograph-app-builder:environment:preview",
+      "owner:withautograph:project:autograph-app-builder:environment:preview"
     );
     expect(() =>
       readHostedDeploymentConfig({
         ...environment,
-        MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
         MCP_OAUTH_AUDIENCE: "https://builder.example.test/not-mcp",
-      }),
+        MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
+      })
     ).toThrow("resourceUrl must be the exact /mcp URL");
   });
 });

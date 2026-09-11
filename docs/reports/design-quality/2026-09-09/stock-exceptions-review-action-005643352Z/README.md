@@ -22,13 +22,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, review count, severity groups, selected row, and suggested-order section create a strong scan path. Selected records are visually obvious, but repeating the severity in both group headings and every row adds some redundant emphasis.                                                                                                                |
-| layout         | 3/4   | The two-column master-detail composition is consistently aligned at 1024–1920px, with compact filters and well-spaced detail sections. At 700px the dedicated list/detail views work well, though the list cards compress severity, cover, and Review actions into a busy right-hand strip.                                                                             |
-| typography     | 3/4   | Headings, product names, values, labels, and explanatory copy use consistent sizing and weight, and the important quantities remain readable across captures. Severity and arrival-status pills are comparatively small, while several neighboring metadata lines have similar visual weight.                                                                           |
-| responsive     | 4/4   | The composition adapts especially well: 1440px and wider use master-detail, 1024px retains both useful panels without horizontal overflow, and 700px changes to an explicit Review list followed by a full-width detail view with Back navigation. The 1024×768 states require only slight vertical scrolling and preserve usable controls.                             |
-| productClarity | 4/4   | The workflow is immediately understandable from the instructional subtitle, location and severity filters, review selection, stock/supplier tabs, suggested quantity, and prominent simulation action. Copy such as “Preview only · No supplier contacted,” “Stock unchanged,” and “Simulated — no order sent” clearly distinguishes the mock action from a real order. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, review count, severity groups, selected row, and suggested-order section create a strong scan path. Selected records are visually obvious, but repeating the severity in both group headings and every row adds some redundant emphasis. |
+| layout | 3/4 | The two-column master-detail composition is consistently aligned at 1024–1920px, with compact filters and well-spaced detail sections. At 700px the dedicated list/detail views work well, though the list cards compress severity, cover, and Review actions into a busy right-hand strip. |
+| typography | 3/4 | Headings, product names, values, labels, and explanatory copy use consistent sizing and weight, and the important quantities remain readable across captures. Severity and arrival-status pills are comparatively small, while several neighboring metadata lines have similar visual weight. |
+| responsive | 4/4 | The composition adapts especially well: 1440px and wider use master-detail, 1024px retains both useful panels without horizontal overflow, and 700px changes to an explicit Review list followed by a full-width detail view with Back navigation. The 1024×768 states require only slight vertical scrolling and preserve usable controls. |
+| productClarity | 4/4 | The workflow is immediately understandable from the instructional subtitle, location and severity filters, review selection, stock/supplier tabs, suggested quantity, and prominent simulation action. Copy such as “Preview only · No supplier contacted,” “Stock unchanged,” and “Simulated — no order sent” clearly distinguishes the mock action from a real order. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/227) |
-| desktop-0                | typography | 0/0                         | 0% (0/557) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/137) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/227) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/227) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/216) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/549) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/253) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/111) |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/125) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/111) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/227) |
+| desktop-0 | typography | 0/0 | 0% (0/557) |
+| desktop-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/137) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/227) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/137) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/227) |
+| desktop-window-0 | typography | 0/0 | 0% (0/557) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/137) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/216) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/549) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/253) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/111) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/125) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/111) |
 
 ## Latest-run screenshots
 

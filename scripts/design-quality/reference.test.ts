@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { checkJsxAttributes, readReference } from "./reference";
@@ -16,17 +17,16 @@ describe("readReference", () => {
           jsx: "preserve",
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
-      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; nonNullable?: JSX.Element; value: string; callback: () => void }) { return null; }`,
+      `export function RecordListDetailLayout(_props: { list: JSX.Element; detail: JSX.Element | null; nonNullable?: JSX.Element; value: string; callback: () => void }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordListDetailLayout } from "@autograph/compositions";
             import { imported } from "./imported";
             declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { main: {}; aside: {} } } }
@@ -44,10 +44,11 @@ describe("readReference", () => {
               const derived = makeLabel();
               return <><RecordListDetailLayout list={list} detail={detail} value={derived} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} value={state} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} value={state} callback={() => undefined} /></>;
             }`,
+          path: "app/page.tsx",
         },
         {
-          path: "app/imported.tsx",
           content: `export const imported = <main />;`,
+          path: "app/imported.tsx",
         },
       ],
     });
@@ -77,18 +78,18 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
-      `export type TableSpec = { narrowLayout: "compact" | "full"; columns: Array<{ id: string }> }; export function DataTable(_props: { spec: TableSpec }) { return null; } export function Loose(_props: any) { return null; }`,
+      `export type TableSpec = { narrowLayout: "compact" | "full"; columns: Array<{ id: string }> }; export function DataTable(_props: { spec: TableSpec }) { return null; } export function Loose(_props: any) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { DataTable, Loose } from "@autograph/compositions"; const compact = true; export function Page() { return <><DataTable spec={{ narrowLayout: compact ? "compact" : "full", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -110,18 +111,18 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/components": ["./core/components.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "components.tsx"),
-      `type Node = "ready" | "paused" | { children: Node }; export function PageHeader(_props: { title: Node }) { return null; }`,
+      `type Node = "ready" | "paused" | { children: Node }; export function PageHeader(_props: { title: Node }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { PageHeader } from "@autograph/components"; export function Page() { return <><PageHeader title="ready" /><PageHeader title={"ready"} /><PageHeader title={"invalid"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -139,22 +140,22 @@ describe("readReference", () => {
       join(root, "tsconfig.json"),
       JSON.stringify({
         compilerOptions: {
-          strict: true,
           noUncheckedIndexedAccess: true,
           paths: { "@autograph/components": ["./core/components.tsx"] },
+          strict: true,
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "components.tsx"),
-      `export function PageHeader(_props: { actions: { label: string }[] }) { return null; }`,
+      `export function PageHeader(_props: { actions: { label: string }[] }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { PageHeader } from "@autograph/components"; const items: Array<{ label: string }> = []; export function Page(){ return <PageHeader actions={[{ label: items[0].label }]} /> }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -165,7 +166,7 @@ describe("readReference", () => {
           code: expect.any(Number),
           message: expect.stringMatching(/possibly .*undefined/i),
         }),
-      ]),
+      ])
     );
   });
 
@@ -179,22 +180,22 @@ describe("readReference", () => {
           jsx: "preserve",
           paths: { "@autograph/components": ["./core/components.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "components.tsx"),
       `export type Slot = string | JSX.Element | { readonly children?: Slot };
-       export function Card(_props: { tag?: Slot; invalid?: string; onSelect: () => void; loose?: any }) { return null; }`,
+       export function Card(_props: { tag?: Slot; invalid?: string; onSelect: () => void; loose?: any }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Card } from "@autograph/components";
             declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { span: {} } } }
             declare const uncertain: any;
             export function Page() { return <><Card tag={<span />} onSelect={() => undefined} loose={uncertain} /><Card invalid={<span />} onSelect={uncertain} /><Card tag={uncertain} onSelect={() => undefined} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -218,19 +219,19 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
       `type Section = { title: string; sections: Section[] };
-       export function RecordDetailPanel(_props: { sections: Section[]; detail: { mode: "compact" | "full"; sections: Section[] } }) { return null; }`,
+       export function RecordDetailPanel(_props: { sections: Section[]; detail: { mode: "compact" | "full"; sections: Section[] } }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordDetailPanel } from "@autograph/compositions"; export function Page() { return <><RecordDetailPanel sections={[]} detail={{ mode: "compact", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ mode: "wide", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ sections: [] }} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -255,22 +256,22 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
       `type Node = string | { children?: Node };
        type Action = { id: string; label: Node; intent?: "primary" | "secondary" };
-       export function RecordDetailPanel(_props: { actions: readonly Action[] }) { return null; }`,
+       export function RecordDetailPanel(_props: { actions: readonly Action[] }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordDetailPanel } from "@autograph/compositions";
             declare const stage: "ready" | "done";
             export function Page() { return <><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset" }]} /><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset", intent: "invalid" }]} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -289,20 +290,20 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
       `type Section = { title: string; sections: Section[] };
        export function Tuples(_props: { required: [Section]; optional: [Section?]; rest: [Section, ...Section[]] }) { return null; }
-       export function Directory(_props: { entries: Record<string, Section> }) { return null; }`,
+       export function Directory(_props: { entries: Record<string, Section> }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Tuples, Directory } from "@autograph/compositions"; declare const uncertain: any; export function Page() { return <><Tuples required={[]} optional={[]} rest={[]} /><Tuples required={[{ title: "one", sections: [] }, { title: "two", sections: [] }]} optional={[]} rest={[{ title: "one", sections: [] }]} /><Directory entries={{ west: { title: "West", sections: [] } }} /><Directory entries={{ west: { title: 1, sections: [] } }} /><Directory entries={{ ...uncertain }} /><Directory entries={uncertain} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -329,18 +330,18 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/components": ["./core/components.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "components.tsx"),
-      `export function Choice(_props: { value: { value: string } | { value: any } }) { return null; }`,
+      `export function Choice(_props: { value: { value: string } | { value: any } }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Choice } from "@autograph/components"; export function Page() { return <><Choice value={{ value: "ready" }} /><Choice value={{ value: 123 }} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -359,18 +360,18 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/components": ["./core/components.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(root, "core", "components.tsx"),
-      `export function Choice(_props: { spec: { id: string } | null }) { return null; } export function Loose(_props: { value: unknown }) { return null; } export function Variant(_props: { mode: "ready" | "paused" }) { return null; }`,
+      `export function Choice(_props: { spec: { id: string } | null }) { return null; } export function Loose(_props: { value: unknown }) { return null; } export function Variant(_props: { mode: "ready" | "paused" }) { return null; }`
     );
     const result = checkJsxAttributes({
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Choice, Loose, Variant } from "@autograph/components"; export function Page() { return <><Choice spec={{ id: "stock" }} /><Loose value={"untrusted target"} /><Variant mode={"invalid"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -391,40 +392,40 @@ describe("readReference", () => {
         compilerOptions: {
           paths: { "@autograph/components": ["./core/components.tsx"] },
         },
-      }),
+      })
     );
     await writeFile(
       join(core, "components.tsx"),
-      `export function Button(_props: { variant?: "primary" | "secondary" }) { return null; }`,
+      `export function Button(_props: { variant?: "primary" | "secondary" }) { return null; }`
     );
     const packageRoot = join(root, "packages", "compositions");
     await mkdir(join(packageRoot, "src"), { recursive: true });
     await writeFile(
       join(packageRoot, "package.json"),
       JSON.stringify({
-        name: "@autograph/compositions",
         exports: { ".": "./src/index.ts", "./table": "./src/table.ts" },
-      }),
+        name: "@autograph/compositions",
+      })
     );
     await writeFile(
       join(packageRoot, "src/index.ts"),
-      `export const Overview = () => null;`,
+      `export const Overview = () => null;`
     );
     await writeFile(
       join(packageRoot, "src/table.ts"),
-      `export const DataTable = () => null;`,
+      `export const DataTable = () => null;`
     );
 
     const reference = await readReference(root);
     expect(
       reference.modules["@autograph/components"].exports.Button.props?.variant
-        .values,
+        .values
     ).toEqual(["primary", "secondary"]);
     expect(
-      reference.modules["@autograph/compositions"].exports.Overview,
+      reference.modules["@autograph/compositions"].exports.Overview
     ).toBeDefined();
     expect(
-      reference.modules["@autograph/compositions/table"].exports.DataTable,
+      reference.modules["@autograph/compositions/table"].exports.DataTable
     ).toBeDefined();
   });
 
@@ -435,26 +436,26 @@ describe("readReference", () => {
     await writeFile(
       join(packageRoot, "package.json"),
       JSON.stringify({
-        name: "@autograph/components",
         exports: "./src/index.tsx",
-      }),
+        name: "@autograph/components",
+      })
     );
     await writeFile(
       join(packageRoot, "src/index.tsx"),
       `export type ButtonProps = { variant?: "primary" | "secondary"; label: string };
        export function Button(_props: ButtonProps) { return null; }
-       export const helper = 1;`,
+       export const helper = 1;`
     );
 
     const reference = await readReference(root);
     expect(
-      reference.modules["@autograph/components"].exports.Button.props,
+      reference.modules["@autograph/components"].exports.Button.props
     ).toEqual({
+      label: { primitiveKinds: ["string"], required: true },
       variant: { required: false, values: ["primary", "secondary"] },
-      label: { required: true, primitiveKinds: ["string"] },
     });
     expect(reference.modules["@autograph/components"].exports.helper).toEqual(
-      {},
+      {}
     );
   });
 });

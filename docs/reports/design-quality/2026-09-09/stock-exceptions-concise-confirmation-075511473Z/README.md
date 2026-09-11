@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                     |
-| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, selected product, stock-evidence heading, severity pills, and primary replenishment action establish a clear scan path. Selected-row highlighting is prominent, although exception rows show severity and days of cover without the unit shortfall used in the detail, limiting at-a-glance prioritization.                                |
-| layout         | 4/4   | The filters, exception list, and detail panel use consistent edges, spacing, and section dividers. The 1024–1920 captures remain balanced and appropriately dense, while action footers stay separated from evidence content.                                                                                                                              |
-| typography     | 3/4   | Heading levels, compact field labels, key-value rows, and numeric units are consistent and readable throughout. The supplied accessibility audit does flag insufficient contrast for text inside the authoritative primary Button in several states; this should be documented for Arrusted system-owner review rather than locally recolored.             |
-| responsive     | 4/4   | The composition adapts well across 1920, 1440, 1024, and 700-pixel desktop windows. It preserves list-detail context at 1024, changes to a constrained detail view with a clear Back control at 700, and uses bounded vertical scrolling for longer evidence without horizontal overflow.                                                                  |
-| productClarity | 3/4   | Location and severity filters, selection state, supplier facts, modeled quantity, projected on-hand, and reset behavior make the workflow understandable. Repeated simulation messaging clearly limits expectations, but the confirmation state says “No order was placed” before confirmation, which reads like a completed result rather than a preview. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, selected product, stock-evidence heading, severity pills, and primary replenishment action establish a clear scan path. Selected-row highlighting is prominent, although exception rows show severity and days of cover without the unit shortfall used in the detail, limiting at-a-glance prioritization. |
+| layout | 4/4 | The filters, exception list, and detail panel use consistent edges, spacing, and section dividers. The 1024–1920 captures remain balanced and appropriately dense, while action footers stay separated from evidence content. |
+| typography | 3/4 | Heading levels, compact field labels, key-value rows, and numeric units are consistent and readable throughout. The supplied accessibility audit does flag insufficient contrast for text inside the authoritative primary Button in several states; this should be documented for Arrusted system-owner review rather than locally recolored. |
+| responsive | 4/4 | The composition adapts well across 1920, 1440, 1024, and 700-pixel desktop windows. It preserves list-detail context at 1024, changes to a constrained detail view with a clear Back control at 700, and uses bounded vertical scrolling for longer evidence without horizontal overflow. |
+| productClarity | 3/4 | Location and severity filters, selection state, supplier facts, modeled quantity, projected on-hand, and reset behavior make the workflow understandable. Repeated simulation messaging clearly limits expectations, but the confirmation state says “No order was placed” before confirmation, which reads like a completed result rather than a preview. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/526) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/526) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/526) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
 
 ## Latest-run screenshots
 

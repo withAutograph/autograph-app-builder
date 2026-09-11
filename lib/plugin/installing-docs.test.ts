@@ -3,19 +3,22 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+
 import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const readDocumentation = (path: string) => readFile(resolve(path), "utf8");
+const readDocumentation = (path: string) => readFile(resolve(path), "utf-8");
 const verifiedReleaseInstall = {
-  path: "docs/installing.md",
   heading: "## Install before shared marketplace publication",
+  path: "docs/installing.md",
 } as const;
 
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
   const match = section.match(/```sh\n([\s\S]*?)\n```/u);
-  if (!match) throw new Error(`${heading} has no shell block.`);
+  if (!match) {
+    throw new Error(`${heading} has no shell block.`);
+  }
   return match[1];
 }
 
@@ -27,16 +30,18 @@ async function writeStub(root: string, name: string, body: string) {
 
 async function readAuditLog(path: string) {
   try {
-    return await readFile(path, "utf8");
+    return await readFile(path, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "";
+    }
     throw error;
   }
 }
 
 async function runInstall(
   script: string,
-  failure: "none" | "checksum" | "release-verifier",
+  failure: "none" | "checksum" | "release-verifier"
 ) {
   const root = await mkdtemp(join(tmpdir(), "autograph-install-docs-"));
   const bin = join(root, "bin");
@@ -45,7 +50,7 @@ async function runInstall(
   await writeStub(
     bin,
     "gh",
-    'case "${2:-}" in download) exit 0 ;; verify) exit "${GH_VERIFY_EXIT:-0}" ;; verify-asset) exit 0 ;; *) exit 2 ;; esac',
+    'case "${2:-}" in download) exit 0 ;; verify) exit "${GH_VERIFY_EXIT:-0}" ;; verify-asset) exit 0 ;; *) exit 2 ;; esac'
   );
   await writeStub(bin, "shasum", 'exit "${SHASUM_EXIT:-0}"');
   await writeStub(bin, "tar", 'printf "tar %s\\n" "$*" >> "$AUDIT_LOG"');
@@ -54,19 +59,22 @@ async function runInstall(
   const execution = execute("/bin/sh", ["-c", script], {
     cwd: root,
     env: {
+      AUDIT_LOG: auditLog,
+      GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
       NODE_ENV: "test",
       PATH: `${bin}:/usr/bin:/bin`,
-      AUDIT_LOG: auditLog,
       SHASUM_EXIT: failure === "checksum" ? "1" : "0",
-      GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
     },
   });
   try {
-    if (failure === "none") await execution;
-    else await expect(execution).rejects.toThrow();
+    if (failure === "none") {
+      await execution;
+    } else {
+      await expect(execution).rejects.toThrow();
+    }
     return await readAuditLog(auditLog);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 }
 
@@ -87,10 +95,10 @@ describe("public plugin installation documentation", () => {
 
     const auditLog = await runInstall(script, "none");
     expect(auditLog).toContain(
-      "tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz",
+      "tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz"
     );
     expect(auditLog).toMatch(
-      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u,
+      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u
     );
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
@@ -100,7 +108,7 @@ describe("public plugin installation documentation", () => {
     const script = firstShellBlock(documentation, "## Install");
 
     expect(script).toContain(
-      "codex plugin marketplace add withAutograph/marketplace",
+      "codex plugin marketplace add withAutograph/marketplace"
     );
     expect(script).toContain("codex plugin add app-builder@autograph");
     expect(script).not.toContain("gh release download");
@@ -111,21 +119,21 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain(
-      "Once the pre-release `v0.2.12` GitHub release is published",
+      "Once the pre-release `v0.2.12` GitHub release is published"
     );
     expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.12` exists/u,
+      /These\s+commands fail closed until `v0\.2\.12` exists/u
     );
     expect(documentation).toContain("app-builder-0.2.12.tar.gz");
     expect(documentation).toContain(
-      "app-builder-codex-marketplace-0.2.12.tar.gz",
+      "app-builder-codex-marketplace-0.2.12.tar.gz"
     );
     expect(documentation).toContain("Exact-main CI waits for Vercel Git");
     expect(documentation).toMatch(
-      /The protected\s+`release:publish` step creates the prerelease/u,
+      /The protected\s+`release:publish` step creates the prerelease/u
     );
     expect(documentation).toMatch(
-      /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u,
+      /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u
     );
     expect(documentation).not.toContain("owner-only-hosted-oauth-token");
   });

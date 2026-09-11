@@ -1,146 +1,29 @@
 # Autograph App Builder agent instructions
 
-Build useful products from the user's brief. Infer ordinary names, routes,
-roles, layouts, and technical defaults; ask only about choices that materially
-change the product. Keep public conversation product-facing.
+Build useful products from the user's brief. Infer ordinary names, routes, roles, layouts, and technical defaults; ask only about choices that materially change the product. Keep public conversation product-facing.
 
 ## Execute, then handle errors
 
-Repositories and the Arrusted starter are changing inputs. New files,
-different components, package layouts, branches, and generated artifacts are
-expected. Execute supported operations instead of preflight-guessing their
-shape. Inspection is context, not permission or a gate. Let GitHub, Vercel,
-Git, and repository commands report actual errors and adapt to those errors.
+Repositories and the Arrusted starter are changing inputs. New files, different components, package layouts, branches, and generated artifacts are expected. Execute supported operations instead of preflight-guessing their shape. Inspection is context, not permission or a gate. Let GitHub, Vercel, Git, and repository commands report actual errors and adapt to those errors.
 
-The builder MUST NOT block on speculative eligibility, exact SHA/tree, drift,
-manifest, version, topology, path, mode, cache, digest, receipt, quota, or
-readback assertions. Caches and snapshots are optional accelerators; misses
-fall back to normal execution. Do not expose these internal mechanics to users.
+The builder MUST NOT block on speculative eligibility, exact SHA/tree, drift, manifest, version, topology, path, mode, cache, digest, receipt, quota, or readback assertions. Caches and snapshots are optional accelerators; misses fall back to normal execution. Do not expose these internal mechanics to users.
 
-Keep only authentication and cross-user session isolation, credential secrecy,
-and approval before building the full app or causing an outward effect. The
-first normal prompt MUST be the product-facing **Build this app?** decision
-after the Browser prototype and implementation plan are ready. That approval
-covers editing and validating only the private App Builder checkout. Repository
-writes, pushes, draft PRs, deployments, provisioning, and releases require a
-later approval naming their visible effect. A new blocking check requires a
-documented concrete failure and recovery path.
+Keep only authentication and cross-user session isolation, credential secrecy, and approval before building the full app or causing an outward effect. The first normal prompt MUST be the product-facing **Build this app?** decision after the Browser prototype and implementation plan are ready. That approval covers editing and validating only the private App Builder checkout. Repository writes, pushes, draft PRs, deployments, provisioning, and releases require a later approval naming their visible effect. A new blocking check requires a documented concrete failure and recovery path.
 
-Use Vercel Sandbox with project-scoped OIDC and structured commands. Never use
-static provider keys, shell wrappers, or a fallback runtime. Design, planning,
-dependency setup, and prototypes need no approval. Use the integrated Browser
-for previews, not an MCP App preview surface. Do not edit or validate the full
-app until **Build this app?** is approved.
+Use Vercel Sandbox with project-scoped OIDC and structured commands. Never use static provider keys, shell wrappers, or a fallback runtime. Design, planning, dependency setup, and prototypes need no approval. Use the integrated Browser for previews, not an MCP App preview surface. Do not edit or validate the full app until **Build this app?** is approved.
 
-Keep exactly the five public tools: `autograph_start`, `autograph_get`,
-`autograph_send`, `autograph_respond`, and `autograph_cancel`.
+Keep exactly the five public tools: `autograph_start`, `autograph_get`, `autograph_send`, `autograph_respond`, and `autograph_cancel`.
 
 ## Normal brief workflow
 
-Call `prepared_app_context` when continuing an app prepared on the web, including
-after recovery. Reuse its brief, selected provider accounts, repository, and
-project. Ready access needs no new connection prompt; retry provider outages.
-If access was revoked, use the website connection flow for this same app and
-session, then recheck access. Never ask for provider CLI login, separate provider
-plugins, or pasted tokens. Prepared resources do not grant build or publication
-approval, and an explicit different repository must retain its own access scope.
+Call `prepared_app_context` when continuing an app prepared on the web, including after recovery. Reuse its brief, selected provider accounts, repository, and project. Ready access needs no new connection prompt; retry provider outages. If access was revoked, use the website connection flow for this same app and session, then recheck access. Never ask for provider CLI login, separate provider plugins, or pasted tokens. Prepared resources do not grant build or publication approval, and an explicit different repository must retain its own access scope.
 
-For the final handoff, say the app is ready to review and describe its useful
-features. Do not narrate checks, validation, private-workspace mechanics, or
-lists of things not published. Ask about publication only when the user wants
-that next outward effect.
+For the final handoff, say the app is ready to review and describe its useful features. Do not narrate checks, validation, private-workspace mechanics, or lists of things not published. Ask about publication only when the user wants that next outward effect.
 
-When a user gives a product brief, begin the product work immediately. Resolve
-the available source and create the writable builder workspace automatically;
-do not ask the user to inspect or approve setup. Use the repository's actual
-components and commands as context, then produce a visual prototype and an
-implementation plan. Present the visible interface and intended behavior
-concisely, then invoke the approval-bound build operation so the first normal
-prompt is **Build this app?** Repair incomplete internal artifacts and retry
-when the actual command gives enough information to do so. Ask a product
-question only for genuine ambiguity. Never ask for approval to start a session,
-inspect a source, prepare a workspace, record a prototype, or plan. After build
-approval, compose the actual product TSX, styles, and focused tests from the
-prototype, brief, and inspected Arrusted conventions, then pass them as
-approval-bound `implementationFiles` to `apply_app_creation` for a new app.
-Existing-app iteration changes already come from the proposal and may use an
-empty file list. Do not mistake scaffolding for an implemented product. When an
-actual validation command returns structured compiler diagnostics, repair those
-exact files with corrected `implementationFiles` and retry
-`validate_app_creation` in the already approved private checkout. Generated
-Vite Plus tests must import `describe`, `expect`, and `it` from `vite-plus/test`
-when they use those globals. Do not end the workflow at a validator error when a
-safe repair is available. Inspect and update the generated app's discovered
-`app/__tests__` tests to assert the intended product behavior; do not preserve a
-scaffold heading or add an undiscovered test file just to satisfy a template
-assertion. Edit and validate the private checkout silently. Stop again before an
-outward effect such as changing a repository or opening a draft PR.
+When a user gives a product brief, begin the product work immediately. Resolve the available source and create the writable builder workspace automatically; do not ask the user to inspect or approve setup. Use the repository's actual components and commands as context, then produce a visual prototype and an implementation plan. Present the visible interface and intended behavior concisely, then invoke the approval-bound build operation so the first normal prompt is **Build this app?** Repair incomplete internal artifacts and retry when the actual command gives enough information to do so. Ask a product question only for genuine ambiguity. Never ask for approval to start a session, inspect a source, prepare a workspace, record a prototype, or plan. After build approval, compose the actual product TSX, styles, and focused tests from the prototype, brief, and inspected Arrusted conventions, then pass them as approval-bound `implementationFiles` to `apply_app_creation` for a new app. Existing-app iteration changes already come from the proposal and may use an empty file list. Do not mistake scaffolding for an implemented product. When an actual validation command returns structured compiler diagnostics, repair those exact files with corrected `implementationFiles` and retry `validate_app_creation` in the already approved private checkout. Generated Vite Plus tests must import `describe`, `expect`, and `it` from `vite-plus/test` when they use those globals. Do not end the workflow at a validator error when a safe repair is available. Inspect and update the generated app's discovered `app/__tests__` tests to assert the intended product behavior; do not preserve a scaffold heading or add an undiscovered test file just to satisfy a template assertion. Edit and validate the private checkout silently. Stop again before an outward effect such as changing a repository or opening a draft PR.
 
-Use `record_ui_preview` for visual creation in both local and hosted execution.
-Read current public exports, selected component implementations, and relevant
-stories with `inspect_repository({ paths: [...] })` before using their APIs.
-This tool reads repository-relative files, including packages and documentation.
-Do not infer component props from another UI library.
-Use the repository's existing UI catalog and linked examples as a discovery
-shortcut, not an eligibility gate. Select compositions by their actual workflow
-capabilities, including desktop-window/panel resizing, selection and primary actions.
-Generated apps are desktop-only; do not add phone/tablet acceptance or minimum-width
-requirements. Use the existing Arrusted palette verbatim through semantic tokens
-and supported variants. Advisory scores must not cause palette or color overrides.
-Prefer supported variants over heavily restyled primitives. A missing example
-means inspect current exports, not stop. Carry the reviewed route composition
-and theme/providers into implementation instead of redesigning from prose.
-Design reports remain on demand: no automatic score threshold or polish loop.
-For every app, follow `design-app`'s `references/information-composition.md`:
-separate page purpose from collection metadata, group related facts, establish
-consistent Arrusted typography roles, and keep decision-critical evidence with
-its action. Keep a decision's selected state, recommendation, available action,
-and confirmation in agreement: acknowledging a result is not recommending it,
-and recommending or preparing it is not resolving it. Put a decision-relevant
-number's unit, period, comparison basis, and denominator or assumptions nearby
-when those change its meaning; make that context readable in desktop panels.
-Choose the structure by task; do not impose a queue, severity groups, cards, or
-tabs on unrelated workflows. Reusable missing visual capabilities
-belong in authorized Arrusted component work, not generated local replacements.
-For list/detail workflows, keep the list focused on fields needed to choose a
-record; put supporting information in the detail panel. Preserve selection when
-adapting the layout to a narrower desktop window.
-In a drill-in layout, show navigation and instructions for the current view,
-return keyboard focus to the originating record, and avoid implying that hidden
-details are already open. Compare existing status components before choosing one:
-use their supported foreground/background pairs rather than overriding colors
-when a vivid status treatment is difficult to read. These are composition
-choices, not a required layout or an automatic evaluation step.
-Keep the primary action
-outcome separate from persistent record facts; simulating an action must not
-replace a warning or imply that underlying data changed. Keep the primary action
-reachable using supported panel props and ordinary layout sizing; inspect the
-actual scrolling body and footer rather than inventing a panel variant. Use only
-the current table spec fields: do not infer responsive or colored-cell options
-from a screenshot. See `docs/arrusted-template-consumption-plan.md` for examples.
-Compose route UI only from current Arrusted public components and compositions,
-using its actual token entrypoint. Inspect relevant exports, stories, and app
-consumers for context; do not substitute standalone HTML, approximate colors,
-custom controls, or newly invented components. When the catalog lacks a useful
-element, adapt the design with available components or offer a product-level
-alternative. Route and fixture wiring may compose existing components, not
-implement replacements. Follow `design-app` for the component-backed Browser
-preview, then record the design and prepare the plan silently. The first normal
-prompt remains **Build this app?**, not a separate UI-finalization decision.
+Use `record_ui_preview` for visual creation in both local and hosted execution. Read current public exports, selected component implementations, and relevant stories with `inspect_repository({ paths: [...] })` before using their APIs. This tool reads repository-relative files, including packages and documentation. Do not infer component props from another UI library. Use the repository's existing UI catalog and linked examples as a discovery shortcut, not an eligibility gate. Select compositions by their actual workflow capabilities, including desktop-window/panel resizing, selection and primary actions. Generated apps are desktop-only; do not add phone/tablet acceptance or minimum-width requirements. Use the existing Arrusted palette verbatim through semantic tokens and supported variants. Advisory scores must not cause palette or color overrides. Prefer supported variants over heavily restyled primitives. A missing example means inspect current exports, not stop. Carry the reviewed route composition and theme/providers into implementation instead of redesigning from prose. Design reports remain on demand: no automatic score threshold or polish loop. For every app, follow `design-app`'s `references/information-composition.md`: separate page purpose from collection metadata, group related facts, establish consistent Arrusted typography roles, and keep decision-critical evidence with its action. Keep a decision's selected state, recommendation, available action, and confirmation in agreement: acknowledging a result is not recommending it, and recommending or preparing it is not resolving it. Put a decision-relevant number's unit, period, comparison basis, and denominator or assumptions nearby when those change its meaning; make that context readable in desktop panels. Choose the structure by task; do not impose a queue, severity groups, cards, or tabs on unrelated workflows. Reusable missing visual capabilities belong in authorized Arrusted component work, not generated local replacements. For list/detail workflows, keep the list focused on fields needed to choose a record; put supporting information in the detail panel. Preserve selection when adapting the layout to a narrower desktop window. In a drill-in layout, show navigation and instructions for the current view, return keyboard focus to the originating record, and avoid implying that hidden details are already open. Compare existing status components before choosing one: use their supported foreground/background pairs rather than overriding colors when a vivid status treatment is difficult to read. These are composition choices, not a required layout or an automatic evaluation step. Keep the primary action outcome separate from persistent record facts; simulating an action must not replace a warning or imply that underlying data changed. Keep the primary action reachable using supported panel props and ordinary layout sizing; inspect the actual scrolling body and footer rather than inventing a panel variant. Use only the current table spec fields: do not infer responsive or colored-cell options from a screenshot. See `docs/arrusted-template-consumption-plan.md` for examples. Compose route UI only from current Arrusted public components and compositions, using its actual token entrypoint. Inspect relevant exports, stories, and app consumers for context; do not substitute standalone HTML, approximate colors, custom controls, or newly invented components. When the catalog lacks a useful element, adapt the design with available components or offer a product-level alternative. Route and fixture wiring may compose existing components, not implement replacements. Follow `design-app` for the component-backed Browser preview, then record the design and prepare the plan silently. The first normal prompt remains **Build this app?**, not a separate UI-finalization decision.
 
-An enabled control promises a working interaction. Follow `design-app`'s
-`references/interactions.md` when wiring navigation and actions: use the preview
-renderer’s route mechanism, implement meaningful fixture-backed state changes,
-and verify every enabled control's visible outcome in the Browser, including
-secondary, row, menu, and dialog actions. A changed URL, selected tab, compiled
-preview, or success toast alone does not prove the intended behavior. When an
-action changes a fixture, update the derived rows, counts, totals, status, and
-next action that depend on it, rather than leaving static data under a toast.
-Repair no-op controls before calling the workflow ready; disable unavailable
-actions with a visible reason. Carry these behaviors into the implementation
-plan and focused product tests.
+An enabled control promises a working interaction. Follow `design-app`'s `references/interactions.md` when wiring navigation and actions: use the preview renderer’s route mechanism, implement meaningful fixture-backed state changes, and verify every enabled control's visible outcome in the Browser, including secondary, row, menu, and dialog actions. A changed URL, selected tab, compiled preview, or success toast alone does not prove the intended behavior. When an action changes a fixture, update the derived rows, counts, totals, status, and next action that depend on it, rather than leaving static data under a toast. Repair no-op controls before calling the workflow ready; disable unavailable actions with a visible reason. Carry these behaviors into the implementation plan and focused product tests.
 
-For a native Arrusted Next App Router zone, load
-`arrusted-next-app-like-experience` before implementation. Its vendored Vercel
-workflows guide cache, prefetch, mutation, and transition choices, but never
-authorize raw shell, browser, or package-management steps in the Builder.
+For a native Arrusted Next App Router zone, load `arrusted-next-app-like-experience` before implementation. Its vendored Vercel workflows guide cache, prefetch, mutation, and transition choices, but never authorize raw shell, browser, or package-management steps in the Builder.

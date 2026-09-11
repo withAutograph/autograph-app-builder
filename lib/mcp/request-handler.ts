@@ -3,17 +3,13 @@ import { createMcpHandler } from "mcp-handler";
 import {
   authorizeHostedPrincipal,
   HostedAuthorizationError,
-  type HostedPrincipal,
 } from "../eve/hosted-auth";
-import {
-  createHostedEveSessionService,
-  type HostedEveTransport,
-} from "../eve/hosted-service";
-import {
-  createEveSessionService,
-  type EveSessionService,
-} from "../eve/service";
+import type { HostedPrincipal } from "../eve/hosted-auth";
+import { createHostedEveSessionService } from "../eve/hosted-service";
+import type { HostedEveTransport } from "../eve/hosted-service";
 import type { HostedEveStore } from "../eve/hosted-store";
+import { createEveSessionService } from "../eve/service";
+import type { EveSessionService } from "../eve/service";
 import {
   attachPrototypePreviewUrl,
   prototypePreviewRequestUrl,
@@ -26,9 +22,8 @@ import {
   eveSendInputSchema,
   eveSessionResultSchema,
   eveStartInputSchema,
-  type EveSessionListResult,
-  type EveSessionResult,
 } from "./contracts";
+import type { EveSessionListResult, EveSessionResult } from "./contracts";
 import {
   forbiddenResponse,
   hostedMcpAuthConfigSchema,
@@ -36,8 +31,10 @@ import {
   parseStrictBearerAuthorization,
   unauthorizedResponse,
   unavailableResponse,
-  type HostedAccessTokenVerifier,
-  type HostedMcpAuthConfig,
+} from "./request-auth";
+import type {
+  HostedAccessTokenVerifier,
+  HostedMcpAuthConfig,
 } from "./request-auth";
 import {
   McpToolAuthenticationRequiredError,
@@ -50,13 +47,13 @@ import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
 const sessionResourceMeta = {
   ui: {
-    prefersBorder: false,
     csp: {
-      connectDomains: [],
-      resourceDomains: [],
-      frameDomains: ["about:"],
       baseUriDomains: [],
+      connectDomains: [],
+      frameDomains: ["about:"],
+      resourceDomains: [],
     },
+    prefersBorder: false,
   },
 } as const;
 
@@ -142,20 +139,22 @@ export function withHostedBuilderHandoffs(input: {
   handoffs: HostedBuilderHandoffRuntime;
 }): EveSessionService {
   const authority = {
-    issuer: input.principal.issuer,
     audience: input.principal.audience,
-    workspaceId: input.principal.workspaceId,
+    issuer: input.principal.issuer,
     ownerUserId: input.principal.ownerUserId,
+    workspaceId: input.principal.workspaceId,
   };
   return {
     ...input.service,
     async start(request) {
-      if (request.handoffId === undefined) return input.service.start(request);
+      if (request.handoffId === undefined) {
+        return input.service.start(request);
+      }
       const resolved = await input.handoffs.resolve({
         authority,
         handoffId: request.handoffId,
       });
-      if (resolved.status === "redeemed")
+      if (resolved.status === "redeemed") {
         return input.service.recoverStart === undefined
           ? Promise.reject(new Error("handoff-start-recovery-unavailable"))
           : input.service.recoverStart({
@@ -163,21 +162,23 @@ export function withHostedBuilderHandoffs(input: {
               cursor: 0,
               limit: 100,
             });
+      }
       const resolvedRepository =
         resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
         const access = await input.handoffs.recheckRepositoryAccess({
-          sourceHandoffId: request.handoffId,
           principal: input.principal,
           repository: resolvedRepository,
+          sourceHandoffId: request.handoffId,
         });
-        if (access.status === "provider-unavailable")
+        if (access.status === "provider-unavailable") {
           throw new McpProviderUnavailableError();
+        }
       }
       const result = await input.service.start({
+        clientRequestId: resolved.deterministicClientRequestId,
         prompt: resolved.prompt,
         sourceHandoffId: request.handoffId,
-        clientRequestId: resolved.deterministicClientRequestId,
       });
       await input.handoffs.bindSession({
         authority,
@@ -192,11 +193,11 @@ export function withHostedBuilderHandoffs(input: {
 
 export function createAutographMcpHandler(
   service: EveSessionService,
-  options: { requestUrl?: string; advertiseOauth?: boolean } = {},
+  options: { requestUrl?: string; advertiseOauth?: boolean } = {}
 ) {
   const toolAuthMeta = (
     _operation: string,
-    meta: Record<string, unknown> = {},
+    meta: Record<string, unknown> = {}
   ) =>
     options.advertiseOauth
       ? {
@@ -204,8 +205,8 @@ export function createAutographMcpHandler(
             ...meta,
             securitySchemes: [
               {
-                type: "oauth2" as const,
                 scopes: [...autographToolScopes],
+                type: "oauth2" as const,
               },
             ],
           },
@@ -222,64 +223,64 @@ export function createAutographMcpHandler(
       "autograph-session",
       SESSION_RESOURCE_URI,
       {
-        title: "Autograph App Builder progress",
+        _meta: sessionResourceMeta,
         description: "Live progress and requests from Autograph App Builder.",
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-        _meta: sessionResourceMeta,
+        title: "Autograph App Builder progress",
       },
       async (uri) => ({
         contents: [
           {
-            uri: uri.href,
+            _meta: sessionResourceMeta,
             mimeType: MCP_APP_RESOURCE_MIME_TYPE,
             text: sessionUiHtml,
-            _meta: sessionResourceMeta,
+            uri: uri.href,
           },
         ],
-      }),
+      })
     );
 
     server.registerTool(
       "autograph_start",
       {
-        title: "Start with Autograph App Builder",
-        description:
-          "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         annotations: {
-          readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
+          readOnlyHint: false,
         },
+        description:
+          "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         inputSchema: eveStartInputSchema,
         outputSchema: eveSessionResultSchema,
+        title: "Start with Autograph App Builder",
         ...toolAuthMeta("start"),
       },
       async (input) => {
         try {
           return toolResult(
             present(await service.start(input)),
-            "Autograph App Builder started the app build.",
+            "Autograph App Builder started the app build."
           );
         } catch (error) {
           return safeToolError(error);
         }
-      },
+      }
     );
     server.registerTool(
       "autograph_get",
       {
-        title: "Check App Builder progress",
-        description:
-          "List recent app builds, or read the next page of one app build's progress and requests.",
         annotations: {
-          readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
+          readOnlyHint: true,
         },
+        description:
+          "List recent app builds, or read the next page of one app build's progress and requests.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveGetResultSchema,
+        title: "Check App Builder progress",
         ...toolAuthMeta("get"),
       },
       async (input) => {
@@ -288,60 +289,60 @@ export function createAutographMcpHandler(
             input.sessionId === undefined
               ? await service.list({ cursor: input.cursor, limit: input.limit })
               : await service.get({
-                  sessionId: input.sessionId,
                   cursor: input.cursor,
                   limit: input.limit,
+                  sessionId: input.sessionId,
                 });
           return toolResult(
             present(result),
-            "Autograph App Builder returned the latest progress.",
+            "Autograph App Builder returned the latest progress."
           );
         } catch (error) {
           return safeToolError(error, input.sessionId ?? "");
         }
-      },
+      }
     );
     server.registerTool(
       "autograph_send",
       {
-        title: "Send App Builder feedback",
-        description:
-          "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         annotations: {
-          readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
+          readOnlyHint: false,
         },
+        description:
+          "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         inputSchema: eveSendInputSchema,
         outputSchema: eveSessionResultSchema,
+        title: "Send App Builder feedback",
         ...toolAuthMeta("send"),
       },
       async (input) => {
         try {
           return toolResult(
             present(await service.send(input)),
-            "Autograph App Builder received the feedback.",
+            "Autograph App Builder received the feedback."
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
         }
-      },
+      }
     );
     server.registerTool(
       "autograph_respond",
       {
-        title: "Answer App Builder questions",
-        description:
-          "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         annotations: {
-          readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
+          readOnlyHint: false,
         },
+        description:
+          "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
         inputSchema: eveRespondInputSchema,
         outputSchema: eveSessionResultSchema,
+        title: "Answer App Builder questions",
         ...toolAuthMeta("respond", {
           ui: { visibility: ["model", "app"] },
         }),
@@ -350,53 +351,63 @@ export function createAutographMcpHandler(
         try {
           return toolResult(
             present(await service.respond(input)),
-            "Autograph App Builder recorded the answers.",
+            "Autograph App Builder recorded the answers."
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
         }
-      },
+      }
     );
     server.registerTool(
       "autograph_cancel",
       {
-        title: "Stop App Builder work",
-        description:
-          "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
         annotations: {
-          readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
+          readOnlyHint: false,
         },
+        description:
+          "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
         inputSchema: eveCancelInputSchema,
         outputSchema: eveSessionResultSchema,
+        title: "Stop App Builder work",
         ...toolAuthMeta("cancel"),
       },
       async (input) => {
         try {
           return toolResult(
             present(await service.cancel(input)),
-            "Autograph App Builder received the stop request.",
+            "Autograph App Builder received the stop request."
           );
         } catch (error) {
           return safeToolError(error, input.sessionId);
         }
-      },
+      }
     );
   });
 }
 
 function adapterMode(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ): "local" | "hosted" | "unconfigured" | "invalid" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
-  if (![undefined, "0", "1"].includes(local)) return "invalid";
-  if (![undefined, "0", "1"].includes(hosted)) return "invalid";
-  if (local === "1" && hosted === "1") return "invalid";
-  if (hosted === "1") return "hosted";
-  if (local === "1") return "local";
+  if (![undefined, "0", "1"].includes(local)) {
+    return "invalid";
+  }
+  if (![undefined, "0", "1"].includes(hosted)) {
+    return "invalid";
+  }
+  if (local === "1" && hosted === "1") {
+    return "invalid";
+  }
+  if (hosted === "1") {
+    return "hosted";
+  }
+  if (local === "1") {
+    return "local";
+  }
   return "unconfigured";
 }
 
@@ -422,7 +433,7 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
           message !== null &&
           "method" in message &&
           typeof message.method === "string" &&
-          publicDiscoveryMethods.has(message.method),
+          publicDiscoveryMethods.has(message.method)
       )
     );
   } catch {
@@ -484,8 +495,9 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
       "name" in body.params &&
       typeof body.params.name === "string"
     ) {
-      if (hostedToolNames.has(body.params.name))
+      if (hostedToolNames.has(body.params.name)) {
         return [...autographToolScopes];
+      }
     }
   } catch {
     // Malformed requests remain subject to the session scope and MCP parsing.
@@ -495,16 +507,18 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
 
 async function hostedServiceForRequest(
   request: Request,
-  runtime: HostedMcpRuntime,
+  runtime: HostedMcpRuntime
 ): Promise<EveSessionService | Response> {
   const parsedAuth = hostedMcpAuthConfigSchema.safeParse(runtime.auth);
-  if (!parsedAuth.success) return unavailableResponse();
+  if (!parsedAuth.success) {
+    return unavailableResponse();
+  }
   const auth = parsedAuth.data;
   const requiredScopes = await requiredScopesForRequest(request);
   let token: string;
   try {
     token = parseStrictBearerAuthorization(
-      request.headers.get("authorization"),
+      request.headers.get("authorization")
     );
   } catch {
     return unauthorizedResponse(auth, requiredScopes);
@@ -513,8 +527,8 @@ async function hostedServiceForRequest(
   let verifiedClaims;
   try {
     verifiedClaims = await runtime.verifier.verify({
-      token,
       nowEpochSeconds: Math.floor((runtime.now?.() ?? Date.now()) / 1_000),
+      token,
     });
   } catch {
     return unauthorizedResponse(auth, requiredScopes);
@@ -523,10 +537,10 @@ async function hostedServiceForRequest(
   let principal: HostedPrincipal;
   try {
     principal = authorizeHostedPrincipal({
-      verifiedClaims,
-      expectedIssuer: auth.issuer,
       expectedAudience: auth.audience,
+      expectedIssuer: auth.issuer,
       requiredScopes,
+      verifiedClaims,
     });
   } catch (error) {
     if (
@@ -565,9 +579,9 @@ async function hostedServiceForRequest(
   return runtime.handoffs === undefined
     ? service
     : withHostedBuilderHandoffs({
-        service,
-        principal,
         handoffs: runtime.handoffs,
+        principal,
+        service,
       });
 }
 
@@ -575,23 +589,27 @@ export function createMcpRequestHandler(
   input: {
     environment?: NodeJS.ProcessEnv | Record<string, string | undefined>;
     hostedRuntime?: HostedMcpRuntime;
-  } = {},
+  } = {}
 ) {
   const environment = input.environment ?? process.env;
   return async (request: Request): Promise<Response> => {
     const mode = adapterMode(environment);
-    if (mode === "invalid") return unavailableResponse();
+    if (mode === "invalid") {
+      return unavailableResponse();
+    }
     if (mode === "hosted") {
-      if (input.hostedRuntime === undefined) return unavailableResponse();
+      if (input.hostedRuntime === undefined) {
+        return unavailableResponse();
+      }
       if (await isPublicDiscoveryRequest(request)) {
         return createAutographMcpHandler(discoveryOnlyService, {
-          requestUrl: request.url,
           advertiseOauth: true,
+          requestUrl: request.url,
         })(request);
       }
       const selected = await hostedServiceForRequest(
         request,
-        input.hostedRuntime,
+        input.hostedRuntime
       );
       if (selected instanceof Response) {
         const challenge = selected.headers.get("www-authenticate");
@@ -602,14 +620,14 @@ export function createMcpRequestHandler(
         ) {
           return createAutographMcpHandler(
             authenticationRequiredService(challenge),
-            { requestUrl: request.url, advertiseOauth: true },
+            { advertiseOauth: true, requestUrl: request.url }
           )(request);
         }
         return selected;
       }
       return createAutographMcpHandler(selected, {
-        requestUrl: request.url,
         advertiseOauth: true,
+        requestUrl: request.url,
       })(request);
     }
     if (mode === "local") {

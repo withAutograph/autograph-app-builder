@@ -2,14 +2,13 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
+import type { EveSessionService } from "../eve/service";
 import {
   eveSessionResultSchema,
   publicPrototypePreviewUrlSchema,
   publicPrototypeSchema,
-  type EveSessionResult,
-  type PublicPrototype,
 } from "./contracts";
-import type { EveSessionService } from "../eve/service";
+import type { EveSessionResult, PublicPrototype } from "./contracts";
 
 const previewSessionIdSchema = z
   .string()
@@ -18,12 +17,12 @@ const previewSessionIdSchema = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u);
 const previewDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
-const unprivilegedPortSchema = z.coerce.number().int().min(1_024).max(65_535);
+const unprivilegedPortSchema = z.coerce.number().int().min(1024).max(65_535);
 
 const previewRouteInputSchema = z
   .object({
-    sessionId: previewSessionIdSchema,
     digest: previewDigestSchema,
+    sessionId: previewSessionIdSchema,
   })
   .strict();
 
@@ -37,18 +36,21 @@ export function prototypePreviewRequestUrl(input: {
   environment: Environment;
   requestUrl: string;
 }): string {
-  const environment = input.environment;
+  const { environment } = input;
   const exactDevelopmentAdapter =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
     environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
     environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
     environment.EVE_HOSTED_ADAPTER === "0";
-  if (!exactDevelopmentAdapter) return input.requestUrl;
+  if (!exactDevelopmentAdapter) {
+    return input.requestUrl;
+  }
 
   const configured = environment.APP_BUILDER_DEVELOPMENT_ORIGIN;
-  if (configured === undefined)
+  if (configured === undefined) {
     throw new Error("The local development preview origin is unavailable.");
+  }
   const origin = new URL(configured);
   const port = unprivilegedPortSchema.safeParse(origin.port);
   if (
@@ -60,10 +62,11 @@ export function prototypePreviewRequestUrl(input: {
     origin.pathname !== "/" ||
     origin.search !== "" ||
     origin.hash !== ""
-  )
+  ) {
     throw new Error(
-      "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP origin.",
+      "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP origin."
     );
+  }
   return new URL("/mcp", origin).href;
 }
 
@@ -94,8 +97,8 @@ const previewResponseHeaders = {
 
 function emptyPreviewNotFoundResponse(): Response {
   return new Response(null, {
-    status: 404,
     headers: previewResponseHeaders,
+    status: 404,
   });
 }
 
@@ -114,10 +117,12 @@ function previewUrl(input: {
   digest: string;
 }): string | undefined {
   const parsed = previewRouteInputSchema.safeParse({
-    sessionId: input.sessionId,
     digest: input.digest,
+    sessionId: input.sessionId,
   });
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    return undefined;
+  }
   let origin: string;
   try {
     origin = new URL(input.requestUrl).origin;
@@ -126,7 +131,7 @@ function previewUrl(input: {
   }
   const candidate = new URL(
     `/preview/${parsed.data.sessionId}/${parsed.data.digest}`,
-    `${origin}/`,
+    `${origin}/`
   ).href;
   return publicPrototypePreviewUrlSchema.safeParse(candidate).success
     ? candidate
@@ -135,16 +140,20 @@ function previewUrl(input: {
 
 export function attachPrototypePreviewUrl(
   resultInput: EveSessionResult,
-  requestUrl: string,
+  requestUrl: string
 ): EveSessionResult {
   const result = eveSessionResultSchema.parse(resultInput);
-  if (result.prototype === undefined) return result;
+  if (result.prototype === undefined) {
+    return result;
+  }
   const url = previewUrl({
+    digest: result.prototype.digest,
     requestUrl,
     sessionId: result.sessionId,
-    digest: result.prototype.digest,
   });
-  if (url === undefined) return result;
+  if (url === undefined) {
+    return result;
+  }
   return eveSessionResultSchema.parse({
     ...result,
     prototype: { ...result.prototype, previewUrl: url },
@@ -164,30 +173,32 @@ export function createPrototypePreviewRequestHandler(input: {
 }) {
   return async (
     request: Request,
-    routeInput: { sessionId: string; digest: string },
+    routeInput: { sessionId: string; digest: string }
   ): Promise<Response> => {
     const route = previewRouteInputSchema.safeParse(routeInput);
-    if (!route.success) return emptyPreviewNotFoundResponse();
+    if (!route.success) {
+      return emptyPreviewNotFoundResponse();
+    }
     try {
       const prototype = publicPrototypeSchema.safeParse(
         await input.resolvePrototype({
           request,
           sessionId: route.data.sessionId,
-        }),
+        })
       );
       if (
         !prototype.success ||
         !equalDigest(prototype.data.digest, route.data.digest) ||
         !equalDigest(
           createHash("sha256").update(prototype.data.content).digest("hex"),
-          route.data.digest,
+          route.data.digest
         )
       ) {
         return emptyPreviewNotFoundResponse();
       }
       return new Response(prototype.data.content, {
-        status: 200,
         headers: previewResponseHeaders,
+        status: 200,
       });
     } catch {
       return emptyPreviewNotFoundResponse();
@@ -200,17 +211,22 @@ export function createServicePrototypePreviewResolver(input: {
 }): PrototypePreviewResolver {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);
-    if (service === undefined) return undefined;
+    if (service === undefined) {
+      return undefined;
+    }
     // The public event tail can expose the preview URL just before the
     // corresponding prototype event has reached the request-scoped read. Give
     // that normal delivery race a short chance to settle so the first Browser
     // navigation does not turn a valid preview into a sticky 404.
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const result = await service.get({ sessionId, cursor: 0, limit: 1 });
-      if (result.prototype !== undefined) return result.prototype;
-      if (attempt < 4)
+      const result = await service.get({ cursor: 0, limit: 1, sessionId });
+      if (result.prototype !== undefined) {
+        return result.prototype;
+      }
+      if (attempt < 4) {
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      }
     }
-    return undefined;
+    return;
   };
 }

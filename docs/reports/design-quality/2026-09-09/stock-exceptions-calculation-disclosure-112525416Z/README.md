@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title, filters, exception list, selected record identity, evidence, and replenishment action form a clear task sequence. Selection highlighting and prominent modeled quantities make the active item and outcome immediately scannable.                                                                                                                                |
-| layout         | 3/4   | Alignment and spacing are consistently strong across the filter grid, list rows, detail fields, and quantity cards. The centered maximum-width composition remains readable at 1920px, though the isolated helper sentence between filters and list slightly weakens grouping.                                                                                                   |
-| typography     | 4/4   | Product names, section headings, labels, values, and supporting copy use a consistent and readable scale. Large quantity values are appropriately emphasized, while status pills and secondary metadata remain subordinate without becoming difficult to read.                                                                                                                   |
-| responsive     | 4/4   | The composition remains usable at 1920, 1440, and 1024px, then intentionally changes from list-detail to a focused detail view with a clear Back action at 700px. Controls remain visible, and expanded supplier or calculation content uses ordinary vertical document scrolling without horizontal overflow.                                                                   |
-| productClarity | 3/4   | Location and severity filters, selectable exceptions, supplier details, mock confirmation, completed status, reset, and repeated simulation-only messaging clearly explain the workflow. One terminology inconsistency—showing 18 units as “Gross on-hand” in evidence but “Current on-hand” in the model while 12 units are reserved—can make the modeled basis less immediate. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title, filters, exception list, selected record identity, evidence, and replenishment action form a clear task sequence. Selection highlighting and prominent modeled quantities make the active item and outcome immediately scannable. |
+| layout | 3/4 | Alignment and spacing are consistently strong across the filter grid, list rows, detail fields, and quantity cards. The centered maximum-width composition remains readable at 1920px, though the isolated helper sentence between filters and list slightly weakens grouping. |
+| typography | 4/4 | Product names, section headings, labels, values, and supporting copy use a consistent and readable scale. Large quantity values are appropriately emphasized, while status pills and secondary metadata remain subordinate without becoming difficult to read. |
+| responsive | 4/4 | The composition remains usable at 1920, 1440, and 1024px, then intentionally changes from list-detail to a focused detail view with a clear Back action at 700px. Controls remain visible, and expanded supplier or calculation content uses ordinary vertical document scrolling without horizontal overflow. |
+| productClarity | 3/4 | Location and severity filters, selectable exceptions, supplier details, mock confirmation, completed status, reset, and repeated simulation-only messaging clearly explain the workflow. One terminology inconsistency—showing 18 units as “Gross on-hand” in evidence but “Current on-hand” in the model while 12 units are reserved—can make the modeled basis less immediate. |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/267) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/126) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/267) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/126) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/267) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/126) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/142) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/297) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/166) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/71)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/79)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/75)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/126) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/126) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/126) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/142) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/297) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/166) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/71) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/79) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/75) |
 
 ## Latest-run screenshots
 

@@ -5,11 +5,11 @@ import { z } from "zod";
 
 import { readPreviewOAuthRuntimeConfig } from "@/lib/auth/preview-oauth-runtime";
 import { getBuilderHandoffDeploymentHandler } from "@/lib/handoff/deployment";
-import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import {
   type BuilderProvisionResponse,
   builderProvisionRequestSchema,
 } from "@/lib/provisioning/contracts";
+import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
 const handoffContinuationInputSchema = z
@@ -72,7 +72,8 @@ async function sameOriginHeaders(contentType?: string) {
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
     const payload = (await response.json().catch(() => undefined)) as
-      { error?: string } | undefined;
+      | { error?: string }
+      | undefined;
     throw new Error(payload?.error ?? fallback);
   }
   return (await response.json()) as T;
@@ -95,7 +96,7 @@ export async function provisionBuilderProvider(input: {
       method: "POST",
       headers: await sameOriginHeaders("application/json"),
       body: JSON.stringify(input),
-    }),
+    })
   );
   return readJson(response, "provisioning_unavailable");
 }
@@ -117,7 +118,7 @@ export async function reserveBuilderProvider(input: {
       method: "POST",
       headers: await sameOriginHeaders("application/json"),
       body: JSON.stringify(input),
-    }),
+    })
   );
   return readJson(response, "provisioning_unavailable");
 }
@@ -128,11 +129,11 @@ export async function readBuilderProviderProvisioning(requestId: string) {
     new Request(requestUrl(path), {
       headers: await sameOriginHeaders(),
       cache: "no-store",
-    }),
+    })
   );
   return readJson<BuilderProvisionResponse>(
     response,
-    "provisioning_unavailable",
+    "provisioning_unavailable"
   );
 }
 
@@ -153,7 +154,7 @@ export async function createBuilderHandoff(input: {
       method: "POST",
       headers: await sameOriginHeaders("application/json"),
       body: JSON.stringify(input),
-    }),
+    })
   );
   return readJson<{
     version: 1;
@@ -164,7 +165,7 @@ export async function createBuilderHandoff(input: {
 
 function provisioningInput(
   input: BuilderHandoffContinuationInput,
-  operation: "github" | "vercel",
+  operation: "github" | "vercel"
 ) {
   return builderProvisionRequestSchema.parse({
     version: 1,
@@ -188,7 +189,7 @@ function provisioningInput(
 
 function unavailableProvisioning(
   input: BuilderHandoffContinuationInput,
-  code: "feature_disabled" | "provider_unavailable",
+  code: "feature_disabled" | "provider_unavailable"
 ): BuilderProvisionResponse {
   const result = (provider: "github" | "vercel") => {
     const selected =
@@ -227,7 +228,7 @@ function unavailableProvisioning(
 
 async function createContinuationHandoff(
   input: BuilderHandoffContinuationInput,
-  provisioning: BuilderProvisionResponse,
+  provisioning: BuilderProvisionResponse
 ) {
   return createBuilderHandoff({
     version: 1,
@@ -254,7 +255,7 @@ async function createContinuationHandoff(
  */
 export async function continueBuilderHandoff(
   _previous: BuilderHandoffContinuationState | undefined,
-  untrustedInput: BuilderHandoffContinuationInput,
+  untrustedInput: BuilderHandoffContinuationInput
 ): Promise<BuilderHandoffContinuationState> {
   const parsed = handoffContinuationInputSchema.safeParse(untrustedInput);
   if (!parsed.success) return { status: "error" };
@@ -263,19 +264,19 @@ export async function continueBuilderHandoff(
   try {
     let provisioning = unavailableProvisioning(
       input,
-      input.provisioningEnabled ? "provider_unavailable" : "feature_disabled",
+      input.provisioningEnabled ? "provider_unavailable" : "feature_disabled"
     );
 
     if (input.provisioningEnabled && input.retryProvider) {
       provisioning = await provisionBuilderProvider(
-        provisioningInput(input, input.retryProvider),
+        provisioningInput(input, input.retryProvider)
       );
     } else if (input.provisioningEnabled) {
       if (input.form.githubInstallationId) {
         try {
           await reserveBuilderProvider(provisioningInput(input, "github"));
           provisioning = await provisionBuilderProvider(
-            provisioningInput(input, "github"),
+            provisioningInput(input, "github")
           );
         } catch {
           if (input.form.vercelInstallationId)
@@ -297,7 +298,7 @@ export async function continueBuilderHandoff(
         try {
           await reserveBuilderProvider(provisioningInput(input, "vercel"));
           provisioning = await provisionBuilderProvider(
-            provisioningInput(input, "vercel"),
+            provisioningInput(input, "vercel")
           );
         } catch {
           // Preserve the most recent durable provisioning snapshot. The retry

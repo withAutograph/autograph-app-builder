@@ -10,7 +10,7 @@ describe("hosted Bun runtime", () => {
   it("installs Bun once per sandbox and exposes its binary path", async () => {
     // Eve exposes a PromiseLike command, not a native Promise with .catch().
     const run = vi.fn(() => {
-      const result = Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       return { then: result.then.bind(result) };
     });
     const install = createHostedBunRuntimeInstaller();
@@ -24,7 +24,7 @@ describe("hosted Bun runtime", () => {
       env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
     });
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(
-      `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin`,
+      `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin`
     );
   });
 });

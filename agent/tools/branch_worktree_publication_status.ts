@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { branchPublicationDigest } from "@/lib/agent/branch-worktree-publication-schema";
 import {
   appBuilderWorkflowState,
   updateExactWorkflow,
@@ -14,7 +15,6 @@ import {
   readBranchWorktreePublicationJournal,
   verifyBranchWorktreePublication,
 } from "@/lib/repository/node-branch-worktree-publication";
-import { branchPublicationDigest } from "@/lib/agent/branch-worktree-publication-schema";
 
 function branchWorkflow() {
   const workflow = appBuilderWorkflowState.get();
@@ -23,10 +23,11 @@ function branchWorkflow() {
     workflow.phase !== "branch_publication_pending" &&
     workflow.phase !== "branch_publication_failed" &&
     workflow.phase !== "published_branch_worktree"
-  )
+  ) {
     throw new Error(
-      "An exact separately reviewed change set is required before branch-worktree publication.",
+      "An exact separately reviewed change set is required before branch-worktree publication."
     );
+  }
   return workflow;
 }
 
@@ -34,27 +35,25 @@ export async function exactBranchWorktreePublicationProposal(input: {
   expectedReviewDigest: string;
 }) {
   const workflow = branchWorkflow();
-  if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
+  if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
     throw new Error(
-      "The reviewed change-set receipt changed before publication.",
+      "The reviewed change-set receipt changed before publication."
     );
+  }
   return deriveBranchWorktreePublicationProposal({
-    sourceReceipt: workflow.sourceReceipt,
     review: workflow.reviewReceipt,
+    sourceReceipt: workflow.sourceReceipt,
   });
 }
 
 export default defineTool({
   description:
     "Read the exact proposal for creating a deterministic builder-owned branch and worktree from the reviewed existing repository. This verifies source SHA, index, remote, status, review, paths, modes, digests, and collision absence without writing.",
-  inputSchema: z.strictObject({
-    expectedReviewDigest: branchPublicationDigest,
-  }),
   async execute(input) {
     const workflow = branchWorkflow();
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
       throw new Error(
-        "The reviewed receipt changed before publication status.",
+        "The reviewed receipt changed before publication status."
       );
     const proposal =
       workflow.phase === "reviewed"
@@ -71,7 +70,7 @@ export default defineTool({
           transition: (current) => {
             if (current.phase !== "branch_publication_pending")
               throw new Error(
-                "The publication workflow changed before pre-journal reconciliation.",
+                "The publication workflow changed before pre-journal reconciliation."
               );
             const {
               branchPublicationProposal: _proposal,
@@ -102,11 +101,11 @@ export default defineTool({
     if (
       !exactBranchWorktreeProposalMatch(
         proposalFromBranchJournal(journal),
-        proposal,
+        proposal
       )
     )
       throw new Error(
-        "The durable branch-worktree journal belongs to a different proposal.",
+        "The durable branch-worktree journal belongs to a different proposal."
       );
     if (journal.status === "succeeded") {
       await verifyBranchWorktreePublication({
@@ -129,7 +128,7 @@ export default defineTool({
               current.phase !== "branch_publication_failed"
             )
               throw new Error(
-                "The publication workflow changed before reconciliation.",
+                "The publication workflow changed before reconciliation."
               );
             return {
               ...current,
@@ -151,7 +150,7 @@ export default defineTool({
         transition: (current) => {
           if (current.phase !== "reviewed")
             throw new Error(
-              "The publication workflow changed before pending reconciliation.",
+              "The publication workflow changed before pending reconciliation."
             );
           return {
             ...current,
@@ -175,7 +174,7 @@ export default defineTool({
             current.phase !== "branch_publication_pending"
           )
             throw new Error(
-              "The publication workflow changed before reconciliation.",
+              "The publication workflow changed before reconciliation."
             );
           return {
             ...current,
@@ -194,4 +193,7 @@ export default defineTool({
       recoveryAllowed: true,
     };
   },
+  inputSchema: z.strictObject({
+    expectedReviewDigest: branchPublicationDigest,
+  }),
 });

@@ -1,13 +1,16 @@
 import postcss from "postcss";
 
-export type CssSourceFile = { path: string; content: string };
-export type CssRuleEvidence = {
+export interface CssSourceFile {
+  path: string;
+  content: string;
+}
+export interface CssRuleEvidence {
   selector: string;
   property: string;
   value: string;
   source: { path: string; line: number; column: number };
   ruleSignature: string;
-};
+}
 
 // Rule tuples are exact CSS evidence. In particular, collapsing whitespace can
 // change quoted strings and selectors, so only trim surrounding transport noise.
@@ -23,11 +26,15 @@ function canonicalSelector(value: string) {
     const char = value[index]!;
     if (quote) {
       output += char;
-      if (char === quote && value[index - 1] !== "\\") quote = undefined;
+      if (char === quote && value[index - 1] !== "\\") {
+        quote = undefined;
+      }
       continue;
     }
     if (char === '"' || char === "'") {
-      if (pendingSpace && output) output += " ";
+      if (pendingSpace && output) {
+        output += " ";
+      }
       pendingSpace = false;
       quote = char;
       output += char;
@@ -39,8 +46,9 @@ function canonicalSelector(value: string) {
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char))
+      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char)) {
         output += " ";
+      }
     }
     pendingSpace = false;
     output += char;
@@ -50,7 +58,7 @@ function canonicalSelector(value: string) {
 
 function ruleSignature(
   selector: string,
-  declarations: Array<{ prop: string; value: string; important?: boolean }>,
+  declarations: { prop: string; value: string; important?: boolean }[]
 ): string | undefined {
   const properties = declarations.map((declaration) => declaration.prop);
   if (
@@ -61,22 +69,23 @@ function ruleSignature(
           (other) =>
             other !== property &&
             (other.startsWith(`${property}-`) ||
-              property.startsWith(`${other}-`)),
-        ),
+              property.startsWith(`${other}-`))
+        )
     )
-  )
+  ) {
     return undefined;
+  }
   return `${canonicalSelector(selector)}\u0000${declarations
     .map(
       (declaration) =>
-        `${declaration.prop}\u0000${declaration.value.trim()}\u0000${Boolean(declaration.important)}`,
+        `${declaration.prop}\u0000${declaration.value.trim()}\u0000${Boolean(declaration.important)}`
     )
     .sort()
     .join("\u0001")}`;
 }
 
 export function collectCssRuleEvidence(
-  files: CssSourceFile[],
+  files: CssSourceFile[]
 ): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
@@ -84,22 +93,28 @@ export function collectCssRuleEvidence(
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP
       // backend, so it deliberately stays unassessed.
-      if (rule.parent?.type !== "root") return;
+      if (rule.parent?.type !== "root") {
+        return;
+      }
       const declarations =
         rule.nodes?.filter(
-          (node): node is postcss.Declaration => node.type === "decl",
+          (node): node is postcss.Declaration => node.type === "decl"
         ) ?? [];
       const signature = ruleSignature(rule.selector, declarations);
-      if (!signature) return;
+      if (!signature) {
+        return;
+      }
       for (const declaration of declarations) {
         const start = declaration.source?.start;
-        if (!start) continue;
+        if (!start) {
+          continue;
+        }
         evidence.push({
-          selector: canonicalSelector(rule.selector),
           property: declaration.prop,
-          value: normal(declaration.value),
-          source: { path: file.path, line: start.line, column: start.column },
           ruleSignature: signature,
+          selector: canonicalSelector(rule.selector),
+          source: { column: start.column, line: start.line, path: file.path },
+          value: normal(declaration.value),
         });
       }
     });
@@ -113,26 +128,28 @@ export function generatedCssRule(
   selector: string | undefined,
   property: string,
   value: string | undefined,
-  declarations: Array<{ name: string; value: string; important?: boolean }>,
+  declarations: { name: string; value: string; important?: boolean }[]
 ) {
-  if (!selector || value === undefined) return undefined;
+  if (!selector || value === undefined) {
+    return undefined;
+  }
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
-    (rule) => key(rule.selector, rule.property, rule.value) === tuple,
+    (rule) => key(rule.selector, rule.property, rule.value) === tuple
   );
   const actual = ruleSignature(
     selector,
     declarations.map((declaration) => ({
+      important: declaration.important,
       prop: declaration.name,
       value: declaration.value,
-      important: declaration.important,
-    })),
+    }))
   );
   const loaded = actual
     ? matchingGenerated.filter((rule) => rule.ruleSignature === actual)
     : [];
   const matchingShared = shared.filter(
-    (rule) => key(rule.selector, rule.property, rule.value) === tuple,
+    (rule) => key(rule.selector, rule.property, rule.value) === tuple
   );
   return loaded.length === 1 &&
     matchingGenerated.length === 1 &&

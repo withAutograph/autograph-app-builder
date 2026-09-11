@@ -9,8 +9,8 @@ import {
   assertExactGitHubDraftPullRequestContent,
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
-  type DraftPullRequestProposal,
 } from "./github-publication";
+import type { DraftPullRequestProposal } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 
@@ -39,14 +39,17 @@ export type GitHubAppHttpProviderCredentials = z.infer<
 >;
 
 export function parseGitHubAppHttpProviderCredentials(
-  input: unknown,
+  input: unknown
 ): GitHubAppHttpProviderCredentials {
   const parsed = credentialsSchema.safeParse(input);
-  if (!parsed.success)
+  if (!parsed.success) {
     throw new Error("GitHub App provider configuration is invalid.");
+  }
   try {
     const key = createPrivateKey(parsed.data.privateKey);
-    if (key.asymmetricKeyType !== "rsa") throw new Error("not-rsa");
+    if (key.asymmetricKeyType !== "rsa") {
+      throw new Error("not-rsa");
+    }
   } catch {
     throw new Error("GitHub App provider configuration is invalid.");
   }
@@ -54,11 +57,12 @@ export function parseGitHubAppHttpProviderCredentials(
 }
 
 export function parseGitHubAppHttpProviderConfig(
-  input: unknown,
+  input: unknown
 ): GitHubAppHttpProviderConfig {
   const parsed = configSchema.safeParse(input);
-  if (!parsed.success)
+  if (!parsed.success) {
     throw new Error("GitHub App provider configuration is invalid.");
+  }
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: parsed.data.appId,
     privateKey: parsed.data.privateKey,
@@ -66,11 +70,11 @@ export function parseGitHubAppHttpProviderConfig(
   return { ...credentials, installationId: parsed.data.installationId };
 }
 
-export type GitHubPublicationFile = {
+export interface GitHubPublicationFile {
   path: string;
   mode: "100644" | "100755";
   content: Uint8Array;
-};
+}
 
 export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
   inspectRepositoryByName(input: {
@@ -83,14 +87,14 @@ export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
 }
 
 type Fetch = typeof fetch;
-type PermissionSnapshot = {
+interface PermissionSnapshot {
   metadata: "read";
   contents: "read" | "write";
   workflows: "none" | "write";
   pullRequests: "none" | "write";
   administration: "none" | "write";
   variables: "read";
-};
+}
 
 const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
@@ -100,13 +104,17 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function property(value: unknown, key: string): unknown {
-  if (!record(value) || !(key in value)) throw new Error("invalid-response");
+  if (!record(value) || !(key in value)) {
+    throw new Error("invalid-response");
+  }
   return value[key];
 }
 
 function stringProperty(value: unknown, key: string): string {
   const result = property(value, key);
-  if (typeof result !== "string") throw new Error("invalid-response");
+  if (typeof result !== "string") {
+    throw new Error("invalid-response");
+  }
   return result;
 }
 
@@ -117,27 +125,33 @@ function decimalProperty(value: unknown, key: string): string {
       !Number.isSafeInteger(result) ||
       result < 1) &&
     (typeof result !== "string" || !decimal.safeParse(result).success)
-  )
+  ) {
     throw new Error("invalid-response");
+  }
   return String(result);
 }
 
 function safeRepositoryIdNumber(value: string): number {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value)
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value) {
     throw new Error("invalid-response");
+  }
   return parsed;
 }
 
 function booleanProperty(value: unknown, key: string): boolean {
   const result = property(value, key);
-  if (typeof result !== "boolean") throw new Error("invalid-response");
+  if (typeof result !== "boolean") {
+    throw new Error("invalid-response");
+  }
   return result;
 }
 
 function arrayProperty(value: unknown, key: string): unknown[] {
   const result = property(value, key);
-  if (!Array.isArray(result)) throw new Error("invalid-response");
+  if (!Array.isArray(result)) {
+    throw new Error("invalid-response");
+  }
   return result;
 }
 
@@ -151,15 +165,17 @@ function validateFile(file: GitHubPublicationFile): void {
     (file.mode !== "100644" && file.mode !== "100755") ||
     !(file.content instanceof Uint8Array) ||
     file.content.byteLength > MAX_FILE_BYTES
-  )
+  ) {
     throw new Error("invalid-material");
+  }
 }
 
 function canonicalFiles(
-  input: readonly GitHubPublicationFile[],
+  input: readonly GitHubPublicationFile[]
 ): readonly GitHubPublicationFile[] {
-  if (input.length === 0 || input.length > MAX_FILES)
+  if (input.length === 0 || input.length > MAX_FILES) {
     throw new Error("invalid-material");
+  }
   const paths = new Set<string>();
   let totalBytes = 0;
   for (const file of input) {
@@ -169,16 +185,18 @@ function canonicalFiles(
       paths.has(file.path) ||
       [...paths].some(
         (path) =>
-          path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
+          path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`)
       )
-    )
+    ) {
       throw new Error("invalid-material");
+    }
     paths.add(file.path);
   }
-  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
+  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
     throw new Error("invalid-material");
+  }
   return [...input].toSorted((left, right) =>
-    compareOverlayPaths(left.path, right.path),
+    compareOverlayPaths(left.path, right.path)
   );
 }
 
@@ -200,7 +218,9 @@ function permissionRequest(permission: PermissionSnapshot) {
 }
 
 function normalizedPermissions(value: unknown): PermissionSnapshot {
-  if (!record(value)) throw new Error("invalid-response");
+  if (!record(value)) {
+    throw new Error("invalid-response");
+  }
   const allowed = new Set([
     "metadata",
     "contents",
@@ -209,10 +229,11 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
     "administration",
     "actions_variables",
   ]);
-  if (Object.keys(value).some((key) => !allowed.has(key)))
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("invalid-response");
-  const metadata = value.metadata;
-  const contents = value.contents;
+  }
+  const { metadata } = value;
+  const { contents } = value;
   const workflows = value.workflows ?? "none";
   const pullRequests = value.pull_requests ?? "none";
   const administration = value.administration ?? "none";
@@ -224,15 +245,16 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
     (pullRequests !== "none" && pullRequests !== "write") ||
     (administration !== "none" && administration !== "write") ||
     variables !== "read"
-  )
+  ) {
     throw new Error("invalid-response");
+  }
   return {
-    metadata,
-    contents,
-    workflows,
-    pullRequests,
     administration,
+    contents,
+    metadata,
+    pullRequests,
     variables,
+    workflows,
   };
 }
 
@@ -251,8 +273,8 @@ export function createGitHubAppHttpProvider(input: {
   const request = input.fetch ?? fetch;
   const app = createGitHubApp({
     appId: config.appId,
-    privateKey: config.privateKey,
     fetch: request,
+    privateKey: config.privateKey,
   });
 
   async function github(input: {
@@ -264,41 +286,43 @@ export function createGitHubAppHttpProvider(input: {
   }): Promise<{ status: number; body: unknown; requestId: string }> {
     try {
       const response = await createGitHubTokenOctokit({
-        token: input.authorization,
         fetch: request,
+        token: input.authorization,
       }).request(`${input.method ?? "GET"} ${input.path}`, {
         ...(record(input.body) ? input.body : {}),
       });
-      if (!input.expected.includes(response.status))
+      if (!input.expected.includes(response.status)) {
         throw new Error(`github-status-${response.status}`);
+      }
       return {
-        status: response.status,
         body: response.data,
         requestId: requestId(
-          String(response.headers["x-github-request-id"] ?? "github"),
+          String(response.headers["x-github-request-id"] ?? "github")
         ),
+        status: response.status,
       };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (typeof status === "number" && input.expected.includes(status))
+      if (typeof status === "number" && input.expected.includes(status)) {
         return {
           status,
           body: record(response) ? response.data : undefined,
           requestId: requestId(
             record(response) && record(response.headers)
               ? String(response.headers["x-github-request-id"] ?? "github")
-              : "github",
+              : "github"
           ),
         };
-      throw new Error("github-request-failed");
+      }
+      throw new Error("github-request-failed", { cause: error });
     }
   }
 
   async function installation() {
     const { data } = await app.octokit.request(
       "GET /app/installations/{installation_id}",
-      { installation_id: Number(config.installationId) },
+      { installation_id: Number(config.installationId) }
     );
     const account = property(data, "account");
     const selection = stringProperty(data, "repository_selection");
@@ -307,20 +331,21 @@ export function createGitHubAppHttpProvider(input: {
       decimalProperty(data, "id") !== config.installationId ||
       (selection !== "all" && selection !== "selected") ||
       (accountType !== "Organization" && accountType !== "User")
-    )
+    ) {
       throw new Error("invalid-response");
+    }
     return {
-      installationId: config.installationId,
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
       accountType: accountType as "Organization" | "User",
+      installationId: config.installationId,
       repositorySelection: selection,
     };
   }
 
   async function token(
     permissions: PermissionSnapshot,
-    repositoryIds?: readonly string[],
+    repositoryIds?: readonly string[]
   ) {
     const authentication = await app.octokit.auth({
       type: "installation",
@@ -332,59 +357,66 @@ export function createGitHubAppHttpProvider(input: {
       refresh: true,
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512)
+    if (value.length < 20 || value.length > 512) {
       throw new Error("invalid-response");
+    }
     const granted = normalizedPermissions(
-      property(authentication, "permissions"),
+      property(authentication, "permissions")
     );
-    if (JSON.stringify(granted) !== JSON.stringify(permissions))
+    if (JSON.stringify(granted) !== JSON.stringify(permissions)) {
       throw new Error("invalid-response");
+    }
     return value;
   }
 
   async function repositoryReadToken(repositoryId: string) {
     decimal.parse(repositoryId);
     const authentication = await app.octokit.auth({
-      type: "installation",
       installationId: config.installationId,
       permissions: { contents: "read" },
-      repositoryIds: [safeRepositoryIdNumber(repositoryId)],
       refresh: true,
+      repositoryIds: [safeRepositoryIdNumber(repositoryId)],
+      type: "installation",
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512)
+    if (value.length < 20 || value.length > 512) {
       throw new Error("invalid-response");
+    }
     const permissions = property(authentication, "permissions");
     if (
       !record(permissions) ||
       permissions.contents !== "read" ||
       (permissions.metadata !== undefined && permissions.metadata !== "read") ||
       Object.keys(permissions).some(
-        (key) => key !== "contents" && key !== "metadata",
+        (key) => key !== "contents" && key !== "metadata"
       )
-    )
+    ) {
       throw new Error("invalid-response");
+    }
     return value;
   }
 
   async function selectedRepositories(
-    permissions: PermissionSnapshot,
+    permissions: PermissionSnapshot
   ): Promise<readonly string[]> {
     const accessToken = await token(permissions);
     const ids: string[] = [];
     for (let page = 1; ; page += 1) {
       const response = await github({
-        path: `/installation/repositories?per_page=100&page=${page}`,
         authorization: accessToken,
         expected: [200],
+        path: `/installation/repositories?per_page=100&page=${page}`,
       });
       const repositories = arrayProperty(response.body, "repositories");
       ids.push(
-        ...repositories.map((repository) => decimalProperty(repository, "id")),
+        ...repositories.map((repository) => decimalProperty(repository, "id"))
       );
-      if (ids.length > MAX_INSTALLATION_REPOSITORIES)
+      if (ids.length > MAX_INSTALLATION_REPOSITORIES) {
         throw new Error("installation-too-large");
-      if (repositories.length < 100) break;
+      }
+      if (repositories.length < 100) {
+        break;
+      }
     }
     return [...new Set(ids)].toSorted();
   }
@@ -392,14 +424,14 @@ export function createGitHubAppHttpProvider(input: {
   async function repositoryById(
     repositoryId: string,
     ref: string,
-    permissions: PermissionSnapshot,
+    permissions: PermissionSnapshot
   ) {
     decimal.parse(repositoryId);
     const accessToken = await token(permissions, [repositoryId]);
     const repositoryResponse = await github({
-      path: `/repositories/${repositoryId}`,
       authorization: accessToken,
       expected: [200],
+      path: `/repositories/${repositoryId}`,
     });
     const owner = property(repositoryResponse.body, "owner");
     const repositoryOwner = stringProperty(owner, "login");
@@ -407,71 +439,80 @@ export function createGitHubAppHttpProvider(input: {
     if (
       !name.safeParse(repositoryOwner).success ||
       !name.safeParse(repositoryName).success
-    )
+    ) {
       throw new Error("invalid-response");
+    }
     const commit = await github({
-      path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${encodePath(ref)}`,
       authorization: accessToken,
       expected: [200],
+      path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${encodePath(ref)}`,
     });
     const commitData = property(commit.body, "commit");
     const tree = property(commitData, "tree");
     const variableNames: string[] = [];
     for (let page = 1; page <= 10; page += 1) {
       const variables = await github({
-        path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/actions/variables?per_page=100&page=${page}`,
         authorization: accessToken,
         expected: [200],
+        path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/actions/variables?per_page=100&page=${page}`,
       });
       const pageVariables = arrayProperty(variables.body, "variables");
       variableNames.push(
-        ...pageVariables.map((value) => stringProperty(value, "name")),
+        ...pageVariables.map((value) => stringProperty(value, "name"))
       );
-      if (pageVariables.length < 100) break;
-      if (page === 10) throw new Error("repository-variables-too-large");
+      if (pageVariables.length < 100) {
+        break;
+      }
+      if (page === 10) {
+        throw new Error("repository-variables-too-large");
+      }
     }
-    if (!booleanProperty(repositoryResponse.body, "private"))
+    if (!booleanProperty(repositoryResponse.body, "private")) {
       throw new Error("invalid-response");
+    }
     return {
-      repositoryId,
-      owner: repositoryOwner,
-      name: repositoryName,
-      visibility: "private" as const,
+      accessToken,
       defaultBranch: stringProperty(repositoryResponse.body, "default_branch"),
       headSha: objectId.parse(stringProperty(commit.body, "sha")),
       headTree: objectId.parse(stringProperty(tree, "sha")),
+      name: repositoryName,
+      owner: repositoryOwner,
+      repositoryId,
       repositoryVariableNames: variableNames.toSorted(),
-      accessToken,
+      visibility: "private" as const,
     };
   }
 
   async function repositoryByName(
     owner: string,
     repositoryName: string,
-    permissions: PermissionSnapshot,
+    permissions: PermissionSnapshot
   ) {
     if (
       !name.safeParse(owner).success ||
       !name.safeParse(repositoryName).success
-    )
+    ) {
       throw new Error("invalid-destination");
+    }
     const accessToken = await token(permissions);
     let response;
     try {
       response = await github({
-        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
         authorization: accessToken,
         expected: [200, 404],
+        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
       });
     } catch {
       throw new Error("github-request-failed");
     }
-    if (response.status === 404) return undefined;
+    if (response.status === 404) {
+      return undefined;
+    }
     const repositoryId = decimalProperty(response.body, "id");
     return repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
-      permissions,
+      permissions
     );
   }
 
@@ -479,17 +520,17 @@ export function createGitHubAppHttpProvider(input: {
     owner: string,
     repositoryName: string,
     accessToken: string,
-    file: GitHubPublicationFile,
+    file: GitHubPublicationFile
   ): Promise<string> {
     const response = await github({
-      method: "POST",
-      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
       authorization: accessToken,
       body: {
         content: Buffer.from(file.content).toString("base64"),
         encoding: "base64",
       },
       expected: [201],
+      method: "POST",
+      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
     });
     return objectId.parse(stringProperty(response.body, "sha"));
   }
@@ -502,28 +543,26 @@ export function createGitHubAppHttpProvider(input: {
     deletions?: readonly string[];
     baseTree?: string;
   }): Promise<string> {
-    const entries: Array<{
+    const entries: {
       path: string;
       mode: "100644" | "100755";
       type: "blob";
       sha: string;
-    }> = [];
+    }[] = [];
     for (const file of input.files) {
       entries.push({
-        path: file.path,
         mode: file.mode,
-        type: "blob",
+        path: file.path,
         sha: await createBlob(
           input.owner,
           input.repositoryName,
           input.accessToken,
-          file,
+          file
         ),
+        type: "blob",
       });
     }
     const response = await github({
-      method: "POST",
-      path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/trees`,
       authorization: input.accessToken,
       body: {
         ...(input.baseTree === undefined ? {} : { base_tree: input.baseTree }),
@@ -538,37 +577,39 @@ export function createGitHubAppHttpProvider(input: {
         ],
       },
       expected: [201],
+      method: "POST",
+      path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/trees`,
     });
     return objectId.parse(stringProperty(response.body, "sha"));
   }
 
   async function repositorySnapshotForProposal(
     proposal: DraftPullRequestProposal,
-    permissions: PermissionSnapshot,
+    permissions: PermissionSnapshot
   ) {
     const snapshot = await repositoryById(
       proposal.repositoryId,
       proposal.baseBranch,
-      permissions,
+      permissions
     );
     return {
-      snapshot: publicRepositorySnapshot(snapshot),
       accessToken: snapshot.accessToken,
+      snapshot: publicRepositorySnapshot(snapshot),
     };
   }
 
   function publicRepositorySnapshot(
-    snapshot: Awaited<ReturnType<typeof repositoryById>>,
+    snapshot: Awaited<ReturnType<typeof repositoryById>>
   ) {
     return {
-      repositoryId: snapshot.repositoryId,
-      owner: snapshot.owner,
-      name: snapshot.name,
-      visibility: snapshot.visibility,
       defaultBranch: snapshot.defaultBranch,
       headSha: snapshot.headSha,
       headTree: snapshot.headTree,
+      name: snapshot.name,
+      owner: snapshot.owner,
+      repositoryId: snapshot.repositoryId,
       repositoryVariableNames: snapshot.repositoryVariableNames,
+      visibility: snapshot.visibility,
     };
   }
 
@@ -580,116 +621,6 @@ export function createGitHubAppHttpProvider(input: {
         throw new Error("GitHub provider operation failed.");
       }
     },
-    async inspectInstallation({ requestedPermissions }) {
-      const identity = await installation();
-      const selectedRepositoryIds =
-        await selectedRepositories(requestedPermissions);
-      return {
-        ...identity,
-        selectedRepositoryIds,
-        grantedPermissions: requestedPermissions,
-      };
-    },
-
-    async inspectRepository({ repositoryId, ref }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "read",
-        workflows: "none",
-        pullRequests: "none",
-        administration: "none",
-        variables: "read",
-      };
-      const snapshot = await repositoryById(repositoryId, ref, permissions);
-      return publicRepositorySnapshot(snapshot);
-    },
-
-    async inspectRepositoryByName({ owner, name: repositoryName }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "read",
-        workflows: "none",
-        pullRequests: "none",
-        administration: "none",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(
-        owner,
-        repositoryName,
-        permissions,
-      );
-      if (snapshot === undefined) return undefined;
-      const response = await github({
-        path: `/repositories/${snapshot.repositoryId}`,
-        authorization: snapshot.accessToken,
-        expected: [200],
-      });
-      return {
-        ...publicRepositorySnapshot(snapshot),
-        archived: booleanProperty(response.body, "archived"),
-      };
-    },
-
-    async inspectDestination({ owner, name: repositoryName }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
-        administration: "write",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(
-        owner,
-        repositoryName,
-        permissions,
-      );
-      if (snapshot === undefined) return "absent";
-      return publicRepositorySnapshot(snapshot);
-    },
-
-    async inspectFreshRepositoryOutcome(proposal) {
-      assertExactFreshRepositoryProposal(proposal);
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
-        administration: "write",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(
-        proposal.destinationOwner,
-        proposal.destinationName,
-        permissions,
-      );
-      if (snapshot === undefined) return undefined;
-      const commit = await github({
-        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/commits/${encodeURIComponent(proposal.defaultBranch)}`,
-        authorization: snapshot.accessToken,
-        expected: [200],
-      });
-      const parents = arrayProperty(commit.body, "parents").map((parent) =>
-        objectId.parse(stringProperty(parent, "sha")),
-      );
-      if (
-        !stringProperty(property(commit.body, "commit"), "message").includes(
-          `App-Builder-Idempotency: ${proposal.idempotencyKey}`,
-        )
-      )
-        throw new Error("fresh-repository-marker-mismatch");
-      const repository = publicRepositorySnapshot(snapshot);
-      return {
-        idempotencyKey: proposal.idempotencyKey,
-        repository,
-        initialCommit: {
-          sha: objectId.parse(stringProperty(commit.body, "sha")),
-          tree: repository.headTree,
-          parents,
-        },
-      };
-    },
-
     async createPrivateFreshHistoryRepository(proposal, content) {
       assertExactFreshRepositoryProposal(proposal);
       const identity = await installation();
@@ -703,7 +634,7 @@ export function createGitHubAppHttpProvider(input: {
             path: file.path,
             mode: file.mode,
             content: file.bytes,
-          })),
+          }))
         );
       } catch {
         return {
@@ -765,7 +696,23 @@ export function createGitHubAppHttpProvider(input: {
       });
       return { status: "accepted", requestId: reference.requestId };
     },
-
+    async inspectDestination({ owner, name: repositoryName }) {
+      const permissions: PermissionSnapshot = {
+        metadata: "read",
+        contents: "write",
+        workflows: "write",
+        pullRequests: "none",
+        administration: "write",
+        variables: "read",
+      };
+      const snapshot = await repositoryByName(
+        owner,
+        repositoryName,
+        permissions
+      );
+      if (snapshot === undefined) return "absent";
+      return publicRepositorySnapshot(snapshot);
+    },
     async inspectDraftPublication(proposal) {
       assertExactDraftPullRequestProposal(proposal);
       const permissions: PermissionSnapshot = {
@@ -778,7 +725,7 @@ export function createGitHubAppHttpProvider(input: {
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(
         proposal,
-        permissions,
+        permissions
       );
       const compare = await github({
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(snapshot.headSha)}`,
@@ -807,7 +754,7 @@ export function createGitHubAppHttpProvider(input: {
           const tree = property(property(branchCommit.body, "commit"), "tree");
           const markerMatches = stringProperty(
             property(branchCommit.body, "commit"),
-            "message",
+            "message"
           ).includes(`App-Builder-Idempotency: ${proposal.idempotencyKey}`);
           const branchCompare = await github({
             path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(branchSha)}`,
@@ -816,7 +763,7 @@ export function createGitHubAppHttpProvider(input: {
           });
           const normalizedChangedPaths = arrayProperty(
             branchCompare.body,
-            "files",
+            "files"
           )
             .map((file) => stringProperty(file, "filename"))
             .toSorted();
@@ -861,19 +808,19 @@ export function createGitHubAppHttpProvider(input: {
               draft: booleanProperty(pull, "draft"),
               headRepositoryId: decimalProperty(
                 property(property(pull, "head"), "repo"),
-                "id",
+                "id"
               ),
               headBranch: stringProperty(property(pull, "head"), "ref"),
               headSha: objectId.parse(
-                stringProperty(property(pull, "head"), "sha"),
+                stringProperty(property(pull, "head"), "sha")
               ),
               baseRepositoryId: decimalProperty(
                 property(property(pull, "base"), "repo"),
-                "id",
+                "id"
               ),
               baseBranch: stringProperty(property(pull, "base"), "ref"),
               baseSha: objectId.parse(
-                stringProperty(property(pull, "base"), "sha"),
+                stringProperty(property(pull, "base"), "sha")
               ),
               changeSetDigest: exactPull
                 ? proposal.changeSetDigest
@@ -890,7 +837,94 @@ export function createGitHubAppHttpProvider(input: {
         pullRequest,
       };
     },
-
+    async inspectFreshRepositoryOutcome(proposal) {
+      assertExactFreshRepositoryProposal(proposal);
+      const permissions: PermissionSnapshot = {
+        metadata: "read",
+        contents: "write",
+        workflows: "write",
+        pullRequests: "none",
+        administration: "write",
+        variables: "read",
+      };
+      const snapshot = await repositoryByName(
+        proposal.destinationOwner,
+        proposal.destinationName,
+        permissions
+      );
+      if (snapshot === undefined) return undefined;
+      const commit = await github({
+        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/commits/${encodeURIComponent(proposal.defaultBranch)}`,
+        authorization: snapshot.accessToken,
+        expected: [200],
+      });
+      const parents = arrayProperty(commit.body, "parents").map((parent) =>
+        objectId.parse(stringProperty(parent, "sha"))
+      );
+      if (
+        !stringProperty(property(commit.body, "commit"), "message").includes(
+          `App-Builder-Idempotency: ${proposal.idempotencyKey}`
+        )
+      )
+        throw new Error("fresh-repository-marker-mismatch");
+      const repository = publicRepositorySnapshot(snapshot);
+      return {
+        idempotencyKey: proposal.idempotencyKey,
+        repository,
+        initialCommit: {
+          sha: objectId.parse(stringProperty(commit.body, "sha")),
+          tree: repository.headTree,
+          parents,
+        },
+      };
+    },
+    async inspectInstallation({ requestedPermissions }) {
+      const identity = await installation();
+      const selectedRepositoryIds =
+        await selectedRepositories(requestedPermissions);
+      return {
+        ...identity,
+        selectedRepositoryIds,
+        grantedPermissions: requestedPermissions,
+      };
+    },
+    async inspectRepository({ repositoryId, ref }) {
+      const permissions: PermissionSnapshot = {
+        metadata: "read",
+        contents: "read",
+        workflows: "none",
+        pullRequests: "none",
+        administration: "none",
+        variables: "read",
+      };
+      const snapshot = await repositoryById(repositoryId, ref, permissions);
+      return publicRepositorySnapshot(snapshot);
+    },
+    async inspectRepositoryByName({ owner, name: repositoryName }) {
+      const permissions: PermissionSnapshot = {
+        metadata: "read",
+        contents: "read",
+        workflows: "none",
+        pullRequests: "none",
+        administration: "none",
+        variables: "read",
+      };
+      const snapshot = await repositoryByName(
+        owner,
+        repositoryName,
+        permissions
+      );
+      if (snapshot === undefined) return undefined;
+      const response = await github({
+        path: `/repositories/${snapshot.repositoryId}`,
+        authorization: snapshot.accessToken,
+        expected: [200],
+      });
+      return {
+        ...publicRepositorySnapshot(snapshot),
+        archived: booleanProperty(response.body, "archived"),
+      };
+    },
     async publishDraftPullRequest(proposal, content) {
       assertExactDraftPullRequestProposal(proposal);
       let changes: readonly {
@@ -957,7 +991,7 @@ export function createGitHubAppHttpProvider(input: {
             };
           })
           .toSorted((left, right) =>
-            compareOverlayPaths(left.path, right.path),
+            compareOverlayPaths(left.path, right.path)
           );
         if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
           throw new Error("invalid-material");
@@ -982,7 +1016,7 @@ export function createGitHubAppHttpProvider(input: {
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(
         proposal,
-        permissions,
+        permissions
       );
       if (
         snapshot.headSha !== proposal.baseSha ||
@@ -990,10 +1024,10 @@ export function createGitHubAppHttpProvider(input: {
       )
         return { status: "rejected", code: "stale-base" };
       const files = changes.flatMap((change) =>
-        change.after === undefined ? [] : [change.after],
+        change.after === undefined ? [] : [change.after]
       );
       const deletions = changes.flatMap((change) =>
-        change.kind === "deleted" ? [change.path] : [],
+        change.kind === "deleted" ? [change.path] : []
       );
       const tree = await createTree({
         owner: proposal.owner,

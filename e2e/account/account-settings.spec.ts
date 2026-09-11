@@ -1,5 +1,5 @@
-import postgres from "postgres";
 import { expect, test } from "playwright/test";
+import postgres from "postgres";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 import {
@@ -22,7 +22,7 @@ test("stock account menu updates the profile and signs out", async ({
   await page.getByRole("menuitem", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings\/account/u, { timeout: 15_000 });
   await expect(
-    page.getByRole("heading", { name: "Account settings" }),
+    page.getByRole("heading", { name: "Account settings" })
   ).toBeVisible();
 
   await page.getByLabel("Name", { exact: true }).fill("Autograph E2E User");
@@ -43,7 +43,7 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
   test.setTimeout(60_000);
   let authenticator: VirtualAuthenticator | undefined = await registerPasskey(
     context,
-    page,
+    page
   );
   try {
     await page.goto("/settings/account");
@@ -78,11 +78,13 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
       .getByRole("button", { name: "Delete passkey" })
       .click();
     await expect(
-      page.getByText("Add another passkey before deleting this one."),
+      page.getByText("Add another passkey before deleting this one.")
     ).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
   } finally {
-    if (!page.isClosed()) await authenticator?.dispose();
+    if (!page.isClosed()) {
+      await authenticator?.dispose();
+    }
   }
 });
 
@@ -92,9 +94,7 @@ test("ambiguous and revoked workspace authority show recovery surfaces", async (
   await finishOAuth(page, "GitHub");
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const [{ id: userId }] = await sql<
-      Array<{ id: string }>
-    >`SELECT id FROM "user"`;
+    const [{ id: userId }] = await sql<{ id: string }[]>`SELECT id FROM "user"`;
     await sql`
       INSERT INTO organization
         (id, name, slug, created_at, issuer, audience, workspace_id)
@@ -109,7 +109,7 @@ test("ambiguous and revoked workspace authority show recovery surfaces", async (
     `;
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Choose your Autograph workspace" }),
+      page.getByRole("heading", { name: "Choose your Autograph workspace" })
     ).toBeVisible();
 
     await sql`DELETE FROM member WHERE id = 'e2e-second-member'`;
@@ -117,7 +117,7 @@ test("ambiguous and revoked workspace authority show recovery surfaces", async (
     await sql`UPDATE "user" SET banned = true WHERE id = ${userId}`;
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Your workspace isn’t available" }),
+      page.getByRole("heading", { name: "Your workspace isn’t available" })
     ).toBeVisible();
   } finally {
     await sql.end();

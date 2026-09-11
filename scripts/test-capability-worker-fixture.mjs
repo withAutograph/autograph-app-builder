@@ -3,7 +3,7 @@ import { parentPort, workerData } from "node:worker_threads";
 const accessor =
   process[
     Symbol.for(
-      "withAutograph.autograph-app-builder.test-capability-registry.v2",
+      "withAutograph.autograph-app-builder.test-capability-registry.v2"
     )
   ];
 const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
@@ -45,24 +45,24 @@ if (workerData?.spawnNested === true) {
 }
 
 parentPort?.postMessage({
-  capability,
   appRoot: process.env.EVE_DEV_WORKER_APP_ROOT ?? null,
-  eveDev: process.env.EVE_DEV ?? null,
-  workflowBaseUrl: process.env.WORKFLOW_LOCAL_BASE_URL ?? null,
-  workflowBodyTimeout: process.env.WORKFLOW_LOCAL_BODY_TIMEOUT_MS ?? null,
-  workflowHeadersTimeout: process.env.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS ?? null,
-  port: process.env.PORT ?? null,
-  hasTransportSecret:
-    process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
-  sandboxRunId: process.env.EVE_DEVELOPMENT_SANDBOX_RUN_ID ?? null,
+  capability,
   evaluation: process.env.EVE_EVALUATION ?? null,
   evaluationRunId: process.env.EVE_EVALUATION_RUN_ID ?? null,
+  eveDev: process.env.EVE_DEV ?? null,
   hasGateAEnvironment: gateAFields.some(
-    (field) => process.env[field] !== undefined,
+    (field) => process.env[field] !== undefined
   ),
-  nestedCapability,
+  hasTransportSecret:
+    process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
   nestedAppRoot,
+  nestedCapability,
   nestedEveDev,
   nestedWorkflowBodyTimeout,
   nestedWorkflowHeadersTimeout,
+  port: process.env.PORT ?? null,
+  sandboxRunId: process.env.EVE_DEVELOPMENT_SANDBOX_RUN_ID ?? null,
+  workflowBaseUrl: process.env.WORKFLOW_LOCAL_BASE_URL ?? null,
+  workflowBodyTimeout: process.env.WORKFLOW_LOCAL_BODY_TIMEOUT_MS ?? null,
+  workflowHeadersTimeout: process.env.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS ?? null,
 });

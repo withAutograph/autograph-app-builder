@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+
 import {
   buildAgentPluginPackage,
   validateAgentPluginPackage,
@@ -7,17 +8,17 @@ import {
 const repositoryRoot = resolve(".");
 const outputRoot = resolve(
   repositoryRoot,
-  ".artifacts/agent-plugin/app-builder",
+  ".artifacts/agent-plugin/app-builder"
 );
 await validateAgentPluginPackage({
+  packageKind: "source",
   pluginRoot: repositoryRoot,
   repositoryRoot,
-  packageKind: "source",
 });
-await buildAgentPluginPackage({ repositoryRoot, outputRoot });
+await buildAgentPluginPackage({ outputRoot, repositoryRoot });
 await validateAgentPluginPackage({
+  packageKind: "generated-artifact",
   pluginRoot: outputRoot,
   repositoryRoot,
-  packageKind: "generated-artifact",
 });
 console.log(`Built portable Agent Plugin: ${outputRoot}`);

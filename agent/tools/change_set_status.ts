@@ -1,15 +1,16 @@
-import { defineTool } from "eve/tools";
-import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
+
+import type { SandboxSession } from "eve/sandbox";
+import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import {
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
   overlayChanges,
 } from "@/lib/repository/target-apply";
-import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export async function exactNormalizedChangeSet(input: {
@@ -23,45 +24,44 @@ export async function exactNormalizedChangeSet(input: {
     ? await inspectFixtureApplyOverlay(
         input.sandbox,
         input.state.applyReceipt.applyRoot,
-        input.state.appSpec.appId,
+        input.state.appSpec.appId
       )
     : await inspectApplyOverlay(
         input.sandbox,
-        input.state.applyReceipt.applyRoot,
+        input.state.applyReceipt.applyRoot
       );
   const changes = overlayChanges(
     {
       files: input.state.applyReceipt.preTree,
       treeDigest: input.state.applyReceipt.preTreeDigest,
     },
-    observed,
+    observed
   );
   return deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,
-      postTree: observed.files,
-      postTreeDigest: observed.treeDigest,
-      changes,
       changedContentDigest: createHash("sha256")
         .update(JSON.stringify(changes))
         .digest("hex"),
+      changes,
+      postTree: observed.files,
+      postTreeDigest: observed.treeDigest,
     },
     input.state.validationReceipt,
     input.state.proposal.contractDigest,
-    input.state.sourceReceipt.contractDigest,
+    input.state.sourceReceipt.contractDigest
   );
 }
 
 export default defineTool({
   description:
     "Summarize the reviewed changes after repository validation succeeds. This never publishes or changes an external repository.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     void _input;
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
       throw new Error(
-        "Run the repository validation before reviewing its changes.",
+        "Run the repository validation before reviewing its changes."
       );
     const changeSet = await exactNormalizedChangeSet({
       state,
@@ -69,4 +69,5 @@ export default defineTool({
     });
     return { ...changeSet, reviewed: state.phase === "reviewed" };
   },
+  inputSchema: z.object({}),
 });

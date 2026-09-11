@@ -1,7 +1,9 @@
 import { OrganizationProvisioningError } from "./preview-user-management";
 
 export type WorkspaceOnboardingFailure =
-  "access-denied" | "workspace-ambiguous" | "workspace-setup-retry";
+  | "access-denied"
+  | "workspace-ambiguous"
+  | "workspace-setup-retry";
 
 export type WorkspaceOnboardingState<T> =
   | { status: "anonymous" }
@@ -9,7 +11,7 @@ export type WorkspaceOnboardingState<T> =
   | { status: WorkspaceOnboardingFailure };
 
 export async function resolveWorkspaceOnboardingState<T>(
-  ensure: () => Promise<T | undefined>,
+  ensure: () => Promise<T | undefined>
 ): Promise<WorkspaceOnboardingState<T>> {
   try {
     const value = await ensure();
@@ -18,14 +20,16 @@ export async function resolveWorkspaceOnboardingState<T>(
       : { status: "ready", value };
   } catch (error) {
     if (error instanceof OrganizationProvisioningError) {
-      if (error.reason === "workspace-ambiguous")
+      if (error.reason === "workspace-ambiguous") {
         return { status: "workspace-ambiguous" };
+      }
       if (
         error.reason === "access-revoked" ||
         error.reason === "verified-identity-required" ||
         error.reason === "signup-disabled"
-      )
+      ) {
         return { status: "access-denied" };
+      }
     }
     return { status: "workspace-setup-retry" };
   }
@@ -33,7 +37,7 @@ export async function resolveWorkspaceOnboardingState<T>(
 
 export function workspaceOnboardingRedirect(
   origin: string,
-  failure: WorkspaceOnboardingFailure,
+  failure: WorkspaceOnboardingFailure
 ) {
   const url = new URL("/", origin);
   url.searchParams.set("onboarding", failure);

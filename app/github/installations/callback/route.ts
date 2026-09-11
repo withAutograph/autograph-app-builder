@@ -6,16 +6,17 @@ import {
 
 const callback = createGitHubAppInstallationDeploymentHandler(
   "callback",
-  process.env,
+  process.env
 );
 
 export async function GET(request: Request) {
   const fixture = applyLocalGitHubCallbackFixture(request, process.env);
   const response = await callback(fixture.request);
-  if (fixture.applied)
+  if (fixture.applied) {
     response.headers.append(
       "set-cookie",
-      clearLocalGitHubCallbackFixtureCookie(),
+      clearLocalGitHubCallbackFixtureCookie()
     );
+  }
   return response;
 }

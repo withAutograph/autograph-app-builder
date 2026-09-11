@@ -11,7 +11,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
     await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`
     );
     t.succeeded();
 

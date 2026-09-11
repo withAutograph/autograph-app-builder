@@ -2,14 +2,17 @@ import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
 import { sessionStatusSchema } from "../mcp/contracts";
-import { hostedPrincipalSchema, type HostedPrincipal } from "./hosted-auth";
+import { hostedPrincipalSchema } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   HostedCancellationUnsettledError,
   HostedAdapterSessionUnavailableError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
-  type HostedEngineSnapshot,
-  type HostedEveTransport,
+} from "./hosted-service";
+import type {
+  HostedEngineSnapshot,
+  HostedEveTransport,
 } from "./hosted-service";
 import {
   deriveInstalledEveStatus,
@@ -42,9 +45,9 @@ const sameOriginConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["baseUrl"],
         message:
           "The canonical Eve API must use a credential-free HTTPS origin.",
+        path: ["baseUrl"],
       });
       return z.NEVER;
     }
@@ -77,7 +80,7 @@ const errorResponseSchema = z
   .passthrough();
 
 const streamEnvelopeSchema = z
-  .object({ type: z.string().min(1), data: z.record(z.string(), z.unknown()) })
+  .object({ data: z.record(z.string(), z.unknown()), type: z.string().min(1) })
   .passthrough();
 
 export interface HostedWorkloadIdentity {
@@ -87,7 +90,7 @@ export interface HostedWorkloadIdentity {
 function exactToken(value: string): string {
   if (
     value.length === 0 ||
-    value.length > 8_192 ||
+    value.length > 8192 ||
     value !== value.trim() ||
     /[\0\r\n]/u.test(value)
   ) {
@@ -98,14 +101,14 @@ function exactToken(value: string): string {
 
 function endpoint(
   config: z.infer<typeof sameOriginConfigSchema>,
-  path: string,
+  path: string
 ): string {
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
 function forwardedPrincipal(
   principalInput: HostedPrincipal,
-  sourceHandoffId?: string,
+  sourceHandoffId?: string
 ) {
   const principal = hostedPrincipalSchema.parse(principalInput);
   return {
@@ -174,7 +177,7 @@ async function postMutation(input: {
     headers = await workloadHeaders(input.workloadIdentity);
   } catch {
     throw new SubmissionRejectedBeforeDispatchError(
-      "workload_identity_unavailable",
+      "workload_identity_unavailable"
     );
   }
 
@@ -183,22 +186,22 @@ async function postMutation(input: {
     response = await input.fetchImplementation(
       endpoint(input.config, input.path),
       {
-        method: "POST",
-        redirect: "manual",
-        signal: AbortSignal.timeout(input.config.timeoutMs),
+        body: JSON.stringify({
+          ...input.body,
+          forwardedPrincipal: forwardedPrincipal(
+            input.principal,
+            input.sourceHandoffId
+          ),
+        }),
         headers: {
           ...headers,
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...input.body,
-          forwardedPrincipal: forwardedPrincipal(
-            input.principal,
-            input.sourceHandoffId,
-          ),
-        }),
-      },
+        method: "POST",
+        redirect: "manual",
+        signal: AbortSignal.timeout(input.config.timeoutMs),
+      }
     );
   } catch {
     throw new SubmissionOutcomeUnknownError();
@@ -209,13 +212,17 @@ async function postMutation(input: {
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
       throw new SubmissionRejectedBeforeDispatchError(
-        parsed.success ? parsed.data.code : "eve_request_rejected",
+        parsed.success ? parsed.data.code : "eve_request_rejected"
       );
     }
-    if (response.status !== 202) throw new Error("Unexpected response status.");
+    if (response.status !== 202) {
+      throw new Error("Unexpected response status.");
+    }
     return acceptedTurnSchema.parse(body);
   } catch (error) {
-    if (error instanceof SubmissionRejectedBeforeDispatchError) throw error;
+    if (error instanceof SubmissionRejectedBeforeDispatchError) {
+      throw error;
+    }
     throw new SubmissionOutcomeUnknownError();
   }
 }
@@ -230,9 +237,9 @@ async function authenticatedFetch(input: {
   const headers = await workloadHeaders(input.workloadIdentity);
   return input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
+    headers: { ...headers, ...input.init?.headers },
     redirect: "manual",
     signal: input.init?.signal ?? AbortSignal.timeout(input.config.timeoutMs),
-    headers: { ...headers, ...input.init?.headers },
   });
 }
 
@@ -250,7 +257,9 @@ async function readInstalledSnapshot(input: {
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
-  if (response.status === 404) throw new HostedAdapterSessionUnavailableError();
+  if (response.status === 404) {
+    throw new HostedAdapterSessionUnavailableError();
+  }
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }
@@ -276,10 +285,10 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
-    await response.body.cancel().catch(() => undefined);
+    await response.body.cancel().catch(() => {});
     return {
-      snapshot: { status: sessionStatusSchema.parse("working"), events: [] },
       installed: [],
+      snapshot: { events: [], status: sessionStatusSchema.parse("working") },
     };
   }
 
@@ -296,8 +305,8 @@ async function readInstalledSnapshot(input: {
         if (line.length > 0 && events.length <= tail) {
           events.push(
             streamEnvelopeSchema.parse(
-              JSON.parse(line),
-            ) as unknown as MessageStreamEvent,
+              JSON.parse(line)
+            ) as unknown as MessageStreamEvent
           );
         }
         break;
@@ -312,8 +321,8 @@ async function readInstalledSnapshot(input: {
         if (line.length > 0) {
           events.push(
             streamEnvelopeSchema.parse(
-              JSON.parse(line),
-            ) as unknown as MessageStreamEvent,
+              JSON.parse(line)
+            ) as unknown as MessageStreamEvent
           );
         }
         newline = buffered.indexOf("\n");
@@ -323,7 +332,7 @@ async function readInstalledSnapshot(input: {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
   } finally {
-    await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 
@@ -334,25 +343,25 @@ async function readInstalledSnapshot(input: {
   const uiPreview = latestInstalledUiPreview(events);
   const implementationPlan = latestInstalledImplementationPlan(events);
   return {
+    installed: events,
     snapshot: {
-      status: deriveInstalledEveStatus(events),
       events: projected,
+      status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
-    installed: events,
   };
 }
 
 async function readSnapshot(
-  input: Parameters<typeof readInstalledSnapshot>[0],
+  input: Parameters<typeof readInstalledSnapshot>[0]
 ): Promise<HostedEngineSnapshot> {
   return (await readInstalledSnapshot(input)).snapshot;
 }
 
 function activeTurnId(
-  events: readonly MessageStreamEvent[],
+  events: readonly MessageStreamEvent[]
 ): string | undefined {
   let active: string | undefined;
   for (const event of events) {
@@ -363,21 +372,24 @@ function activeTurnId(
     if (
       turnId !== undefined &&
       !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
-    )
+    ) {
       active = turnId;
+    }
     if (
       ["turn.completed", "turn.failed", "turn.cancelled"].includes(
-        event.type,
+        event.type
       ) &&
       (turnId === undefined || turnId === active)
-    )
+    ) {
       active = undefined;
+    }
     if (
       ["session.waiting", "session.completed", "session.failed"].includes(
-        event.type,
+        event.type
       )
-    )
+    ) {
       active = undefined;
+    }
   }
   return active;
 }
@@ -385,14 +397,14 @@ function activeTurnId(
 function cancellationSettled(
   events: readonly MessageStreamEvent[],
   startIndex: number,
-  turnId: string,
+  turnId: string
 ): boolean {
   const next = events.slice(startIndex);
   const cancelledAt = next.findIndex(
-    (event) => event.type === "turn.cancelled" && event.data.turnId === turnId,
+    (event) => event.type === "turn.cancelled" && event.data.turnId === turnId
   );
   return (
-    cancelledAt >= 0 &&
+    cancelledAt !== -1 &&
     next
       .slice(cancelledAt + 1)
       .some((event) => event.type === "session.waiting")
@@ -400,18 +412,21 @@ function cancellationSettled(
 }
 
 function outstandingRequestIds(
-  events: readonly MessageStreamEvent[],
+  events: readonly MessageStreamEvent[]
 ): ReadonlySet<string> {
   const outstanding = new Set<string>();
   for (const event of events) {
-    if (event.type === "input.requested")
+    if (event.type === "input.requested") {
       for (const request of event.data.requests)
         outstanding.add(request.requestId);
-    if (event.type === "input.resolved")
+    }
+    if (event.type === "input.resolved") {
       for (const resolution of event.data.resolutions)
         outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled")
+    }
+    if (event.type === "approval.settled") {
       outstanding.delete(event.data.requestId);
+    }
   }
   return outstanding;
 }
@@ -429,8 +444,9 @@ async function readRespondSettlement(input: {
     if (
       observed.snapshot.status !== "input_required" ||
       input.requestIds.every((requestId) => !outstanding.has(requestId))
-    )
+    ) {
       return observed.snapshot;
+    }
   }
   throw new SubmissionOutcomeUnknownError();
 }
@@ -444,71 +460,10 @@ export function createSameOriginEveTransport(input: {
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const common = {
     config,
-    workloadIdentity: input.workloadIdentity,
     fetchImplementation,
+    workloadIdentity: input.workloadIdentity,
   };
   return {
-    async start(request) {
-      const accepted = await postMutation({
-        ...common,
-        path: "/eve/v1/session",
-        principal: request.principal,
-        body: { message: request.prompt, operationId: request.operationId },
-        sourceHandoffId: request.sourceHandoffId,
-      });
-      return {
-        adapterSessionId: accepted.sessionId,
-        snapshot: await readSnapshot({
-          ...common,
-          sessionId: accepted.sessionId,
-        }),
-      };
-    },
-    get: (request) =>
-      readSnapshot({ ...common, sessionId: request.adapterSessionId }),
-    async send(request) {
-      const accepted = await postMutation({
-        ...common,
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
-        principal: request.principal,
-        body: { message: request.message, turnPolicy: "queue" },
-        sourceHandoffId: request.sourceHandoffId,
-      });
-      if (accepted.sessionId !== request.adapterSessionId) {
-        throw new SubmissionOutcomeUnknownError();
-      }
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
-    },
-    async respond(request) {
-      const accepted = await postMutation({
-        ...common,
-        sourceHandoffId: request.sourceHandoffId,
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
-        principal: request.principal,
-        body: {
-          inputResponses: request.responses.map(({ requestId, response }) =>
-            response.kind === "approve"
-              ? { requestId, optionId: "approve" }
-              : response.kind === "deny"
-                ? { requestId, optionId: "cancel" }
-                : {
-                    requestId,
-                    ...(response.optionId === undefined
-                      ? { text: response.value }
-                      : { optionId: response.optionId }),
-                  },
-          ),
-        },
-      });
-      if (accepted.sessionId !== request.adapterSessionId) {
-        throw new SubmissionOutcomeUnknownError();
-      }
-      return readRespondSettlement({
-        ...common,
-        sessionId: request.adapterSessionId,
-        requestIds: request.responses.map(({ requestId }) => requestId),
-      });
-    },
     async cancel(request) {
       const before = await readInstalledSnapshot({
         ...common,
@@ -529,7 +484,7 @@ export function createSameOriginEveTransport(input: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(
-            guardedTurnId === undefined ? {} : { turnId: guardedTurnId },
+            guardedTurnId === undefined ? {} : { turnId: guardedTurnId }
           ),
         },
       });
@@ -561,7 +516,7 @@ export function createSameOriginEveTransport(input: {
           cancellationSettled(
             observed.installed,
             before.installed.length,
-            guardedTurnId,
+            guardedTurnId
           )
         )
           return observed.snapshot;
@@ -570,6 +525,67 @@ export function createSameOriginEveTransport(input: {
           throw new SubmissionRejectedBeforeDispatchError("turn_changed");
       }
       throw new HostedCancellationUnsettledError();
+    },
+    get: (request) =>
+      readSnapshot({ ...common, sessionId: request.adapterSessionId }),
+    async respond(request) {
+      const accepted = await postMutation({
+        ...common,
+        sourceHandoffId: request.sourceHandoffId,
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        body: {
+          inputResponses: request.responses.map(({ requestId, response }) =>
+            response.kind === "approve"
+              ? { requestId, optionId: "approve" }
+              : response.kind === "deny"
+                ? { requestId, optionId: "cancel" }
+                : {
+                    requestId,
+                    ...(response.optionId === undefined
+                      ? { text: response.value }
+                      : { optionId: response.optionId }),
+                  }
+          ),
+        },
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return readRespondSettlement({
+        ...common,
+        sessionId: request.adapterSessionId,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+      });
+    },
+    async send(request) {
+      const accepted = await postMutation({
+        ...common,
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        body: { message: request.message, turnPolicy: "queue" },
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+    },
+    async start(request) {
+      const accepted = await postMutation({
+        ...common,
+        path: "/eve/v1/session",
+        principal: request.principal,
+        body: { message: request.prompt, operationId: request.operationId },
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      return {
+        adapterSessionId: accepted.sessionId,
+        snapshot: await readSnapshot({
+          ...common,
+          sessionId: accepted.sessionId,
+        }),
+      };
     },
   };
 }

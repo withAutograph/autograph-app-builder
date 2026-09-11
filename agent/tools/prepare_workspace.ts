@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -8,22 +9,21 @@ import {
   updateExactWorkflow,
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
-import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
+import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import {
   prepareDevelopmentSandboxWorkspace,
   prepareSupportedSandboxWorkspace,
   readPreparedSandboxWorkspaceRecord,
 } from "@/lib/repository/supported-template";
-import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
+
 import sourceStatus from "./source_status";
 
 export default defineTool({
   description:
     "Prepare the current writable repository checkout for product work. This is automatic and records the provider-created checkout without treating normal source or layout changes as failures.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
@@ -68,7 +68,7 @@ export default defineTool({
       current.githubSource?.digest !== source.githubSource?.digest
     )
       throw new Error(
-        "This app build already owns a different GitHub source binding.",
+        "This app build already owns a different GitHub source binding."
       );
     if (
       !development &&
@@ -84,7 +84,7 @@ export default defineTool({
         ctx.callId,
         source.receipt.sourceKind === "existing-repository"
           ? "planning"
-          : "full",
+          : "full"
       );
     } else if (githubWorkspace !== undefined) {
       workspace = githubWorkspace;
@@ -102,7 +102,7 @@ export default defineTool({
         false,
         source.receipt.sourceKind === "existing-repository"
           ? "planning"
-          : "full",
+          : "full"
       );
     }
     updateExactWorkflow({
@@ -125,4 +125,5 @@ export default defineTool({
     });
     return workspace;
   },
+  inputSchema: z.object({}),
 });

@@ -1,16 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+
+import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import {
   choiceRequest,
   semanticChoiceRequest,
 } from "@/.storybook/create-app/mcp-fixtures";
-import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
+
 import { InputControl } from "./view";
 
 const meta = {
-  title: "MCP/Inputs/Choice Request",
+  args: { onAnswer: fn(), request: choiceRequest },
   component: InputControl,
-  args: { request: choiceRequest, onAnswer: fn() },
   decorators: [
     (Story) => (
       <McpBlockStoryLayout>
@@ -18,6 +19,7 @@ const meta = {
       </McpBlockStoryLayout>
     ),
   ],
+  title: "MCP/Inputs/Choice Request",
 } satisfies Meta<typeof InputControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -15,8 +16,8 @@ import {
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
   waitForDevelopmentSourceChange,
-  type DevelopmentSnapshot,
 } from "../lib/development/local-mode";
+import type { DevelopmentSnapshot } from "../lib/development/local-mode";
 import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
 import {
   createDevelopmentShutdown,
@@ -29,39 +30,40 @@ import {
   fingerprintDevelopmentRuntime,
   waitForDevelopmentRuntimeChange,
 } from "../lib/development/runtime-watch";
+import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
+import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 import {
   HOSTED_BUN_VERSION,
   HOSTED_MISE_VERSION,
   HOSTED_NODE_VERSION,
   HOSTED_RUST_VERSION,
 } from "../lib/sandbox/hosted-toolchain";
-import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
-import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 
 const repositoryRoot = resolve(".");
 const developmentTools = {
-  node: HOSTED_NODE_VERSION,
   bun: HOSTED_BUN_VERSION,
   mise: HOSTED_MISE_VERSION,
+  node: HOSTED_NODE_VERSION,
   rust: HOSTED_RUST_VERSION,
 } as const;
 
-type DevelopmentSupervisorState = {
+interface DevelopmentSupervisorState {
   fingerprint?: string;
   result?: Awaited<ReturnType<typeof createDevelopmentPackage>>;
   dependencyKey?: string;
   snapshot?: DevelopmentSnapshot;
-};
+}
 
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
-  if (value === undefined || !value.startsWith("/"))
+  if (value === undefined || !value.startsWith("/")) {
     throw new Error(`mise must supply the absolute ${name} ${description}.`);
+  }
   return value;
 }
 
 async function privateRoot(path: string) {
-  await mkdir(path, { recursive: true, mode: 0o700 });
+  await mkdir(path, { mode: 0o700, recursive: true });
   const canonical = await realpath(path);
   const info = await lstat(canonical);
   if (
@@ -70,10 +72,11 @@ async function privateRoot(path: string) {
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o077) !== 0
-  )
+  ) {
     throw new Error(
-      `Development root must be canonical, owner-only, and mode 0700: ${path}`,
+      `Development root must be canonical, owner-only, and mode 0700: ${path}`
     );
+  }
   return canonical;
 }
 
@@ -168,21 +171,21 @@ async function runEveCycle(input: {
   const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
   try {
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: input.sourceRoot,
       runRoot: activeRun,
+      sourceRoot: input.sourceRoot,
     });
     const dependencyKey = await developmentDependencyKey({
-      sourceRoot: snapshot.root,
       platform: "linux/amd64",
+      sourceRoot: snapshot.root,
       tools: developmentTools,
     });
     const dependencyCacheHit =
       input.packageState.dependencyKey === dependencyKey;
     const previousEntries = new Map(
-      input.packageState.snapshot?.entries.map((entry) => [entry.path, entry]),
+      input.packageState.snapshot?.entries.map((entry) => [entry.path, entry])
     );
     const currentEntries = new Map(
-      snapshot.entries.map((entry) => [entry.path, entry]),
+      snapshot.entries.map((entry) => [entry.path, entry])
     );
     const changedPaths = new Set([
       ...previousEntries.keys(),
@@ -193,39 +196,42 @@ async function runEveCycle(input: {
     for (const path of changedPaths) {
       const previous = previousEntries.get(path);
       const current = currentEntries.get(path);
-      if (previous?.digest === current?.digest) continue;
+      if (previous?.digest === current?.digest) {
+        continue;
+      }
       snapshotDeltaFiles += 1;
       snapshotDeltaBytes += current?.bytes ?? previous?.bytes ?? 0;
     }
     const runtimeFingerprint =
       await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
-      repositoryRoot,
       port: input.nextPort,
+      repositoryRoot,
     });
     const packageReused =
       input.packageState.fingerprint === packageFingerprint &&
       input.packageState.result !== undefined;
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
-        repositoryRoot,
         outputRoot: input.codexRoot,
         port: input.nextPort,
+        repositoryRoot,
       });
       input.packageState.fingerprint = packageFingerprint;
     }
     const packageResult = input.packageState.result;
-    if (packageResult === undefined)
+    if (packageResult === undefined) {
       throw new Error("Development package was unavailable.");
+    }
     const closed = developmentLaunchEnvironment({
-      sourceRoot: input.sourceRoot,
-      snapshotRoot: snapshot.root,
+      dependencyKey,
       destinationRoot: input.destinationRoot,
+      evePort: input.evePort,
+      fingerprint: snapshot.fingerprint,
+      snapshotRoot: snapshot.root,
+      sourceRoot: input.sourceRoot,
       sourceSha: snapshot.commit,
       sourceTree: snapshot.tree,
-      fingerprint: snapshot.fingerprint,
-      dependencyKey,
-      evePort: input.evePort,
     });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
@@ -234,17 +240,17 @@ async function runEveCycle(input: {
         "tsx",
         join(
           repositoryRoot,
-          ".config/mise/scripts/repository/run-local-development-eve.mts",
+          ".config/mise/scripts/repository/run-local-development-eve.mts"
         ),
       ],
       {
         cwd: repositoryRoot,
         env: eveWrapperEnvironment({
-          closed,
           applicationRoot: cycle.application.root,
+          closed,
           runsRoot: input.runsRoot,
-          supervisorRoot: input.supervisorRoot,
           runtimeHome: cycle.runtimeHome,
+          supervisorRoot: input.supervisorRoot,
           workflowData: cycle.workflowData,
         }),
         // Eve starts a local server child of its own.  Put this wrapper and
@@ -252,67 +258,70 @@ async function runEveCycle(input: {
         // the whole Eve cycle instead of leaving its listener on the port.
         detached: process.platform !== "win32",
         stdio: "inherit",
-      },
+      }
     );
     const watchers = new AbortController();
     const sourceChanged = waitForDevelopmentSourceChange({
-      sourceRoot: input.sourceRoot,
       expectedFingerprint: snapshot.fingerprint,
       signal: watchers.signal,
-    }).then(() => ({ kind: "restart" as const, code: 0 }));
+      sourceRoot: input.sourceRoot,
+    }).then(() => ({ code: 0, kind: "restart" as const }));
     const runtimeChanged = waitForDevelopmentRuntimeChange({
-      repositoryRoot,
       expectedFingerprint: runtimeFingerprint,
+      repositoryRoot,
       signal: watchers.signal,
-    }).then(() => ({ kind: "restart" as const, code: 0 }));
+    }).then(() => ({ code: 0, kind: "restart" as const }));
     const eveExited = developmentChildExit(eve).then((code) => ({
-      kind: "eve-exit" as const,
       code,
+      kind: "eve-exit" as const,
     }));
     const stopping = waitForDevelopmentShutdown(
       input.signal,
-      input.shutdownExitCode,
+      input.shutdownExitCode
     );
     try {
       const startup = await Promise.race([
         waitForDevelopmentMcp({
           endpoint: packageResult.receipt.endpoint,
           signal: watchers.signal,
-        }).then(() => ({ kind: "ready" as const, code: 0 })),
+        }).then(() => ({ code: 0, kind: "ready" as const })),
         sourceChanged,
         runtimeChanged,
         eveExited,
         input.nextExited,
         stopping,
       ]);
-      if (startup.kind !== "ready") return startup;
-      if (!packageReused)
+      if (startup.kind !== "ready") {
+        return startup;
+      }
+      if (!packageReused) {
         await registerDevelopmentPackage({
           codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
           codexHome: requiredEnvironment(
             "APP_BUILDER_DEV_CODEX_HOME",
-            "profile root",
+            "profile root"
           ),
           marketplaceRoot: packageResult.marketplaceRoot,
           version: packageResult.receipt.version,
         });
+      }
       console.info(
         JSON.stringify({
-          event: "autograph.local.eve-cycle",
-          eveRestartMs: Math.round(performance.now() - cycleStartedAt),
-          persistentEveStateReused: false,
           cycleRoot: cycle.root,
-          packageReused,
-          snapshotDeltaFiles,
-          snapshotDeltaBytes,
           dependencyCache: dependencyCacheHit ? "hit" : "miss",
-        }),
+          eveRestartMs: Math.round(performance.now() - cycleStartedAt),
+          event: "autograph.local.eve-cycle",
+          packageReused,
+          persistentEveStateReused: false,
+          snapshotDeltaBytes,
+          snapshotDeltaFiles,
+        })
       );
       input.packageState.dependencyKey = dependencyKey;
       input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
       console.log(
-        "Open a fresh Codex task and select Autograph App Builder (Development).",
+        "Open a fresh Codex task and select Autograph App Builder (Development)."
       );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
       return await Promise.race([
@@ -338,7 +347,7 @@ try {
   const args = parseDevelopmentArguments(process.argv.slice(2));
   const sourceRoot = await realpath(args.arrustedRoot);
   const artifactRoot = await privateRoot(
-    args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
+    args.stateRoot ?? join(repositoryRoot, ".artifacts/development")
   );
   const stateRoot = await privateRoot(join(artifactRoot, "state"));
   const cycleFile = join(stateRoot, "eve-cycle");
@@ -350,12 +359,12 @@ try {
   // again never collides with that finished application tree. Each targeted
   // Eve restart receives a separate cycle root below this supervisor.
   const supervisorRoot = await privateRoot(
-    await realpath(await mkdtemp(join(runsRoot, "supervisor-"))),
+    await realpath(await mkdtemp(join(runsRoot, "supervisor-")))
   );
   const packageState: DevelopmentSupervisorState = {};
   const nextHome = await privateRoot(join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
-    args.destinationRoot ?? join(artifactRoot, "destination"),
+    args.destinationRoot ?? join(artifactRoot, "destination")
   );
   next = spawn(
     requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
@@ -376,26 +385,26 @@ try {
         runtimeHome: nextHome,
       }),
       stdio: "inherit",
-    },
+    }
   );
   const nextExited = developmentChildExit(next).then((code) => ({
-    kind: "next-exit" as const,
     code,
+    kind: "next-exit" as const,
   }));
   while (!shutdown.signal.aborted) {
     const outcome = await runEveCycle({
-      cycleFile,
-      sourceRoot,
-      runsRoot,
       codexRoot: await privateRoot(join(cacheRoot, "codex")),
-      supervisorRoot,
-      packageState,
+      cycleFile,
       destinationRoot,
-      nextPort: args.nextPort,
       evePort: args.evePort,
-      signal: shutdown.signal,
-      shutdownExitCode: shutdown.exitCode,
       nextExited,
+      nextPort: args.nextPort,
+      packageState,
+      runsRoot,
+      shutdownExitCode: shutdown.exitCode,
+      signal: shutdown.signal,
+      sourceRoot,
+      supervisorRoot,
     });
     if (
       outcome.kind === "next-exit" ||
@@ -406,13 +415,17 @@ try {
       break;
     }
     console.log(
-      "Development runtime changed; Eve and the local package are restarting while Next stays live.",
+      "Development runtime changed; Eve and the local package are restarting while Next stays live."
     );
   }
 } catch (error) {
-  if (!shutdown.signal.aborted) throw error;
+  if (!shutdown.signal.aborted) {
+    throw error;
+  }
   process.exitCode = shutdown.exitCode();
 } finally {
-  if (next !== undefined) await stopDevelopmentChild(next);
+  if (next !== undefined) {
+    await stopDevelopmentChild(next);
+  }
   shutdown.dispose();
 }

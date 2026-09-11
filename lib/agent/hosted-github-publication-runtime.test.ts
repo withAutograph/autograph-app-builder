@@ -2,23 +2,21 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it, vi } from "vitest";
 
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type {
   GitHubPublicationAdapter,
   GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
-import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
-import {
-  createHostedGitHubPublicationRuntimeResolver,
-  type HostedGitHubPublicationProviderFactory,
-} from "./hosted-github-publication-runtime";
+import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
+import type { HostedGitHubPublicationProviderFactory } from "./hosted-github-publication-runtime";
 
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_one",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user_one",
+  workspaceId: "workspace_one",
 };
 
 const forwarded = {
@@ -43,27 +41,27 @@ function sessionAuth() {
 }
 
 const installation = {
-  installationId: "123",
   accountId: "456",
   accountLogin: "withAutograph",
   accountType: "Organization" as const,
   active: true,
+  installationId: "123",
   updatedAt: new Date("2026-08-28T00:00:00.000Z"),
 };
 
 const proposals: GitHubPublicationProposalStore = {
   async read() {
-    return undefined;
+    return;
   },
   async save() {},
 };
 
 const receipts: GitHubPublicationReceiptStore = {
-  async read() {
-    return undefined;
-  },
   async compareAndSet() {
     return true;
+  },
+  async read() {
+    return undefined;
   },
 };
 
@@ -77,25 +75,25 @@ function dependencies(input?: {
     isMember: vi.fn(async () => input?.activeMember ?? true),
   }));
   const installationStore: HostedGitHubInstallationStore = {
+    bind: vi.fn(),
     read: vi.fn(async () =>
       input !== undefined && "boundInstallation" in input
         ? (input.boundInstallation ?? undefined)
-        : installation,
+        : installation
     ),
-    bind: vi.fn(),
   };
   const installations = vi.fn(() => installationStore);
   const publicationStores = vi.fn(() => ({ proposals, receipts }));
   return {
     dependencies: {
-      membership,
       installations,
+      membership,
       publicationStores,
       readPreparedHandoff: vi.fn(async () => undefined),
     },
     installationStore,
-    membership,
     installations,
+    membership,
     publicationStores,
   };
 }
@@ -104,8 +102,8 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   it("uses the prepared selection instead of the last connected installation on every resolution", async () => {
     const selected = {
       ...installation,
-      installationId: "789",
       accountLogin: "prepared-account",
+      installationId: "789",
     };
     const injected = dependencies();
     const list = vi.fn(async () => [installation, selected]);
@@ -116,14 +114,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           providers: { githubInstallationId: "789" },
         }) as BuilderHandoffIntent & {
           providers: { githubInstallationId: string };
-        },
+        }
     );
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: { ...injected.dependencies, readPreparedHandoff },
       enabled: true,
       openDatabase: async () => ({}) as never,
       providerFactory,
-      dependencies: { ...injected.dependencies, readPreparedHandoff },
     });
     const auth = sessionAuth();
     await resolver.resolve(auth);
@@ -136,7 +134,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       installation: selected,
     });
     expect(readPreparedHandoff.mock.invocationCallOrder[0]).toBeLessThan(
-      providerFactory.mock.invocationCallOrder[0]!,
+      providerFactory.mock.invocationCallOrder[0]!
     );
   });
 
@@ -149,14 +147,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           ? [installation]
           : [
               installation,
-              { ...installation, installationId: "789", active: false },
-            ],
+              { ...installation, active: false, installationId: "789" },
+            ]
       );
       const providerFactory = vi.fn(async () => adapter);
       const resolver = createHostedGitHubPublicationRuntimeResolver({
-        enabled: true,
-        openDatabase: async () => ({}) as never,
-        providerFactory,
         dependencies: {
           ...injected.dependencies,
           readPreparedHandoff: async () =>
@@ -166,22 +161,22 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
               providers: { githubInstallationId: string };
             },
         },
+        enabled: true,
+        openDatabase: async () => ({}) as never,
+        providerFactory,
       });
       await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-        "installation is inactive or unavailable",
+        "installation is inactive or unavailable"
       );
       expect(providerFactory).not.toHaveBeenCalled();
       expect(injected.publicationStores).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it("reads the selected installation from an older provisioning result and supports legacy-only storage", async () => {
     const injected = dependencies();
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
-      enabled: true,
-      openDatabase: async () => ({}) as never,
-      providerFactory,
       dependencies: {
         ...injected.dependencies,
         readPreparedHandoff: async () =>
@@ -191,6 +186,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
             },
           }) as BuilderHandoffIntent,
       },
+      enabled: true,
+      openDatabase: async () => ({}) as never,
+      providerFactory,
     });
     await resolver.resolve(sessionAuth());
     expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
@@ -201,18 +199,18 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const openDatabase = vi.fn(async () => ({}) as never);
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
-      enabled: true,
-      openDatabase,
-      providerFactory,
       dependencies: {
         ...injected.dependencies,
         readPreparedHandoff: async () => {
           throw new Error("Handoff unavailable");
         },
       },
+      enabled: true,
+      openDatabase,
+      providerFactory,
     });
     await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-      "Handoff unavailable",
+      "Handoff unavailable"
     );
     expect(openDatabase).not.toHaveBeenCalled();
     expect(injected.publicationStores).not.toHaveBeenCalled();
@@ -225,11 +223,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     });
 
     await expect(
-      resolver.resolve(null).then((runtime) => runtime.status()),
+      resolver.resolve(null).then((runtime) => runtime.status())
     ).resolves.toMatchObject({
-      enabled: false,
       adapterConfigured: false,
       durableStoreConfigured: false,
+      enabled: false,
       liveGitHubCallsAvailable: false,
     });
   });
@@ -238,14 +236,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const database = {} as never;
     const openDatabase = vi.fn(async () => database);
     const providerFactory = vi.fn<HostedGitHubPublicationProviderFactory>(
-      async () => adapter,
+      async () => adapter
     );
     const injected = dependencies();
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
       enabled: true,
       openDatabase,
       providerFactory,
-      dependencies: injected.dependencies,
     });
 
     const first = await resolver.resolve(sessionAuth());
@@ -266,7 +264,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     expect(injected.publicationStores).toHaveBeenNthCalledWith(
       1,
       database,
-      authority,
+      authority
     );
   });
 
@@ -284,14 +282,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     };
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
       enabled: true,
       openDatabase: async () => ({}) as never,
       providerFactory,
-      dependencies: injected.dependencies,
     });
 
     await expect(
-      resolver.resolve(auth).then((runtime) => runtime.status()),
+      resolver.resolve(auth).then((runtime) => runtime.status())
     ).resolves.toMatchObject({ enabled: true });
     expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
   });
@@ -354,7 +352,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     });
 
     await expect(resolver.resolve(auth)).rejects.toThrow(
-      "exact forwarded user authority",
+      "exact forwarded user authority"
     );
     expect(openDatabase).not.toHaveBeenCalled();
     expect(providerFactory).not.toHaveBeenCalled();
@@ -405,25 +403,25 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       });
 
       await expect(resolver.resolve(auth)).rejects.toThrow(
-        "matching current and initiating authority",
+        "matching current and initiating authority"
       );
       expect(openDatabase).not.toHaveBeenCalled();
       expect(providerFactory).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it("requires live membership before reading an installation", async () => {
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies({ activeMember: false });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
       enabled: true,
       openDatabase: async () => ({}) as never,
       providerFactory,
-      dependencies: injected.dependencies,
     });
 
     await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-      "membership is not active",
+      "membership is not active"
     );
     expect(injected.installationStore.read).not.toHaveBeenCalled();
     expect(injected.publicationStores).not.toHaveBeenCalled();
@@ -436,14 +434,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       boundInstallation: { ...installation, active: false },
     });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
       enabled: true,
       openDatabase: async () => ({}) as never,
       providerFactory,
-      dependencies: injected.dependencies,
     });
 
     await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-      "installation is inactive or unavailable",
+      "installation is inactive or unavailable"
     );
     expect(injected.installationStore.read).toHaveBeenCalledWith(authority);
     expect(injected.publicationStores).not.toHaveBeenCalled();
@@ -454,14 +452,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies({ boundInstallation: null });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
       enabled: true,
       openDatabase: async () => ({}) as never,
       providerFactory,
-      dependencies: injected.dependencies,
     });
 
     await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
-      "installation is inactive or unavailable",
+      "installation is inactive or unavailable"
     );
     expect(injected.publicationStores).not.toHaveBeenCalled();
     expect(providerFactory).not.toHaveBeenCalled();
@@ -470,7 +468,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   it("contains no ambient installation-id authority", async () => {
     const source = await readFile(
       "lib/agent/hosted-github-publication-runtime.ts",
-      "utf8",
+      "utf-8"
     );
     expect(source).not.toContain("GITHUB_APP_INSTALLATION_ID");
     expect(source).not.toContain("process.env");

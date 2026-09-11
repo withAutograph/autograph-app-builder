@@ -21,26 +21,26 @@ import {
   developmentVercelDependencyRepairCommand,
   developmentVercelProviderTemplateKey,
   developmentVercelRevalidationKey,
-  type DevelopmentVercelBootstrapInput,
 } from "./development-toolchain";
+import type { DevelopmentVercelBootstrapInput } from "./development-toolchain";
 
 function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
   const sourceArchive = Buffer.from("source");
   return {
-    sourceRoot: "/private/source",
-    sourceFingerprint: "a".repeat(64),
-    sourceSha: "b".repeat(40),
-    sourceTree: "c".repeat(40),
     dependencyKey: "d".repeat(64),
-    sourceArchive,
-    sourceArchiveSha256:
-      "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
     lockfiles: {
       ".config/mise/config.toml": "1".repeat(64),
       ".config/mise/mise.lock": "2".repeat(64),
-      "bun.lock": "3".repeat(64),
       "Cargo.lock": "4".repeat(64),
+      "bun.lock": "3".repeat(64),
     },
+    sourceArchive,
+    sourceArchiveSha256:
+      "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+    sourceFingerprint: "a".repeat(64),
+    sourceRoot: "/private/source",
+    sourceSha: "b".repeat(40),
+    sourceTree: "c".repeat(40),
     ...override,
   } satisfies DevelopmentVercelBootstrapInput;
 }
@@ -54,16 +54,16 @@ describe("Development Vercel Sandbox dependency template", () => {
       sourceTree: "1".repeat(40),
     });
     expect(developmentVercelRevalidationKey(codeOnlyChange)).toBe(
-      developmentVercelRevalidationKey(first),
+      developmentVercelRevalidationKey(first)
     );
     expect(
-      developmentVercelRevalidationKey({ dependencyKey: first.dependencyKey }),
+      developmentVercelRevalidationKey({ dependencyKey: first.dependencyKey })
     ).toBe(developmentVercelRevalidationKey(first));
     expect(developmentVercelProviderTemplateKey(first.dependencyKey)).toBe(
-      developmentVercelProviderTemplateKey(codeOnlyChange.dependencyKey),
+      developmentVercelProviderTemplateKey(codeOnlyChange.dependencyKey)
     );
     expect(developmentVercelProviderTemplateKey("9".repeat(64))).not.toBe(
-      developmentVercelProviderTemplateKey(first.dependencyKey),
+      developmentVercelProviderTemplateKey(first.dependencyKey)
     );
   });
 
@@ -72,31 +72,31 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain('"scope":"development-execution"');
     expect(command).toContain('"version":3');
     expect(command).toContain(
-      `/workspace/.app-builder/dependency-cache/dependencies/${input().dependencyKey}/node_modules`,
+      `/workspace/.app-builder/dependency-cache/dependencies/${input().dependencyKey}/node_modules`
     );
     expect(command).toContain(
-      "/workspace/.app-builder/dependency-cache/cargo/config.toml",
+      "/workspace/.app-builder/dependency-cache/cargo/config.toml"
     );
     expect(command).toContain(
-      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted"
     );
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain(
-      'directory = "/workspace/.app-builder/dependency-cache/cargo/vendor"',
+      'directory = "/workspace/.app-builder/dependency-cache/cargo/vendor"'
     );
     expect(command).toContain(
-      'if grep -F "$work" "$work/cargo-closure/config.toml"',
+      'if grep -F "$work" "$work/cargo-closure/config.toml"'
     );
     expect(command).not.toContain("docker");
     expect(command).not.toContain("microsandbox");
     expect(command).not.toContain("sudo");
     expect(command).not.toContain("chmod -R a-w");
     expect(command).toContain(
-      'test "$(realpath "$cache_root")" = "$cache_root"',
+      'test "$(realpath "$cache_root")" = "$cache_root"'
     );
     expect(command).toContain(
-      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022'
     );
     expect(DEVELOPMENT_SANDBOX_ENVIRONMENT).toMatchObject({
       LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
@@ -110,17 +110,17 @@ describe("Development Vercel Sandbox dependency template", () => {
     const cacheHit = command.indexOf("development_vercel_dependency_cache_hit");
     const staging = command.indexOf('work="$(mktemp -d');
     const install = command.indexOf(
-      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
+      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent"
     );
 
     expect(cacheHit).toBeGreaterThan(-1);
     expect(cacheHit).toBeLessThan(staging);
     expect(cacheHit).toBeLessThan(install);
     expect(command).toContain('"scope":"development-execution"');
-    expect(command).toContain('"dependencyKey":"' + input().dependencyKey);
+    expect(command).toContain(`"dependencyKey":"${input().dependencyKey}`);
     expect(command).toContain("node_modules/path-to-regexp/package.json");
     expect(command).toContain(
-      "node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json",
+      "node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json"
     );
     expect(command).toContain('"$cache_root/cargo/config.toml"');
     expect(command).toContain('unlink "$source_archive"');
@@ -128,10 +128,10 @@ describe("Development Vercel Sandbox dependency template", () => {
 
   it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
     const command = developmentVercelDependencyRepairCommand(
-      input().dependencyKey,
+      input().dependencyKey
     );
     expect(command).toContain(
-      'find "$cache_root" \\( -type f -o -type d \\) -perm /022',
+      'find "$cache_root" \\( -type f -o -type d \\) -perm /022'
     );
     expect(command).not.toContain('find "$cache_root" -perm /022');
     expect(command).toContain(developmentDependencySymlinkScript);
@@ -139,14 +139,14 @@ describe("Development Vercel Sandbox dependency template", () => {
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-development-links-")),
+      await mkdtemp(join(tmpdir(), "app-builder-development-links-"))
     );
     try {
       const source = join(root, "source");
       const modules = join(source, "node_modules");
       const packageRoot = join(
         modules,
-        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
+        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp"
       );
       const workspacePackage = join(source, "packages/shared");
       const workspaceBin = join(workspacePackage, "bin/shared.mjs");
@@ -160,7 +160,7 @@ describe("Development Vercel Sandbox dependency template", () => {
       await symlink(workspacePackage, join(modules, "workspace-shared"));
       await symlink(
         "../workspace-shared/bin/shared.mjs",
-        join(modules, ".bin/shared"),
+        join(modules, ".bin/shared")
       );
 
       execFileSync(process.execPath, ["-", source], {
@@ -168,22 +168,22 @@ describe("Development Vercel Sandbox dependency template", () => {
       });
 
       expect(await readlink(join(modules, "path-to-regexp"))).toBe(
-        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
+        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp"
       );
       expect(await readlink(join(modules, "workspace-shared"))).toBe(
-        "/workspace/repository/packages/shared",
+        "/workspace/repository/packages/shared"
       );
       expect(await readlink(join(modules, ".bin/shared"))).toBe(
-        "/workspace/repository/packages/shared/bin/shared.mjs",
+        "/workspace/repository/packages/shared/bin/shared.mjs"
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
   it("rejects unresolved and outside dependency links", async () => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-development-links-")),
+      await mkdtemp(join(tmpdir(), "app-builder-development-links-"))
     );
     try {
       const source = join(root, "source");
@@ -197,7 +197,7 @@ describe("Development Vercel Sandbox dependency template", () => {
       });
       expect(unresolved.status).not.toBe(0);
       expect(unresolved.stderr.toString()).toContain(
-        "Unresolved development dependency link: missing",
+        "Unresolved development dependency link: missing"
       );
 
       await rm(join(modules, "missing"));
@@ -207,10 +207,10 @@ describe("Development Vercel Sandbox dependency template", () => {
       });
       expect(escaped.status).not.toBe(0);
       expect(escaped.stderr.toString()).toContain(
-        "Development dependency link escaped the source: outside",
+        "Development dependency link escaped the source: outside"
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -220,7 +220,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain("command -v python3 >/dev/null");
     expect(command).toContain("extract_verified_archive() {");
     expect(command).toContain(
-      'extract_verified_archive "$work/cargo.tar.xz" "$work"',
+      'extract_verified_archive "$work/cargo.tar.xz" "$work"'
     );
     expect(command).toContain('archive.extractall(destination, filter="data")');
     expect(command).not.toContain("tar -xJf");

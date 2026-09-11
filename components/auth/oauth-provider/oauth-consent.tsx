@@ -1,11 +1,13 @@
 "use client";
 
 import {
-  type OAuthAuthorizationRequest,
-  type OAuthProviderAuthClient,
   parseOAuthAuthorizationRequest,
   resolveOAuthScopeMetadata,
   sanitizeOAuthClientUrl,
+} from "@better-auth-ui/core/plugins/oauth-provider";
+import type {
+  OAuthAuthorizationRequest,
+  OAuthProviderAuthClient,
 } from "@better-auth-ui/core/plugins/oauth-provider";
 import { useAuth, useAuthPlugin, useSession } from "@better-auth-ui/react";
 import {
@@ -30,11 +32,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
 import { cn } from "@/lib/utils";
+
 import { UserAvatar } from "../user/user-avatar";
 
-export type OAuthConsentProps = {
+export interface OAuthConsentProps {
   className?: string;
-};
+}
 
 const interpolateClient = (template: string, clientName: string) =>
   template.replace("{{client}}", clientName);
@@ -52,7 +55,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   const locationSearch = useSyncExternalStore(
     subscribeToLocation,
     getLocationSearch,
-    getServerLocationSearch,
+    getServerLocationSearch
   );
   const request: OAuthAuthorizationRequest | undefined = locationSearch
     ? parseOAuthAuthorizationRequest(locationSearch)
@@ -75,7 +78,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
       publicClient.isError ||
       (!publicClient.isPending && session && !client));
   const canRespond = Boolean(
-    request?.clientId && session && client && !consent.isPending,
+    request?.clientId && session && client && !consent.isPending
   );
 
   if (invalidRequest) {
@@ -119,7 +122,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               <Skeleton className="h-4 w-36" />
             )}
             {client?.client_uri ? (
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="text-muted-foreground truncate text-xs">
                 {client.client_uri}
               </p>
             ) : null}
@@ -133,7 +136,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           <CardDescription>
             {interpolateClient(
               localization.authorizationDescription,
-              clientName,
+              clientName
             )}
           </CardDescription>
         </div>
@@ -154,16 +157,16 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
                   {
                     clientId: request.clientId,
                     requestedScopes: request.scopes,
-                  },
+                  }
                 );
 
                 return (
                   <li className="flex gap-3" key={scope}>
-                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <Check className="text-primary mt-0.5 size-4 shrink-0" />
                     <div className="grid gap-0.5">
                       <p className="text-sm font-medium">{metadata.label}</p>
                       {metadata.description ? (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           {metadata.description}
                         </p>
                       ) : null}
@@ -188,7 +191,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
         <div className="flex items-center gap-3">
           <UserAvatar isPending={isSessionPending} user={session?.user} />
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {localization.signedInAs}
             </p>
             {session ? (
@@ -197,7 +200,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
                   {session.user.name || session.user.email}
                 </p>
                 {session.user.name ? (
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-muted-foreground truncate text-xs">
                     {session.user.email}
                   </p>
                 ) : null}
@@ -212,7 +215,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
             {policyUrl ? (
               <a
-                className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground underline underline-offset-4"
                 href={policyUrl}
                 rel="noreferrer"
                 target="_blank"
@@ -222,7 +225,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
             ) : null}
             {termsUrl ? (
               <a
-                className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground underline underline-offset-4"
                 href={termsUrl}
                 rel="noreferrer"
                 target="_blank"

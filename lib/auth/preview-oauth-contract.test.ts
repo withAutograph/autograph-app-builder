@@ -15,7 +15,7 @@ const config = {
 function membership(active = true) {
   return {
     activeWorkspaceForUser: vi.fn(async () =>
-      active ? "workspace_1" : undefined,
+      active ? "workspace_1" : undefined
     ),
     isActiveMember: vi.fn(async () => active),
   };
@@ -27,7 +27,7 @@ describe("Preview OAuth activation contract", () => {
       readPreviewOAuthContractConfig({
         BETTER_AUTH_URL: config.issuer,
         MCP_RESOURCE_URL: config.resource,
-      }),
+      })
     ).toEqual(config);
     for (const candidate of [
       { ...config, issuer: "https://other.example.test/api/auth" },
@@ -39,7 +39,7 @@ describe("Preview OAuth activation contract", () => {
         buildPreviewMcpOAuthOptions({
           config: candidate,
           membership: membership(),
-        }),
+        })
       ).toThrow();
     }
   });
@@ -50,30 +50,30 @@ describe("Preview OAuth activation contract", () => {
       membership: membership(),
     });
     expect(options).toMatchObject({
-      resource: config.resource,
-      loginPage: "/auth/sign-in",
+      accessTokenExpiresIn: 300,
+      allowDynamicClientRegistration: false,
+      allowPublicClientPrelogin: true,
+      allowUnauthenticatedClientRegistration: false,
+      clientRegistrationAllowedResources: [],
+      clientRegistrationDefaultResources: [config.resource],
+      clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
+      clientRegistrationRequirePKCE: true,
       consentPage: "/auth/consent",
       grantTypes: ["authorization_code", "refresh_token"],
-      accessTokenExpiresIn: 300,
+      loginPage: "/auth/sign-in",
       refreshTokenExpiresIn: 28_800,
-      clientRegistrationRequirePKCE: true,
-      allowPublicClientPrelogin: true,
-      allowDynamicClientRegistration: false,
-      allowUnauthenticatedClientRegistration: false,
-      clientRegistrationDefaultResources: [config.resource],
-      clientRegistrationAllowedResources: [],
-      clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
+      resource: config.resource,
     });
     expect(options.scopes).toEqual(previewOAuthScopes);
     expect(options.clientRegistrationAllowedScopes).toEqual(
-      previewOAuthScopes.slice(1),
+      previewOAuthScopes.slice(1)
     );
     expect(options.resources).toEqual([
       {
-        identifier: config.resource,
         accessTokenTtl: 300,
-        refreshTokenTtl: 28_800,
         allowedScopes: [...previewOAuthScopes],
+        identifier: config.resource,
+        refreshTokenTtl: 28_800,
         signingAlgorithm: "ES256",
       },
     ]);
@@ -88,9 +88,9 @@ describe("Preview OAuth activation contract", () => {
     ] as const) {
       await expect(
         options.clientPrivileges?.({
-          headers: new Headers(),
           action,
-        }),
+          headers: new Headers(),
+        })
       ).resolves.toBe(false);
     }
     for (const action of [
@@ -104,9 +104,9 @@ describe("Preview OAuth activation contract", () => {
     ] as const) {
       await expect(
         options.resourcePrivileges?.({
-          headers: new Headers(),
           action,
-        }),
+          headers: new Headers(),
+        })
       ).resolves.toBe(false);
     }
   });
@@ -122,34 +122,34 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       options.postLogin?.shouldRedirect({
         headers: new Headers(),
-        user,
-        session: {} as never,
         scopes: ["autograph:session"],
-      }),
+        session: {} as never,
+        user,
+      })
     ).resolves.toBe(false);
     await expect(
       options.postLogin?.consentReferenceId({
-        user,
-        session: {} as never,
         scopes: ["autograph:session"],
-      }),
+        session: {} as never,
+        user,
+      })
     ).resolves.toBe("workspace_1");
     await expect(
       options.customAccessTokenClaims?.({
-        user,
         referenceId: "workspace_1",
-        scopes: ["autograph:session"],
         resources: [config.resource],
-      }),
+        scopes: ["autograph:session"],
+        user,
+      })
     ).resolves.toEqual({
       nbf: 2_000_000_000,
       workspace_id: "workspace_1",
     });
     expect(authority.isActiveMember).toHaveBeenCalledWith({
-      issuer: config.issuer,
       audience: config.resource,
-      workspaceId: "workspace_1",
+      issuer: config.issuer,
       ownerUserId: "user_1",
+      workspaceId: "workspace_1",
     });
   });
 
@@ -162,25 +162,25 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       inactive.postLogin?.shouldRedirect({
         headers: new Headers(),
-        user,
-        session: {} as never,
         scopes: ["autograph:session"],
-      }),
+        session: {} as never,
+        user,
+      })
     ).rejects.toThrow("exactly one active");
     await expect(
       inactive.postLogin?.consentReferenceId({
-        user,
-        session: {} as never,
         scopes: ["autograph:session"],
-      }),
+        session: {} as never,
+        user,
+      })
     ).rejects.toThrow("exactly one active");
     await expect(
       inactive.customAccessTokenClaims?.({
-        user,
         referenceId: "workspace_1",
-        scopes: ["autograph:session"],
         resources: [config.resource],
-      }),
+        scopes: ["autograph:session"],
+        user,
+      })
     ).rejects.toThrow("not active");
 
     const active = buildPreviewMcpOAuthOptions({
@@ -189,11 +189,11 @@ describe("Preview OAuth activation contract", () => {
     });
     await expect(
       active.customAccessTokenClaims?.({
-        user,
         referenceId: "workspace_1",
-        scopes: ["autograph:session"],
         resources: ["https://other.example.test/mcp"],
-      }),
+        scopes: ["autograph:session"],
+        user,
+      })
     ).rejects.toThrow("not active");
   });
 
@@ -203,12 +203,12 @@ describe("Preview OAuth activation contract", () => {
         client_name: "Codex",
         redirect_uris: ["http://127.0.0.1:43123/auth/callback"],
         token_endpoint_auth_method: "none",
-      }),
+      })
     );
     const options = buildPreviewCimdOptions({ fetchClientMetadataResource });
     expect(options.metadataProfile).toBe("mcp-2026-07-28");
     const response = await options.fetchClientMetadataResource(
-      "https://client.example/codex.json",
+      "https://client.example/codex.json"
     );
     await expect(response.json()).resolves.toMatchObject({
       token_endpoint_auth_method: "none",
@@ -218,52 +218,52 @@ describe("Preview OAuth activation contract", () => {
   it("preserves the native Codex refresh capability", async () => {
     const fetchClientMetadataResource = vi.fn(async () =>
       Response.json({
-        client_id: "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
-        client_uri: "https://chatgpt.com/codex",
         application_type: "native",
+        client_id: "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
+        client_name: "Codex",
+        client_uri: "https://chatgpt.com/codex",
+        grant_types: ["authorization_code", "refresh_token"],
+        logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
         redirect_uris: [
           "http://127.0.0.1/callback/4-bzS8rt42zJ",
           "http://localhost/callback/4-bzS8rt42zJ",
         ],
+        response_types: ["code"],
         token_endpoint_auth_method: "none",
         token_endpoint_auth_methods_supported: ["none"],
-        grant_types: ["authorization_code", "refresh_token"],
-        response_types: ["code"],
-        client_name: "Codex",
-        logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
-      }),
+      })
     );
     const options = buildPreviewCimdOptions({ fetchClientMetadataResource });
     const response = await options.fetchClientMetadataResource(
-      "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
+      "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json"
     );
 
     await expect(response.json()).resolves.toMatchObject({
-      token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
       redirect_uris: [
         "http://127.0.0.1/callback/4-bzS8rt42zJ",
         "http://localhost/callback/4-bzS8rt42zJ",
       ],
+      token_endpoint_auth_method: "none",
     });
 
     const unsupported = buildPreviewCimdOptions({
       fetchClientMetadataResource: vi.fn(async () =>
         Response.json({
           client_name: "Expanded client",
-          redirect_uris: ["http://127.0.0.1/callback"],
-          token_endpoint_auth_method: "none",
           grant_types: [
             "authorization_code",
             "refresh_token",
             "client_credentials",
           ],
+          redirect_uris: ["http://127.0.0.1/callback"],
           response_types: ["code"],
-        }),
+          token_endpoint_auth_method: "none",
+        })
       ),
     });
     const unsupportedResponse = await unsupported.fetchClientMetadataResource(
-      "https://client.example/expanded.json",
+      "https://client.example/expanded.json"
     );
     await expect(unsupportedResponse.json()).resolves.toMatchObject({
       grant_types: [
@@ -284,13 +284,13 @@ describe("Preview OAuth activation contract", () => {
             ...(tokenEndpointAuthMethod === undefined
               ? {}
               : { token_endpoint_auth_method: tokenEndpointAuthMethod }),
-          }),
+          })
         ),
       });
       await expect(
         options.fetchClientMetadataResource(
-          "https://client.example/metadata.json",
-        ),
+          "https://client.example/metadata.json"
+        )
       ).rejects.toThrow("token_endpoint_auth_method none");
     }
   });

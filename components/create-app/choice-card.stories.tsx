@@ -3,19 +3,19 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 
-import styles from "../../app/ui/app-builder.module.css";
 import { ChoiceCard } from "./choice-card";
 
+import styles from "../../app/ui/app-builder.module.css";
+
 const meta = {
-  title: "Components/Create App/Primitives/Choice Card",
-  component: ChoiceCard,
   args: {
     checked: false,
-    name: "destination",
-    value: "codex",
-    onChange: fn(),
     children: "ChatGPT / Codex",
+    name: "destination",
+    onChange: fn(),
+    value: "codex",
   },
+  component: ChoiceCard,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -25,6 +25,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Primitives/Choice Card",
 } satisfies Meta<typeof ChoiceCard>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -32,7 +33,7 @@ type Story = StoryObj<typeof meta>;
 export const Unselected: Story = {};
 export const Selected: Story = { args: { checked: true } };
 export const ComingSoon: Story = {
-  args: { badge: "Coming soon", disabled: true, children: "Web Chat" },
+  args: { badge: "Coming soon", children: "Web Chat", disabled: true },
 };
 export const ToggleAction: Story = {
   play: async ({ canvasElement, args }) => {

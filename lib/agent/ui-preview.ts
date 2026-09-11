@@ -8,21 +8,21 @@ const previewPath = z
 const route = z.string().regex(/^\/[a-z0-9-]*(?:\/[a-z0-9-]+)*$/u);
 
 export const uiPreviewFileSchema = z.strictObject({
-  path: previewPath,
   content: z.string().min(1).max(262_144),
+  path: previewPath,
 });
 export const uiPreviewGapSchema = z.strictObject({
-  path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
-  reason: z.string().min(8).max(500),
   composes: z
     .array(
       z.strictObject({
         name: z.string().regex(/^[A-Z][A-Za-z0-9]*$/u),
         source: z.enum(["@autograph/components", "@autograph/icons"]),
-      }),
+      })
     )
     .min(1)
     .max(32),
+  path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
+  reason: z.string().min(8).max(500),
   tokens: z
     .array(z.string().regex(/^--[a-z][a-z0-9-]*$/u))
     .min(1)
@@ -31,8 +31,8 @@ export const uiPreviewGapSchema = z.strictObject({
 
 const manifestItem = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  statement: z.string().min(3).max(1_000),
   routes: z.array(route).min(1).max(16),
+  statement: z.string().min(3).max(1_000),
 });
 const catalogElement = (source: z.ZodType<string>) =>
   z.strictObject({
@@ -41,18 +41,19 @@ const catalogElement = (source: z.ZodType<string>) =>
   });
 
 export const uiPreviewManifestSchema = z.strictObject({
-  version: z.literal(1),
-  screens: z
+  assumptions: z.array(manifestItem).max(64),
+  decisions: z.array(manifestItem).max(64),
+  fixtureFacts: z.array(manifestItem).max(64),
+  implementationNotes: z
     .array(
       z.strictObject({
-        id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-        title: z.string().min(1).max(120),
-        route,
-        entry: previewPath,
-      }),
+        visibleElement: z.string().min(3).max(300),
+        productionMeaning: z.string().min(3).max(1_000),
+        routes: z.array(route).min(1).max(16),
+      })
     )
-    .min(1)
-    .max(16),
+    .max(128),
+  openQuestions: z.array(manifestItem).max(32),
   productionComponents: z
     .array(catalogElement(z.literal("@autograph/components")))
     .max(128),
@@ -62,19 +63,18 @@ export const uiPreviewManifestSchema = z.strictObject({
   productionIcons: z
     .array(catalogElement(z.literal("@autograph/icons")))
     .max(128),
-  fixtureFacts: z.array(manifestItem).max(64),
-  decisions: z.array(manifestItem).max(64),
-  assumptions: z.array(manifestItem).max(64),
-  openQuestions: z.array(manifestItem).max(32),
-  implementationNotes: z
+  screens: z
     .array(
       z.strictObject({
-        visibleElement: z.string().min(3).max(300),
-        productionMeaning: z.string().min(3).max(1_000),
-        routes: z.array(route).min(1).max(16),
-      }),
+        id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+        title: z.string().min(1).max(120),
+        route,
+        entry: previewPath,
+      })
     )
-    .max(128),
+    .min(1)
+    .max(16),
+  version: z.literal(1),
 });
 export const uiPreviewInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -82,10 +82,10 @@ export const uiPreviewInputSchema = z.strictObject({
     .string()
     .regex(/^[a-f0-9]{64}$/u)
     .optional(),
-  routes: z.array(route).min(1).max(16),
+  catalogGaps: z.array(uiPreviewGapSchema).max(16).default([]),
   files: z.array(uiPreviewFileSchema).min(1).max(32),
   manifest: uiPreviewManifestSchema,
-  catalogGaps: z.array(uiPreviewGapSchema).max(16).default([]),
+  routes: z.array(route).min(1).max(16),
 });
 
 export type UiPreviewInput = z.infer<typeof uiPreviewInputSchema>;
@@ -105,7 +105,7 @@ function digest(value: unknown) {
 function imports(content: string) {
   return [
     ...content.matchAll(
-      /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu,
+      /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu
     ),
   ]
     .map((match) => match[1]!)
@@ -116,17 +116,23 @@ function namedImports(content: string, source: string): string[] {
   const names = new Set<string>();
   const pattern = new RegExp(
     `import\\s+(type\\s+)?\\{([^}]*)\\}\\s+from\\s+["']${source.replace("/", "\\/")}["']`,
-    "gu",
+    "gu"
   );
   for (const match of content.matchAll(pattern)) {
-    if (match[1]) continue;
+    if (match[1]) {
+      continue;
+    }
     for (const item of (match[2] ?? "").split(",")) {
-      if (/^type\s/u.test(item.trim())) continue;
+      if (/^type\s/u.test(item.trim())) {
+        continue;
+      }
       const name = item
         .trim()
         .split(/\s+as\s+/u)[0]
         ?.trim();
-      if (name) names.add(name);
+      if (name) {
+        names.add(name);
+      }
     }
   }
   return [...names].toSorted();
@@ -134,10 +140,10 @@ function namedImports(content: string, source: string): string[] {
 
 function manifestNames(
   values: readonly { name: string; source: string }[],
-  source: string,
+  source: string
 ) {
   return new Set(
-    values.filter((value) => value.source === source).map(({ name }) => name),
+    values.filter((value) => value.source === source).map(({ name }) => name)
   );
 }
 
@@ -148,119 +154,141 @@ function manifestNames(
 export function validateUiPreview(input: UiPreviewInput): void {
   const parsed = uiPreviewInputSchema.parse(input);
   const paths = new Set(parsed.files.map(({ path }) => path));
-  if (paths.size !== parsed.files.length)
+  if (paths.size !== parsed.files.length) {
     throw new Error("UI preview paths must be unique.");
-  if (new Set(parsed.routes).size !== parsed.routes.length)
+  }
+  if (new Set(parsed.routes).size !== parsed.routes.length) {
     throw new Error("UI preview routes must be unique.");
-  if (parsed.catalogGaps.length > 0)
+  }
+  if (parsed.catalogGaps.length > 0) {
     throw new Error(
-      "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
+      "Adapt the design using existing Arrusted components instead of defining a catalog-gap component."
     );
+  }
   const screenRoutes = new Set(
-    parsed.manifest.screens.map(({ route }) => route),
+    parsed.manifest.screens.map(({ route }) => route)
   );
   if (
     parsed.routes.some((value) => !screenRoutes.has(value)) ||
     parsed.manifest.screens.some(
       ({ route: value, entry }) =>
-        !parsed.routes.includes(value) || !paths.has(entry),
+        !parsed.routes.includes(value) || !paths.has(entry)
     )
-  )
+  ) {
     throw new Error("UI preview screens, routes, and entries must agree.");
+  }
   const componentNames = manifestNames(
     parsed.manifest.productionComponents,
-    "@autograph/components",
+    "@autograph/components"
   );
   const compositionNames = manifestNames(
     parsed.manifest.productionCompositions,
-    "@autograph/compositions",
+    "@autograph/compositions"
   );
   const iconNames = manifestNames(
     parsed.manifest.productionIcons,
-    "@autograph/icons",
+    "@autograph/icons"
   );
 
   for (const file of parsed.files) {
     if (
       /\/(?:api|schema|server)\//u.test(file.path) ||
       /(?:^|\/)route\.ts$/u.test(file.path)
-    )
+    ) {
       throw new Error(
-        "UI previews cannot contain backend, schema, or API files.",
+        "UI previews cannot contain backend, schema, or API files."
       );
+    }
     if (
       /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content)
-    )
+    ) {
       throw new Error("UI previews cannot contact a network service.");
-    if (/\b(?:use server|server action|next\/server)\b/u.test(file.content))
+    }
+    if (/\b(?:use server|server action|next\/server)\b/u.test(file.content)) {
       throw new Error("UI previews cannot define server behavior.");
-    if (/--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
+    }
+    if (/--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content)) {
       throw new Error("UI previews cannot define replacement design tokens.");
-    if (/\b(?:linear|radial|conic)-gradient\s*\(/u.test(file.content))
+    }
+    if (/\b(?:linear|radial|conic)-gradient\s*\(/u.test(file.content)) {
       throw new Error("UI previews cannot invent decorative gradients.");
-    if (file.path.startsWith("src/components/"))
+    }
+    if (file.path.startsWith("src/components/")) {
       throw new Error(
-        "Compose screens from existing Arrusted components; do not define replacement components.",
+        "Compose screens from existing Arrusted components; do not define replacement components."
       );
-    if (/<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content))
+    }
+    if (
+      /<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content)
+    ) {
       throw new Error(
-        "Local workflow components must compose public Arrusted primitives.",
+        "Local workflow components must compose public Arrusted primitives."
       );
+    }
     for (const specifier of imports(file.content)) {
-      if (specifier.startsWith("@autograph/") && !publicImports.has(specifier))
+      if (
+        specifier.startsWith("@autograph/") &&
+        !publicImports.has(specifier)
+      ) {
         throw new Error(`UI preview import is not public: ${specifier}`);
-      if (specifier.startsWith("../") || specifier.startsWith("../../"))
+      }
+      if (specifier.startsWith("../") || specifier.startsWith("../../")) {
         throw new Error(
-          "UI preview imports must remain inside its source bundle.",
+          "UI preview imports must remain inside its source bundle."
         );
+      }
     }
     for (const [source, inventory] of [
       ["@autograph/components", componentNames],
       ["@autograph/compositions", compositionNames],
       ["@autograph/icons", iconNames],
-    ] as const)
+    ] as const) {
       for (const name of namedImports(file.content, source))
         if (!inventory.has(name))
           throw new Error(
-            `UI preview catalog import is missing from its manifest: ${source}#${name}`,
+            `UI preview catalog import is missing from its manifest: ${source}#${name}`
           );
+    }
   }
-  for (const gap of parsed.catalogGaps)
+  for (const gap of parsed.catalogGaps) {
     if (!paths.has(gap.path))
       throw new Error("A UI catalog gap refers to a missing local component.");
+  }
   for (const collection of [
     parsed.manifest.fixtureFacts,
     parsed.manifest.decisions,
     parsed.manifest.assumptions,
     parsed.manifest.openQuestions,
     parsed.manifest.implementationNotes,
-  ])
+  ]) {
     for (const item of collection)
       if (item.routes.some((value) => !screenRoutes.has(value)))
         throw new Error(
-          "UI preview manifest metadata refers to an unknown route.",
+          "UI preview manifest metadata refers to an unknown route."
         );
-  for (const gap of parsed.catalogGaps)
+  }
+  for (const gap of parsed.catalogGaps) {
     for (const item of gap.composes) {
       const inventory =
         item.source === "@autograph/components" ? componentNames : iconNames;
       if (!inventory.has(item.name))
         throw new Error(
-          "Each catalog gap must compose inventoried public primitives.",
+          "Each catalog gap must compose inventoried public primitives."
         );
     }
+  }
 }
 
 export function uiPreviewSourceDigest(input: UiPreviewInput) {
   return digest({
     appId: input.appId,
-    routes: [...input.routes].toSorted(),
+    catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
+      left.path.localeCompare(right.path)
+    ),
     files: [...input.files].toSorted((left, right) =>
-      left.path.localeCompare(right.path),
+      left.path.localeCompare(right.path)
     ),
     manifest: input.manifest,
-    catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
-      left.path.localeCompare(right.path),
-    ),
+    routes: [...input.routes].toSorted(),
   });
 }

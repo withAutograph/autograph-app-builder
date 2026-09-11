@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   parseProviderConnectionReturn,
   providerConnectionRedirect,
@@ -14,15 +15,15 @@ describe("provider return routing", () => {
     form.set("returnTo", handoff);
     form.set("resumeKey", resumeKey);
     const state = providerConnectionReturnFromFormData(form);
-    expect(state).toEqual({ returnTo: handoff, resumeKey });
+    expect(state).toEqual({ resumeKey, returnTo: handoff });
     for (const provider of ["github", "vercel"] as const) {
       const url = new URL(
         providerConnectionRedirect({
           origin: "https://builder.example",
           provider,
-          status: "connected",
           returnState: state,
-        }),
+          status: "connected",
+        })
       );
       expect(url.origin).toBe("https://builder.example");
       expect(url.pathname).toBe(handoff);
@@ -53,12 +54,12 @@ describe("provider return routing", () => {
       providerConnectionRedirect({
         origin: "https://builder.example",
         provider: "vercel",
-        status: "failed",
         reason: "callback-invalid",
         returnState: { returnTo: handoff },
-      }),
+        status: "failed",
+      })
     ).toBe(
-      `https://builder.example${handoff}?vercel=failed&vercelReason=callback-invalid`,
+      `https://builder.example${handoff}?vercel=failed&vercelReason=callback-invalid`
     );
   });
 });

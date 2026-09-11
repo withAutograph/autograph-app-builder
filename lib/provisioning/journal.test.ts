@@ -1,33 +1,35 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  initialBuilderProvisionJournalRecord,
-  updateBuilderProvisionJournal,
-  type BuilderProvisionAuthority,
-  type BuilderProvisionJournalRow,
-  type BuilderProvisionJournalStore,
-} from "./journal";
-import {
   builderProvisionRequestDigest,
   builderProvisionRequestSchema,
 } from "./contracts";
+import {
+  initialBuilderProvisionJournalRecord,
+  updateBuilderProvisionJournal,
+} from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalRow,
+  BuilderProvisionJournalStore,
+} from "./journal";
 
 const request = builderProvisionRequestSchema.parse({
-  version: 1,
-  requestId: "123e4567-e89b-42d3-a456-426614174000",
-  operation: "github",
   appName: "Vendor Portal",
-  repository: { name: "vendor-portal", private: true },
+  operation: "github",
   providers: {
     githubInstallationId: "101",
     vercelInstallationId: "icfg_202",
   },
+  repository: { name: "vendor-portal", private: true },
+  requestId: "123e4567-e89b-42d3-a456-426614174000",
+  version: 1,
 });
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 } satisfies BuilderProvisionAuthority;
 
 function memoryStore(): BuilderProvisionJournalStore {
@@ -35,6 +37,25 @@ function memoryStore(): BuilderProvisionJournalStore {
   const key = (value: BuilderProvisionAuthority, requestId: string) =>
     JSON.stringify([value, requestId]);
   return {
+    async compareAndSet(input) {
+      const id = key(input.authority, input.requestId);
+      const current = rows.get(id);
+      if (!current || current.revision !== input.expectedRevision)
+        return undefined;
+      const next = {
+        ...current,
+        state: input.record.response.status,
+        revision: current.revision + 1,
+        record: structuredClone(input.record),
+        updatedAt: input.now,
+      };
+      rows.set(id, next);
+      return structuredClone(next);
+    },
+    async read(input) {
+      const row = rows.get(key(input.authority, input.requestId));
+      return row ? structuredClone(row) : undefined;
+    },
     async reserve(input) {
       const id = key(input.authority, input.request.requestId);
       const digest = builderProvisionRequestDigest(input.request);
@@ -57,66 +78,47 @@ function memoryStore(): BuilderProvisionJournalStore {
       rows.set(id, row);
       return structuredClone(row);
     },
-    async read(input) {
-      const row = rows.get(key(input.authority, input.requestId));
-      return row ? structuredClone(row) : undefined;
-    },
-    async compareAndSet(input) {
-      const id = key(input.authority, input.requestId);
-      const current = rows.get(id);
-      if (!current || current.revision !== input.expectedRevision)
-        return undefined;
-      const next = {
-        ...current,
-        state: input.record.response.status,
-        revision: current.revision + 1,
-        record: structuredClone(input.record),
-        updatedAt: input.now,
-      };
-      rows.set(id, next);
-      return structuredClone(next);
-    },
   };
 }
 
 describe("builder provisioning journal", () => {
   it("is idempotent by tenant, request ID, and operation-independent digest", async () => {
     const store = memoryStore();
-    const first = await store.reserve({ authority, request, now: new Date() });
+    const first = await store.reserve({ authority, now: new Date(), request });
     const retry = await store.reserve({
       authority,
-      request: { ...request, operation: "vercel" },
       now: new Date(),
+      request: { ...request, operation: "vercel" },
     });
     expect(retry.revision).toBe(first.revision);
     await expect(
       store.reserve({
         authority,
+        now: new Date(),
         request: {
           ...request,
           repository: { ...request.repository, name: "other" },
         },
-        now: new Date(),
-      }),
+      })
     ).rejects.toThrow("request-id-reused");
     const otherTenant = await store.reserve({
       authority: { ...authority, workspaceId: "workspace-2" },
+      now: new Date(),
       request: {
         ...request,
         repository: { ...request.repository, name: "other" },
       },
-      now: new Date(),
     });
     expect(otherTenant.requestDigest).not.toBe(first.requestDigest);
   });
 
   it("uses compare-and-set without losing successful provider state", async () => {
     const store = memoryStore();
-    await store.reserve({ authority, request, now: new Date() });
+    await store.reserve({ authority, now: new Date(), request });
     const updated = await updateBuilderProvisionJournal({
-      store,
       authority,
       requestId: request.requestId,
+      store,
       update(current) {
         current.operations.github.attempted = true;
         current.response.github = {
@@ -131,10 +133,10 @@ describe("builder provisioning journal", () => {
     expect(updated.record.response.status).toBe("pending");
     const stale = await store.compareAndSet({
       authority,
-      requestId: request.requestId,
       expectedRevision: 1,
-      record: updated.record,
       now: new Date(),
+      record: updated.record,
+      requestId: request.requestId,
     });
     expect(stale).toBeUndefined();
   });

@@ -25,9 +25,12 @@ function runLookup(options: LookupOptions) {
       "client.example.com",
       options,
       (error, address, family) => {
-        if (error) reject(error);
-        else resolve({ address, family });
-      },
+        if (error) {
+          reject(error);
+        } else {
+          resolve({ address, family });
+        }
+      }
     );
   });
 }
@@ -41,7 +44,7 @@ function requestFixture(input: {
     (
       url: URL,
       options: RequestOptions,
-      responseListener: (response: IncomingMessage) => void,
+      responseListener: (response: IncomingMessage) => void
     ) => {
       observed.url = url;
       observed.options = options;
@@ -68,7 +71,7 @@ function requestFixture(input: {
         return request;
       };
       return request;
-    },
+    }
   );
   return { observed, requestHttps };
 }
@@ -94,13 +97,13 @@ describe("Preview CIMD transport", () => {
       const resolveHostname = vi.fn(async () => publicAddresses);
       const fixture = requestFixture({ lookupOptions });
       const fetchMetadata = createPreviewCimdTransport({
-        resolveHostname,
         requestHttps: fixture.requestHttps,
+        resolveHostname,
       });
 
       const response = await fetchMetadata(
         "https://client.example.com:8443/metadata.json",
-        { method: "GET" },
+        { method: "GET" }
       );
 
       expect(await response.text()).toBe("metadata-body");
@@ -116,21 +119,21 @@ describe("Preview CIMD transport", () => {
         servername: "client.example.com",
       });
       expect(fixture.observed.options?.signal).toBeInstanceOf(AbortSignal);
-    },
+    }
   );
 
   it("rejects a private DNS answer before opening a connection", async () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
+      requestHttps,
       resolveHostname: vi.fn(async () => [
         publicAddresses[0],
         { address: "169.254.169.254", family: 4 },
       ]),
-      requestHttps,
     });
 
     await expect(
-      fetchMetadata("https://client.example.com/metadata.json"),
+      fetchMetadata("https://client.example.com/metadata.json")
     ).rejects.toThrow("public-routable");
     expect(requestHttps).not.toHaveBeenCalled();
   });
@@ -140,20 +143,20 @@ describe("Preview CIMD transport", () => {
     const timeoutSignal = vi.fn(() => timeout.signal);
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
-      resolveHostname: vi.fn(
-        () => new Promise<LookupAddress[]>(() => undefined),
-      ),
       requestHttps,
+      resolveHostname: vi.fn(
+        () => new Promise<LookupAddress[]>(() => undefined)
+      ),
       timeoutSignal,
     });
 
     const rejection = expect(
-      fetchMetadata("https://client.example.com/metadata.json"),
+      fetchMetadata("https://client.example.com/metadata.json")
     ).rejects.toMatchObject({ name: "TimeoutError" });
     timeout.abort(new DOMException("Timed out.", "TimeoutError"));
 
     await rejection;
-    expect(timeoutSignal).toHaveBeenCalledWith(5_000);
+    expect(timeoutSignal).toHaveBeenCalledWith(5000);
     expect(requestHttps).not.toHaveBeenCalled();
   });
 
@@ -161,16 +164,16 @@ describe("Preview CIMD transport", () => {
     const controller = new AbortController();
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
-      resolveHostname: vi.fn(
-        () => new Promise<LookupAddress[]>(() => undefined),
-      ),
       requestHttps,
+      resolveHostname: vi.fn(
+        () => new Promise<LookupAddress[]>(() => undefined)
+      ),
     });
 
     const rejection = expect(
       fetchMetadata("https://client.example.com/metadata.json", {
         signal: controller.signal,
-      }),
+      })
     ).rejects.toMatchObject({ name: "AbortError" });
     controller.abort();
 
@@ -183,8 +186,8 @@ describe("Preview CIMD transport", () => {
     async (input) => {
       const requestHttps = vi.fn();
       const fetchMetadata = createPreviewCimdTransport({
-        resolveHostname: vi.fn(async () => publicAddresses),
         requestHttps,
+        resolveHostname: vi.fn(async () => publicAddresses),
       });
       const request =
         input === "POST"
@@ -195,7 +198,7 @@ describe("Preview CIMD transport", () => {
 
       await expect(fetchMetadata(request)).rejects.toThrow();
       expect(requestHttps).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it("returns redirects without following them", async () => {
@@ -204,12 +207,12 @@ describe("Preview CIMD transport", () => {
       responseStatus: 302,
     });
     const fetchMetadata = createPreviewCimdTransport({
-      resolveHostname: vi.fn(async () => publicAddresses),
       requestHttps: fixture.requestHttps,
+      resolveHostname: vi.fn(async () => publicAddresses),
     });
 
     const response = await fetchMetadata(
-      "https://client.example.com/metadata.json",
+      "https://client.example.com/metadata.json"
     );
 
     expect(response.status).toBe(302);

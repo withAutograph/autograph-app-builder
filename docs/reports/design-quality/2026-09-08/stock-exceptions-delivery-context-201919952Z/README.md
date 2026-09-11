@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                        |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page establishes a clear sequence from title and review count to filters, severity-grouped products, selected-record detail, and the replenishment action. Selected rows, detail headings, tabs, delivery guidance, and simulation confirmation are all visually distinct and easy to scan.                                                               |
-| layout         | 3/4   | The two-column master-detail composition is consistently aligned and comfortably spaced from 900px through 1920px. At 1024×768, however, the list can scroll its group heading out of view and supplier content gains a small nested scroll region, slightly weakening context and flow.                                                                      |
-| typography     | 4/4   | Type sizes, weights, and labels are consistent across headings, row metadata, stock values, tabs, and actions. Product names and cover values scan particularly well; only the longer delivery advisory becomes somewhat dense at narrower desktop widths.                                                                                                    |
-| responsive     | 3/4   | Across the supplied desktop windows from 900×900 to 1920×1080, both columns remain usable, controls fit without horizontal overflow, and action buttons remain visible. The 1024×768 supplier state introduces nested scrolling and lost group-heading context, so the composition is strong but not seamless at shorter windows.                             |
-| productClarity | 4/4   | The interface directly supports location and severity filtering, clearly identifies the selected product, separates stock position from supplier details, and presents supplier, lead-time, pack-size, and cover evidence. The mock nature of replenishment is explicit through “Preview only,” “Order simulated,” and “Simulated — no order sent” messaging. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page establishes a clear sequence from title and review count to filters, severity-grouped products, selected-record detail, and the replenishment action. Selected rows, detail headings, tabs, delivery guidance, and simulation confirmation are all visually distinct and easy to scan. |
+| layout | 3/4 | The two-column master-detail composition is consistently aligned and comfortably spaced from 900px through 1920px. At 1024×768, however, the list can scroll its group heading out of view and supplier content gains a small nested scroll region, slightly weakening context and flow. |
+| typography | 4/4 | Type sizes, weights, and labels are consistent across headings, row metadata, stock values, tabs, and actions. Product names and cover values scan particularly well; only the longer delivery advisory becomes somewhat dense at narrower desktop widths. |
+| responsive | 3/4 | Across the supplied desktop windows from 900×900 to 1920×1080, both columns remain usable, controls fit without horizontal overflow, and action buttons remain visible. The 1024×768 supplier state introduces nested scrolling and lost group-heading context, so the composition is strong but not seamless at shorter windows. |
+| productClarity | 4/4 | The interface directly supports location and severity filtering, clearly identifies the selected product, separates stock position from supplier details, and presents supplier, lead-time, pack-size, and cover evidence. The mock nature of replenishment is explicit through “Preview only,” “Order simulated,” and “Simulated — no order sent” messaging. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/226) |
-| desktop-0                | typography | 0/0                         | 0% (0/560) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/313) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/137) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/226) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/560) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/313) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/226) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/560) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/313) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-900x900-0 | color      | 0/0                         | 0% (0/226) |
-| desktop-custom-900x900-0 | typography | 0/0                         | 0% (0/560) |
-| desktop-custom-900x900-0 | spacing    | 0/0                         | 0% (0/313) |
-| desktop-custom-900x900-0 | radius     | 0/0                         | 0% (0/114) |
-| desktop-custom-900x900-0 | border     | 0/0                         | 0% (0/137) |
-| desktop-custom-900x900-0 | shadow     | 0/0                         | 0% (0/120) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/226) |
+| desktop-0 | typography | 0/0 | 0% (0/560) |
+| desktop-0 | spacing | 0/0 | 0% (0/313) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/137) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/226) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/560) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/313) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/137) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/226) |
+| desktop-window-0 | typography | 0/0 | 0% (0/560) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/313) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/137) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-900x900-0 | color | 0/0 | 0% (0/226) |
+| desktop-custom-900x900-0 | typography | 0/0 | 0% (0/560) |
+| desktop-custom-900x900-0 | spacing | 0/0 | 0% (0/313) |
+| desktop-custom-900x900-0 | radius | 0/0 | 0% (0/114) |
+| desktop-custom-900x900-0 | border | 0/0 | 0% (0/137) |
+| desktop-custom-900x900-0 | shadow | 0/0 | 0% (0/120) |
 
 ## Latest-run screenshots
 

@@ -1,8 +1,6 @@
 import { createAuthPlugin } from "@better-auth-ui/core";
-import {
-  themePlugin as coreThemePlugin,
-  type ThemeLocalization,
-} from "@better-auth-ui/core/plugins/theme";
+import { themePlugin as coreThemePlugin } from "@better-auth-ui/core/plugins/theme";
+import type { ThemeLocalization } from "@better-auth-ui/core/plugins/theme";
 
 /**
  * Hook shape compatible with `next-themes`' `useTheme` and similar APIs. The
@@ -16,7 +14,7 @@ export type UseThemeHook = () => {
   themes?: string[];
 };
 
-type CommonThemeOptions = {
+interface CommonThemeOptions {
   /**
    * Override the plugin's default localization strings.
    * @remarks `ThemeLocalization`
@@ -27,7 +25,7 @@ type CommonThemeOptions = {
    * @default ["system", "light", "dark"]
    */
   themes?: string[];
-};
+}
 
 export type ThemePluginOptions = CommonThemeOptions &
   (
@@ -77,10 +75,10 @@ export const themePlugin = createAuthPlugin(
       useTheme:
         useTheme ??
         (() => ({
-          theme: base.theme,
           setTheme: base.setTheme,
+          theme: base.theme,
           themes: base.themes,
         })),
     };
-  },
+  }
 );

@@ -6,30 +6,30 @@ import {
 } from "./hosted-auth";
 
 const claims = {
-  issuer: "https://identity.example.test",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://identity.example.test",
+  scopes: ["autograph:session", "autograph:respond"],
   subject: "user_1",
   workspaceId: "workspace_1",
-  scopes: ["autograph:session", "autograph:respond"],
 };
 
 function authorize(verifiedClaims: unknown = claims) {
   return authorizeHostedPrincipal({
-    verifiedClaims,
-    expectedIssuer: claims.issuer,
     expectedAudience: claims.audience,
+    expectedIssuer: claims.issuer,
     requiredScopes: ["autograph:session", "autograph:respond"],
+    verifiedClaims,
   });
 }
 
 describe("hosted Eve authorization", () => {
   it("creates a closed request-scoped principal from exact verified claims", () => {
     expect(authorize()).toEqual({
-      issuer: claims.issuer,
       audience: claims.audience,
-      workspaceId: claims.workspaceId,
+      issuer: claims.issuer,
       ownerUserId: claims.subject,
       scopes: ["autograph:respond", "autograph:session"],
+      workspaceId: claims.workspaceId,
     });
   });
 

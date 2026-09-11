@@ -1,5 +1,5 @@
-import postgres from "postgres";
 import { expect, test } from "playwright/test";
+import postgres from "postgres";
 
 import {
   advanceProviderConnectionToApproval,
@@ -30,15 +30,15 @@ type GitHubCallbackFixture =
 
 async function setGitHubCallbackFixture(
   page: import("playwright/test").Page,
-  fixture: GitHubCallbackFixture,
+  fixture: GitHubCallbackFixture
 ) {
   await page.context().addCookies([
     {
       name: "autograph-e2e-github-callback",
-      value: fixture,
-      url: appOrigin,
-      secure: true,
       sameSite: "Lax",
+      secure: true,
+      url: appOrigin,
+      value: fixture,
     },
   ]);
 }
@@ -61,14 +61,15 @@ async function openBuilderPage(page: import("playwright/test").Page) {
 
 function expectGitHubControlAndNoOAuthLeak(
   page: import("playwright/test").Page,
-  rawValues: ReadonlyArray<string>,
+  rawValues: readonly string[]
 ) {
   const messages: string[] = [];
   page.on("console", (message) => messages.push(message.text()));
   return async () => {
     await expect(page.getByRole("checkbox", { name: /GitHub/u })).toBeVisible();
-    for (const rawValue of rawValues)
+    for (const rawValue of rawValues) {
       expect(messages.join("\n")).not.toContain(rawValue);
+    }
   };
 }
 
@@ -85,19 +86,19 @@ for (const provider of emulatedProviders) {
       .locator("#app-brief")
       .fill(`Keep this ${provider} brief through authorization.`);
     await expect(page.locator("#app-brief")).toHaveValue(
-      `Keep this ${provider} brief through authorization.`,
+      `Keep this ${provider} brief through authorization.`
     );
     await page.getByLabel("App Name").fill(`${provider} Restored App`);
 
     await installProvider(page, provider);
     await expect(page.getByLabel("App Name")).toHaveValue(
-      `${provider} Restored App`,
+      `${provider} Restored App`
     );
     await expect(page.locator("#app-brief")).toHaveValue(
-      `Keep this ${provider} brief through authorization.`,
+      `Keep this ${provider} brief through authorization.`
     );
     await expect(
-      page.getByText(`${provider} connected successfully.`),
+      page.getByText(`${provider} connected successfully.`)
     ).toBeVisible();
     await expect
       .poll(async () => {
@@ -146,8 +147,8 @@ test("connections remain available when the user returns through the other OAuth
   await expectProviderSelection(page, "GitHub");
   await expectProviderSelection(page, "Vercel");
   expect(await applicationCounts()).toMatchObject({
-    users: 1,
     githubInstallations: 1,
+    users: 1,
     vercelInstallations: 1,
   });
 });
@@ -167,7 +168,7 @@ test("the emulated approval Back action restores the unchanged builder draft", a
   await waitForBuilderReady(page);
   await expect(page.getByLabel("App Name")).toHaveValue("Back Action Draft");
   await expect(page.locator("#app-brief")).toHaveValue(
-    "Keep this draft without connecting.",
+    "Keep this draft without connecting."
   );
   expect((await applicationCounts()).githubInstallations).toBe(0);
 });
@@ -183,7 +184,7 @@ for (const provider of emulatedProviders) {
       .locator("#app-brief")
       .fill(`Keep this ${provider} draft when leaving connections.`);
     await expect(page.locator("#app-brief")).toHaveValue(
-      `Keep this ${provider} draft when leaving connections.`,
+      `Keep this ${provider} draft when leaving connections.`
     );
     await page.getByLabel("App Name").fill(`${provider} Back Draft`);
 
@@ -192,10 +193,10 @@ for (const provider of emulatedProviders) {
     await expect(page).toHaveURL(/\/?resume=/u);
     await waitForBuilderReady(page);
     await expect(page.getByLabel("App Name")).toHaveValue(
-      `${provider} Back Draft`,
+      `${provider} Back Draft`
     );
     await expect(page.locator("#app-brief")).toHaveValue(
-      `Keep this ${provider} draft when leaving connections.`,
+      `Keep this ${provider} draft when leaving connections.`
     );
     expect((await applicationCounts())[descriptor.bindingCount]).toBe(0);
   });
@@ -246,11 +247,11 @@ for (const key of [
 
     await setGitHubCallbackFixture(
       page,
-      `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture,
+      `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture
     );
     await startGitHubConnection(page);
     await expect(page).toHaveURL(
-      /github=failed&githubReason=callback-invalid/u,
+      /github=failed&githubReason=callback-invalid/u
     );
     expect((await applicationCounts()).githubInstallations).toBe(0);
     await assertNoLeak();
@@ -271,7 +272,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   expect(state).toBeTruthy();
 
   await page.goto(
-    `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state!)}`,
+    `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state!)}`
   );
   await expect(page).toHaveURL(/vercel=failed/u);
   expect((await applicationCounts()).vercelInstallations).toBe(0);
@@ -294,8 +295,9 @@ for (const provider of emulatedProviders) {
     await page.locator("#app-brief").fill(brief);
     let callbackUrl = "";
     page.on("request", (request) => {
-      if (new URL(request.url()).pathname === descriptor.callbackPath)
+      if (new URL(request.url()).pathname === descriptor.callbackPath) {
         callbackUrl = request.url();
+      }
     });
     await installProvider(page, provider);
     expect(callbackUrl).toContain("state=");
@@ -327,7 +329,7 @@ for (const provider of emulatedProviders) {
       await sql.unsafe(
         `UPDATE ${descriptor.authorizationStateTable}
          SET created_at = now() - interval '2 seconds',
-             expires_at = now() - interval '1 second'`,
+             expires_at = now() - interval '1 second'`
       );
     } finally {
       await sql.end();
@@ -335,8 +337,9 @@ for (const provider of emulatedProviders) {
     await page
       .getByRole("button", { name: localApprovalButtonName(provider) })
       .click();
-    if (new URL(page.url()).origin === descriptor.emulatorOrigin)
+    if (new URL(page.url()).origin === descriptor.emulatorOrigin) {
       await page.getByRole("button", { name: /autograph-dev/u }).click();
+    }
 
     await expect(page).toHaveURL(new RegExp(`${descriptor.slug}=failed`, "u"));
     await waitForBuilderReady(page);

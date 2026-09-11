@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected-record identity, and detail sections form a strong review sequence. Severity pills and selected-row treatment aid scanning, while the modeled quantities are prominent. The projected result, however, has the same card weight as its inputs and becomes an isolated third card, so the most consequential number is not quite dominant.                                                                                                               |
-| layout         | 3/4   | The two-pane composition is cleanly aligned with consistent card boundaries, row spacing, and label/value columns. It remains comfortably centered at 1920px and dense but usable at 1024px. The confirmation header becomes crowded at 1024px, forcing the product title onto an awkward second line, and the 2+1 metric grid leaves the result visually detached.                                                                                                                                       |
-| typography     | 3/4   | Typography is highly consistent: clear page and section headings, readable metadata, bold exception names, and appropriately enlarged modeled quantities. The isolated “M” line in the 1024px confirmation header disrupts reading, but otherwise labels and supporting explanations remain legible across the supplied sizes.                                                                                                                                                                            |
-| responsive     | 3/4   | The design adapts well from 1920px to 1024px and switches to a focused list-or-detail flow with a clear Back control at 700px. Controls remain usable and no horizontal overflow is reported. The 1024px action/header collision shows that panel-width responsiveness needs one earlier composition change, and no windows narrower than 700px were provided.                                                                                                                                            |
-| productClarity | 4/4   | The task is immediately understandable: filter by location and severity, choose an exception, inspect stock and supplier evidence, and try a clearly labeled mock replenishment. Confirmation and completed states explicitly state that no order is placed and inventory remains unchanged, while the quantity calculation and supplier minimum are explained. The only minor ambiguity is that the constrained initial list visually highlights a record while withholding its detail until activation. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected-record identity, and detail sections form a strong review sequence. Severity pills and selected-row treatment aid scanning, while the modeled quantities are prominent. The projected result, however, has the same card weight as its inputs and becomes an isolated third card, so the most consequential number is not quite dominant. |
+| layout | 3/4 | The two-pane composition is cleanly aligned with consistent card boundaries, row spacing, and label/value columns. It remains comfortably centered at 1920px and dense but usable at 1024px. The confirmation header becomes crowded at 1024px, forcing the product title onto an awkward second line, and the 2+1 metric grid leaves the result visually detached. |
+| typography | 3/4 | Typography is highly consistent: clear page and section headings, readable metadata, bold exception names, and appropriately enlarged modeled quantities. The isolated “M” line in the 1024px confirmation header disrupts reading, but otherwise labels and supporting explanations remain legible across the supplied sizes. |
+| responsive | 3/4 | The design adapts well from 1920px to 1024px and switches to a focused list-or-detail flow with a clear Back control at 700px. Controls remain usable and no horizontal overflow is reported. The 1024px action/header collision shows that panel-width responsiveness needs one earlier composition change, and no windows narrower than 700px were provided. |
+| productClarity | 4/4 | The task is immediately understandable: filter by location and severity, choose an exception, inspect stock and supplier evidence, and try a clearly labeled mock replenishment. Confirmation and completed states explicitly state that no order is placed and inventory remains unchanged, while the quantity calculation and supplier minimum are explained. The only minor ambiguity is that the constrained initial list visually highlights a record while withholding its detail until activation. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/274) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/274) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/274) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/141) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/292) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/164) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/70)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/78)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/74)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/141) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/292) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/164) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/70) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/78) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/74) |
 
 ## Latest-run screenshots
 

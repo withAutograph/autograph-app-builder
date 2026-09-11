@@ -3,16 +3,14 @@ import { z } from "zod";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { deriveBuilderAppId } from "../provisioning/names";
 import { createPostgresBuilderProvisionJournalStore } from "../provisioning/postgres-journal";
-import type { BuilderProvisionJournalStore } from "../provisioning/journal";
+import { builderHandoffDestinationSchema } from "./contracts";
+import type { BuilderHandoffIntent } from "./contracts";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
-import { activeBuilderModelIdSchema } from "../integrations/active-model";
-import {
-  builderHandoffDestinationSchema,
-  type BuilderHandoffIntent,
-} from "./contracts";
 import {
   BuilderHandoffConflictError,
   BuilderHandoffUnavailableError,
@@ -20,13 +18,15 @@ import {
 } from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
-const maximumRequestBytes = 64 * 1_024;
+const maximumRequestBytes = 64 * 1024;
 
 class BuilderHandoffRequestError extends Error {}
 
 function hasCanonicalRequestOrigin(request: Request, origin: string) {
   const requestUrl = new URL(request.url);
-  if (requestUrl.origin === origin) return true;
+  if (requestUrl.origin === origin) {
+    return true;
+  }
   const canonicalUrl = new URL(origin);
   return (
     requestUrl.protocol === canonicalUrl.protocol &&
@@ -35,13 +35,17 @@ function hasCanonicalRequestOrigin(request: Request, origin: string) {
 }
 
 async function readBoundedJson(request: Request) {
-  if (request.body === null) throw new BuilderHandoffRequestError();
+  if (request.body === null) {
+    throw new BuilderHandoffRequestError();
+  }
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   while (true) {
     const next = await reader.read();
-    if (next.done) break;
+    if (next.done) {
+      break;
+    }
     bytes += next.value.byteLength;
     if (bytes > maximumRequestBytes) {
       await reader.cancel();
@@ -64,11 +68,13 @@ async function readBoundedJson(request: Request) {
 
 export const builderHandoffCreateRequestSchema = z
   .object({
-    version: z.literal(1),
+    appName: z.string().trim().min(1).max(120),
+    brief: z.string().trim().min(1).max(32_000),
+    connections: z.array(z.string().trim().min(1).max(100)).max(50),
     creationRequestId: z.string().uuid(),
     destination: builderHandoffDestinationSchema.optional(),
+    modelId: activeBuilderModelIdSchema,
     provisioningRequestId: z.string().uuid().optional(),
-    appName: z.string().trim().min(1).max(120),
     repository: z
       .object({
         name: z
@@ -80,16 +86,14 @@ export const builderHandoffCreateRequestSchema = z
         private: z.boolean(),
       })
       .strict(),
-    brief: z.string().trim().min(1).max(32_000),
-    modelId: activeBuilderModelIdSchema,
-    connections: z.array(z.string().trim().min(1).max(100)).max(50),
+    version: z.literal(1),
   })
   .strict();
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
 
-export type BuilderHandoffPageData = {
+export interface BuilderHandoffPageData {
   version: 1;
   handoffId: string;
   expiresAt: string;
@@ -98,7 +102,7 @@ export type BuilderHandoffPageData = {
   destination: "codex" | "cursor";
   cursorInstallReady: boolean;
   mcpUrl: string;
-};
+}
 
 export function createBuilderHandoffRouteHandler(input: {
   origin: string;
@@ -106,7 +110,7 @@ export function createBuilderHandoffRouteHandler(input: {
   journal: BuilderProvisionJournalStore;
   handoffs: HandoffService;
 }) {
-  const origin = new URL(input.origin).origin;
+  const { origin } = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (
@@ -115,29 +119,32 @@ export function createBuilderHandoffRouteHandler(input: {
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/json"
-      )
+      ) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
+      }
       const contentLength = request.headers.get("content-length");
       if (
         contentLength &&
         (!/^\d+$/u.test(contentLength) ||
           Number(contentLength) > maximumRequestBytes)
-      )
+      ) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
-          { status: 401, headers: noStore },
+          { status: 401, headers: noStore }
         );
+      }
       const body = builderHandoffCreateRequestSchema.parse(
-        await readBoundedJson(request),
+        await readBoundedJson(request)
       );
       const provision = body.provisioningRequestId
         ? await input.journal.read({
@@ -145,11 +152,12 @@ export function createBuilderHandoffRouteHandler(input: {
             requestId: body.provisioningRequestId,
           })
         : undefined;
-      if (body.provisioningRequestId && !provision)
+      if (body.provisioningRequestId && !provision) {
         return Response.json(
           { error: "handoff_unavailable" },
-          { status: 404, headers: noStore },
+          { status: 404, headers: noStore }
         );
+      }
       const github = provision?.record.response.github;
       const appName = provision?.record.request.appName ?? body.appName;
       const repository =
@@ -161,88 +169,93 @@ export function createBuilderHandoffRouteHandler(input: {
           ...(body.destination === undefined
             ? {}
             : { destination: body.destination }),
-          appName,
           appId:
             provision?.record.response.appId ?? deriveBuilderAppId(appName),
+          appName,
           brief: body.brief,
+          connections: body.connections,
+          modelId: body.modelId,
           repository: {
-            requestedName: repository.name,
             private: repository.private,
+            requestedName: repository.name,
             ...(github?.status === "succeeded"
               ? { resolvedFullName: github.fullName }
               : {}),
           },
-          modelId: body.modelId,
-          connections: body.connections,
           ...(provision === undefined
             ? {}
             : {
                 providers: provision.record.request.providers,
-                provisioningRequestId: provision.requestId,
-                provisioningRequestDigest: provision.requestDigest,
                 provisioning: provision.record.response,
+                provisioningRequestDigest: provision.requestDigest,
+                provisioningRequestId: provision.requestId,
               }),
         },
       });
       return Response.json(
         {
-          version: 1,
-          handoffId: created.handoffId,
           expiresAt: created.expiresAt.toISOString(),
+          handoffId: created.handoffId,
+          version: 1,
         },
-        { headers: noStore },
+        { headers: noStore }
       );
     } catch (error) {
       if (
         error instanceof BuilderHandoffRequestError ||
         error instanceof z.ZodError
-      )
+      ) {
         return Response.json(
           { error: "request_invalid" },
-          { status: 400, headers: noStore },
+          { status: 400, headers: noStore }
         );
-      if (error instanceof BuilderHandoffConflictError)
+      }
+      if (error instanceof BuilderHandoffConflictError) {
         return Response.json(
           { error: "request_id_conflict" },
-          { status: 409, headers: noStore },
+          { status: 409, headers: noStore }
         );
+      }
       return Response.json(
         { error: "handoff_unavailable" },
-        { status: 503, headers: noStore },
+        { headers: noStore, status: 503 }
       );
     }
   };
 }
 
 function handoffErrorResponse(error: unknown) {
-  if (error instanceof BuilderHandoffUnavailableError)
+  if (error instanceof BuilderHandoffUnavailableError) {
     return Response.json(
       { error: "handoff_unavailable" },
-      { status: 404, headers: noStore },
+      { status: 404, headers: noStore }
     );
-  if (error instanceof BuilderHandoffConflictError)
+  }
+  if (error instanceof BuilderHandoffConflictError) {
     return Response.json(
       { error: "request_id_conflict" },
-      { status: 409, headers: noStore },
+      { status: 409, headers: noStore }
     );
+  }
   if (
     error instanceof BuilderHandoffRequestError ||
     error instanceof z.ZodError
-  )
+  ) {
     return Response.json(
       { error: "request_invalid" },
-      { status: 400, headers: noStore },
+      { status: 400, headers: noStore }
     );
+  }
   return Response.json(
     { error: "handoff_unavailable" },
-    { status: 503, headers: noStore },
+    { headers: noStore, status: 503 }
   );
 }
 
 export function createBuilderHandoffStatusRouteHandler(input: {
   pageData(
     request: Request,
-    handoffId: string,
+    handoffId: string
   ): Promise<BuilderHandoffPageData | undefined>;
 }) {
   return async (request: Request, handoffId: string) => {
@@ -252,7 +265,7 @@ export function createBuilderHandoffStatusRouteHandler(input: {
         ? Response.json(data, { headers: noStore })
         : Response.json(
             { error: "authentication_required" },
-            { status: 401, headers: noStore },
+            { headers: noStore, status: 401 }
           );
     } catch (error) {
       return handoffErrorResponse(error);
@@ -265,7 +278,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
   authorityForRequest(request: Request): Promise<Authority | undefined>;
   handoffs: HandoffService;
 }) {
-  const origin = new URL(input.origin).origin;
+  const { origin } = new URL(input.origin);
   return async (request: Request, handoffId: string) => {
     try {
       if (
@@ -274,21 +287,24 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/json"
-      )
+      ) {
         throw new BuilderHandoffRequestError();
+      }
       const contentLength = request.headers.get("content-length");
       if (
         contentLength &&
         (!/^\d+$/u.test(contentLength) ||
           Number(contentLength) > maximumRequestBytes)
-      )
+      ) {
         throw new BuilderHandoffRequestError();
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
-          { status: 401, headers: noStore },
+          { status: 401, headers: noStore }
         );
+      }
       const body = z
         .object({ creationRequestId: z.string().uuid() })
         .strict()
@@ -300,11 +316,11 @@ export function createBuilderHandoffRenewRouteHandler(input: {
       });
       return Response.json(
         {
-          version: 1,
-          handoffId: renewed.handoffId,
           expiresAt: renewed.expiresAt.toISOString(),
+          handoffId: renewed.handoffId,
+          version: 1,
         },
-        { headers: noStore },
+        { headers: noStore }
       );
     } catch (error) {
       return handoffErrorResponse(error);
@@ -326,11 +342,6 @@ function deploymentContext(environment: Environment) {
     deploymentDatabases.set(preview.databaseUrl, database);
   }
   return {
-    preview,
-    database,
-    handoffs: createBuilderHandoffService({
-      store: createPostgresBuilderHandoffStore(database),
-    }),
     async authorityForHeaders(headers: Headers) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment,
@@ -345,6 +356,11 @@ function deploymentContext(environment: Environment) {
           })
         : undefined;
     },
+    database,
+    handoffs: createBuilderHandoffService({
+      store: createPostgresBuilderHandoffStore(database),
+    }),
+    preview,
   };
 }
 
@@ -355,52 +371,54 @@ export async function getBuilderHandoffPageData(input: {
 }): Promise<BuilderHandoffPageData | undefined> {
   const context = deploymentContext(input.environment);
   const authority = await context.authorityForHeaders(input.headers);
-  if (!authority) return undefined;
+  if (!authority) {
+    return undefined;
+  }
   const { status, record } = await context.handoffs.status({
     authority,
     handoffId: input.handoffId,
   });
   const { isCursorClientReady } = await import("../auth/cursor-client");
   return {
-    version: 1,
-    handoffId: record.handoffId,
-    expiresAt: record.expiresAt.toISOString(),
-    status,
-    intent: record.intent,
-    destination: record.intent.destination ?? "codex",
     cursorInstallReady: await isCursorClientReady(
       context.database,
-      context.preview.resource,
+      context.preview.resource
     ),
+    destination: record.intent.destination ?? "codex",
+    expiresAt: record.expiresAt.toISOString(),
+    handoffId: record.handoffId,
+    intent: record.intent,
     mcpUrl: context.preview.resource,
+    status,
+    version: 1,
   };
 }
 
 export function getBuilderHandoffStatusDeploymentHandler(
-  environment: Environment,
+  environment: Environment
 ) {
   return createBuilderHandoffStatusRouteHandler({
     pageData: (request, handoffId) =>
       getBuilderHandoffPageData({
         environment,
-        headers: request.headers,
         handoffId,
+        headers: request.headers,
       }),
   });
 }
 
 export function getBuilderHandoffRenewDeploymentHandler(
-  environment: Environment,
+  environment: Environment
 ) {
   // Compose inside the error boundary so setup failures also remain no-store.
   return async (request: Request, handoffId: string) => {
     try {
       const context = deploymentContext(environment);
       return await createBuilderHandoffRenewRouteHandler({
-        origin: new URL(context.preview.issuer).origin,
-        handoffs: context.handoffs,
         authorityForRequest: (request) =>
           context.authorityForHeaders(request.headers),
+        handoffs: context.handoffs,
+        origin: new URL(context.preview.issuer).origin,
       })(request, handoffId);
     } catch (error) {
       return handoffErrorResponse(error);
@@ -411,10 +429,10 @@ export function getBuilderHandoffRenewDeploymentHandler(
 export function getBuilderHandoffDeploymentHandler(environment: Environment) {
   const context = deploymentContext(environment);
   return createBuilderHandoffRouteHandler({
-    origin: new URL(context.preview.issuer).origin,
-    journal: createPostgresBuilderProvisionJournalStore(context.database),
-    handoffs: context.handoffs,
     authorityForRequest: (request) =>
       context.authorityForHeaders(request.headers),
+    handoffs: context.handoffs,
+    journal: createPostgresBuilderProvisionJournalStore(context.database),
+    origin: new URL(context.preview.issuer).origin,
   });
 }

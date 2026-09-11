@@ -1,30 +1,31 @@
-import {
-  parseProviderConnectionFailureReason,
-  providerConnectionFailureMessage,
-} from "@/lib/integrations/provider-connection-status";
-import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import { Suspense } from "react";
+import { FaGithub } from "react-icons/fa";
+
 import {
   ProviderConnection,
   ProviderConnectionNotice,
 } from "@/app/ui/provider-connection";
-import { Suspense } from "react";
-import { FaGithub } from "react-icons/fa";
+import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import {
+  parseProviderConnectionFailureReason,
+  providerConnectionFailureMessage,
+} from "@/lib/integrations/provider-connection-status";
 
-type Props = {
+interface Props {
   searchParams: Promise<{
     status?: string | string[];
     reason?: string | string[];
     returnTo?: string | string[];
     resume?: string | string[];
   }>;
-};
+}
 
 async function GitHubInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
-    returnTo,
     resumeKey: resume,
+    returnTo,
   });
   return (
     <ProviderConnection

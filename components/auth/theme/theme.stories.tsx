@@ -7,7 +7,7 @@ import { UserButton } from "@/components/auth/user/user-button";
 
 function ThemeControls() {
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 bg-background p-6 text-foreground">
+    <main className="bg-background text-foreground mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
       <div className="flex justify-end">
         <UserButton align="end" size="icon" />
       </div>
@@ -17,12 +17,12 @@ function ThemeControls() {
 }
 
 const meta = {
-  title: "Components/Auth/Theme Controls",
   component: ThemeControls,
   parameters: {
     authSession: storybookAuthenticatedSession,
     layout: "fullscreen",
   },
+  title: "Components/Auth/Theme Controls",
 } satisfies Meta<typeof ThemeControls>;
 
 export default meta;
@@ -46,7 +46,7 @@ export const StockControls: Story = {
 
     await userEvent.keyboard("{Escape}");
     await userEvent.click(
-      canvas.getByRole("radio", { name: /^Light(?:\s|$)/ }),
+      canvas.getByRole("radio", { name: /^Light(?:\s|$)/ })
     );
 
     await expect(document.documentElement).toHaveClass("light");
@@ -54,7 +54,7 @@ export const StockControls: Story = {
     await expect(localStorage.getItem("theme")).toBe("light");
 
     await userEvent.click(
-      canvas.getByRole("radio", { name: /^System(?:\s|$)/ }),
+      canvas.getByRole("radio", { name: /^System(?:\s|$)/ })
     );
     await expect(localStorage.getItem("theme")).toBe("system");
   },

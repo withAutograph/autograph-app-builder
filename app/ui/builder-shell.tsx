@@ -2,10 +2,9 @@ import { ArrowLeft, Check, Info } from "@geist-ui/icons";
 import Link from "next/link";
 
 import { UserButton } from "../../components/auth/user/user-button";
-import {
-  providerConnectionFailureMessage,
-  type ProviderConnectionNotice,
-} from "../../lib/integrations/provider-connection-status";
+import { providerConnectionFailureMessage } from "../../lib/integrations/provider-connection-status";
+import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
+
 import styles from "./app-builder.module.css";
 
 export function Header() {
@@ -30,7 +29,9 @@ export function ProviderNotices({
 }: {
   notices: ProviderConnectionNotice[];
 }) {
-  if (!notices.length) return null;
+  if (!notices.length) {
+    return null;
+  }
   return (
     <div className={styles.providerNotices} aria-live="polite">
       {notices.map((notice) => {

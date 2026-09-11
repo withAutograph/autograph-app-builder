@@ -12,8 +12,9 @@ import { HOSTED_MANAGED_SKILL_CONTENTS } from "./hosted-managed-seeds.generated"
 const temporaryRoots: string[] = [];
 
 afterEach(() => {
-  for (const root of temporaryRoots.splice(0))
+  for (const root of temporaryRoots.splice(0)) {
     rmSync(root, { force: true, recursive: true });
+  }
 });
 
 describe("hosted runtime asset bundle", () => {
@@ -21,10 +22,10 @@ describe("hosted runtime asset bundle", () => {
     const runtimeRoot = mkdtempSync(join(tmpdir(), "hosted-runtime-assets-"));
     temporaryRoots.push(runtimeRoot);
     const seedsModule = pathToFileURL(
-      resolve("lib/sandbox/hosted-managed-seeds.ts"),
+      resolve("lib/sandbox/hosted-managed-seeds.ts")
     ).href;
     const artifactModule = pathToFileURL(
-      resolve("lib/sandbox/hosted-artifact.ts"),
+      resolve("lib/sandbox/hosted-artifact.ts")
     ).href;
     const tsxLoader = import.meta.resolve("tsx/esm");
     const childEnvironment = { ...process.env };
@@ -41,9 +42,9 @@ process.stdout.write(JSON.stringify({ artifactUrl: artifact.HOSTED_ARTIFACT_URL,
       ],
       {
         cwd: runtimeRoot,
-        encoding: "utf8",
+        encoding: "utf-8",
         env: childEnvironment,
-      },
+      }
     );
 
     expect(JSON.parse(output)).toEqual({

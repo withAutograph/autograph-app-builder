@@ -29,30 +29,32 @@ const roots: string[] = [];
 afterEach(async () => {
   const { rm } = await import("node:fs/promises");
   const makeWritable = async (path: string) => {
-    await chmod(path, 0o700).catch(() => undefined);
+    await chmod(path, 0o700).catch(() => {});
     for (const entry of await readdir(path, { withFileTypes: true }).catch(
-      () => [],
+      () => []
     )) {
-      if (entry.isDirectory()) await makeWritable(join(path, entry.name));
-      else if (!entry.isSymbolicLink())
+      if (entry.isDirectory()) {
+        await makeWritable(join(path, entry.name));
+      } else if (!entry.isSymbolicLink()) {
         await chmod(join(path, entry.name), 0o600).catch(() => undefined);
+      }
     }
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))
   );
 });
 
 async function fixture() {
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "app-builder-dev-source-")),
+    await mkdtemp(join(tmpdir(), "app-builder-dev-source-"))
   );
   roots.push(root);
   await mkdir(join(root, ".config/mise"), { recursive: true });
   await writeFile(
     join(root, ".config/mise/config.toml"),
-    '[tools]\nbun = "1.3.14"\n',
+    '[tools]\nbun = "1.3.14"\n'
   );
   await writeFile(join(root, ".config/mise/mise.lock"), "mise-lock\n");
   await writeFile(join(root, "bun.lock"), "bun-lock\n");
@@ -63,10 +65,10 @@ async function fixture() {
     execFileSync("/usr/bin/git", args, {
       cwd: root,
       env: {
-        PATH: "/usr/bin:/bin",
         HOME: "/dev/null",
         LC_ALL: "C",
         NODE_ENV: "test",
+        PATH: "/usr/bin:/bin",
       },
     });
   git("init", "-q");
@@ -80,7 +82,7 @@ async function fixture() {
     "commit.gpgsign=false",
     "commit",
     "-qm",
-    "fixture",
+    "fixture"
   );
   return root;
 }
@@ -90,7 +92,7 @@ describe("development source snapshots", () => {
     const source = await fixture();
     const { execFileSync } = await import("node:child_process");
     const git = (cwd: string, ...args: string[]) =>
-      execFileSync("/usr/bin/git", args, { cwd, encoding: "utf8" });
+      execFileSync("/usr/bin/git", args, { cwd, encoding: "utf-8" });
     const head = git(source, "rev-parse", "HEAD").trim();
     const submodule = join(source, "plugin");
     git(
@@ -98,7 +100,7 @@ describe("development source snapshots", () => {
       "update-index",
       "--add",
       "--cacheinfo",
-      `160000,${head},plugin`,
+      `160000,${head},plugin`
     );
     await mkdir(submodule);
     const empty = await fingerprintDevelopmentSource(source);
@@ -112,22 +114,22 @@ describe("development source snapshots", () => {
     await writeFile(join(submodule, "tracked.txt"), "dirty");
     await writeFile(join(submodule, "ignored.txt"), "ignored");
     const runRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-")),
+      await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-"))
     );
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot,
+      sourceRoot: source,
     });
     expect(
-      await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf8"),
+      await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf-8")
     ).toBe("dirty");
     expect(
-      await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf8"),
+      await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf-8")
     ).toBe("not a checkout");
     await expect(
-      stat(join(snapshot.root, "plugin/ignored.txt")),
+      stat(join(snapshot.root, "plugin/ignored.txt"))
     ).rejects.toMatchObject({ code: "ENOENT" });
     expect(snapshot.fingerprint).not.toBe(empty);
   });
@@ -137,31 +139,31 @@ describe("development source snapshots", () => {
     await writeFile(join(source, "README.md"), "dirty\n");
     await writeFile(
       join(source, "new-file.ts"),
-      "export const fresh = true;\n",
+      "export const fresh = true;\n"
     );
     const runRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-run-")),
+      await mkdtemp(join(tmpdir(), "app-builder-dev-run-"))
     );
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
 
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot,
+      sourceRoot: source,
     });
 
-    expect(await readFile(join(snapshot.root, "README.md"), "utf8")).toBe(
-      "dirty\n",
+    expect(await readFile(join(snapshot.root, "README.md"), "utf-8")).toBe(
+      "dirty\n"
     );
     expect(
-      await readFile(join(snapshot.root, "new-file.ts"), "utf8"),
+      await readFile(join(snapshot.root, "new-file.ts"), "utf-8")
     ).toContain("fresh");
     expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
     expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(
-      0o600,
+      0o600
     );
     expect(snapshot.fingerprint).toBe(
-      await fingerprintDevelopmentSource(source),
+      await fingerprintDevelopmentSource(source)
     );
     expect(snapshot.commit).toMatch(/^[0-9a-f]{40}$/u);
   });
@@ -176,34 +178,34 @@ describe("development source snapshots", () => {
   it("refreshes the reviewed snapshot after a live Arrusted edit", async () => {
     const source = await fixture();
     const firstRunRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
+      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-"))
     );
     const secondRunRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
+      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-"))
     );
     roots.push(firstRunRoot, secondRunRoot);
     await chmod(firstRunRoot, 0o700);
     await chmod(secondRunRoot, 0o700);
     const first = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot: firstRunRoot,
+      sourceRoot: source,
     });
     await writeFile(join(source, "README.md"), "changed after first plan\n");
     const second = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot: secondRunRoot,
+      sourceRoot: source,
     });
 
     expect(second.fingerprint).not.toBe(first.fingerprint);
-    expect(await readFile(join(second.root, "README.md"), "utf8")).toBe(
-      "changed after first plan\n",
+    expect(await readFile(join(second.root, "README.md"), "utf-8")).toBe(
+      "changed after first plan\n"
     );
   });
 
   it("rejects a tracked file whose parent was replaced by an escaping symlink", async () => {
     const source = await fixture();
     const outside = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-outside-")),
+      await mkdtemp(join(tmpdir(), "app-builder-dev-outside-"))
     );
     roots.push(outside);
     await mkdir(join(source, "tracked"));
@@ -216,7 +218,7 @@ describe("development source snapshots", () => {
     await writeFile(join(outside, "secret.txt"), "outside\n");
     await symlink(outside, join(source, "tracked"));
     await expect(fingerprintDevelopmentSource(source)).rejects.toThrow(
-      "ancestor was unsafe",
+      "ancestor was unsafe"
     );
   });
 
@@ -224,21 +226,21 @@ describe("development source snapshots", () => {
     const source = await fixture();
     const expectedFingerprint = await fingerprintDevelopmentSource(source);
     const changed = waitForDevelopmentSourceChange({
-      sourceRoot: source,
-      expectedFingerprint,
-      debounceMs: 5,
       auditMs: 50,
+      debounceMs: 5,
+      expectedFingerprint,
+      sourceRoot: source,
     });
     await writeFile(join(source, "README.md"), "changed during run\n");
     await expect(changed).resolves.toBe(true);
 
     const controller = new AbortController();
     const stopped = waitForDevelopmentSourceChange({
-      sourceRoot: source,
+      auditMs: 50,
+      debounceMs: 5,
       expectedFingerprint: await fingerprintDevelopmentSource(source),
       signal: controller.signal,
-      debounceMs: 5,
-      auditMs: 50,
+      sourceRoot: source,
     });
     controller.abort();
     await expect(stopped).resolves.toBe(false);
@@ -250,45 +252,45 @@ describe("development dependency key", () => {
     expect(DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION).toBe(2);
     const source = await fixture();
     const tools = {
-      node: "24.18.0",
       bun: "1.3.14",
       mise: "2026.8.12",
+      node: "24.18.0",
       rust: "1.97.1",
     };
     const first = await developmentDependencyKey({
-      sourceRoot: source,
       platform: "linux/arm64",
+      sourceRoot: source,
       tools,
     });
     await writeFile(join(source, "README.md"), "ordinary source edit\n");
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools,
-      }),
+      })
     ).toBe(first);
     await writeFile(join(source, "bun.lock"), "changed lock\n");
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools,
-      }),
+      })
     ).not.toBe(first);
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/amd64",
+        sourceRoot: source,
         tools,
-      }),
+      })
     ).not.toBe(first);
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools: { ...tools, rust: "1.97.2" },
-      }),
+      })
     ).not.toBe(first);
   });
 });
@@ -302,14 +304,14 @@ describe("development CLI", () => {
         "/tmp/arrusted",
         "--endpoint",
         "https://example.com",
-      ]),
+      ])
     ).toThrow(/unsupported/u);
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]),
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"])
     ).toMatchObject({
       arrustedRoot: "/tmp/arrusted",
-      nextPort: 3000,
       evePort: 2000,
+      nextPort: 3000,
     });
   });
 });

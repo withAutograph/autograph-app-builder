@@ -10,14 +10,14 @@ function request(fixture: string) {
     "https://localhost:3001/github/installations/callback?code=opaque&state=correlation",
     {
       headers: { cookie: `${localGitHubCallbackFixtureCookie}=${fixture}` },
-    },
+    }
   );
 }
 
 describe("local GitHub callback fixtures", () => {
   test("are disabled in production and without local provider emulation", () => {
     for (const environment of [
-      { NODE_ENV: "production", APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1" },
+      { APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1", NODE_ENV: "production" },
       { NODE_ENV: "test" },
     ] satisfies NodeJS.ProcessEnv[]) {
       const original = request("extensions");
@@ -28,8 +28,8 @@ describe("local GitHub callback fixtures", () => {
 
   test("adds repeated provider extensions only to a real OAuth callback", () => {
     const result = applyLocalGitHubCallbackFixture(request("extensions"), {
-      NODE_ENV: "test",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+      NODE_ENV: "test",
     });
     const query = new URL(result.request.url).searchParams;
     expect(result.applied).toBe(true);
@@ -50,11 +50,11 @@ describe("local GitHub callback fixtures", () => {
     ["duplicate-setup-action", "setup_action", 2],
   ])("models %s independently", (fixture, key, count) => {
     const result = applyLocalGitHubCallbackFixture(request(fixture), {
-      NODE_ENV: "test",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+      NODE_ENV: "test",
     });
     expect(new URL(result.request.url).searchParams.getAll(key)).toHaveLength(
-      count,
+      count
     );
   });
 });

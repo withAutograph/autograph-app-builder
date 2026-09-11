@@ -31,7 +31,7 @@ function developmentVersion(port: number) {
 
 export type DevelopmentCodexCommandRunner = (
   args: readonly string[],
-  options: { allowFailure?: boolean },
+  options: { allowFailure?: boolean }
 ) => Promise<{ stdout: string; stderr: string }>;
 
 async function packageInputDigest(path: string): Promise<string> {
@@ -41,14 +41,16 @@ async function packageInputDigest(path: string): Promise<string> {
       .sort((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
         const entryPath = join(path, entry.name);
-        if (entry.isDirectory())
+        if (entry.isDirectory()) {
           return [entry.name, await packageInputDigest(entryPath)] as const;
-        if (!entry.isFile())
+        }
+        if (!entry.isFile()) {
           throw new Error(
-            `Development package input was not a regular file: ${entryPath}`,
+            `Development package input was not a regular file: ${entryPath}`
           );
+        }
         return [entry.name, sha256(await readFile(entryPath))] as const;
-      }),
+      })
   );
   return sha256(JSON.stringify(contents));
 }
@@ -65,18 +67,18 @@ export async function developmentPackageFingerprint(input: {
   const repositoryRoot = resolve(input.repositoryRoot);
   return sha256(
     JSON.stringify({
-      skills: await packageInputDigest(join(repositoryRoot, "skills")),
       icon: sha256(
-        await readFile(join(repositoryRoot, "assets/autograph-icon.png")),
-      ),
-      plugin: sha256(
-        await readFile(join(repositoryRoot, ".codex-plugin/plugin.json")),
+        await readFile(join(repositoryRoot, "assets/autograph-icon.png"))
       ),
       mcpHandler: sha256(
-        await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts")),
+        await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"))
+      ),
+      plugin: sha256(
+        await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"))
       ),
       port: input.port,
-    }),
+      skills: await packageInputDigest(join(repositoryRoot, "skills")),
+    })
   );
 }
 
@@ -87,15 +89,15 @@ export async function createDevelopmentPackage(input: {
 }) {
   const repositoryRoot = resolve(input.repositoryRoot);
   const outputRoot = resolve(input.outputRoot);
-  await mkdir(outputRoot, { recursive: true, mode: 0o700 });
+  await mkdir(outputRoot, { mode: 0o700, recursive: true });
   const temporaryMarketplaceRoot = await mkdtemp(
-    join(outputRoot, ".marketplace-"),
+    join(outputRoot, ".marketplace-")
   );
   const marketplaceRoot = join(outputRoot, "marketplace");
   const pluginRoot = join(
     temporaryMarketplaceRoot,
     "plugins",
-    DEVELOPMENT_PLUGIN_NAME,
+    DEVELOPMENT_PLUGIN_NAME
   );
   const endpoint = `http://127.0.0.1:${input.port}/mcp`;
   // Codex retains an MCP transport by server name across tasks.  Make the
@@ -105,8 +107,8 @@ export async function createDevelopmentPackage(input: {
   const version = developmentVersion(input.port);
   try {
     await mkdir(join(pluginRoot, ".codex-plugin"), {
-      recursive: true,
       mode: 0o700,
+      recursive: true,
     });
     await cp(join(repositoryRoot, "skills"), join(pluginRoot, "skills"), {
       recursive: true,
@@ -114,10 +116,10 @@ export async function createDevelopmentPackage(input: {
     await mkdir(join(pluginRoot, "assets"), { mode: 0o700 });
     await cp(
       join(repositoryRoot, "assets/autograph-icon.png"),
-      join(pluginRoot, "assets/autograph-icon.png"),
+      join(pluginRoot, "assets/autograph-icon.png")
     );
     const sourceManifest = JSON.parse(
-      await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf8"),
+      await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf-8")
     ) as Record<string, unknown>;
     const sourceInterface =
       typeof sourceManifest.interface === "object" &&
@@ -126,8 +128,6 @@ export async function createDevelopmentPackage(input: {
         : {};
     const manifest = {
       ...sourceManifest,
-      name: DEVELOPMENT_PLUGIN_NAME,
-      version,
       description: "Local-only Autograph App Builder development package.",
       interface: {
         ...sourceInterface,
@@ -135,33 +135,35 @@ export async function createDevelopmentPackage(input: {
         shortDescription: "Build with local App Builder and Arrusted changes",
       },
       mcpServers: "./.mcp.json",
+      name: DEVELOPMENT_PLUGIN_NAME,
+      version,
     };
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
         [mcpServer]: {
+          oauth_resource: endpoint,
           type: "http",
           url: endpoint,
-          oauth_resource: endpoint,
         },
       },
     };
     const handler = await readFile(
       join(repositoryRoot, "lib/mcp/request-handler.ts"),
-      "utf8",
+      "utf-8"
     );
     const tools = [...registeredAutographToolNames(handler)];
     const marketplaceManifestPath = join(
       temporaryMarketplaceRoot,
-      ".agents/plugins/marketplace.json",
+      ".agents/plugins/marketplace.json"
     );
     await mkdir(dirname(marketplaceManifestPath), {
-      recursive: true,
       mode: 0o700,
+      recursive: true,
     });
     const marketplace = {
-      name: DEVELOPMENT_MARKETPLACE_NAME,
       interface: { displayName: "Autograph Development" },
+      name: DEVELOPMENT_MARKETPLACE_NAME,
       plugins: [
         {
           name: DEVELOPMENT_PLUGIN_NAME,
@@ -181,35 +183,25 @@ export async function createDevelopmentPackage(input: {
       writeFile(
         marketplaceManifestPath,
         `${JSON.stringify(marketplace, null, 2)}\n`,
-        { mode: 0o600 },
+        { mode: 0o600 }
       ),
       writeFile(
         join(pluginRoot, ".codex-plugin/plugin.json"),
         `${JSON.stringify(manifest, null, 2)}\n`,
-        { mode: 0o600 },
+        { mode: 0o600 }
       ),
       writeFile(
         join(pluginRoot, ".mcp.json"),
         `${JSON.stringify(mcp, null, 2)}\n`,
-        { mode: 0o600 },
+        { mode: 0o600 }
       ),
       writeFile(
         join(pluginRoot, "tools-list.json"),
         `${JSON.stringify(tools, null, 2)}\n`,
-        { mode: 0o600 },
+        { mode: 0o600 }
       ),
     ]);
     const receipt = {
-      format: "autograph-development-package-v2",
-      marketplace: DEVELOPMENT_MARKETPLACE_NAME,
-      plugin: DEVELOPMENT_PLUGIN_NAME,
-      selector: DEVELOPMENT_PLUGIN_SELECTOR,
-      version,
-      mcpServer,
-      endpoint,
-      tools,
-      mcpAppPreview: false,
-      publication: false,
       digest: sha256(
         JSON.stringify({
           marketplace: DEVELOPMENT_MARKETPLACE_NAME,
@@ -219,15 +211,25 @@ export async function createDevelopmentPackage(input: {
           mcpServer,
           endpoint,
           tools,
-        }),
+        })
       ),
+      endpoint,
+      format: "autograph-development-package-v2",
+      marketplace: DEVELOPMENT_MARKETPLACE_NAME,
+      mcpAppPreview: false,
+      mcpServer,
+      plugin: DEVELOPMENT_PLUGIN_NAME,
+      publication: false,
+      selector: DEVELOPMENT_PLUGIN_SELECTOR,
+      tools,
+      version,
     } as const;
     await writeFile(
       join(pluginRoot, "development-receipt.json"),
       `${JSON.stringify(receipt, null, 2)}\n`,
-      { mode: 0o600 },
+      { mode: 0o600 }
     );
-    await rm(marketplaceRoot, { recursive: true, force: true });
+    await rm(marketplaceRoot, { force: true, recursive: true });
     await rename(temporaryMarketplaceRoot, marketplaceRoot);
     return {
       marketplaceRoot,
@@ -235,7 +237,7 @@ export async function createDevelopmentPackage(input: {
       receipt,
     };
   } finally {
-    await rm(temporaryMarketplaceRoot, { recursive: true, force: true });
+    await rm(temporaryMarketplaceRoot, { force: true, recursive: true });
   }
 }
 
@@ -256,11 +258,11 @@ export async function registerDevelopmentPackage(input: {
         const result = await execFileAsync(codexBin, [...args], {
           env: { ...process.env, CODEX_HOME: codexHome },
         });
-        return { stdout: result.stdout, stderr: result.stderr };
+        return { stderr: result.stderr, stdout: result.stdout };
       } catch (error) {
         if (options.allowFailure) {
           const failed = error as { stdout?: string; stderr?: string };
-          return { stdout: failed.stdout ?? "", stderr: failed.stderr ?? "" };
+          return { stderr: failed.stderr ?? "", stdout: failed.stdout ?? "" };
         }
         throw error;
       }
@@ -270,14 +272,14 @@ export async function registerDevelopmentPackage(input: {
   });
   await runner(
     ["plugin", "marketplace", "remove", DEVELOPMENT_MARKETPLACE_NAME, "--json"],
-    { allowFailure: true },
+    { allowFailure: true }
   );
   await runner(["plugin", "marketplace", "add", marketplaceRoot, "--json"], {});
   await runner(["plugin", "add", DEVELOPMENT_PLUGIN_SELECTOR, "--json"], {});
   await disableGlobalDevelopmentPackage(codexHome);
   const listed = await runner(
     ["plugin", "list", "--marketplace", DEVELOPMENT_MARKETPLACE_NAME, "--json"],
-    {},
+    {}
   );
   const parsed = JSON.parse(listed.stdout) as { installed?: unknown[] };
   const installed = parsed.installed?.[0] as
@@ -305,18 +307,19 @@ export async function registerDevelopmentPackage(input: {
       join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
-  )
+  ) {
     throw new Error(
-      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`
     );
-  return { selector: DEVELOPMENT_PLUGIN_SELECTOR, marketplaceRoot };
+  }
+  return { marketplaceRoot, selector: DEVELOPMENT_PLUGIN_SELECTOR };
 }
 
 // `codex plugin add` writes this canonical table to the user config. Keep the
 // installed package available, but let the repository config enable it.
 async function disableGlobalDevelopmentPackage(codexHome: string) {
   const configPath = join(codexHome, "config.toml");
-  const config = await readFile(configPath, "utf8");
+  const config = await readFile(configPath, "utf-8");
   let inPlugin = false;
   let updated = false;
   const scoped = config
@@ -334,7 +337,7 @@ async function disableGlobalDevelopmentPackage(codexHome: string) {
     .join("\n");
   if (!updated) {
     throw new Error(
-      "Codex did not write the development plugin enablement setting.",
+      "Codex did not write the development plugin enablement setting."
     );
   }
   await writeFile(configPath, scoped);
@@ -351,28 +354,28 @@ export function developmentLaunchEnvironment(input: {
   evePort: number;
 }): Readonly<Record<string, string>> {
   return {
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
+    APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
+    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
+    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
     APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
     APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
-    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
-    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
-    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
-    APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_PUBLICATION: "0",
-    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-    EVE_HOSTED_ADAPTER: "0",
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
-    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+    APP_BUILDER_LOCAL_PUBLICATION: "0",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
+    EVE_HOSTED_ADAPTER: "0",
     REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
     REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,
+    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
   };
 }

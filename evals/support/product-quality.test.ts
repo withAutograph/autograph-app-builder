@@ -88,20 +88,20 @@ describe("product-quality scenarios", () => {
 
   it("fails a needless question in a sparse workflow", () => {
     const report = evaluateConversationQuality({
-      scenario: productQualityScenario("vendor-onboarding"),
       reply:
         "Vendor Onboarding has an operations review queue, vendor detail panel, and conditional Finance verification step. Which layout should I use?",
+      scenario: productQualityScenario("vendor-onboarding"),
     });
     expect(report.hardFailures).toContain(
-      "Conversation asked an unnecessary product question.",
+      "Conversation asked an unnecessary product question."
     );
   });
 
   it("accepts one recommended question for material ambiguity", () => {
     const report = evaluateConversationQuality({
-      scenario: productQualityScenario("material-product-ambiguity"),
       reply:
         "These are meaningfully different products. Should the first version focus on initial onboarding (recommended) or continuously monitoring vendors?",
+      scenario: productQualityScenario("material-product-ambiguity"),
     });
     expect(report.hardFailures).toEqual([]);
   });
@@ -109,9 +109,9 @@ describe("product-quality scenarios", () => {
   it("validates the complete prototype and AppSpec together", () => {
     const scenario = productQualityScenario("vendor-onboarding");
     const report = evaluatePrototypeQuality({
-      scenario,
-      html: completePrototype,
       appSpec: completeAppSpec,
+      html: completePrototype,
+      scenario,
     });
     expect(report.hardFailures).toEqual([]);
   });
@@ -119,14 +119,14 @@ describe("product-quality scenarios", () => {
   it("rejects an incomplete or inaccessible prototype", () => {
     const scenario = productQualityScenario("vendor-onboarding");
     const report = evaluatePrototypeQuality({
-      scenario,
-      html: "<html><body>lorem ipsum</body></html>",
       appSpec: "## Build handoff\n\n{}",
+      html: "<html><body>lorem ipsum</body></html>",
+      scenario,
     });
     expect(report.hardFailures).toContain("Prototype lacks a language.");
     expect(report.hardFailures).toContain("Prototype lacks a main landmark.");
     expect(report.hardFailures).toContain(
-      "Prototype contains unfinished placeholder content.",
+      "Prototype contains unfinished placeholder content."
     );
   });
 });

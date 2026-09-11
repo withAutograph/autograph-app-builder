@@ -18,12 +18,14 @@ type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
 async function collectBounded(
   reader: OutputReader,
   state: { bytes: number; readonly maximumBytes: number },
-  observed: () => void,
+  observed: () => void
 ): Promise<Uint8Array[]> {
   const chunks: Uint8Array[] = [];
   for (;;) {
     const next = await reader.read();
-    if (next.done) break;
+    if (next.done) {
+      break;
+    }
     state.bytes += next.value.byteLength;
     observed();
     if (state.bytes > state.maximumBytes) {
@@ -36,7 +38,7 @@ async function collectBounded(
 
 function decodeChunks(chunks: readonly Uint8Array[]) {
   return new TextDecoder("utf-8", { fatal: true }).decode(
-    Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
+    Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
   );
 }
 
@@ -46,12 +48,12 @@ function timeoutRejection(error: Error, timeoutMs: number) {
     timeout = setTimeout(() => reject(error), timeoutMs);
     timeout.unref?.();
   });
-  return { promise, clear: () => clearTimeout(timeout) };
+  return { clear: () => clearTimeout(timeout), promise };
 }
 
 function resettableTimeoutRejection(error: Error, timeoutMs: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  let rejectPromise: (error: Error) => void = () => undefined;
+  let rejectPromise: (error: Error) => void = () => {};
   const promise = new Promise<never>((_resolve, reject) => {
     rejectPromise = reject;
   });
@@ -61,13 +63,13 @@ function resettableTimeoutRejection(error: Error, timeoutMs: number) {
     timeout = setTimeout(() => rejectPromise(error), timeoutMs);
     timeout.unref?.();
   };
-  return { promise, clear, reset };
+  return { clear, promise, reset };
 }
 
 async function settleWithin(operation: Promise<unknown>, timeoutMs: number) {
   const bounded = timeoutRejection(new Error("cleanup timed out"), timeoutMs);
   try {
-    await Promise.race([operation.catch(() => undefined), bounded.promise]);
+    await Promise.race([operation.catch(() => {}), bounded.promise]);
   } catch {
     // Cleanup evidence is the bounded return itself. The original command
     // error remains authoritative and is never replaced by cleanup failure.
@@ -86,30 +88,30 @@ export async function runBoundedSandboxCommand(
     noOutputTimeoutMs?: number;
     outputBytes?: number;
     killCleanupTimeoutMs?: number;
-  },
+  }
 ): Promise<SandboxCommandResult> {
   const timeoutMs = Math.min(
     limits?.timeoutMs ?? SANDBOX_EXECUTION_POLICY.command.maximumWallTimeMs,
-    SANDBOX_EXECUTION_POLICY.command.maximumWallTimeMs,
+    SANDBOX_EXECUTION_POLICY.command.maximumWallTimeMs
   );
   const outputBytes = Math.min(
     limits?.outputBytes ?? SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes,
-    SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes,
+    SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes
   );
   const noOutputTimeoutMs = Math.min(
     limits?.noOutputTimeoutMs ??
       SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
-    SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
+    SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs
   );
   const killCleanupTimeoutMs = Math.min(
     limits?.killCleanupTimeoutMs ??
       SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
-    SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+    SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs
   );
   const controller = new AbortController();
   const wallTimeout = timeoutRejection(
     new SandboxCommandLimitError("timeout"),
-    timeoutMs,
+    timeoutMs
   );
   const signal = options.abortSignal
     ? AbortSignal.any([options.abortSignal, controller.signal])
@@ -118,18 +120,18 @@ export async function runBoundedSandboxCommand(
   let readers: readonly OutputReader[] = [];
   const noOutputTimeout = resettableTimeoutRejection(
     new SandboxCommandLimitError("no-output-timeout"),
-    noOutputTimeoutMs,
+    noOutputTimeoutMs
   );
   try {
     const spawnPromise = Promise.resolve(
       sandbox.spawn({
         ...options,
-        command: options.command,
         abortSignal: signal,
-      }),
+        command: options.command,
+      })
     );
     process = await Promise.race([spawnPromise, wallTimeout.promise]);
-    spawnPromise.catch(() => undefined);
+    spawnPromise.catch(() => {});
     const stdoutReader = process.stdout.getReader();
     const stderrReader = process.stderr.getReader();
     readers = [stdoutReader, stderrReader];
@@ -145,23 +147,25 @@ export async function runBoundedSandboxCommand(
       stderrPromise,
       Promise.resolve(process.wait()),
     ]);
-    completion.catch(() => undefined);
+    completion.catch(() => {});
     const [stdout, stderr, result] = await Promise.race([
       completion,
       wallTimeout.promise,
       noOutputTimeout.promise,
       new Promise<never>((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else
+        if (signal.aborted) {
+          reject(signal.reason);
+        } else {
           signal.addEventListener("abort", () => reject(signal.reason), {
             once: true,
           });
+        }
       }),
     ]);
     return {
       exitCode: result.exitCode,
-      stdout: decodeChunks(stdout),
       stderr: decodeChunks(stderr),
+      stdout: decodeChunks(stdout),
     };
   } catch (error) {
     controller.abort(error);
@@ -170,9 +174,12 @@ export async function runBoundedSandboxCommand(
       ...(process === undefined ? [] : [Promise.resolve(process.kill())]),
     ];
     await settleWithin(Promise.allSettled(cleanup), killCleanupTimeoutMs);
-    if (error instanceof SandboxCommandLimitError) throw error;
-    if (controller.signal.reason instanceof SandboxCommandLimitError)
+    if (error instanceof SandboxCommandLimitError) {
+      throw error;
+    }
+    if (controller.signal.reason instanceof SandboxCommandLimitError) {
       throw controller.signal.reason;
+    }
     throw error;
   } finally {
     wallTimeout.clear();

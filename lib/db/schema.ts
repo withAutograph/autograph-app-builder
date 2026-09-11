@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
@@ -10,7 +11,6 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 // Better Auth 1.7.1 core + jwt + MCP OAuth Provider schema. These exports use
 // the plugin model names intentionally: the Drizzle adapter resolves models by
@@ -18,57 +18,57 @@ import { sql } from "drizzle-orm";
 export const user = pgTable(
   "user",
   {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
+    banExpires: timestamp("ban_expires", { withTimezone: true }),
+    banReason: text("ban_reason"),
+    banned: boolean("banned").default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
+    id: text("id").primaryKey(),
     image: text("image"),
+    name: text("name").notNull(),
     role: text("role"),
-    banned: boolean("banned").default(false),
-    banReason: text("ban_reason"),
-    banExpires: timestamp("ban_expires", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex("user_email_uidx").on(table.email),
     uniqueIndex("user_email_lower_uidx").on(sql`lower(${table.email})`),
-  ],
+  ]
 );
 
 export const session = pgTable(
   "session",
   {
-    id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    token: text("token").notNull(),
+    activeOrganizationId: text("active_organization_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    impersonatedBy: text("impersonated_by"),
     ipAddress: text("ip_address"),
+    token: text("token").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
     userAgent: text("user_agent"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    activeOrganizationId: text("active_organization_id"),
-    impersonatedBy: text("impersonated_by"),
   },
   (table) => [
     uniqueIndex("session_token_uidx").on(table.token),
     index("session_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const organization = pgTable(
   "organization",
   {
+    audience: text("audience").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     id: text("id").primaryKey(),
+    issuer: text("issuer").notNull(),
+    logo: text("logo"),
+    metadata: text("metadata"),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    logo: text("logo"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-    metadata: text("metadata"),
-    issuer: text("issuer").notNull(),
-    audience: text("audience").notNull(),
     workspaceId: text("workspace_id").notNull(),
   },
   (table) => [
@@ -76,300 +76,300 @@ export const organization = pgTable(
     uniqueIndex("organization_authority_uidx").on(
       table.issuer,
       table.audience,
-      table.workspaceId,
+      table.workspaceId
     ),
-  ],
+  ]
 );
 
 export const member = pgTable(
   "member",
   {
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role").notNull().default("member"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex("member_organization_user_uidx").on(
       table.organizationId,
-      table.userId,
+      table.userId
     ),
     index("member_organization_id_idx").on(table.organizationId),
     index("member_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const personalWorkspace = pgTable(
   "personal_workspace",
   {
-    userId: text("user_id")
-      .primaryKey()
-      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("personal_workspace_organization_id_uidx").on(
-      table.organizationId,
+      table.organizationId
     ),
-  ],
+  ]
 );
 
 export const invitation = pgTable(
   "invitation",
   {
-    id: text("id").primaryKey(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    email: text("email").notNull(),
-    role: text("role"),
-    status: text("status").notNull().default("pending"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    email: text("email").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
     inviterId: text("inviter_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role"),
+    status: text("status").notNull().default("pending"),
   },
   (table) => [
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
-  ],
+  ]
 );
 
 export const account = pgTable(
   "account",
   {
-    id: text("id").primaryKey(),
-    issuer: text("issuer").notNull(),
-    accountId: text("account_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    idToken: text("id_token"),
     accessTokenExpiresAt: timestamp("access_token_expires_at", {
       withTimezone: true,
     }),
+    accountId: text("account_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    idToken: text("id_token"),
+    issuer: text("issuer").notNull(),
+    password: text("password"),
+    providerId: text("provider_id").notNull(),
+    refreshToken: text("refresh_token"),
     refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
       withTimezone: true,
     }),
     scope: text("scope"),
-    password: text("password"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("account_issuer_account_id_uidx").on(
       table.issuer,
-      table.accountId,
+      table.accountId
     ),
     index("account_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const verification = pgTable(
   "verification",
   {
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
-    value: text("value").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    value: text("value").notNull(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)],
+  (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
 
 export const passkey = pgTable(
   "passkey",
   {
+    aaguid: text("aaguid"),
+    backedUp: boolean("backed_up").notNull(),
+    counter: integer("counter").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    credentialID: text("credential_id").notNull(),
+    deviceType: text("device_type").notNull(),
     id: text("id").primaryKey(),
     name: text("name"),
     publicKey: text("public_key").notNull(),
+    transports: text("transports"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    credentialID: text("credential_id").notNull(),
-    counter: integer("counter").notNull(),
-    deviceType: text("device_type").notNull(),
-    backedUp: boolean("backed_up").notNull(),
-    transports: text("transports"),
-    createdAt: timestamp("created_at", { withTimezone: true }),
-    aaguid: text("aaguid"),
   },
   (table) => [
     uniqueIndex("passkey_credential_id_uidx").on(table.credentialID),
     index("passkey_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const passkeyOnboarding = pgTable(
   "passkey_onboarding",
   {
-    id: text("id").primaryKey(),
-    tokenDigest: text("token_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     deploymentId: text("deployment_id").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
     origin: text("origin").notNull(),
     rpId: text("rp_id").notNull(),
+    tokenDigest: text("token_digest").notNull(),
     userHandle: text("user_handle").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex("passkey_onboarding_token_digest_uidx").on(table.tokenDigest),
     uniqueIndex("passkey_onboarding_user_handle_uidx").on(table.userHandle),
     index("passkey_onboarding_expires_at_idx").on(table.expiresAt),
-  ],
+  ]
 );
 
 export const jwks = pgTable("jwks", {
-  id: text("id").primaryKey(),
-  publicKey: text("public_key").notNull(),
-  privateKey: text("private_key").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
   alg: text("alg"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   crv: text("crv"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  id: text("id").primaryKey(),
+  privateKey: text("private_key").notNull(),
+  publicKey: text("public_key").notNull(),
 });
 
 export const oauthClient = pgTable(
   "oauth_client",
   {
-    id: text("id").primaryKey(),
-    clientId: text("client_id").notNull(),
-    clientSecret: text("client_secret"),
-    clientDiscoveryId: text("client_discovery_id"),
-    disabled: boolean("disabled").default(false),
-    skipConsent: boolean("skip_consent"),
-    enableEndSession: boolean("enable_end_session"),
-    subjectType: text("subject_type"),
-    scopes: text("scopes").array(),
+    applicationType: text("application_type"),
+    backchannelLogoutSessionRequired: boolean(
+      "backchannel_logout_session_required"
+    ),
+    backchannelLogoutUri: text("backchannel_logout_uri"),
     clientCredentialsScopes: text("client_credentials_scopes")
       .array()
       .default([]),
-    userId: text("user_id").references(() => user.id),
-    createdAt: timestamp("created_at", { withTimezone: true }),
-    updatedAt: timestamp("updated_at", { withTimezone: true }),
-    name: text("name"),
-    uri: text("uri"),
-    icon: text("icon"),
+    clientDiscoveryId: text("client_discovery_id"),
+    clientId: text("client_id").notNull(),
+    clientSecret: text("client_secret"),
     contacts: text("contacts").array(),
-    tos: text("tos"),
-    policy: text("policy"),
-    softwareId: text("software_id"),
-    softwareVersion: text("software_version"),
-    softwareStatement: text("software_statement"),
-    redirectUris: text("redirect_uris").array().notNull(),
-    postLogoutRedirectUris: text("post_logout_redirect_uris").array(),
-    backchannelLogoutUri: text("backchannel_logout_uri"),
-    backchannelLogoutSessionRequired: boolean(
-      "backchannel_logout_session_required",
-    ),
-    tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
-    applicationType: text("application_type"),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    disabled: boolean("disabled").default(false),
+    dpopBoundAccessTokens: boolean("dpop_bound_access_tokens").default(false),
+    enableEndSession: boolean("enable_end_session"),
+    grantTypes: text("grant_types").array(),
+    icon: text("icon"),
+    id: text("id").primaryKey(),
     jwks: text("jwks"),
     jwksUri: text("jwks_uri"),
-    grantTypes: text("grant_types").array(),
-    responseTypes: text("response_types").array(),
-    requirePKCE: boolean("require_pkce"),
-    dpopBoundAccessTokens: boolean("dpop_bound_access_tokens").default(false),
-    referenceId: text("reference_id"),
     metadata: jsonb("metadata"),
+    name: text("name"),
+    policy: text("policy"),
+    postLogoutRedirectUris: text("post_logout_redirect_uris").array(),
+    redirectUris: text("redirect_uris").array().notNull(),
+    referenceId: text("reference_id"),
+    requirePKCE: boolean("require_pkce"),
+    responseTypes: text("response_types").array(),
+    scopes: text("scopes").array(),
+    skipConsent: boolean("skip_consent"),
+    softwareId: text("software_id"),
+    softwareStatement: text("software_statement"),
+    softwareVersion: text("software_version"),
+    subjectType: text("subject_type"),
+    tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
+    tos: text("tos"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+    uri: text("uri"),
+    userId: text("user_id").references(() => user.id),
   },
   (table) => [
     uniqueIndex("oauth_client_client_id_uidx").on(table.clientId),
     index("oauth_client_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const oauthResource = pgTable(
   "oauth_resource",
   {
+    accessTokenTtl: integer("access_token_ttl"),
+    allowedScopes: text("allowed_scopes").array(),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    customClaims: jsonb("custom_claims"),
+    disabled: boolean("disabled").default(false),
+    dpopBoundAccessTokensRequired: boolean(
+      "dpop_bound_access_tokens_required"
+    ).default(false),
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
+    metadata: jsonb("metadata"),
     name: text("name").notNull(),
-    accessTokenTtl: integer("access_token_ttl"),
+    policyVersion: integer("policy_version").default(1),
     refreshTokenTtl: integer("refresh_token_ttl"),
     signingAlgorithm: text("signing_algorithm"),
     signingKeyId: text("signing_key_id"),
-    allowedScopes: text("allowed_scopes").array(),
-    customClaims: jsonb("custom_claims"),
-    dpopBoundAccessTokensRequired: boolean(
-      "dpop_bound_access_tokens_required",
-    ).default(false),
-    disabled: boolean("disabled").default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
-    policyVersion: integer("policy_version").default(1),
-    metadata: jsonb("metadata"),
   },
   (table) => [
     uniqueIndex("oauth_resource_identifier_uidx").on(table.identifier),
-  ],
+  ]
 );
 
 export const oauthClientResource = pgTable(
   "oauth_client_resource",
   {
-    id: text("id").primaryKey(),
     clientId: text("client_id")
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    id: text("id").primaryKey(),
+    metadata: jsonb("metadata"),
     resourceId: text("resource_id")
       .notNull()
       .references(() => oauthResource.identifier, { onDelete: "cascade" }),
-    metadata: jsonb("metadata"),
-    createdAt: timestamp("created_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("oauth_client_resource_client_resource_uidx").on(
       table.clientId,
-      table.resourceId,
+      table.resourceId
     ),
     index("oauth_client_resource_client_id_idx").on(table.clientId),
     index("oauth_client_resource_resource_id_idx").on(table.resourceId),
-  ],
+  ]
 );
 
 export const oauthRefreshToken = pgTable(
   "oauth_refresh_token",
   {
-    id: text("id").primaryKey(),
-    token: text("token").notNull(),
+    authTime: timestamp("auth_time", { withTimezone: true }),
+    authorizationCodeId: text("authorization_code_id"),
     clientId: text("client_id")
       .notNull()
       .references(() => oauthClient.clientId),
-    sessionId: text("session_id").references(() => session.id, {
-      onDelete: "set null",
-    }),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id),
-    referenceId: text("reference_id"),
-    authorizationCodeId: text("authorization_code_id"),
-    resources: text("resources").array(),
-    requestedUserInfoClaims: text("requested_user_info_claims").array(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    confirmation: jsonb("confirmation"),
     createdAt: timestamp("created_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    id: text("id").primaryKey(),
+    referenceId: text("reference_id"),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    resources: text("resources").array(),
     revoked: timestamp("revoked", { withTimezone: true }),
     rotatedAt: timestamp("rotated_at", { withTimezone: true }),
-    rotationReplayResponse: text("rotation_replay_response"),
     rotationReplayExpiresAt: timestamp("rotation_replay_expires_at", {
       withTimezone: true,
     }),
-    authTime: timestamp("auth_time", { withTimezone: true }),
-    confirmation: jsonb("confirmation"),
+    rotationReplayResponse: text("rotation_replay_response"),
     scopes: text("scopes").array().notNull(),
+    sessionId: text("session_id").references(() => session.id, {
+      onDelete: "set null",
+    }),
+    token: text("token").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id),
   },
   (table) => [
     uniqueIndex("oauth_refresh_token_token_uidx").on(table.token),
@@ -377,33 +377,33 @@ export const oauthRefreshToken = pgTable(
     index("oauth_refresh_token_session_id_idx").on(table.sessionId),
     index("oauth_refresh_token_user_id_idx").on(table.userId),
     index("oauth_refresh_token_authorization_code_id_idx").on(
-      table.authorizationCodeId,
+      table.authorizationCodeId
     ),
-  ],
+  ]
 );
 
 export const oauthAccessToken = pgTable(
   "oauth_access_token",
   {
-    id: text("id").primaryKey(),
-    token: text("token"),
+    authorizationCodeId: text("authorization_code_id"),
     clientId: text("client_id")
       .notNull()
       .references(() => oauthClient.clientId),
+    confirmation: jsonb("confirmation"),
+    createdAt: timestamp("created_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    id: text("id").primaryKey(),
+    referenceId: text("reference_id"),
+    refreshId: text("refresh_id").references(() => oauthRefreshToken.id),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    resources: text("resources").array(),
+    revoked: timestamp("revoked", { withTimezone: true }),
+    scopes: text("scopes").array().notNull(),
     sessionId: text("session_id").references(() => session.id, {
       onDelete: "set null",
     }),
+    token: text("token"),
     userId: text("user_id").references(() => user.id),
-    referenceId: text("reference_id"),
-    authorizationCodeId: text("authorization_code_id"),
-    resources: text("resources").array(),
-    requestedUserInfoClaims: text("requested_user_info_claims").array(),
-    refreshId: text("refresh_id").references(() => oauthRefreshToken.id),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }),
-    revoked: timestamp("revoked", { withTimezone: true }),
-    confirmation: jsonb("confirmation"),
-    scopes: text("scopes").array().notNull(),
   },
   (table) => [
     uniqueIndex("oauth_access_token_token_uidx").on(table.token),
@@ -411,85 +411,84 @@ export const oauthAccessToken = pgTable(
     index("oauth_access_token_session_id_idx").on(table.sessionId),
     index("oauth_access_token_user_id_idx").on(table.userId),
     index("oauth_access_token_authorization_code_id_idx").on(
-      table.authorizationCodeId,
+      table.authorizationCodeId
     ),
     index("oauth_access_token_refresh_id_idx").on(table.refreshId),
-  ],
+  ]
 );
 
 export const oauthConsent = pgTable(
   "oauth_consent",
   {
-    id: text("id").primaryKey(),
     clientId: text("client_id")
       .notNull()
       .references(() => oauthClient.clientId),
-    userId: text("user_id").references(() => user.id),
-    referenceId: text("reference_id"),
-    resources: text("resources").array(),
-    requestedUserInfoClaims: text("requested_user_info_claims").array(),
-    scopes: text("scopes").array().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }),
+    id: text("id").primaryKey(),
+    referenceId: text("reference_id"),
+    requestedUserInfoClaims: text("requested_user_info_claims").array(),
+    resources: text("resources").array(),
+    scopes: text("scopes").array().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
+    userId: text("user_id").references(() => user.id),
   },
   (table) => [
     index("oauth_consent_client_id_idx").on(table.clientId),
     index("oauth_consent_user_id_idx").on(table.userId),
-  ],
+  ]
 );
 
 export const oauthClientAssertion = pgTable("oauth_client_assertion", {
-  id: text("id").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  id: text("id").primaryKey(),
 });
 
 export const hostedWorkspaceMemberships = pgTable(
   "hosted_workspace_membership",
   {
-    issuer: text("issuer").notNull(),
-    audience: text("audience").notNull(),
-    workspaceId: text("workspace_id").notNull(),
-    ownerUserId: text("owner_user_id").notNull(),
     active: boolean("active").notNull().default(false),
+    audience: text("audience").notNull(),
+    issuer: text("issuer").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    workspaceId: text("workspace_id").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_workspace_membership_pk",
       columns: [
         table.issuer,
         table.audience,
         table.workspaceId,
         table.ownerUserId,
       ],
+      name: "hosted_workspace_membership_pk",
     }),
-  ],
+  ]
 );
 
 export const agentSessions = pgTable(
   "agent_session",
   {
-    issuer: text("issuer").notNull(),
-    audience: text("audience").notNull(),
-    workspaceId: text("workspace_id").notNull(),
-    ownerUserId: text("owner_user_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    adapterSessionId: text("adapter_session_id").notNull(),
     adapterGeneration: integer("adapter_generation"),
-    title: text("title"),
-    stage: text("stage"),
-    resumabilityState: text("resumability_state"),
+    adapterSessionId: text("adapter_session_id").notNull(),
+    audience: text("audience").notNull(),
     checkpointDigest: text("checkpoint_digest"),
     checkpointProgressDigest: text("checkpoint_progress_digest"),
-    parentSessionId: text("parent_session_id"),
-    lastProgressAt: timestamp("last_progress_at", { withTimezone: true }),
-    record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    lastProgressAt: timestamp("last_progress_at", { withTimezone: true }),
+    ownerUserId: text("owner_user_id").notNull(),
+    parentSessionId: text("parent_session_id"),
+    record: jsonb("record").notNull(),
+    resumabilityState: text("resumability_state"),
+    sessionId: text("session_id").notNull(),
+    stage: text("stage"),
+    title: text("title"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    workspaceId: text("workspace_id").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "agent_session_tenant_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -497,19 +496,20 @@ export const agentSessions = pgTable(
         table.ownerUserId,
         table.sessionId,
       ],
+      name: "agent_session_tenant_pk",
     }),
     index("agent_session_owner_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
-      table.ownerUserId,
+      table.ownerUserId
     ),
     index("agent_session_retention_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.updatedAt,
+      table.updatedAt
     ),
     index("agent_session_recent_idx").on(
       table.issuer,
@@ -517,58 +517,57 @@ export const agentSessions = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.updatedAt.desc(),
-      table.sessionId.desc(),
+      table.sessionId.desc()
     ),
     uniqueIndex("agent_session_adapter_id_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.adapterSessionId,
+      table.adapterSessionId
     ),
     check(
       "agent_session_adapter_generation_check",
-      sql`${table.adapterGeneration} IS NULL OR ${table.adapterGeneration} > 0`,
+      sql`${table.adapterGeneration} IS NULL OR ${table.adapterGeneration} > 0`
     ),
     check(
       "agent_session_stage_check",
-      sql`${table.stage} IS NULL OR ${table.stage} IN ('starting', 'designing', 'prototype', 'planning', 'ready', 'complete', 'needs_attention')`,
+      sql`${table.stage} IS NULL OR ${table.stage} IN ('starting', 'designing', 'prototype', 'planning', 'ready', 'complete', 'needs_attention')`
     ),
     check(
       "agent_session_resumability_check",
-      sql`${table.resumabilityState} IS NULL OR ${table.resumabilityState} IN ('live', 'checkpoint', 'restart_required', 'terminal')`,
+      sql`${table.resumabilityState} IS NULL OR ${table.resumabilityState} IN ('live', 'checkpoint', 'restart_required', 'terminal')`
     ),
     check(
       "agent_session_checkpoint_digest_check",
-      sql`${table.checkpointDigest} IS NULL OR ${table.checkpointDigest} ~ '^sha256:[a-f0-9]{64}$'`,
+      sql`${table.checkpointDigest} IS NULL OR ${table.checkpointDigest} ~ '^sha256:[a-f0-9]{64}$'`
     ),
     check(
       "agent_session_checkpoint_progress_digest_check",
-      sql`${table.checkpointProgressDigest} IS NULL OR ${table.checkpointProgressDigest} ~ '^sha256:[a-f0-9]{64}$'`,
+      sql`${table.checkpointProgressDigest} IS NULL OR ${table.checkpointProgressDigest} ~ '^sha256:[a-f0-9]{64}$'`
     ),
-  ],
+  ]
 );
 
 export const agentOperations = pgTable(
   "agent_operation",
   {
-    issuer: text("issuer").notNull(),
     audience: text("audience").notNull(),
-    workspaceId: text("workspace_id").notNull(),
-    ownerUserId: text("owner_user_id").notNull(),
-    operationId: text("operation_id").notNull(),
-    sessionId: text("session_id"),
-    kind: text("kind").notNull(),
     clientRequestId: text("client_request_id").notNull(),
-    requestDigest: text("request_digest").notNull(),
-    state: text("state").notNull(),
-    record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    kind: text("kind").notNull(),
+    operationId: text("operation_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    record: jsonb("record").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    sessionId: text("session_id"),
+    state: text("state").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    workspaceId: text("workspace_id").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "agent_operation_tenant_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -576,6 +575,7 @@ export const agentOperations = pgTable(
         table.ownerUserId,
         table.operationId,
       ],
+      name: "agent_operation_tenant_pk",
     }),
     uniqueIndex("agent_operation_idempotency_idx").on(
       table.issuer,
@@ -583,7 +583,7 @@ export const agentOperations = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.kind,
-      table.clientRequestId,
+      table.clientRequestId
     ),
     index("agent_operation_retention_idx").on(
       table.issuer,
@@ -591,32 +591,31 @@ export const agentOperations = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.updatedAt,
-      table.state,
+      table.state
     ),
-  ],
+  ]
 );
 
 export const sandboxExecutionLeases = pgTable(
   "sandbox_execution_lease",
   {
-    issuer: text("issuer").notNull(),
-    audience: text("audience").notNull(),
-    workspaceId: text("workspace_id").notNull(),
-    ownerUserId: text("owner_user_id").notNull(),
-    adapterSessionId: text("adapter_session_id").notNull(),
-    providerSandboxId: text("provider_sandbox_id").notNull(),
-    epoch: integer("epoch").notNull(),
-    state: text("state").notNull(),
-    policyDigest: text("policy_digest").notNull(),
-    record: jsonb("record").notNull(),
     acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull(),
-    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+    adapterSessionId: text("adapter_session_id").notNull(),
+    audience: text("audience").notNull(),
+    epoch: integer("epoch").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    policyDigest: text("policy_digest").notNull(),
+    providerSandboxId: text("provider_sandbox_id").notNull(),
+    record: jsonb("record").notNull(),
     releasedAt: timestamp("released_at", { withTimezone: true }),
+    state: text("state").notNull(),
+    workspaceId: text("workspace_id").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "sandbox_execution_lease_tenant_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -624,13 +623,14 @@ export const sandboxExecutionLeases = pgTable(
         table.ownerUserId,
         table.adapterSessionId,
       ],
+      name: "sandbox_execution_lease_tenant_pk",
     }),
     index("sandbox_execution_lease_workspace_active_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.state,
-      table.expiresAt,
+      table.expiresAt
     ),
     index("sandbox_execution_lease_subject_active_idx").on(
       table.issuer,
@@ -638,155 +638,155 @@ export const sandboxExecutionLeases = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.state,
-      table.expiresAt,
+      table.expiresAt
     ),
     index("sandbox_execution_lease_orphan_idx").on(
       table.state,
-      table.expiresAt,
+      table.expiresAt
     ),
-  ],
+  ]
 );
 
 export const githubPublicationProposals = pgTable(
   "github_publication_proposal",
   {
-    proposalDigest: text("proposal_digest").notNull(),
-    kind: text("kind").notNull(),
-    idempotencyKey: text("idempotency_key").notNull(),
-    proposal: jsonb("proposal").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    kind: text("kind").notNull(),
+    proposal: jsonb("proposal").notNull(),
+    proposalDigest: text("proposal_digest").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "github_publication_proposal_pk",
       columns: [table.proposalDigest],
+      name: "github_publication_proposal_pk",
     }),
     uniqueIndex("github_publication_proposal_idempotency_idx").on(
       table.kind,
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
     check(
       "github_publication_proposal_digest_check",
-      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_publication_proposal_idempotency_key_check",
-      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_publication_proposal_kind_check",
-      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`
     ),
     check(
       "github_publication_proposal_record_check",
-      sql`jsonb_typeof(${table.proposal}) = 'object'`,
+      sql`jsonb_typeof(${table.proposal}) = 'object'`
     ),
-  ],
+  ]
 );
 
 export const githubPublicationJournals = pgTable(
   "github_publication_journal",
   {
-    proposalDigest: text("proposal_digest").notNull(),
-    kind: text("kind").notNull(),
-    idempotencyKey: text("idempotency_key").notNull(),
-    receiptDigest: text("receipt_digest").notNull(),
-    status: text("status").notNull(),
-    record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    kind: text("kind").notNull(),
+    proposalDigest: text("proposal_digest").notNull(),
+    receiptDigest: text("receipt_digest").notNull(),
+    record: jsonb("record").notNull(),
+    status: text("status").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "github_publication_journal_pk",
       columns: [table.proposalDigest],
+      name: "github_publication_journal_pk",
     }),
     uniqueIndex("github_publication_journal_idempotency_idx").on(
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
     index("github_publication_journal_status_idx").on(
       table.status,
-      table.updatedAt,
+      table.updatedAt
     ),
     check(
       "github_publication_journal_proposal_digest_check",
-      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_publication_journal_receipt_digest_check",
-      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_publication_journal_idempotency_key_check",
-      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_publication_journal_kind_check",
-      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`
     ),
     check(
       "github_publication_journal_status_check",
-      sql`${table.status} IN ('pending', 'failed', 'succeeded')`,
+      sql`${table.status} IN ('pending', 'failed', 'succeeded')`
     ),
     check(
       "github_publication_journal_record_check",
-      sql`jsonb_typeof(${table.record}) = 'object'`,
+      sql`jsonb_typeof(${table.record}) = 'object'`
     ),
     check(
       "github_publication_journal_timestamp_check",
-      sql`${table.createdAt} <= ${table.updatedAt}`,
+      sql`${table.createdAt} <= ${table.updatedAt}`
     ),
-  ],
+  ]
 );
 
 const hostedGitHubTenantColumns = {
-  issuer: text("issuer").notNull(),
   audience: text("audience").notNull(),
-  workspaceId: text("workspace_id").notNull(),
+  issuer: text("issuer").notNull(),
   ownerUserId: text("owner_user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
 };
 
 export const hostedGitHubInstallations = pgTable(
   "hosted_github_installation",
   {
     ...hostedGitHubTenantColumns,
-    installationId: text("installation_id").notNull(),
     accountId: text("account_id").notNull(),
     accountLogin: text("account_login").notNull(),
     accountType: text("account_type").notNull(),
     active: boolean("active").notNull(),
+    installationId: text("installation_id").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_github_installation_pk",
       columns: [
         table.issuer,
         table.audience,
         table.workspaceId,
         table.ownerUserId,
       ],
+      name: "hosted_github_installation_pk",
     }),
     uniqueIndex("hosted_github_installation_id_tenant_uidx").on(
       table.installationId,
       table.issuer,
       table.audience,
       table.workspaceId,
-      table.ownerUserId,
+      table.ownerUserId
     ),
     check(
       "hosted_github_installation_id_check",
-      sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.installationId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "hosted_github_installation_account_id_check",
-      sql`${table.accountId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.accountId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "hosted_github_installation_account_type_check",
-      sql`${table.accountType} IN ('Organization', 'User')`,
+      sql`${table.accountType} IN ('Organization', 'User')`
     ),
-  ],
+  ]
 );
 
 /** Multi-installation GitHub bindings used by App Builder selection. The
@@ -796,16 +796,15 @@ export const hostedGitHubInstallationBindings = pgTable(
   "hosted_github_installation_binding",
   {
     ...hostedGitHubTenantColumns,
-    installationId: text("installation_id").notNull(),
     accountId: text("account_id").notNull(),
     accountLogin: text("account_login").notNull(),
     accountType: text("account_type").notNull(),
     active: boolean("active").notNull(),
+    installationId: text("installation_id").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_github_installation_binding_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -813,49 +812,49 @@ export const hostedGitHubInstallationBindings = pgTable(
         table.ownerUserId,
         table.installationId,
       ],
+      name: "hosted_github_installation_binding_pk",
     }),
     uniqueIndex("hosted_github_installation_binding_id_tenant_uidx").on(
       table.installationId,
       table.issuer,
       table.audience,
       table.workspaceId,
-      table.ownerUserId,
+      table.ownerUserId
     ),
     check(
       "hosted_github_installation_binding_id_check",
-      sql`${table.installationId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.installationId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "hosted_github_installation_binding_account_id_check",
-      sql`${table.accountId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.accountId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "hosted_github_installation_binding_account_type_check",
-      sql`${table.accountType} IN ('Organization', 'User')`,
+      sql`${table.accountType} IN ('Organization', 'User')`
     ),
-  ],
+  ]
 );
 
 export const hostedVercelInstallations = pgTable(
   "hosted_vercel_installation",
   {
     ...hostedGitHubTenantColumns,
+    active: boolean("active").notNull(),
+    displayName: text("display_name").notNull(),
+    encryptedToken: text("encrypted_token").notNull(),
     installationId: text("installation_id").notNull(),
+    plan: text("plan").notNull(),
     scopeId: text("scope_id").notNull(),
     scopeType: text("scope_type").notNull(),
-    displayName: text("display_name").notNull(),
     slug: text("slug").notNull(),
-    plan: text("plan").notNull(),
-    encryptedToken: text("encrypted_token").notNull(),
     tokenIv: text("token_iv").notNull(),
-    tokenTag: text("token_tag").notNull(),
     tokenKeyVersion: text("token_key_version").notNull(),
-    active: boolean("active").notNull(),
+    tokenTag: text("token_tag").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_vercel_installation_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -863,32 +862,32 @@ export const hostedVercelInstallations = pgTable(
         table.ownerUserId,
         table.installationId,
       ],
+      name: "hosted_vercel_installation_pk",
     }),
     uniqueIndex("hosted_vercel_installation_id_uidx").on(table.installationId),
     check(
       "hosted_vercel_installation_scope_type_check",
-      sql`${table.scopeType} IN ('team', 'user')`,
+      sql`${table.scopeType} IN ('team', 'user')`
     ),
-  ],
+  ]
 );
 
 export const hostedGitHubUserCredentials = pgTable(
   "hosted_github_user_credential",
   {
     ...hostedGitHubTenantColumns,
-    providerUserId: text("provider_user_id").notNull(),
-    providerLogin: text("provider_login").notNull(),
-    encryptedCredential: text("encrypted_credential").notNull(),
+    active: boolean("active").notNull(),
     credentialIv: text("credential_iv").notNull(),
     credentialTag: text("credential_tag").notNull(),
+    encryptedCredential: text("encrypted_credential").notNull(),
     keyVersion: text("key_version").notNull(),
+    providerLogin: text("provider_login").notNull(),
+    providerUserId: text("provider_user_id").notNull(),
     revision: integer("revision").notNull().default(1),
-    active: boolean("active").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_github_user_credential_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -896,33 +895,33 @@ export const hostedGitHubUserCredentials = pgTable(
         table.ownerUserId,
         table.providerUserId,
       ],
+      name: "hosted_github_user_credential_pk",
     }),
     check(
       "hosted_github_user_credential_provider_user_id_check",
-      sql`${table.providerUserId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.providerUserId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "hosted_github_user_credential_revision_check",
-      sql`${table.revision} > 0`,
+      sql`${table.revision} > 0`
     ),
-  ],
+  ]
 );
 
 export const builderProvisioningJournals = pgTable(
   "builder_provisioning_journal",
   {
     ...hostedGitHubTenantColumns,
-    requestId: text("request_id").notNull(),
-    requestDigest: text("request_digest").notNull(),
-    state: text("state").notNull(),
-    revision: integer("revision").notNull().default(1),
-    record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    record: jsonb("record").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    requestId: text("request_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    state: text("state").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "builder_provisioning_journal_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -930,35 +929,36 @@ export const builderProvisioningJournals = pgTable(
         table.ownerUserId,
         table.requestId,
       ],
+      name: "builder_provisioning_journal_pk",
     }),
     index("builder_provisioning_journal_retention_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.updatedAt,
+      table.updatedAt
     ),
     check(
       "builder_provisioning_journal_request_id_check",
-      sql`${table.requestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+      sql`${table.requestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`
     ),
     check(
       "builder_provisioning_journal_request_digest_check",
-      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "builder_provisioning_journal_state_check",
-      sql`${table.state} IN ('pending', 'settled')`,
+      sql`${table.state} IN ('pending', 'settled')`
     ),
     check(
       "builder_provisioning_journal_revision_check",
-      sql`${table.revision} > 0`,
+      sql`${table.revision} > 0`
     ),
     check(
       "builder_provisioning_journal_record_check",
-      sql`jsonb_typeof(${table.record}) = 'object'`,
+      sql`jsonb_typeof(${table.record}) = 'object'`
     ),
-  ],
+  ]
 );
 
 export const builderHandoffs = pgTable(
@@ -980,34 +980,34 @@ export const builderHandoffs = pgTable(
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.creationRequestId,
+      table.creationRequestId
     ),
     index("builder_handoff_expiry_idx").on(table.expiresAt),
     check(
       "builder_handoff_id_check",
-      sql`${table.handoffId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+      sql`${table.handoffId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`
     ),
     check(
       "builder_handoff_creation_request_id_check",
-      sql`${table.creationRequestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+      sql`${table.creationRequestId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`
     ),
     check(
       "builder_handoff_request_digest_check",
-      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.requestDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "builder_handoff_intent_check",
-      sql`jsonb_typeof(${table.intent}) = 'object'`,
+      sql`jsonb_typeof(${table.intent}) = 'object'`
     ),
     check(
       "builder_handoff_time_check",
-      sql`${table.createdAt} < ${table.expiresAt}`,
+      sql`${table.createdAt} < ${table.expiresAt}`
     ),
     check(
       "builder_handoff_redemption_check",
-      sql`(${table.redeemedAt} IS NULL AND ${table.sessionId} IS NULL) OR (${table.redeemedAt} BETWEEN ${table.createdAt} AND ${table.expiresAt} AND ${table.sessionId} IS NOT NULL)`,
+      sql`(${table.redeemedAt} IS NULL AND ${table.sessionId} IS NULL) OR (${table.redeemedAt} BETWEEN ${table.createdAt} AND ${table.expiresAt} AND ${table.sessionId} IS NOT NULL)`
     ),
-  ],
+  ]
 );
 
 /** Durable, tenant-scoped builder state used to resume across auth/provider redirects. */
@@ -1015,17 +1015,16 @@ export const builderDrafts = pgTable(
   "builder_draft",
   {
     ...hostedGitHubTenantColumns,
-    draftId: text("draft_id").notNull(),
-    status: text("status").notNull().default("active"),
-    revision: integer("revision").notNull().default(1),
-    record: jsonb("record").notNull(),
-    lastClientMutationId: text("last_client_mutation_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    draftId: text("draft_id").notNull(),
+    lastClientMutationId: text("last_client_mutation_id"),
+    record: jsonb("record").notNull(),
+    revision: integer("revision").notNull().default(1),
+    status: text("status").notNull().default("active"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "builder_draft_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -1033,13 +1032,14 @@ export const builderDrafts = pgTable(
         table.ownerUserId,
         table.draftId,
       ],
+      name: "builder_draft_pk",
     }),
     index("builder_draft_updated_idx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.updatedAt,
+      table.updatedAt
     ),
     uniqueIndex("builder_draft_active_tenant_uidx")
       .on(table.issuer, table.audience, table.workspaceId, table.ownerUserId)
@@ -1047,17 +1047,17 @@ export const builderDrafts = pgTable(
     check("builder_draft_revision_check", sql`${table.revision} > 0`),
     check(
       "builder_draft_status_check",
-      sql`${table.status} IN ('active', 'archived')`,
+      sql`${table.status} IN ('active', 'archived')`
     ),
     check(
       "builder_draft_record_check",
-      sql`jsonb_typeof(${table.record}) = 'object'`,
+      sql`jsonb_typeof(${table.record}) = 'object'`
     ),
     check(
       "builder_draft_last_client_mutation_id_check",
-      sql`${table.lastClientMutationId} IS NULL OR ${table.lastClientMutationId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
+      sql`${table.lastClientMutationId} IS NULL OR ${table.lastClientMutationId} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`
     ),
-  ],
+  ]
 );
 
 export const vercelInstallationAuthorizationStates = pgTable(
@@ -1074,25 +1074,25 @@ export const vercelInstallationAuthorizationStates = pgTable(
   },
   (table) => [
     index("vercel_installation_authorization_state_expiry_idx").on(
-      table.expiresAt,
+      table.expiresAt
     ),
     check(
       "vercel_installation_authorization_state_digest_check",
-      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "vercel_installation_authorization_authority_digest_check",
-      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "vercel_installation_authorization_state_time_check",
-      sql`${table.createdAt} < ${table.expiresAt}`,
+      sql`${table.createdAt} < ${table.expiresAt}`
     ),
     check(
       "vercel_installation_authorization_state_consumed_check",
-      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`
     ),
-  ],
+  ]
 );
 
 export const githubInstallationAuthorizationStates = pgTable(
@@ -1109,25 +1109,25 @@ export const githubInstallationAuthorizationStates = pgTable(
   },
   (table) => [
     index("github_installation_authorization_state_expiry_idx").on(
-      table.expiresAt,
+      table.expiresAt
     ),
     check(
       "github_installation_authorization_state_digest_check",
-      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.stateDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_installation_authorization_authority_digest_check",
-      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.authorityDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_installation_authorization_state_time_check",
-      sql`${table.createdAt} < ${table.expiresAt}`,
+      sql`${table.createdAt} < ${table.expiresAt}`
     ),
     check(
       "github_installation_authorization_state_consumed_check",
-      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`,
+      sql`${table.consumedAt} IS NULL OR (${table.consumedAt} >= ${table.createdAt} AND ${table.consumedAt} <= ${table.expiresAt})`
     ),
-  ],
+  ]
 );
 
 /**
@@ -1153,56 +1153,55 @@ export const githubRepositoryAccessContinuations = pgTable(
   },
   (table) => [
     index("github_repository_access_continuation_expiry_idx").on(
-      table.expiresAt,
+      table.expiresAt
     ),
     check(
       "github_repository_access_continuation_digest_check",
-      sql`${table.continuationDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.continuationDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "github_repository_access_continuation_session_check",
-      sql`length(${table.sessionId}) BETWEEN 1 AND 255`,
+      sql`length(${table.sessionId}) BETWEEN 1 AND 255`
     ),
     check(
       "github_repository_access_continuation_request_check",
-      sql`length(${table.requestId}) BETWEEN 1 AND 255`,
+      sql`length(${table.requestId}) BETWEEN 1 AND 255`
     ),
     check(
       "github_repository_access_continuation_repository_check",
-      sql`length(${table.repositoryOwner}) BETWEEN 1 AND 100 AND length(${table.repositoryName}) BETWEEN 1 AND 100`,
+      sql`length(${table.repositoryOwner}) BETWEEN 1 AND 100 AND length(${table.repositoryName}) BETWEEN 1 AND 100`
     ),
     check(
       "github_repository_access_continuation_installation_check",
-      sql`${table.selectedInstallationId} IS NULL OR ${table.selectedInstallationId} ~ '^[1-9][0-9]*$'`,
+      sql`${table.selectedInstallationId} IS NULL OR ${table.selectedInstallationId} ~ '^[1-9][0-9]*$'`
     ),
     check(
       "github_repository_access_continuation_time_check",
-      sql`${table.createdAt} < ${table.expiresAt}`,
+      sql`${table.createdAt} < ${table.expiresAt}`
     ),
     check(
       "github_repository_access_continuation_authorized_check",
-      sql`${table.authorizedAt} IS NULL OR (${table.authorizedAt} >= ${table.createdAt} AND ${table.authorizedAt} <= ${table.expiresAt})`,
+      sql`${table.authorizedAt} IS NULL OR (${table.authorizedAt} >= ${table.createdAt} AND ${table.authorizedAt} <= ${table.expiresAt})`
     ),
     check(
       "github_repository_access_continuation_consumed_check",
-      sql`${table.consumedAt} IS NULL OR (${table.authorizedAt} IS NOT NULL AND ${table.consumedAt} >= ${table.authorizedAt})`,
+      sql`${table.consumedAt} IS NULL OR (${table.authorizedAt} IS NOT NULL AND ${table.consumedAt} >= ${table.authorizedAt})`
     ),
-  ],
+  ]
 );
 
 export const hostedGitHubPublicationProposals = pgTable(
   "hosted_github_publication_proposal",
   {
     ...hostedGitHubTenantColumns,
-    proposalDigest: text("proposal_digest").notNull(),
-    kind: text("kind").notNull(),
-    idempotencyKey: text("idempotency_key").notNull(),
-    proposal: jsonb("proposal").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    kind: text("kind").notNull(),
+    proposal: jsonb("proposal").notNull(),
+    proposalDigest: text("proposal_digest").notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_github_publication_proposal_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -1210,6 +1209,7 @@ export const hostedGitHubPublicationProposals = pgTable(
         table.ownerUserId,
         table.proposalDigest,
       ],
+      name: "hosted_github_publication_proposal_pk",
     }),
     uniqueIndex("hosted_github_publication_proposal_idempotency_uidx").on(
       table.issuer,
@@ -1217,43 +1217,42 @@ export const hostedGitHubPublicationProposals = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.kind,
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
     check(
       "hosted_github_publication_proposal_digest_check",
-      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "hosted_github_publication_proposal_idempotency_check",
-      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "hosted_github_publication_proposal_kind_check",
-      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`
     ),
     check(
       "hosted_github_publication_proposal_record_check",
-      sql`jsonb_typeof(${table.proposal}) = 'object'`,
+      sql`jsonb_typeof(${table.proposal}) = 'object'`
     ),
-  ],
+  ]
 );
 
 export const hostedGitHubPublicationJournals = pgTable(
   "hosted_github_publication_journal",
   {
     ...hostedGitHubTenantColumns,
-    proposalDigest: text("proposal_digest").notNull(),
-    kind: text("kind").notNull(),
-    idempotencyKey: text("idempotency_key").notNull(),
-    receiptDigest: text("receipt_digest").notNull(),
-    status: text("status").notNull(),
-    record: jsonb("record").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    kind: text("kind").notNull(),
+    proposalDigest: text("proposal_digest").notNull(),
+    receiptDigest: text("receipt_digest").notNull(),
+    record: jsonb("record").notNull(),
+    status: text("status").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     primaryKey({
-      name: "hosted_github_publication_journal_pk",
       columns: [
         table.issuer,
         table.audience,
@@ -1261,13 +1260,14 @@ export const hostedGitHubPublicationJournals = pgTable(
         table.ownerUserId,
         table.proposalDigest,
       ],
+      name: "hosted_github_publication_journal_pk",
     }),
     uniqueIndex("hosted_github_publication_journal_idempotency_uidx").on(
       table.issuer,
       table.audience,
       table.workspaceId,
       table.ownerUserId,
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
     index("hosted_github_publication_journal_status_idx").on(
       table.issuer,
@@ -1275,59 +1275,59 @@ export const hostedGitHubPublicationJournals = pgTable(
       table.workspaceId,
       table.ownerUserId,
       table.status,
-      table.updatedAt,
+      table.updatedAt
     ),
     check(
       "hosted_github_publication_journal_proposal_digest_check",
-      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.proposalDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "hosted_github_publication_journal_receipt_digest_check",
-      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "hosted_github_publication_journal_idempotency_check",
-      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.idempotencyKey} ~ '^[0-9a-f]{64}$'`
     ),
     check(
       "hosted_github_publication_journal_kind_check",
-      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`,
+      sql`${table.kind} IN ('fresh-repository', 'draft-pull-request')`
     ),
     check(
       "hosted_github_publication_journal_status_check",
-      sql`${table.status} IN ('pending', 'failed', 'succeeded')`,
+      sql`${table.status} IN ('pending', 'failed', 'succeeded')`
     ),
     check(
       "hosted_github_publication_journal_record_check",
-      sql`jsonb_typeof(${table.record}) = 'object'`,
+      sql`jsonb_typeof(${table.record}) = 'object'`
     ),
     check(
       "hosted_github_publication_journal_timestamp_check",
-      sql`${table.createdAt} <= ${table.updatedAt}`,
+      sql`${table.createdAt} <= ${table.updatedAt}`
     ),
-  ],
+  ]
 );
 
 export const emulatePreviewState = pgTable(
   "emulate_preview_state",
   {
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     namespace: text("namespace").primaryKey(),
     state: text("state").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     check(
       "emulate_preview_state_namespace_check",
-      sql`length(${table.namespace}) BETWEEN 3 AND 1024`,
+      sql`length(${table.namespace}) BETWEEN 3 AND 1024`
     ),
     check(
       "emulate_preview_state_state_check",
-      sql`octet_length(${table.state}) BETWEEN 2 AND 8388608`,
+      sql`octet_length(${table.state}) BETWEEN 2 AND 8388608`
     ),
     check(
       "emulate_preview_state_timestamp_check",
-      sql`${table.createdAt} <= ${table.updatedAt}`,
+      sql`${table.createdAt} <= ${table.updatedAt}`
     ),
-  ],
+  ]
 );

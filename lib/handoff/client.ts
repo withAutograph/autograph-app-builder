@@ -7,14 +7,15 @@ codex plugin add app-builder@autograph`;
 
 export function buildAppHandoffPrompt(
   handoffId: string,
-  destination: HandoffDestination = "codex",
+  destination: HandoffDestination = "codex"
 ) {
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-      handoffId,
+      handoffId
     )
-  )
+  ) {
     throw new Error("handoff-id-invalid");
+  }
   const setup =
     destination === "codex"
       ? `Use the official Autograph App Builder plugin to continue this app.
@@ -40,10 +41,10 @@ Use the same Autograph account as the web form. Reuse its saved GitHub and Verce
 
 export function buildAppHandoffUrl(
   destination: HandoffDestination,
-  handoffId: string,
+  handoffId: string
 ) {
   const prompt = encodeURIComponent(
-    buildAppHandoffPrompt(handoffId, destination),
+    buildAppHandoffPrompt(handoffId, destination)
   );
   return destination === "codex"
     ? `codex://new?prompt=${prompt}`
@@ -51,7 +52,9 @@ export function buildAppHandoffUrl(
 }
 
 export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
-  if (!ready) return undefined;
+  if (!ready) {
+    return undefined;
+  }
   const url = new URL(mcpUrl);
   if (
     (url.protocol !== "https:" &&
@@ -64,16 +67,17 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
     url.password ||
     url.search ||
     url.hash
-  )
+  ) {
     throw new Error("mcp-url-invalid");
+  }
   const config = JSON.stringify({
-    url: url.href,
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
+    url: url.href,
   });
   const encoded = btoa(
     Array.from(new TextEncoder().encode(config), (byte) =>
-      String.fromCharCode(byte),
-    ).join(""),
+      String.fromCharCode(byte)
+    ).join("")
   );
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
 }

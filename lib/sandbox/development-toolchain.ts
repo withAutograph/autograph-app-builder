@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -34,11 +34,11 @@ export const DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS = [
 ] as const;
 export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
+  LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
   MISE_AUTO_INSTALL: "false",
   MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
   MISE_EXEC_AUTO_INSTALL: "false",
   MISE_TASK_RUN_AUTO_INSTALL: "false",
-  LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
   PATH: "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
   TERM: "xterm-256color",
 } as const;
@@ -61,18 +61,18 @@ const sha256 = (value: string | Uint8Array) =>
 
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
-    NODE_ENV: "production",
-    PATH: "/usr/bin:/bin",
-    HOME: "/dev/null",
-    XDG_CONFIG_HOME: "/dev/null",
-    LC_ALL: "C",
-    LANG: "C",
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_SYSTEM: "/dev/null",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_ATTR_NOSYSTEM: "1",
     GIT_NO_LAZY_FETCH: "1",
     GIT_TERMINAL_PROMPT: "0",
+    HOME: "/dev/null",
+    LANG: "C",
+    LC_ALL: "C",
+    NODE_ENV: "production",
+    PATH: "/usr/bin:/bin",
+    XDG_CONFIG_HOME: "/dev/null",
   };
 }
 
@@ -80,14 +80,15 @@ function git(sourceRoot: string, args: readonly string[]) {
   return execFileSync(
     "/usr/bin/git",
     ["-c", "core.hooksPath=/dev/null", "-C", sourceRoot, ...args],
-    { encoding: "utf8", env: gitEnvironment() },
+    { encoding: "utf-8", env: gitEnvironment() }
   ).trim();
 }
 
 function required(environment: Environment, name: string) {
   const value = environment[name];
-  if (value === undefined || value.length === 0)
+  if (value === undefined || value.length === 0) {
     throw new Error(`Development Vercel Sandbox ${name} was unavailable.`);
+  }
   return value;
 }
 
@@ -96,27 +97,32 @@ function exactSourceRoot(path: string) {
     !isAbsolute(path) ||
     resolve(path) !== path ||
     realpathSync(path) !== path
-  )
+  ) {
     throw new Error("Development Vercel source root was not canonical.");
+  }
   const info = lstatSync(path);
   if (
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o022) !== 0
-  )
+  ) {
     throw new Error("Development Vercel source root was not owner-bound.");
+  }
   return path;
 }
 
 function digestFileOrAbsent(path: string) {
   try {
     const info = lstatSync(path);
-    if (!info.isFile() || info.isSymbolicLink())
+    if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`Development dependency input was invalid: ${path}`);
+    }
     return sha256(readFileSync(path));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "absent";
+    }
     throw error;
   }
 }
@@ -130,10 +136,11 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
     !sha256Pattern.test(input.sourceArchiveSha256) ||
     sha256(input.sourceArchive) !== input.sourceArchiveSha256 ||
     Object.values(input.lockfiles).some(
-      (digest) => digest !== "absent" && !sha256Pattern.test(digest),
+      (digest) => digest !== "absent" && !sha256Pattern.test(digest)
     )
-  )
+  ) {
     throw new Error("Development Vercel bootstrap identity was invalid.");
+  }
 }
 
 /**
@@ -218,7 +225,7 @@ for (const { link, replacement } of replacements) {
 }`;
 
 const developmentToolchainCase = (
-  architecture: keyof typeof hostedToolchainArtifacts,
+  architecture: keyof typeof hostedToolchainArtifacts
 ) => {
   const artifact = hostedToolchainArtifacts[architecture];
   return `${architecture})
@@ -330,57 +337,59 @@ exit 0`;
 export function developmentPinnedToolchainKey() {
   return sha256(
     JSON.stringify({
-      contractVersion: 1,
-      node: HOSTED_NODE_VERSION,
-      bun: HOSTED_BUN_VERSION,
-      mise: HOSTED_MISE_VERSION,
-      rust: HOSTED_RUST_VERSION,
       artifacts: hostedToolchainArtifacts,
-      downloadHosts: HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+      bun: HOSTED_BUN_VERSION,
       command: developmentPinnedToolchainCommand(),
-    }),
+      contractVersion: 1,
+      downloadHosts: HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
+      mise: HOSTED_MISE_VERSION,
+      node: HOSTED_NODE_VERSION,
+      rust: HOSTED_RUST_VERSION,
+    })
   );
 }
 
 /** Reads only the exact transient Arrusted snapshot selected by `mise run dev`. */
 export function readDevelopmentVercelBootstrapInput(
-  environment: Environment = process.env,
+  environment: Environment = process.env
 ): DevelopmentVercelBootstrapInput {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
-  )
+  ) {
     throw new Error("Development Vercel Sandbox binding was not closed.");
+  }
   const sourceRoot = exactSourceRoot(
-    required(environment, "REPOSITORY_LOCAL_ROOTS"),
+    required(environment, "REPOSITORY_LOCAL_ROOTS")
   );
   const result = {
-    sourceRoot,
-    sourceFingerprint: required(
-      environment,
-      "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
-    ),
-    sourceSha: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA"),
-    sourceTree: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE"),
     dependencyKey: required(
       environment,
-      "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY",
+      "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"
     ),
     lockfiles: Object.fromEntries(
       dependencyInputs.map((path) => [
         path,
         digestFileOrAbsent(join(sourceRoot, path)),
-      ]),
+      ])
     ) as Record<(typeof dependencyInputs)[number], string>,
+    sourceFingerprint: required(
+      environment,
+      "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT"
+    ),
+    sourceRoot,
+    sourceSha: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA"),
+    sourceTree: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE"),
   };
   if (
     git(sourceRoot, ["rev-parse", "HEAD"]) !== result.sourceSha ||
     git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== result.sourceTree ||
     git(sourceRoot, ["status", "--porcelain=v1", "--untracked-files=all"]) !==
       ""
-  )
+  ) {
     throw new Error("Development Vercel source snapshot drifted.");
+  }
   const sourceArchive = execFileSync(
     "/usr/bin/git",
     [
@@ -392,7 +401,7 @@ export function readDevelopmentVercelBootstrapInput(
       "--format=tar.gz",
       result.sourceSha,
     ],
-    { env: gitEnvironment(), maxBuffer: 256 * 1024 * 1024 },
+    { env: gitEnvironment(), maxBuffer: 256 * 1024 * 1024 }
   );
   const input = {
     ...result,
@@ -405,7 +414,7 @@ export function readDevelopmentVercelBootstrapInput(
 
 /** Builds the standard development-execution cache once per dependency key. */
 export function developmentVercelDependencyCommand(
-  input: DevelopmentVercelBootstrapInput,
+  input: DevelopmentVercelBootstrapInput
 ) {
   assertInput(input);
   return `set -euo pipefail
@@ -497,10 +506,11 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
  * bootstrap creates.
  */
 export function developmentVercelDependencyRepairCommand(
-  dependencyKey: string,
+  dependencyKey: string
 ) {
-  if (!sha256Pattern.test(dependencyKey))
+  if (!sha256Pattern.test(dependencyKey)) {
     throw new Error("Development dependency key was invalid.");
+  }
   return `set -euo pipefail
 test "$(uname -m)" = x86_64
 source_root='/workspace/repository'
@@ -571,49 +581,53 @@ printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 
 /** Agent and skill edits may change Eve's authored key; the provider key may not. */
 export function developmentVercelProviderTemplateKey(dependencyKey: string) {
-  if (!sha256Pattern.test(dependencyKey))
+  if (!sha256Pattern.test(dependencyKey)) {
     throw new Error("Development dependency key was invalid.");
+  }
   return `app-builder-development-${dependencyKey}`;
 }
 
 export function developmentVercelRevalidationKey(
-  input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
+  input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">
 ) {
-  if (!sha256Pattern.test(input.dependencyKey))
+  if (!sha256Pattern.test(input.dependencyKey)) {
     throw new Error("Development dependency key was invalid.");
+  }
   return `autograph-app-builder-vercel-development-v1:${sha256(
     JSON.stringify({
       contractVersion: 1,
       dependencyKey: input.dependencyKey,
-      pinnedToolchain: developmentPinnedToolchainKey(),
       downloadHosts: DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS,
-    }),
+      pinnedToolchain: developmentPinnedToolchainKey(),
+    })
   )}`;
 }
 
 export function developmentExecutionArtifactDigest(
-  environment: Environment = process.env,
+  environment: Environment = process.env
 ) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
-  )
+  ) {
     throw new Error("Development execution binding was not closed.");
+  }
   const sourceFingerprint = required(
     environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
+    "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT"
   );
   const dependencyKey = required(
     environment,
-    "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY",
+    "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"
   );
   if (
     !sha256Pattern.test(sourceFingerprint) ||
     !sha256Pattern.test(dependencyKey)
-  )
+  ) {
     throw new Error("Development execution identity was invalid.");
+  }
   return `vercel-sandbox-development@sha256:${sha256(
-    JSON.stringify({ version: 1, sourceFingerprint, dependencyKey }),
+    JSON.stringify({ dependencyKey, sourceFingerprint, version: 1 })
   )}`;
 }

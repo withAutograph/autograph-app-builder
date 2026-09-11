@@ -1,15 +1,17 @@
 "use client";
 
 import { ChevronDown, Check, Plus } from "@geist-ui/icons";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
+
 import styles from "./app-builder.module.css";
 
-export type ComboOption = {
+export interface ComboOption {
   value: string;
   label: string;
   detail?: string;
   icon?: string;
-};
+}
 export type ComboFooter = ComboOption & { disabled?: boolean };
 
 /** Browser-only combobox island. The builder owns data and persistence; this leaf owns interaction. */
@@ -56,12 +58,14 @@ export function SearchCombobox({
     ? options.filter((option) =>
         `${option.label} ${option.detail ?? ""}`
           .toLowerCase()
-          .includes(query.toLowerCase()),
+          .includes(query.toLowerCase())
       )
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
@@ -73,8 +77,9 @@ export function SearchCombobox({
     setActive(0);
   };
   const choose = (option: ComboOption) => {
-    if (option.value.startsWith("create-") || option.value.startsWith("add-"))
+    if (option.value.startsWith("create-") || option.value.startsWith("add-")) {
       return;
+    }
     onChange(option.value);
     setQuery(option.label);
     setFiltering(false);
@@ -117,12 +122,14 @@ export function SearchCombobox({
           setActive(0);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Escape") restore();
+          if (event.key === "Escape") {
+            restore();
+          }
           if (event.key === "ArrowDown") {
             event.preventDefault();
             setOpen(true);
             setActive((index) =>
-              Math.min(index + 1, Math.max(shown.length - 1, 0)),
+              Math.min(index + 1, Math.max(shown.length - 1, 0))
             );
           }
           if (event.key === "ArrowUp") {
@@ -175,9 +182,9 @@ export function SearchCombobox({
               ) : null}
             </button>
           ))}
-          {!shown.length ? (
+          {shown.length ? null : (
             <p className={styles.noResults}>No results found.</p>
-          ) : null}
+          )}
         </div>
         {menuFooter ? (
           <button

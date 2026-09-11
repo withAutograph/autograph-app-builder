@@ -1,18 +1,25 @@
 import { z } from "zod";
 
-import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
   initialBuilderProvisionResponse,
-  type BuilderProvisionRequest,
 } from "./contracts";
+import type { BuilderProvisionRequest } from "./contracts";
 
 const storedRequestSchema = z
   .object({
-    version: z.literal(1),
-    requestId: z.string().uuid(),
     appName: z.string().trim().min(1).max(120),
+    providers: z
+      .object({
+        githubInstallationId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict(),
     repository: z
       .object({
         name: z
@@ -24,39 +31,32 @@ const storedRequestSchema = z
         private: z.boolean(),
       })
       .strict(),
-    providers: z
-      .object({
-        githubInstallationId: z
-          .string()
-          .regex(/^[1-9][0-9]*$/u)
-          .optional(),
-        vercelInstallationId: z.string().min(1).max(256).optional(),
-      })
-      .strict(),
+    requestId: z.string().uuid(),
+    version: z.literal(1),
   })
   .strict();
 
 const operationStateSchema = z
   .object({
+    absentCandidates: z.array(z.string().min(1).max(100)).max(5),
     attempted: z.boolean(),
     candidates: z.array(z.string().min(1).max(100)).max(5),
-    absentCandidates: z.array(z.string().min(1).max(100)).max(5),
-    leaseId: z.string().uuid().optional(),
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
+    leaseId: z.string().uuid().optional(),
   })
   .strict();
 
 export const builderProvisionJournalRecordSchema = z
   .object({
-    version: z.literal(1),
-    request: storedRequestSchema,
-    response: builderProvisionResponseSchema,
     operations: z
       .object({
         github: operationStateSchema,
         vercel: operationStateSchema,
       })
       .strict(),
+    request: storedRequestSchema,
+    response: builderProvisionResponseSchema,
+    version: z.literal(1),
   })
   .strict();
 
@@ -67,7 +67,7 @@ export type BuilderProvisionAuthority = z.infer<
   typeof hostedTenantAuthoritySchema
 >;
 
-export type BuilderProvisionJournalRow = {
+export interface BuilderProvisionJournalRow {
   authority: BuilderProvisionAuthority;
   requestId: string;
   requestDigest: string;
@@ -76,7 +76,7 @@ export type BuilderProvisionJournalRow = {
   record: BuilderProvisionJournalRecord;
   createdAt: Date;
   updatedAt: Date;
-};
+}
 
 export interface BuilderProvisionJournalStore {
   reserve(input: {
@@ -99,23 +99,23 @@ export interface BuilderProvisionJournalStore {
 
 export function initialBuilderProvisionJournalRecord(
   requestInput: BuilderProvisionRequest,
-  now: Date,
+  now: Date
 ): BuilderProvisionJournalRecord {
   const request = builderProvisionRequestSchema.parse(requestInput);
   return builderProvisionJournalRecordSchema.parse({
-    version: 1,
+    operations: {
+      github: { absentCandidates: [], attempted: false, candidates: [] },
+      vercel: { absentCandidates: [], attempted: false, candidates: [] },
+    },
     request: {
-      version: request.version,
-      requestId: request.requestId,
       appName: request.appName,
-      repository: request.repository,
       providers: request.providers,
+      repository: request.repository,
+      requestId: request.requestId,
+      version: request.version,
     },
     response: initialBuilderProvisionResponse(request, now),
-    operations: {
-      github: { attempted: false, candidates: [], absentCandidates: [] },
-      vercel: { attempted: false, candidates: [], absentCandidates: [] },
-    },
+    version: 1,
   });
 }
 
@@ -125,7 +125,7 @@ export async function updateBuilderProvisionJournal(input: {
   requestId: string;
   now?: () => number;
   update: (
-    current: BuilderProvisionJournalRecord,
+    current: BuilderProvisionJournalRecord
   ) => BuilderProvisionJournalRecord;
 }): Promise<BuilderProvisionJournalRow> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -133,9 +133,11 @@ export async function updateBuilderProvisionJournal(input: {
       authority: input.authority,
       requestId: input.requestId,
     });
-    if (!current) throw new Error("provision-journal-missing");
+    if (!current) {
+      throw new Error("provision-journal-missing");
+    }
     const next = builderProvisionJournalRecordSchema.parse(
-      input.update(structuredClone(current.record)),
+      input.update(structuredClone(current.record))
     );
     const updatedAt = new Date(input.now?.() ?? Date.now());
     next.response.updatedAt = updatedAt.toISOString();
@@ -145,19 +147,21 @@ export async function updateBuilderProvisionJournal(input: {
         : "pending";
     const saved = await input.store.compareAndSet({
       authority: input.authority,
-      requestId: input.requestId,
       expectedRevision: current.revision,
-      record: next,
       now: updatedAt,
+      record: next,
+      requestId: input.requestId,
     });
-    if (saved) return saved;
+    if (saved) {
+      return saved;
+    }
   }
   throw new Error("provision-journal-contention");
 }
 
 function operationSettled(
   record: BuilderProvisionJournalRecord,
-  operation: "github" | "vercel",
+  operation: "github" | "vercel"
 ) {
   const selected =
     operation === "github"

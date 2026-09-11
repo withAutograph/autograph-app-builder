@@ -8,7 +8,7 @@ export default defineEval({
     "A materially ambiguous brief asks one product-domain question with a visible tradeoff and recommended default.",
   async test(t) {
     await t.send(
-      "Uncertain vendor workflow brief: We need an internal vendor product, but we do not know whether it should focus on initial onboarding or ongoing compliance monitoring.",
+      "Uncertain vendor workflow brief: We need an internal vendor product, but we do not know whether it should focus on initial onboarding or ongoing compliance monitoring."
     );
 
     t.succeeded();
@@ -22,8 +22,8 @@ export default defineEval({
       t.reply,
       satisfies(
         (reply) => isProductFacing(reply) && String(reply).endsWith("?"),
-        "the only question is product-facing and recommends a default",
-      ),
+        "the only question is product-facing and recommends a default"
+      )
     );
   },
 });

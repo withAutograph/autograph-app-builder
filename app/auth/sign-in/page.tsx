@@ -1,5 +1,5 @@
-import { SignIn } from "@/components/auth/sign-in";
 import { AuthContinuity } from "@/components/auth/auth-continuity";
+import { SignIn } from "@/components/auth/sign-in";
 
 export default function PreviewSignInPage() {
   return (

@@ -7,8 +7,6 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { AppDetailsSection, appNameFromBrief } from "./app-builder";
 
 const meta = {
-  title: "Components/Create App/Sections/App Details",
-  component: AppDetailsSection,
   args: {
     appName: "Vendor Portal",
     brief: "Build a vendor onboarding portal.",
@@ -16,6 +14,7 @@ const meta = {
     onBriefChange: fn(),
     onCycleBrief: fn(),
   },
+  component: AppDetailsSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -23,6 +22,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/App Details",
 } satisfies Meta<typeof AppDetailsSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -34,7 +34,7 @@ export const EditName: Story = {
     await userEvent.clear(input);
     await userEvent.type(input, "Finance Hub");
     await expect(args.onAppNameChange).toHaveBeenLastCalledWith(
-      "Vendor Portalb",
+      "Vendor Portalb"
     );
   },
 };
@@ -43,7 +43,7 @@ export const CycleBrief: Story = {
     await userEvent.click(
       within(canvasElement).getByRole("button", {
         name: "Try another app brief example",
-      }),
+      })
     );
     await expect(args.onCycleBrief).toHaveBeenCalledOnce();
   },
@@ -66,14 +66,14 @@ function GeneratedNameHarness() {
   );
 }
 export const GeneratedNameSync: Story = {
-  render: () => <GeneratedNameHarness />,
   play: async ({ canvasElement }) => {
     await userEvent.type(
       within(canvasElement).getByLabelText("App Brief"),
-      "Build a finance hub",
+      "Build a finance hub"
     );
     await expect(within(canvasElement).getByLabelText("App Name")).toHaveValue(
-      "Finance Hub",
+      "Finance Hub"
     );
   },
+  render: () => <GeneratedNameHarness />,
 };

@@ -6,7 +6,7 @@ export type SpendTarget =
   | "source_record_ref"
   | "ignore";
 
-export type SpendFixture = {
+export interface SpendFixture {
   import: { batchId: string; rows: number };
   fieldMapping: Record<string, string>;
   preview: { creates: number; needsReview: number };
@@ -24,40 +24,40 @@ export type SpendFixture = {
     sourceRef: string;
     candidates: Array<{ id: string; label: string }>;
   }>;
-};
+}
 
 export type SpendMapping = Record<string, SpendTarget>;
 export type SpendStage = "mapping" | "preview" | "saved" | "review";
-export type SpendState = {
+export interface SpendState {
   stage: SpendStage;
   mapping: SpendMapping;
   selectedMatchId?: string;
   decision?: "resolved" | "deferred";
   saved?: SpendSaveOutcome;
-};
+}
 
-export type SpendPreviewRow = {
+export interface SpendPreviewRow {
   id: string;
   vendor: string;
   amount: string;
   date: string;
   sourceRef: string;
   result: "Ready" | "Needs review";
-};
+}
 
-export type SpendPreview = {
+export interface SpendPreview {
   rows: SpendPreviewRow[];
   ready: number;
   needsReview: number;
   mappingSummary: string;
-};
+}
 
-export type SpendSaveOutcome = {
+export interface SpendSaveOutcome {
   imported: number;
   reviewQueue: number;
   message: string;
   mapping: SpendMapping;
-};
+}
 
 export type SpendAction =
   | { type: "mapping-changed"; source: string; target: SpendTarget }
@@ -76,13 +76,13 @@ const requiredTargets: SpendTarget[] = [
 
 export function initialSpendState(fixture: SpendFixture): SpendState {
   return {
-    stage: "mapping",
     mapping: Object.fromEntries(
       Object.entries(fixture.fieldMapping).map(([target, source]) => [
         source,
         target,
-      ]),
+      ])
     ) as SpendMapping,
+    stage: "mapping",
   };
 }
 
@@ -93,7 +93,7 @@ function sourceFor(mapping: SpendMapping, target: SpendTarget) {
 function mappedValue(
   source: Record<string, string | number>,
   mapping: SpendMapping,
-  target: SpendTarget,
+  target: SpendTarget
 ) {
   const key = sourceFor(mapping, target);
   return key === undefined ? undefined : source[key];
@@ -101,17 +101,17 @@ function mappedValue(
 
 export function deriveSpendPreview(
   fixture: SpendFixture,
-  mapping: SpendMapping,
+  mapping: SpendMapping
 ): SpendPreview {
   const complete = requiredTargets.every((target) =>
-    sourceFor(mapping, target),
+    sourceFor(mapping, target)
   );
   const representativeBaselineReady = fixture.representativeRows.filter(
-    ({ issue }) => !issue,
+    ({ issue }) => !issue
   ).length;
   const unshownReady = Math.max(
     0,
-    fixture.preview.creates - representativeBaselineReady,
+    fixture.preview.creates - representativeBaselineReady
   );
   const rows = fixture.representativeRows.map((row) => {
     const vendor = mappedValue(row.source, mapping, "vendor_name");
@@ -120,8 +120,6 @@ export function deriveSpendPreview(
     const date = mappedValue(row.source, mapping, "transaction_date");
     const sourceRef = mappedValue(row.source, mapping, "source_record_ref");
     return {
-      id: row.id,
-      vendor: vendor === undefined ? "Not mapped" : String(vendor),
       amount:
         typeof amount === "number"
           ? new Intl.NumberFormat("en-US", {
@@ -130,8 +128,10 @@ export function deriveSpendPreview(
             }).format(amount)
           : "Not mapped",
       date: date === undefined ? "Not mapped" : String(date),
-      sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
+      id: row.id,
       result: complete && !row.issue ? "Ready" : "Needs review",
+      sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
+      vendor: vendor === undefined ? "Not mapped" : String(vendor),
     } satisfies SpendPreviewRow;
   });
   const ready = complete
@@ -139,53 +139,59 @@ export function deriveSpendPreview(
     : 0;
   const needsReview = fixture.import.rows - ready;
   const ignored = Object.values(mapping).filter(
-    (value) => value === "ignore",
+    (value) => value === "ignore"
   ).length;
   return {
-    rows,
-    ready,
-    needsReview,
     mappingSummary:
       ignored === 0
         ? "All source columns are included."
         : `${ignored} source ${ignored === 1 ? "column is" : "columns are"} excluded.`,
+    needsReview,
+    ready,
+    rows,
   };
 }
 
 export function reduceSpendState(
   state: SpendState,
-  action: SpendAction,
+  action: SpendAction
 ): SpendState {
   if (action.type === "mapping-changed") {
     const mapping = { ...state.mapping };
-    for (const [source, target] of Object.entries(mapping))
+    for (const [source, target] of Object.entries(mapping)) {
       if (
         source !== action.source &&
         target === action.target &&
         target !== "ignore"
       )
         mapping[source] = "ignore";
+    }
     mapping[action.source] = action.target;
-    return { stage: "mapping", mapping };
+    return { mapping, stage: "mapping" };
   }
-  if (action.type === "preview-requested")
+  if (action.type === "preview-requested") {
     return { ...state, stage: "preview", saved: undefined };
+  }
   if (action.type === "save-requested") {
     const preview = deriveSpendPreview(action.fixture, state.mapping);
     const saved = {
       imported: preview.ready,
-      reviewQueue: preview.needsReview,
-      message: `${preview.ready} rows imported into the simulated spend register. ${preview.needsReview} rows remain in human review.`,
       mapping: { ...state.mapping },
+      message: `${preview.ready} rows imported into the simulated spend register. ${preview.needsReview} rows remain in human review.`,
+      reviewQueue: preview.needsReview,
     };
-    return { ...state, stage: "saved", saved };
+    return { ...state, saved, stage: "saved" };
   }
-  if (action.type === "review-requested") return { ...state, stage: "review" };
-  if (action.type === "match-selected")
+  if (action.type === "review-requested") {
+    return { ...state, stage: "review" };
+  }
+  if (action.type === "match-selected") {
     return { ...state, selectedMatchId: action.id, decision: undefined };
-  if (action.type === "decision-deferred")
+  }
+  if (action.type === "decision-deferred") {
     return { ...state, decision: "deferred" };
-  if (action.type === "decision-applied" && state.selectedMatchId)
+  }
+  if (action.type === "decision-applied" && state.selectedMatchId) {
     return {
       ...state,
       decision: "resolved",
@@ -198,12 +204,12 @@ export function reduceSpendState(
           }
         : undefined,
     };
+  }
   return state;
 }
 
 export function spendActionModel(state: SpendState) {
   return {
-    saveEnabled: state.stage === "preview",
     applyEnabled:
       state.stage === "review" &&
       Boolean(state.selectedMatchId) &&
@@ -214,5 +220,6 @@ export function spendActionModel(state: SpendState) {
         : state.decision === "deferred"
           ? "Left unresolved for follow-up."
           : undefined,
+    saveEnabled: state.stage === "preview",
   };
 }

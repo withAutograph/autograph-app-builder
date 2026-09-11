@@ -1,7 +1,6 @@
-import postgres from "postgres";
 import { expect, test, type Page } from "playwright/test";
+import postgres from "postgres";
 
-import { VirtualAuthenticator } from "./virtual-authenticator";
 import {
   applicationCounts as authCounts,
   appOrigin,
@@ -12,6 +11,7 @@ import {
   resetApplicationState,
   signOut,
 } from "../support/harness";
+import { VirtualAuthenticator } from "./virtual-authenticator";
 
 const onboardingAlreadyAuthenticatedCode =
   "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
@@ -68,14 +68,14 @@ function reportPasskeyFailures(page: Page) {
       "passkey request failed",
       response.status(),
       new URL(response.url()).pathname,
-      body,
+      body
     );
   });
 }
 
 async function expectPasskeyFailure(page: Page) {
   await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
+    page.getByRole("button", { name: "Passkey failed (try again)" })
   ).toBeVisible({ timeout: 30_000 });
 }
 
@@ -100,23 +100,23 @@ test("passkey UI defaults off without a Vercel flag override", async ({
   try {
     await page.goto("/auth/sign-in");
     await expect(
-      page.getByRole("button", { name: "Continue with Passkey" }),
+      page.getByRole("button", { name: "Continue with Passkey" })
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Continue with GitHub" }),
+      page.getByRole("button", { name: "Continue with GitHub" })
     ).toBeVisible();
     await page.getByRole("link", { name: "Sign Up" }).click();
     await expect(
-      page.getByRole("button", { name: "Continue with Passkey" }),
+      page.getByRole("button", { name: "Continue with Passkey" })
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Continue with Vercel" }),
+      page.getByRole("button", { name: "Continue with Vercel" })
     ).toBeVisible();
 
     await finishOAuth(page, "GitHub");
     await page.goto("/settings/account");
     await expect(page.getByRole("button", { name: "Add passkey" })).toHaveCount(
-      0,
+      0
     );
     expect(passkeyRequests).toBe(0);
   } finally {
@@ -136,7 +136,7 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   });
 
   await page.goto(
-    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`
   );
   const signInCard = page.locator('[data-slot="card"]:visible');
   const signInCardBox = await signInCard.boundingBox();
@@ -161,14 +161,14 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
 
   const signUpURL = new URL(signUpHref!, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
-    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
+    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete"
   );
   const signInURL = new URL(
     (await signInLink.getAttribute("href"))!,
-    page.url(),
+    page.url()
   );
   expect(signInURL.searchParams.get("redirectTo")).toBe(
-    signUpURL.searchParams.get("redirectTo"),
+    signUpURL.searchParams.get("redirectTo")
   );
 });
 
@@ -208,7 +208,7 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
         status: 503,
         contentType: "application/json",
         body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
-      }),
+      })
   );
 
   await page.goto("/auth/sign-in");
@@ -270,18 +270,18 @@ test("passkey registration guards Sign Up and supports returning login", async (
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
-        { configurable: true, value: async () => true },
+        { configurable: true, value: async () => true }
       );
     });
     await page.goto("/auth/sign-up");
     const registrationOptionsRequest = page.waitForRequest(
-      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     expect(
       new URL((await registrationOptionsRequest).url()).searchParams.get(
-        "authenticatorAttachment",
-      ),
+        "authenticatorAttachment"
+      )
     ).toBe("platform");
     await expect
       .poll(() => authCounts(), { timeout: 30_000 })
@@ -311,12 +311,12 @@ test("passkey registration guards Sign Up and supports returning login", async (
 
     await page.goto(
       `/auth/sign-up?callbackURL=${encodeURIComponent(
-        "/?source=signed-in#complete",
-      )}`,
+        "/?source=signed-in#complete"
+      )}`
     );
     await expect(page).toHaveURL(/\/\?source=signed-in#complete$/u);
     await expect(
-      page.getByRole("button", { name: "Continue with Passkey" }),
+      page.getByRole("button", { name: "Continue with Passkey" })
     ).toHaveCount(0);
     expect(onboardingRequests).toBe(0);
     expect(await authCounts()).toEqual(registeredCounts);
@@ -325,14 +325,14 @@ test("passkey registration guards Sign Up and supports returning login", async (
     await signOut(page);
     await page.goto(
       `/auth/sign-in?callbackURL=${encodeURIComponent(
-        "/?source=returning#complete",
-      )}`,
+        "/?source=returning#complete"
+      )}`
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\/\?source=returning#complete$/u);
     await expect
       .poll(async () =>
-        (await page.request.get("/api/auth/get-session")).json(),
+        (await page.request.get("/api/auth/get-session")).json()
       )
       .toMatchObject({ user: { emailVerified: false } });
     expect(await authCounts()).toEqual(registeredCounts);
@@ -357,21 +357,21 @@ test("passkey registration keeps the alternate authenticator flow when platform 
         value: async () => {
           throw new DOMException("Unavailable", "NotSupportedError");
         },
-      },
+      }
     );
   });
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.goto("/auth/sign-up");
     const registrationOptionsRequest = page.waitForRequest(
-      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
     expect(
       new URL((await registrationOptionsRequest).url()).searchParams.has(
-        "authenticatorAttachment",
-      ),
+        "authenticatorAttachment"
+      )
     ).toBe(false);
     await expect
       .poll(async () => (await authCounts()).passkeys, { timeout: 30_000 })
@@ -400,7 +400,7 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     });
     const callbackURL = "/?source=brief#complete";
     await page.goto(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+      `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`
     );
     const signInCard = page.locator('[data-slot="card"]');
     const signUpLink = page.getByRole("link", { name: "Sign Up" });
@@ -411,7 +411,7 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
       signUpLink.boundingBox(),
     ]);
     expect(signUpBeforeFailure?.y).toBeGreaterThanOrEqual(
-      (cardBeforeFailure?.y ?? 0) + (cardBeforeFailure?.height ?? 0),
+      (cardBeforeFailure?.y ?? 0) + (cardBeforeFailure?.height ?? 0)
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
@@ -445,18 +445,18 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     expect(await visibleAuthCard.boundingBox()).toEqual(cardBeforeFailure);
     await expect(
       page.getByText(
-        "We couldn’t use an existing passkey. Continue to create a new one.",
-      ),
+        "We couldn’t use an existing passkey. Continue to create a new one."
+      )
     ).toHaveCount(0);
     const signUpURL = new URL(page.url());
     expect(signUpURL.searchParams.has("passkey")).toBe(false);
     expect(signUpURL.searchParams.get("redirectTo")).toBe(
-      "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete",
+      "/auth/setting-up?callbackURL=%2F%3Fsource%3Dbrief%23complete"
     );
     await expect(page.getByText("Already have an account?")).toBeVisible();
     await expect(page.getByRole("link", { name: "Sign In" })).toHaveAttribute(
       "href",
-      "/auth/sign-in?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252F%253Fsource%253Dbrief%2523complete",
+      "/auth/sign-in?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252F%253Fsource%253Dbrief%2523complete"
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\?source=brief#complete$/u);
@@ -484,7 +484,7 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
         get: async () => {
           throw new DOMException(
             "The operation was cancelled.",
-            "NotAllowedError",
+            "NotAllowedError"
           );
         },
       },
@@ -519,7 +519,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
         create: async () => {
           throw new DOMException(
             "The operation was cancelled.",
-            "NotAllowedError",
+            "NotAllowedError"
           );
         },
       },
@@ -572,7 +572,7 @@ for (const contextFailure of [
         status: contextFailure.status,
         contentType: "application/json",
         body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
-      }),
+      })
     );
     page.on("request", (request) => {
       if (
@@ -608,7 +608,7 @@ test("a registration-options failure retains only its bounded onboarding context
           status: 503,
           contentType: "application/json",
           body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
-        }),
+        })
     );
 
     await page.goto("/auth/sign-up");
@@ -696,8 +696,8 @@ test("a session created after Sign Up renders blocks context issuance", async ({
     await signOut(page);
     await staleSignUpPage.goto(
       `/auth/sign-up?callbackURL=${encodeURIComponent(
-        "/?source=context-race#complete",
-      )}`,
+        "/?source=context-race#complete"
+      )}`
     );
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -710,7 +710,7 @@ test("a session created after Sign Up renders blocks context issuance", async ({
     const responsePromise = staleSignUpPage.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-        "/api/auth/passkey/onboarding-context",
+        "/api/auth/passkey/onboarding-context"
     );
     await staleSignUpPage
       .getByRole("button", { name: "Continue with Passkey" })
@@ -722,7 +722,7 @@ test("a session created after Sign Up renders blocks context issuance", async ({
       code: onboardingAlreadyAuthenticatedCode,
     });
     await expect(staleSignUpPage).toHaveURL(
-      /\/\?source=context-race#complete$/u,
+      /\/\?source=context-race#complete$/u
     );
     expect(await authCounts()).toEqual(baseline);
     expect(await authenticator.credentials()).toEqual(deviceCredentials);
@@ -756,12 +756,12 @@ test("a session created after context issuance blocks registration", async ({
         markOptionsGenerated();
         await optionsResponseMayContinue;
         await route.fulfill({ response });
-      },
+      }
     );
     await page.goto(
       `/auth/sign-up?callbackURL=${encodeURIComponent(
-        "/?source=verification-race#complete",
-      )}`,
+        "/?source=verification-race#complete"
+      )}`
     );
     const clickPromise = page
       .getByRole("button", { name: "Continue with Passkey" })
@@ -776,7 +776,7 @@ test("a session created after context issuance blocks registration", async ({
     const verificationResponsePromise = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-        "/api/auth/passkey/verify-registration",
+        "/api/auth/passkey/verify-registration"
     );
     releaseOptionsResponse();
     await clickPromise;
@@ -806,7 +806,7 @@ test("a final persistence failure rolls back registration state", async ({
   const sql = postgres(databaseUrl, { max: 1 });
   try {
     await sql.unsafe(
-      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"',
+      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"'
     );
     await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.unsafe(`
@@ -844,7 +844,7 @@ test("a final persistence failure rolls back registration state", async ({
     expect(await currentSession(page)).toBeNull();
   } finally {
     await sql.unsafe(
-      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"',
+      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"'
     );
     await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.end();
@@ -912,13 +912,13 @@ test("provider account supports multiple passkeys but retains its final passkey"
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Name").fill("OAuth recovery passkey");
     const settingsRegistrationOptionsRequest = page.waitForRequest(
-      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
+      /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u
     );
     await dialog.getByRole("button", { name: "Add passkey" }).click();
     expect(
       new URL(
-        (await settingsRegistrationOptionsRequest).url(),
-      ).searchParams.has("authenticatorAttachment"),
+        (await settingsRegistrationOptionsRequest).url()
+      ).searchParams.has("authenticatorAttachment")
     ).toBe(false);
     await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
     await expect(dialog).toBeHidden();

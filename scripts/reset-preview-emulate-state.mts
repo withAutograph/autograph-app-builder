@@ -1,8 +1,8 @@
 import { z } from "zod";
 
+import { readPrivateDatabaseUrl } from "../lib/db/private-database-url";
 import { previewEmulationNamespace } from "../lib/integrations/local-provider-emulation";
 import { resetPostgresPreviewEmulateState } from "../lib/integrations/preview-emulate-persistence";
-import { readPrivateDatabaseUrl } from "../lib/db/private-database-url";
 
 const args = z
   .tuple([
@@ -18,15 +18,15 @@ const args = z
   .parse(process.argv.slice(2));
 
 const namespace = previewEmulationNamespace({
-  repository: args[3],
-  project: args[5],
   branch: args[7],
+  project: args[5],
+  repository: args[3],
 });
 const deleted = await resetPostgresPreviewEmulateState(
   readPrivateDatabaseUrl(0),
-  namespace,
+  namespace
 );
 
 process.stdout.write(
-  `${JSON.stringify({ namespace, deleted, reseedOnNextRequest: true })}\n`,
+  `${JSON.stringify({ deleted, namespace, reseedOnNextRequest: true })}\n`
 );

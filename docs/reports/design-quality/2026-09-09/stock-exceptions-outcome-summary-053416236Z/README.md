@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title and task description establish context, filters precede the exception list, and selection clearly drives the larger detail panel. The modeled-result state appropriately promotes its outcome and simulation notice, though the similarly weighted detail fields make the ambiguous “Shortfall” value harder to interpret.                                                          |
-| layout         | 4/4   | Alignment, spacing, and density are consistently handled across the filter card, four-row exception list, and detail sections. The centered composition remains coherent from 1024px through 1920px, while the 700px constrained view uses the full available panel width without crowding.                                                                                                        |
-| typography     | 3/4   | Product names, section headings, labels, and values use a consistent and readable hierarchy. Several 12px muted labels are near the measured contrast threshold, while the small red/orange status text has reported contrast between 2.63:1 and 3.2:1, weakening rapid severity scanning despite otherwise clear typography.                                                                      |
-| responsive     | 4/4   | The composition adapts effectively across the supplied 700px, 1024px, 1440px, and 1920px desktop captures. Wide windows retain list and detail together, while the constrained 700px view switches to a focused detail panel with a visible “Back to exceptions” control; expanded and modeled states remain usable with ordinary document scrolling.                                              |
-| productClarity | 3/4   | Location and severity filters, selectable exception rows, stock and supplier evidence, and the mock action directly support the brief. The result explicitly says no order was placed and stock is unchanged. However, “Shortfall 54 units” is not identified as the pre-replenishment shortfall, and the disclosure chevron directions appear opposite to common collapsed/expanded expectations. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title and task description establish context, filters precede the exception list, and selection clearly drives the larger detail panel. The modeled-result state appropriately promotes its outcome and simulation notice, though the similarly weighted detail fields make the ambiguous “Shortfall” value harder to interpret. |
+| layout | 4/4 | Alignment, spacing, and density are consistently handled across the filter card, four-row exception list, and detail sections. The centered composition remains coherent from 1024px through 1920px, while the 700px constrained view uses the full available panel width without crowding. |
+| typography | 3/4 | Product names, section headings, labels, and values use a consistent and readable hierarchy. Several 12px muted labels are near the measured contrast threshold, while the small red/orange status text has reported contrast between 2.63:1 and 3.2:1, weakening rapid severity scanning despite otherwise clear typography. |
+| responsive | 4/4 | The composition adapts effectively across the supplied 700px, 1024px, 1440px, and 1920px desktop captures. Wide windows retain list and detail together, while the constrained 700px view switches to a focused detail panel with a visible “Back to exceptions” control; expanded and modeled states remain usable with ordinary document scrolling. |
+| productClarity | 3/4 | Location and severity filters, selectable exception rows, stock and supplier evidence, and the mock action directly support the brief. The result explicitly says no order was placed and stock is unchanged. However, “Shortfall 54 units” is not identified as the pre-replenishment shortfall, and the disclosure chevron directions appear opposite to common collapsed/expanded expectations. |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/228) |
-| desktop-0                | typography | 0/0                         | 0% (0/518) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/274) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/130) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/518) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/274) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/518) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/274) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/162) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/410) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/186) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/82)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/86)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/82)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/228) |
+| desktop-0 | typography | 0/0 | 0% (0/518) |
+| desktop-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/130) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/228) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/518) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/130) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/228) |
+| desktop-window-0 | typography | 0/0 | 0% (0/518) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/130) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/162) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/410) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/186) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/82) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/86) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/82) |
 
 ## Latest-run screenshots
 

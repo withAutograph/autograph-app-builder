@@ -33,11 +33,10 @@ if [ "$#" -eq 2 ] && [ "$1" = "which" ] && [ "$2" = "node" ]; then
 fi
 printf '%s\\n' CALL >> "$MISE_CALLS"
 printf '%s\\n' "$@" >> "$MISE_CALLS"
-`,
+`
   );
   chmodSync(join(bin, "mise"), 0o700);
   return {
-    root,
     calls,
     environment: {
       LANG: "C",
@@ -45,11 +44,12 @@ printf '%s\\n' "$@" >> "$MISE_CALLS"
       NODE_ENV: "test" as const,
       PATH: `${bin}:/usr/bin:/bin`,
     },
+    root,
   };
 }
 
 function readCalls(path: string) {
-  return readFileSync(path, "utf8").trim().split("\n");
+  return readFileSync(path, "utf-8").trim().split("\n");
 }
 
 describe("hosted artifact mise task contract", () => {
@@ -69,9 +69,9 @@ describe("hosted artifact mise task contract", () => {
         args,
         {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
-        },
+        }
       );
 
       expect(result.status).toBe(0);
@@ -105,9 +105,9 @@ describe("hosted artifact mise task contract", () => {
         ],
         {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
-        },
+        }
       );
 
       expect(result.status).toBe(0);
@@ -138,7 +138,7 @@ describe("hosted artifact mise task contract", () => {
       ]) {
         const result = spawnSync(join(repositoryRoot, task), [], {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
         });
         expect(result.status).toBe(64);

@@ -8,9 +8,11 @@ async function sourceFiles(directory: string): Promise<string[]> {
   const nested = await Promise.all(
     entries.map(async (entry) => {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFiles(path);
+      if (entry.isDirectory()) {
+        return sourceFiles(path);
+      }
       return entry.isFile() && /\.[jt]sx?$/u.test(entry.name) ? [path] : [];
-    }),
+    })
   );
   return nested.flat();
 }
@@ -22,12 +24,12 @@ describe("library architecture boundaries", () => {
       await Promise.all(
         files.map(async (file) => ({
           file,
-          source: await readFile(file, "utf8"),
-        })),
+          source: await readFile(file, "utf-8"),
+        }))
       )
     )
       .filter(({ source }) =>
-        /from ["']@\/(app|components|agent)\//u.test(source),
+        /from ["']@\/(app|components|agent)\//u.test(source)
       )
       .map(({ file }) => file);
 

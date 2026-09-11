@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 describe("web theme integration", () => {
   it("uses the Next.js-safe class theme provider and Better Auth UI plugin", async () => {
     const [layout, providers] = await Promise.all([
-      readFile("app/layout.tsx", "utf8"),
-      readFile("components/providers.tsx", "utf8"),
+      readFile("app/layout.tsx", "utf-8"),
+      readFile("components/providers.tsx", "utf-8"),
     ]);
 
     expect(layout).toContain("suppressHydrationWarning");
@@ -17,8 +18,8 @@ describe("web theme integration", () => {
 
   it("themes every web surface while preserving host-controlled MCP theming", async () => {
     const [webStyles, mcpStyles] = await Promise.all([
-      readFile("app/ui/app-builder.module.css", "utf8"),
-      readFile("lib/mcp/session-app/styles.css", "utf8"),
+      readFile("app/ui/app-builder.module.css", "utf-8"),
+      readFile("lib/mcp/session-app/styles.css", "utf-8"),
     ]);
 
     expect(webStyles).toContain(":global(html.dark) .appShell");

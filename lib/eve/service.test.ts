@@ -8,69 +8,71 @@ import { createLocalEveSessionService, toEveInputResponse } from "./service";
 describe("Eve input response mapping", () => {
   it("maps the public denial to Eve's cancel approval option", () => {
     expect(toEveInputResponse("request-1", { kind: "deny" })).toEqual({
-      requestId: "request-1",
       optionId: "cancel",
+      requestId: "request-1",
     });
   });
 
   it("preserves approval and question answer shapes", () => {
     expect(toEveInputResponse("request-2", { kind: "approve" })).toEqual({
-      requestId: "request-2",
       optionId: "approve",
+      requestId: "request-2",
     });
     expect(
       toEveInputResponse("request-3", {
         kind: "answer",
         value: "Freeform",
-      }),
+      })
     ).toEqual({ requestId: "request-3", text: "Freeform" });
     expect(
       toEveInputResponse("request-4", {
         kind: "answer",
-        value: "ignored label",
         optionId: "choice-1",
-      }),
-    ).toEqual({ requestId: "request-4", optionId: "choice-1" });
+        value: "ignored label",
+      })
+    ).toEqual({ optionId: "choice-1", requestId: "request-4" });
   });
 });
 
 describe("local Eve acceptance", () => {
   it("lists recent work and resumes the selected local session", async () => {
     const events = [
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as MessageStreamEvent[];
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {
+          yield event;
+        }
       },
     };
     const session = {
-      state: { sessionId: "wrun_recent" },
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
       snapshot: vi.fn(async () => ({
         events,
         session: { sessionId: "wrun_recent", streamIndex: events.length },
       })),
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
-      cancel: vi.fn(async () => ({ status: "accepted" })),
+      state: { sessionId: "wrun_recent" },
     };
     const service = createLocalEveSessionService(
       {
         sessions: {
-          create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
+          create: vi.fn(async () => ({ session, response })),
         } as never,
       },
-      { stateGeneration: "recent-list" },
+      { stateGeneration: "recent-list" }
     );
     const started = await service.start({
-      prompt: "Build a vendor workspace",
       clientRequestId: "recent-start",
+      prompt: "Build a vendor workspace",
     });
     await vi.waitFor(async () => {
       await expect(
-        service.list({ cursor: 0, limit: 10 }),
+        service.list({ cursor: 0, limit: 10 })
       ).resolves.toMatchObject({
         sessions: [
           {
@@ -82,19 +84,19 @@ describe("local Eve acceptance", () => {
     });
     await expect(
       service.start({
-        resumeSessionId: started.sessionId,
         clientRequestId: "recent-resume",
-      }),
+        resumeSessionId: started.sessionId,
+      })
     ).resolves.toMatchObject({ sessionId: started.sessionId });
   });
 
   it("continues at the durable tail after the response stream disconnects", async () => {
     const durableEvents = [
       {
-        type: "step.completed",
         data: { turnId: "turn-recovery" },
+        type: "step.completed",
       },
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as MessageStreamEvent[];
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -108,42 +110,42 @@ describe("local Eve acceptance", () => {
       session: { sessionId: "wrun_stream_recovery", streamIndex: 2 },
     }));
     const session = {
-      state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
       snapshot,
+      state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
       stream: vi.fn(async function* () {
         yield durableEvents[1]!;
       }),
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
-      cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
         sessions: {
-          create: vi.fn(async () => ({ session, response })),
           attach,
+          create: vi.fn(async () => ({ session, response })),
         } as never,
       },
-      { stateGeneration: "stream-recovery" },
+      { stateGeneration: "stream-recovery" }
     );
     const started = await service.start({
-      prompt: "Build",
       clientRequestId: "stream-recovery-start",
+      prompt: "Build",
     });
 
     await vi.waitFor(async () => {
       await expect(
         service.get({
-          sessionId: started.sessionId,
           cursor: 0,
           limit: 100,
-        }),
-      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+          sessionId: started.sessionId,
+        })
+      ).resolves.toMatchObject({ cursor: 2, status: "waiting" });
     });
     await expect(
-      service.get({ sessionId: started.sessionId, cursor: 2, limit: 100 }),
-    ).resolves.toMatchObject({ status: "waiting", cursor: 2, events: [] });
+      service.get({ cursor: 2, limit: 100, sessionId: started.sessionId })
+    ).resolves.toMatchObject({ cursor: 2, events: [], status: "waiting" });
     expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenLastCalledWith(started.sessionId, {
       streamIndex: 1,
@@ -159,8 +161,8 @@ describe("local Eve acceptance", () => {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield {
-          type: "step.started",
           data: { turnId: "turn-clean-close" },
+          type: "step.started",
         } as MessageStreamEvent;
       },
     };
@@ -168,35 +170,35 @@ describe("local Eve acceptance", () => {
       throw new Error("snapshot must not run for a live tail");
     });
     const session = {
-      state: { sessionId: "wrun_clean_close", streamIndex: 0 },
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
       snapshot,
+      state: { sessionId: "wrun_clean_close", streamIndex: 0 },
       stream: vi.fn(async function* () {
         await tailReady;
         yield { type: "session.waiting", data: {} } as MessageStreamEvent;
       }),
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
-      cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
         sessions: {
-          create: vi.fn(async () => ({ session, response })),
           attach,
+          create: vi.fn(async () => ({ session, response })),
         } as never,
       },
-      { stateGeneration: "clean-response-tail" },
+      { stateGeneration: "clean-response-tail" }
     );
     const started = await service.start({
-      prompt: "Build",
       clientRequestId: "clean-response-tail-start",
+      prompt: "Build",
     });
 
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
-      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
+      ).resolves.toMatchObject({ cursor: 1, status: "working" });
     });
     expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
@@ -204,8 +206,8 @@ describe("local Eve acceptance", () => {
     releaseTail();
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
-      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
+      ).resolves.toMatchObject({ cursor: 2, status: "waiting" });
     });
     expect(snapshot).not.toHaveBeenCalled();
   });
@@ -213,45 +215,45 @@ describe("local Eve acceptance", () => {
   it("still bounds a model turn after its response iterator closes", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
-            type: "step.started",
             data: { turnId: "turn-closed-response" },
+            type: "step.started",
           } as MessageStreamEvent;
         },
       };
       const session = {
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        respond: vi.fn(async () => response),
+        send: vi.fn(async () => response),
         state: { sessionId: "wrun_closed_response", streamIndex: 0 },
         stream: vi.fn(async function* () {
           await never;
         }),
-        send: vi.fn(async () => response),
-        respond: vi.fn(async () => response),
-        cancel: vi.fn(async () => ({ status: "accepted" })),
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
-            create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
+            create: vi.fn(async () => ({ session, response })),
           } as never,
         },
-        { stateGeneration: "closed-response-timeout", modelTurnTimeoutMs: 10 },
+        { modelTurnTimeoutMs: 10, stateGeneration: "closed-response-timeout" }
       );
       const started = await service.start({
-        prompt: "Build",
         clientRequestId: "closed-response-timeout-start",
+        prompt: "Build",
       });
 
       await vi.advanceTimersByTimeAsync(10);
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({
-        status: "waiting",
         error: { code: "model_turn_interrupted" },
+        status: "waiting",
       });
       expect(session.cancel).toHaveBeenCalledWith({
         turnId: "turn-closed-response",
@@ -265,45 +267,47 @@ describe("local Eve acceptance", () => {
   it("preserves buffered settlement across a Next development module reload", async () => {
     const settledEvents = [
       {
+        data: { message: "Your plan is ready.", turnId: "turn-reload" },
         type: "message.completed",
-        data: { turnId: "turn-reload", message: "Your plan is ready." },
       },
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as unknown as MessageStreamEvent[];
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of settledEvents) yield event;
+        for (const event of settledEvents) {
+          yield event;
+        }
       },
     };
     const session = {
-      state: { sessionId: "wrun_module_reload" },
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
+      state: { sessionId: "wrun_module_reload" },
     };
     const stateGeneration = "one-development-invocation";
     const firstService = createLocalEveSessionService(
       {
         sessions: {
-          create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
+          create: vi.fn(async () => ({ session, response })),
         } as never,
       },
-      { stateGeneration },
+      { stateGeneration }
     );
     const started = await firstService.start({
-      prompt: "Build",
       clientRequestId: "module-reload-start",
+      prompt: "Build",
     });
     await vi.waitFor(async () => {
       await expect(
         firstService.get({
-          sessionId: started.sessionId,
           cursor: 0,
           limit: 100,
-        }),
-      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+          sessionId: started.sessionId,
+        })
+      ).resolves.toMatchObject({ cursor: 2, status: "waiting" });
     });
 
     vi.resetModules();
@@ -311,21 +315,20 @@ describe("local Eve acceptance", () => {
     const reloadedService = reloaded.createLocalEveSessionService(
       {
         sessions: {
-          create: vi.fn(),
           attach: vi.fn(() => session),
+          create: vi.fn(),
         } as never,
       },
-      { stateGeneration },
+      { stateGeneration }
     );
 
     await expect(
       reloadedService.get({
-        sessionId: started.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: started.sessionId,
+      })
     ).resolves.toMatchObject({
-      status: "waiting",
       cursor: 2,
       events: expect.arrayContaining([
         expect.objectContaining({
@@ -334,9 +337,10 @@ describe("local Eve acceptance", () => {
         }),
         expect.objectContaining({ type: "status", status: "waiting" }),
       ]),
+      status: "waiting",
     });
     await expect(
-      reloadedService.list({ cursor: 0, limit: 10 }),
+      reloadedService.list({ cursor: 0, limit: 10 })
     ).resolves.toMatchObject({
       sessions: [
         expect.objectContaining({
@@ -351,36 +355,36 @@ describe("local Eve acceptance", () => {
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+        yield { data: {}, type: "session.waiting" } as MessageStreamEvent;
       },
     };
     const session = {
-      state: { sessionId: "wrun_previous_cycle" },
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
+      state: { sessionId: "wrun_previous_cycle" },
     };
     const client = {
       sessions: {
-        create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
+        create: vi.fn(async () => ({ session, response })),
       } as never,
     };
     const firstCycle = createLocalEveSessionService(client, {
       stateGeneration: "cycle-one",
     });
     const started = await firstCycle.start({
-      prompt: "Build",
       clientRequestId: "previous-cycle-start",
+      prompt: "Build",
     });
     await vi.waitFor(async () => {
       await expect(
         firstCycle.get({
-          sessionId: started.sessionId,
           cursor: 0,
           limit: 100,
-        }),
-      ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
+          sessionId: started.sessionId,
+        })
+      ).resolves.toMatchObject({ cursor: 1, status: "waiting" });
     });
 
     const nextCycle = createLocalEveSessionService(client, {
@@ -388,15 +392,15 @@ describe("local Eve acceptance", () => {
     });
     await expect(
       nextCycle.get({
-        sessionId: started.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: started.sessionId,
+      })
     ).resolves.toEqual({
-      sessionId: started.sessionId,
-      status: "working",
       cursor: 0,
       events: [],
+      sessionId: started.sessionId,
+      status: "working",
     });
   });
 
@@ -406,23 +410,27 @@ describe("local Eve acceptance", () => {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield {
-          type: "step.started",
           data: { turnId: "turn-before-restart" },
+          type: "step.started",
         } as MessageStreamEvent;
         await new Promise<void>((resolve) => (keepOldResponseOpen = resolve));
       },
     };
     const resumedEvents = [
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as MessageStreamEvent[];
     const resumedResponse = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of resumedEvents) yield event;
+        for (const event of resumedEvents) {
+          yield event;
+        }
       },
     };
     const session = {
-      state: { sessionId: "wrun_restart_interrupted" },
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => resumedResponse),
+      send: vi.fn(async () => resumedResponse),
       snapshot: vi.fn(async () => ({
         events: [
           {
@@ -432,58 +440,56 @@ describe("local Eve acceptance", () => {
         ] as MessageStreamEvent[],
         session: { sessionId: "wrun_restart_interrupted", streamIndex: 1 },
       })),
-      send: vi.fn(async () => resumedResponse),
-      respond: vi.fn(async () => resumedResponse),
-      cancel: vi.fn(async () => ({ status: "accepted" })),
+      state: { sessionId: "wrun_restart_interrupted" },
     };
     const attach = vi.fn(() => session);
     const client = {
       sessions: {
-        create: vi.fn(async () => ({ session, response: oldResponse })),
         attach,
+        create: vi.fn(async () => ({ session, response: oldResponse })),
       } as never,
     };
     const first = createLocalEveSessionService(client, {
-      stateGeneration: "one-local-invocation",
       restartGeneration: "eve-child-one",
+      stateGeneration: "one-local-invocation",
     });
     const started = await first.start({
-      prompt: "Build",
       clientRequestId: "restart-interrupted-start",
+      prompt: "Build",
     });
     await vi.waitFor(async () => {
       await expect(
-        first.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
-      ).resolves.toMatchObject({ status: "working", cursor: 1 });
+        first.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
+      ).resolves.toMatchObject({ cursor: 1, status: "working" });
     });
 
     const restarted = createLocalEveSessionService(client, {
-      stateGeneration: "one-local-invocation",
       restartGeneration: "eve-child-two",
+      stateGeneration: "one-local-invocation",
     });
     await expect(
-      restarted.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
-    ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
+      restarted.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
+    ).resolves.toMatchObject({ cursor: 1, status: "waiting" });
     await expect(
-      restarted.cancel({ sessionId: started.sessionId }),
+      restarted.cancel({ sessionId: started.sessionId })
     ).resolves.toMatchObject({
       status: "waiting",
     });
     expect(session.cancel).not.toHaveBeenCalled();
 
     await restarted.send({
-      sessionId: started.sessionId,
-      message: "Continue from the last product decision.",
       clientRequestId: "restart-interrupted-send",
+      message: "Continue from the last product decision.",
+      sessionId: started.sessionId,
     });
     await vi.waitFor(async () => {
       await expect(
         restarted.get({
-          sessionId: started.sessionId,
           cursor: 0,
           limit: 100,
-        }),
-      ).resolves.toMatchObject({ status: "waiting", cursor: 2 });
+          sessionId: started.sessionId,
+        })
+      ).resolves.toMatchObject({ cursor: 2, status: "waiting" });
     });
     expect(attach).toHaveBeenCalledWith(started.sessionId, {
       streamIndex: 1,
@@ -498,11 +504,10 @@ describe("local Eve acceptance", () => {
     const mediaType = "text/html";
     const digest = createHash("sha256").update(content).digest("hex");
     const revision = createHash("sha256")
-      .update(JSON.stringify({ path, mediaType, digest }))
+      .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
     const events = [
       {
-        type: "actions.requested",
         data: {
           actions: [
             {
@@ -513,72 +518,75 @@ describe("local Eve acceptance", () => {
             },
           ],
         },
+        type: "actions.requested",
       },
       {
-        type: "action.result",
         data: {
-          status: "completed",
           result: {
-            kind: "tool-result",
             callId: "call_prototype",
-            toolName: "record_prototype_artifact",
+            kind: "tool-result",
             output: {
               appId: "vendor-onboarding",
-              path,
-              mediaType,
               digest,
+              mediaType,
+              path,
+              recordedByCallId: "call_prototype",
+              reused: false,
               revision,
               sessionId: "wrun_prototype",
-              recordedByCallId: "call_prototype",
               size: Buffer.byteLength(content),
-              reused: false,
             },
+            toolName: "record_prototype_artifact",
           },
+          status: "completed",
         },
+        type: "action.result",
       },
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as unknown as MessageStreamEvent[];
     const response = (entries: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of entries) yield event;
+        for (const event of entries) {
+          yield event;
+        }
       },
     });
     const session = {
-      state: { sessionId: "wrun_prototype" },
-      send: vi.fn(async () => response([])),
-      respond: vi.fn(async () => response([])),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response([])),
+      send: vi.fn(async () => response([])),
+      state: { sessionId: "wrun_prototype" },
     };
     const service = createLocalEveSessionService({
       sessions: {
-        create: vi.fn(async () => ({ session, response: response(events) })),
         attach: vi.fn(() => session),
+        create: vi.fn(async () => ({ session, response: response(events) })),
       } as never,
     });
     const started = await service.start({
-      prompt: "Build",
       clientRequestId: "prototype-start",
+      prompt: "Build",
     });
 
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 1, limit: 100 }),
+        service.get({ cursor: 1, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({
         cursor: 1,
         events: [],
-        prototype: { path, mediaType, content, digest, revision },
+        prototype: { content, digest, mediaType, path, revision },
       });
     });
     await expect(
       service.send({
-        sessionId: started.sessionId,
-        message: "Continue",
         clientRequestId: "prototype-send",
-      }),
+        message: "Continue",
+        sessionId: started.sessionId,
+      })
     ).resolves.toMatchObject({
+      prototype: { content, digest, mediaType, path, revision },
       status: "working",
-      prototype: { path, mediaType, content, digest, revision },
     });
   });
 
@@ -588,11 +596,10 @@ describe("local Eve acceptance", () => {
     const mediaType = "text/html";
     const digest = createHash("sha256").update(content).digest("hex");
     const revision = createHash("sha256")
-      .update(JSON.stringify({ path, mediaType, digest }))
+      .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
     const events = [
       {
-        type: "actions.requested",
         data: {
           actions: [
             {
@@ -603,30 +610,31 @@ describe("local Eve acceptance", () => {
             },
           ],
         },
+        type: "actions.requested",
       },
       {
-        type: "action.result",
         data: {
-          status: "completed",
           result: {
-            kind: "tool-result",
             callId: "call_route_prototype",
-            toolName: "record_prototype_artifact",
+            kind: "tool-result",
             output: {
               appId: "stock-exceptions",
-              path,
-              mediaType,
               digest,
+              mediaType,
+              path,
+              recordedByCallId: "call_route_prototype",
+              reused: false,
               revision,
               sessionId: "wrun_route_prototype",
-              recordedByCallId: "call_route_prototype",
               size: Buffer.byteLength(content),
-              reused: false,
             },
+            toolName: "record_prototype_artifact",
           },
+          status: "completed",
         },
+        type: "action.result",
       },
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ] as unknown as MessageStreamEvent[];
     const snapshot = vi.fn(async () => ({
       events,
@@ -636,24 +644,24 @@ describe("local Eve acceptance", () => {
       },
     }));
     const session = {
-      state: { sessionId: "wrun_route_prototype" },
       snapshot,
+      state: { sessionId: "wrun_route_prototype" },
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       { sessions: { attach } as never },
-      { stateGeneration: "route-local-preview" },
+      { stateGeneration: "route-local-preview" }
     );
 
     await expect(
       service.get({
-        sessionId: "wrun_route_prototype",
         cursor: 0,
         limit: 1,
-      }),
+        sessionId: "wrun_route_prototype",
+      })
     ).resolves.toMatchObject({
+      prototype: { content, digest, mediaType, path, revision },
       status: "waiting",
-      prototype: { path, mediaType, content, digest, revision },
     });
     expect(snapshot).toHaveBeenCalledTimes(1);
     expect(attach).toHaveBeenLastCalledWith("wrun_route_prototype", {
@@ -662,7 +670,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("returns one stable public handle without waiting for the active turn", async () => {
-    const never = new Promise<void>(() => undefined);
+    const never = new Promise<void>(() => {});
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
@@ -671,33 +679,33 @@ describe("local Eve acceptance", () => {
       },
     };
     const session = {
-      state: { sessionId: "wrun_prompt_return" },
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
+      state: { sessionId: "wrun_prompt_return" },
     };
-    const create = vi.fn(async () => ({ session, response }));
+    const create = vi.fn(async () => ({ response, session }));
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService({
-      sessions: { create, attach } as never,
+      sessions: { attach, create } as never,
     });
 
     const first = await Promise.race([
-      service.start({ prompt: "Build", clientRequestId: "prompt-return-1" }),
+      service.start({ clientRequestId: "prompt-return-1", prompt: "Build" }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("start blocked")), 100),
+        setTimeout(() => reject(new Error("start blocked")), 100)
       ),
     ]);
     const retry = await service.start({
-      prompt: "Build",
       clientRequestId: "prompt-return-1",
+      prompt: "Build",
     });
 
     expect(first).toEqual({
-      sessionId: "wrun_prompt_return",
-      status: "working",
       cursor: 0,
       events: [],
+      sessionId: "wrun_prompt_return",
+      status: "working",
     });
     expect(retry).toEqual(first);
     expect(create).toHaveBeenCalledTimes(1);
@@ -706,25 +714,27 @@ describe("local Eve acceptance", () => {
   it("cancels one stalled model turn and exposes a retryable paused result", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
-            type: "step.started",
             data: { turnId: "turn-model-stalled" },
+            type: "step.started",
           } as MessageStreamEvent;
           await never;
         },
       };
       const durableEvents = [
         {
-          type: "step.started",
           data: { turnId: "turn-model-stalled" },
+          type: "step.started",
         },
       ] as MessageStreamEvent[];
       const session = {
-        state: { sessionId: "wrun_model_stalled" },
+        cancel: vi.fn(async () => ({ status: "accepted" })),
+        respond: vi.fn(async () => response),
+        send: vi.fn(async () => response),
         snapshot: vi.fn(async () => ({
           events: durableEvents,
           session: {
@@ -732,43 +742,41 @@ describe("local Eve acceptance", () => {
             streamIndex: durableEvents.length,
           },
         })),
-        send: vi.fn(async () => response),
-        respond: vi.fn(async () => response),
-        cancel: vi.fn(async () => ({ status: "accepted" })),
+        state: { sessionId: "wrun_model_stalled" },
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
-            create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
+            create: vi.fn(async () => ({ session, response })),
           } as never,
         },
-        { stateGeneration: "model-turn-timeout", modelTurnTimeoutMs: 10 },
+        { modelTurnTimeoutMs: 10, stateGeneration: "model-turn-timeout" }
       );
 
       const started = await service.start({
-        prompt: "Build",
         clientRequestId: "model-turn-timeout-start",
+        prompt: "Build",
       });
       await vi.advanceTimersByTimeAsync(10);
       await Promise.resolve();
 
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({
-        status: "waiting",
         error: {
           code: "model_turn_interrupted",
           message:
             "Autograph paused because a response took too long. Your progress is saved; try again in a moment.",
         },
+        status: "waiting",
       });
       await expect(
         service.send({
-          sessionId: started.sessionId,
-          message: "Continue",
           clientRequestId: "model-turn-timeout-retry",
-        }),
+          message: "Continue",
+          sessionId: started.sessionId,
+        })
       ).rejects.toThrow("previous Autograph response is still settling");
       expect(session.cancel).toHaveBeenCalledWith({
         turnId: "turn-model-stalled",
@@ -787,35 +795,35 @@ describe("local Eve acceptance", () => {
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
-            type: "step.started",
             data: { turnId: "turn-model-healthy" },
+            type: "step.started",
           } as MessageStreamEvent;
-          yield { type: "session.waiting", data: {} } as MessageStreamEvent;
+          yield { data: {}, type: "session.waiting" } as MessageStreamEvent;
         },
       };
       const session = {
-        state: { sessionId: "wrun_model_healthy" },
-        send: vi.fn(async () => response),
-        respond: vi.fn(async () => response),
         cancel: vi.fn(async () => ({ status: "accepted" })),
+        respond: vi.fn(async () => response),
+        send: vi.fn(async () => response),
+        state: { sessionId: "wrun_model_healthy" },
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
-            create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
+            create: vi.fn(async () => ({ session, response })),
           } as never,
         },
-        { stateGeneration: "model-turn-healthy", modelTurnTimeoutMs: 10 },
+        { modelTurnTimeoutMs: 10, stateGeneration: "model-turn-healthy" }
       );
       const started = await service.start({
-        prompt: "Build",
         clientRequestId: "model-turn-healthy-start",
+        prompt: "Build",
       });
       await vi.advanceTimersByTimeAsync(10);
 
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({ status: "waiting" });
       expect(response.cancel).not.toHaveBeenCalled();
     } finally {
@@ -835,60 +843,60 @@ describe("local Eve acceptance", () => {
       }),
       async *[Symbol.asyncIterator]() {
         yield {
-          type: "step.started",
           data: { turnId: "turn-1" },
+          type: "step.started",
         } as MessageStreamEvent;
         await cancelled;
         yield {
-          type: "turn.cancelled",
           data: { turnId: "turn-1" },
+          type: "turn.cancelled",
         } as MessageStreamEvent;
       },
     };
     const session = {
-      state: { sessionId: "wrun_lifecycle" },
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
+      state: { sessionId: "wrun_lifecycle" },
     };
     const service = createLocalEveSessionService({
       sessions: {
-        create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
+        create: vi.fn(async () => ({ session, response })),
       } as never,
     });
     const start = await service.start({
-      prompt: "Build",
       clientRequestId: "prompt-lifecycle-1",
+      prompt: "Build",
     });
     await expect(
-      service.get({ sessionId: start.sessionId, cursor: 0, limit: 100 }),
+      service.get({ cursor: 0, limit: 100, sessionId: start.sessionId })
     ).resolves.toMatchObject({ sessionId: start.sessionId });
     await expect(
       service.send({
-        sessionId: start.sessionId,
-        message: "Continue",
         clientRequestId: "prompt-lifecycle-2",
-      }),
+        message: "Continue",
+        sessionId: start.sessionId,
+      })
     ).resolves.toMatchObject({ status: "working" });
     await expect(
       service.respond({
-        sessionId: start.sessionId,
-        responses: [{ requestId: "request-1", response: { kind: "approve" } }],
         clientRequestId: "prompt-lifecycle-3",
-      }),
+        responses: [{ requestId: "request-1", response: { kind: "approve" } }],
+        sessionId: start.sessionId,
+      })
     ).rejects.toThrow("complete outstanding Eve input batch");
     await expect(
-      service.cancel({ sessionId: start.sessionId }),
+      service.cancel({ sessionId: start.sessionId })
     ).resolves.toMatchObject({ sessionId: start.sessionId });
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: start.sessionId, cursor: 0, limit: 100 }),
+        service.get({ cursor: 0, limit: 100, sessionId: start.sessionId })
       ).resolves.toMatchObject({
-        status: "cancelled",
         events: expect.arrayContaining([
           expect.objectContaining({ type: "status", status: "cancelled" }),
         ]),
+        status: "cancelled",
       });
     });
     expect(session.send).toHaveBeenCalledTimes(1);
@@ -900,39 +908,39 @@ describe("local Eve acceptance", () => {
   it("bounds a local cancel when the current Eve response cannot settle", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(() => never),
         async *[Symbol.asyncIterator]() {
           yield {
-            type: "step.started",
             data: { turnId: "turn-cancel-timeout" },
+            type: "step.started",
           } as MessageStreamEvent;
           await never;
         },
       };
       const session = {
-        state: { sessionId: "wrun_cancel_timeout" },
-        send: vi.fn(async () => response),
-        respond: vi.fn(async () => response),
         cancel: vi.fn(async () => ({ status: "accepted" })),
+        respond: vi.fn(async () => response),
+        send: vi.fn(async () => response),
+        state: { sessionId: "wrun_cancel_timeout" },
       };
       const service = createLocalEveSessionService({
         sessions: {
-          create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
+          create: vi.fn(async () => ({ session, response })),
         } as never,
       });
       const started = await service.start({
-        prompt: "Build",
         clientRequestId: "cancel-timeout-start",
+        prompt: "Build",
       });
 
       const cancellation = service.cancel({ sessionId: started.sessionId });
       const expectedCancellation = expect(cancellation).rejects.toThrow(
-        "Cancellation was accepted",
+        "Cancellation was accepted"
       );
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(5000);
       await expectedCancellation;
     } finally {
       vi.useRealTimers();
@@ -943,25 +951,25 @@ describe("local Eve acceptance", () => {
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        await new Promise<void>(() => undefined);
+        await new Promise<void>(() => {});
         yield {} as MessageStreamEvent;
       },
     };
     const session = {
-      state: { sessionId: "wrun_exact_turn" },
-      send: vi.fn(async () => response),
-      respond: vi.fn(async () => response),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => response),
+      send: vi.fn(async () => response),
+      state: { sessionId: "wrun_exact_turn" },
     };
     const service = createLocalEveSessionService({
       sessions: {
-        create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
+        create: vi.fn(async () => ({ session, response })),
       } as never,
     });
     const start = await service.start({
-      prompt: "Build",
       clientRequestId: "prompt-turn-cancel",
+      prompt: "Build",
     });
     await service.cancel({ sessionId: start.sessionId, turnId: "turn-7" });
     expect(session.cancel).toHaveBeenCalledWith({ turnId: "turn-7" });
@@ -972,32 +980,32 @@ describe("local Eve acceptance", () => {
     const stream = (events: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {
+          yield event;
+        }
       },
     });
     const initial = stream([
-      { type: "session.waiting", data: {} } as MessageStreamEvent,
+      { data: {}, type: "session.waiting" } as MessageStreamEvent,
     ]);
     const followUp = stream([
       {
-        type: "input.requested",
         data: {
-          turnId: "turn-follow-up",
           requests: ["request-source", "request-plan", "request-preview"].map(
             (requestId) => ({
               requestId,
               kind: "tool-approval",
               prompt: requestId,
-            }),
+            })
           ),
+          turnId: "turn-follow-up",
         },
+        type: "input.requested",
       } as unknown as MessageStreamEvent,
     ]);
     const responded = stream([
       {
-        type: "input.resolved",
         data: {
-          turnId: "turn-follow-up",
           resolutions: [
             "request-source",
             "request-plan",
@@ -1008,99 +1016,101 @@ describe("local Eve acceptance", () => {
             outcome: "approved",
             response: { requestId, optionId: "approve" },
           })),
+          turnId: "turn-follow-up",
         },
+        type: "input.resolved",
       } as unknown as MessageStreamEvent,
       {
-        type: "step.completed",
         data: { turnId: "turn-follow-up" },
+        type: "step.completed",
       } as MessageStreamEvent,
-      { type: "session.waiting", data: {} } as MessageStreamEvent,
+      { data: {}, type: "session.waiting" } as MessageStreamEvent,
     ]);
     const rebound = {
-      state: { sessionId: "wrun_rebound" },
-      send: vi.fn(async () => followUp),
-      respond: vi.fn(async () => responded),
       cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => responded),
+      send: vi.fn(async () => followUp),
+      state: { sessionId: "wrun_rebound" },
     };
     const created = { ...rebound };
     const attach = vi.fn(() => rebound);
     const service = createLocalEveSessionService({
       sessions: {
-        create: vi.fn(async () => ({ session: created, response: initial })),
         attach,
+        create: vi.fn(async () => ({ session: created, response: initial })),
       } as never,
     });
     const started = await service.start({
-      prompt: "Build",
       clientRequestId: "rebind-start",
+      prompt: "Build",
     });
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
+        service.get({ cursor: 0, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({ cursor: 1, status: "waiting" });
     });
 
     await service.send({
-      sessionId: started.sessionId,
-      message: "Use the source",
       clientRequestId: "rebind-send",
+      message: "Use the source",
+      sessionId: started.sessionId,
     });
     expect(attach).toHaveBeenNthCalledWith(1, started.sessionId, {
       streamIndex: 1,
     });
     await vi.waitFor(async () => {
       await expect(
-        service.get({ sessionId: started.sessionId, cursor: 1, limit: 100 }),
+        service.get({ cursor: 1, limit: 100, sessionId: started.sessionId })
       ).resolves.toMatchObject({
         cursor: 4,
-        status: "input_required",
         inputRequests: expect.arrayContaining([
           expect.objectContaining({ requestId: "request-source" }),
           expect.objectContaining({ requestId: "request-plan" }),
           expect.objectContaining({ requestId: "request-preview" }),
         ]),
+        status: "input_required",
       });
     });
 
     await service.respond({
-      sessionId: started.sessionId,
+      clientRequestId: "rebind-respond",
       responses: [
         { requestId: "request-source", response: { kind: "approve" } },
         { requestId: "request-plan", response: { kind: "approve" } },
         { requestId: "request-preview", response: { kind: "approve" } },
       ],
-      clientRequestId: "rebind-respond",
+      sessionId: started.sessionId,
     });
     expect(attach).toHaveBeenNthCalledWith(2, started.sessionId, {
       streamIndex: 2,
     });
     await vi.waitFor(async () => {
       const result = await service.get({
-        sessionId: started.sessionId,
         cursor: 0,
         limit: 100,
+        sessionId: started.sessionId,
       });
       expect(result.cursor).toBe(6);
       expect(result.status).toBe("waiting");
       expect(result.inputRequests).toBeUndefined();
       expect(
         result.events.filter(
-          (event) => event.type === "status" && event.status === "waiting",
-        ),
+          (event) => event.type === "status" && event.status === "waiting"
+        )
       ).toHaveLength(2);
       expect(result.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            type: "input_required",
             request: expect.objectContaining({ requestId: "request-source" }),
+            type: "input_required",
           }),
-        ]),
+        ])
       );
     });
     expect(rebound.respond).toHaveBeenCalledWith([
-      { requestId: "request-source", optionId: "approve" },
-      { requestId: "request-plan", optionId: "approve" },
-      { requestId: "request-preview", optionId: "approve" },
+      { optionId: "approve", requestId: "request-source" },
+      { optionId: "approve", requestId: "request-plan" },
+      { optionId: "approve", requestId: "request-preview" },
     ]);
   });
 });

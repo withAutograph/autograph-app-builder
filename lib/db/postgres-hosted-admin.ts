@@ -1,6 +1,7 @@
 import { and, eq, lt, lte, ne, notExists } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
+import type { HostedAdminStore } from "./hosted-admin";
 import {
   agentOperations,
   agentSessions,
@@ -13,42 +14,41 @@ import {
   hostedWorkspaceMemberships,
   vercelInstallationAuthorizationStates,
 } from "./schema";
-import * as databaseSchema from "./schema";
-import type { HostedAdminStore } from "./hosted-admin";
+import type * as databaseSchema from "./schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 function membershipPredicate(
-  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
+  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"]
 ) {
   return and(
     eq(hostedWorkspaceMemberships.issuer, authority.issuer),
     eq(hostedWorkspaceMemberships.audience, authority.audience),
     eq(hostedWorkspaceMemberships.workspaceId, authority.workspaceId),
-    eq(hostedWorkspaceMemberships.ownerUserId, authority.ownerUserId),
+    eq(hostedWorkspaceMemberships.ownerUserId, authority.ownerUserId)
   );
 }
 
 function operationTenantPredicate(
-  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
+  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"]
 ) {
   return and(
     eq(agentOperations.issuer, authority.issuer),
     eq(agentOperations.audience, authority.audience),
     eq(agentOperations.workspaceId, authority.workspaceId),
-    eq(agentOperations.ownerUserId, authority.ownerUserId),
+    eq(agentOperations.ownerUserId, authority.ownerUserId)
   );
 }
 
 function sessionTenantPredicate(
-  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
+  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"]
 ) {
   return and(
     eq(agentSessions.issuer, authority.issuer),
     eq(agentSessions.audience, authority.audience),
     eq(agentSessions.workspaceId, authority.workspaceId),
-    eq(agentSessions.ownerUserId, authority.ownerUserId),
+    eq(agentSessions.ownerUserId, authority.ownerUserId)
   );
 }
 
@@ -61,19 +61,19 @@ function integrationTenantPredicate(
     | typeof builderProvisioningJournals
     | typeof githubInstallationAuthorizationStates
     | typeof vercelInstallationAuthorizationStates,
-  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
+  authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"]
 ) {
   return and(
     eq(table.issuer, authority.issuer),
     eq(table.audience, authority.audience),
     eq(table.workspaceId, authority.workspaceId),
-    eq(table.ownerUserId, authority.ownerUserId),
+    eq(table.ownerUserId, authority.ownerUserId)
   );
 }
 
 async function deleteExpired(
   transaction: Transaction,
-  input: Parameters<HostedAdminStore["applyRetention"]>[0],
+  input: Parameters<HostedAdminStore["applyRetention"]>[0]
 ) {
   // Reserved rows are replay authority after an interrupted submission and are
   // never age-deleted. A session is deleted only after every operation that
@@ -84,8 +84,8 @@ async function deleteExpired(
       and(
         operationTenantPredicate(input.authority),
         lt(agentOperations.updatedAt, input.deleteBefore),
-        ne(agentOperations.state, "reserved"),
-      ),
+        ne(agentOperations.state, "reserved")
+      )
     )
     .returning({ operationId: agentOperations.operationId });
 
@@ -105,11 +105,11 @@ async function deleteExpired(
                 eq(agentOperations.audience, agentSessions.audience),
                 eq(agentOperations.workspaceId, agentSessions.workspaceId),
                 eq(agentOperations.ownerUserId, agentSessions.ownerUserId),
-                eq(agentOperations.sessionId, agentSessions.sessionId),
-              ),
-            ),
-        ),
-      ),
+                eq(agentOperations.sessionId, agentSessions.sessionId)
+              )
+            )
+        )
+      )
     )
     .returning({ sessionId: agentSessions.sessionId });
 
@@ -119,10 +119,10 @@ async function deleteExpired(
       and(
         integrationTenantPredicate(
           githubInstallationAuthorizationStates,
-          input.authority,
+          input.authority
         ),
-        lt(githubInstallationAuthorizationStates.expiresAt, input.deleteBefore),
-      ),
+        lt(githubInstallationAuthorizationStates.expiresAt, input.deleteBefore)
+      )
     )
     .returning({
       stateDigest: githubInstallationAuthorizationStates.stateDigest,
@@ -133,10 +133,10 @@ async function deleteExpired(
       and(
         integrationTenantPredicate(
           vercelInstallationAuthorizationStates,
-          input.authority,
+          input.authority
         ),
-        lt(vercelInstallationAuthorizationStates.expiresAt, input.deleteBefore),
-      ),
+        lt(vercelInstallationAuthorizationStates.expiresAt, input.deleteBefore)
+      )
     )
     .returning({
       stateDigest: vercelInstallationAuthorizationStates.stateDigest,
@@ -147,11 +147,11 @@ async function deleteExpired(
       and(
         integrationTenantPredicate(
           builderProvisioningJournals,
-          input.authority,
+          input.authority
         ),
         eq(builderProvisioningJournals.state, "settled"),
-        lt(builderProvisioningJournals.updatedAt, input.deleteBefore),
-      ),
+        lt(builderProvisioningJournals.updatedAt, input.deleteBefore)
+      )
     )
     .returning({ requestId: builderProvisioningJournals.requestId });
   const githubCredentials = await transaction
@@ -160,64 +160,30 @@ async function deleteExpired(
       and(
         integrationTenantPredicate(
           hostedGitHubUserCredentials,
-          input.authority,
+          input.authority
         ),
         eq(hostedGitHubUserCredentials.active, false),
-        lt(hostedGitHubUserCredentials.updatedAt, input.deleteBefore),
-      ),
+        lt(hostedGitHubUserCredentials.updatedAt, input.deleteBefore)
+      )
     )
     .returning({ providerUserId: hostedGitHubUserCredentials.providerUserId });
 
   return {
-    operationRowsDeleted: operations.length,
-    sessionRowsDeleted: sessions.length,
+    authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
     integrationRowsDeleted:
       provisioningJournals.length + githubCredentials.length,
-    authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
+    operationRowsDeleted: operations.length,
+    sessionRowsDeleted: sessions.length,
   };
 }
 
 export function createPostgresHostedAdminStore(
-  database: Database,
+  database: Database
 ): HostedAdminStore {
   return {
-    async seedMembership({ authority, now }) {
-      const rows = await database
-        .insert(hostedWorkspaceMemberships)
-        .values({ ...authority, active: true, updatedAt: now })
-        .onConflictDoUpdate({
-          target: [
-            hostedWorkspaceMemberships.issuer,
-            hostedWorkspaceMemberships.audience,
-            hostedWorkspaceMemberships.workspaceId,
-            hostedWorkspaceMemberships.ownerUserId,
-          ],
-          set: { active: true, updatedAt: now },
-        })
-        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
-      if (rows.length !== 1) {
-        throw new Error("Hosted membership activation was not durable.");
-      }
-      return { membershipRowsAffected: 1 };
-    },
-
-    async revokeMembership({ authority, now }) {
-      const rows = await database
-        .update(hostedWorkspaceMemberships)
-        .set({ active: false, updatedAt: now })
-        .where(
-          and(
-            membershipPredicate(authority),
-            eq(hostedWorkspaceMemberships.active, true),
-          ),
-        )
-        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
-      return { membershipRowsAffected: rows.length };
-    },
-
     applyRetention(input) {
       return database.transaction((transaction) =>
-        deleteExpired(transaction, input),
+        deleteExpired(transaction, input)
       );
     },
 
@@ -230,17 +196,14 @@ export function createPostgresHostedAdminStore(
             and(
               membershipPredicate(authority),
               eq(hostedWorkspaceMemberships.active, false),
-              lte(
-                hostedWorkspaceMemberships.updatedAt,
-                membershipRevokedBefore,
-              ),
-            ),
+              lte(hostedWorkspaceMemberships.updatedAt, membershipRevokedBefore)
+            )
           )
           .limit(1)
           .for("update");
         if (inactiveMembership.length !== 1) {
           throw new Error(
-            "Hosted tenant deletion requires a drained inactive membership.",
+            "Hosted tenant deletion requires a drained inactive membership."
           );
         }
 
@@ -255,7 +218,7 @@ export function createPostgresHostedAdminStore(
         const githubInstallations = await transaction
           .delete(hostedGitHubInstallations)
           .where(
-            integrationTenantPredicate(hostedGitHubInstallations, authority),
+            integrationTenantPredicate(hostedGitHubInstallations, authority)
           )
           .returning({
             installationId: hostedGitHubInstallations.installationId,
@@ -265,8 +228,8 @@ export function createPostgresHostedAdminStore(
           .where(
             integrationTenantPredicate(
               hostedGitHubInstallationBindings,
-              authority,
-            ),
+              authority
+            )
           )
           .returning({
             installationId: hostedGitHubInstallationBindings.installationId,
@@ -274,7 +237,7 @@ export function createPostgresHostedAdminStore(
         const githubCredentials = await transaction
           .delete(hostedGitHubUserCredentials)
           .where(
-            integrationTenantPredicate(hostedGitHubUserCredentials, authority),
+            integrationTenantPredicate(hostedGitHubUserCredentials, authority)
           )
           .returning({
             providerUserId: hostedGitHubUserCredentials.providerUserId,
@@ -282,13 +245,13 @@ export function createPostgresHostedAdminStore(
         const provisioningJournals = await transaction
           .delete(builderProvisioningJournals)
           .where(
-            integrationTenantPredicate(builderProvisioningJournals, authority),
+            integrationTenantPredicate(builderProvisioningJournals, authority)
           )
           .returning({ requestId: builderProvisioningJournals.requestId });
         const vercelInstallations = await transaction
           .delete(hostedVercelInstallations)
           .where(
-            integrationTenantPredicate(hostedVercelInstallations, authority),
+            integrationTenantPredicate(hostedVercelInstallations, authority)
           )
           .returning({
             installationId: hostedVercelInstallations.installationId,
@@ -298,8 +261,8 @@ export function createPostgresHostedAdminStore(
           .where(
             integrationTenantPredicate(
               githubInstallationAuthorizationStates,
-              authority,
-            ),
+              authority
+            )
           )
           .returning({
             stateDigest: githubInstallationAuthorizationStates.stateDigest,
@@ -309,8 +272,8 @@ export function createPostgresHostedAdminStore(
           .where(
             integrationTenantPredicate(
               vercelInstallationAuthorizationStates,
-              authority,
-            ),
+              authority
+            )
           )
           .returning({
             stateDigest: vercelInstallationAuthorizationStates.stateDigest,
@@ -336,6 +299,40 @@ export function createPostgresHostedAdminStore(
             githubStates.length + vercelStates.length,
         };
       });
+    },
+
+    async revokeMembership({ authority, now }) {
+      const rows = await database
+        .update(hostedWorkspaceMemberships)
+        .set({ active: false, updatedAt: now })
+        .where(
+          and(
+            membershipPredicate(authority),
+            eq(hostedWorkspaceMemberships.active, true)
+          )
+        )
+        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
+      return { membershipRowsAffected: rows.length };
+    },
+
+    async seedMembership({ authority, now }) {
+      const rows = await database
+        .insert(hostedWorkspaceMemberships)
+        .values({ ...authority, active: true, updatedAt: now })
+        .onConflictDoUpdate({
+          target: [
+            hostedWorkspaceMemberships.issuer,
+            hostedWorkspaceMemberships.audience,
+            hostedWorkspaceMemberships.workspaceId,
+            hostedWorkspaceMemberships.ownerUserId,
+          ],
+          set: { active: true, updatedAt: now },
+        })
+        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
+      if (rows.length !== 1) {
+        throw new Error("Hosted membership activation was not durable.");
+      }
+      return { membershipRowsAffected: 1 };
     },
   };
 }

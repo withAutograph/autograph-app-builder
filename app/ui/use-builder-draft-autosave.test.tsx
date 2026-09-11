@@ -1,16 +1,17 @@
 /** @vitest-environment jsdom */
 
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderDraftOutbox } from "./builder-draft-outbox";
-import {
-  type BuilderDraftAutosave,
-  useBuilderDraftAutosave,
-} from "./use-builder-draft-autosave";
+import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
+import type { BuilderDraftAutosave } from "./use-builder-draft-autosave";
 
-type Snapshot = { brief: string };
+interface Snapshot {
+  brief: string;
+}
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -27,7 +28,7 @@ function Harness({
   outbox: BuilderDraftOutbox<Snapshot>;
   save: Parameters<typeof useBuilderDraftAutosave<Snapshot>>[0]["save"];
 }) {
-  const value = useBuilderDraftAutosave({ outbox, save, debounceMs: 10_000 });
+  const value = useBuilderDraftAutosave({ debounceMs: 10_000, outbox, save });
   useEffect(() => {
     autosave = value;
   }, [value]);
@@ -39,12 +40,16 @@ async function render(props: Parameters<typeof Harness>[0]) {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root?.render(<Harness {...props} />));
-  if (!autosave) throw new Error("autosave-harness-not-ready");
+  if (!autosave) {
+    throw new Error("autosave-harness-not-ready");
+  }
   return autosave;
 }
 
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   container?.remove();
   root = undefined;
   container = undefined;
@@ -59,13 +64,15 @@ describe("useBuilderDraftAutosave", () => {
       resolveFirst = resolve;
     });
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      read: vi.fn(),
-      write: vi.fn(),
       clear: vi.fn(),
       clearIfMutationId: vi.fn(async () => true),
+      read: vi.fn(),
+      write: vi.fn(),
     };
     const save = vi.fn(async ({ mutationId, snapshot }) => {
-      if (snapshot.brief === "older") await firstSave;
+      if (snapshot.brief === "older") {
+        await firstSave;
+      }
       return { mutationId, savedAt: "2030-01-01T00:00:00.000Z" };
     });
     const value = await render({ outbox, save });
@@ -83,11 +90,11 @@ describe("useBuilderDraftAutosave", () => {
 
     expect(save).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ snapshot: { brief: "older" } }),
+      expect.objectContaining({ snapshot: { brief: "older" } })
     );
     expect(save).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ snapshot: { brief: "newer" } }),
+      expect.objectContaining({ snapshot: { brief: "newer" } })
     );
     expect(outbox.clearIfMutationId).toHaveBeenCalledTimes(2);
   });

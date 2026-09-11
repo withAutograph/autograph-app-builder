@@ -13,23 +13,18 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 export default defineTool({
   description:
     "Read the exact reviewed workflow and fresh GitHub default-branch observation, then durably seal a draft pull-request proposal. This performs no branch, push, pull-request, release-gate, or repository mutation.",
-  inputSchema: z.strictObject({
-    expectedGitHubSourceDigest: digest,
-    expectedReviewDigest: digest,
-    title: z.string().trim().min(1).max(120),
-  }),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined)
       throw new Error(
-        "No reviewed workflow with an immutable GitHub source is available.",
+        "No reviewed workflow with an immutable GitHub source is available."
       );
     if (
       state.githubSource.digest !== input.expectedGitHubSourceDigest ||
       state.reviewReceipt.digest !== input.expectedReviewDigest
     )
       throw new Error(
-        "The proposal request is not bound to the exact GitHub source and review receipts.",
+        "The proposal request is not bound to the exact GitHub source and review receipts."
       );
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const proposal = await runtime.sealDraftPullRequestProposal({
@@ -44,7 +39,7 @@ export default defineTool({
       proposal.repositoryId !== state.githubSource.repository.repositoryId
     )
       throw new Error(
-        "The sealed draft pull-request proposal is not bound to the current reviewed workflow.",
+        "The sealed draft pull-request proposal is not bound to the current reviewed workflow."
       );
     updateExactWorkflow({
       expected: state,
@@ -52,7 +47,7 @@ export default defineTool({
       transition: (latest) => {
         if (latest.phase !== "reviewed" || latest.githubSource === undefined)
           throw new Error(
-            "The reviewed GitHub workflow changed before proposal sealing.",
+            "The reviewed GitHub workflow changed before proposal sealing."
           );
         return {
           ...latest,
@@ -66,4 +61,9 @@ export default defineTool({
     });
     return proposal;
   },
+  inputSchema: z.strictObject({
+    expectedGitHubSourceDigest: digest,
+    expectedReviewDigest: digest,
+    title: z.string().trim().min(1).max(120),
+  }),
 });

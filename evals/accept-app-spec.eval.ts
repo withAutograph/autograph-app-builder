@@ -1,13 +1,13 @@
-import { defineEval } from "eve/evals";
-import { equals, includes, satisfies } from "eve/evals/expect";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+
+import { defineEval } from "eve/evals";
+import { equals, includes, satisfies } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
-  timeoutMs: 300_000,
   description:
     "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
   async test(t) {
@@ -24,7 +24,7 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`
     );
     t.succeeded();
     t.check(t.reply, includes("ready for automatic implementation planning"));
@@ -39,7 +39,7 @@ export default defineEval({
     t.succeeded();
     t.check(
       t.reply,
-      includes("reused the exact durable dependency-preparation receipt"),
+      includes("reused the exact durable dependency-preparation receipt")
     );
 
     await t.send("Run target identity and planning.");
@@ -53,10 +53,10 @@ export default defineEval({
         (reply) =>
           typeof reply === "string" &&
           !/target identity|canonical proposal|digest-bound|target mutation/iu.test(
-            reply,
+            reply
           ),
-        "planning result stays product-facing",
-      ),
+        "planning result stays product-facing"
+      )
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -65,7 +65,7 @@ export default defineEval({
     t.succeeded();
     t.check(
       t.reply,
-      includes("reused the exact durable target-planning receipt"),
+      includes("reused the exact durable target-planning receipt")
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -108,7 +108,7 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     const retryValidation = await t.send(
-      "Retry target validation after a lost response.",
+      "Retry target validation after a lost response."
     );
     t.succeeded();
     retryValidation.notEvent("input.requested");
@@ -130,7 +130,7 @@ export default defineEval({
     t.notCalledTool("write_file");
 
     const retryReview = await t.send(
-      "Retry change-set acceptance after a lost response.",
+      "Retry change-set acceptance after a lost response."
     );
     t.succeeded();
     retryReview.notEvent("input.requested");
@@ -161,7 +161,7 @@ export default defineEval({
     t.succeeded();
     t.check(
       t.reply,
-      includes("reused the exact durable local-publication receipt"),
+      includes("reused the exact durable local-publication receipt")
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -191,8 +191,8 @@ export default defineEval({
           typeof reply === "string" &&
           reply.includes('"review"') &&
           reply.includes('"publication"'),
-        "published workflow retains exact review and publication receipts",
-      ),
+        "published workflow retains exact review and publication receipts"
+      )
     );
     const afterRevision = t.reply;
 
@@ -216,4 +216,5 @@ export default defineEval({
     t.notCalledTool("write_file");
     await writeFile(topologyPath, topologyBeforeOverlap);
   },
+  timeoutMs: 300_000,
 });

@@ -30,13 +30,13 @@ describe("exact forwarded session authority", () => {
       },
     });
     expect(
-      sourceHandoffIdForSessionAuth({ current: prepared, initiator: prepared }),
+      sourceHandoffIdForSessionAuth({ current: prepared, initiator: prepared })
     ).toBe(handoffId);
     expect(
-      sourceHandoffIdForSessionAuth({ current: auth(), initiator: auth() }),
+      sourceHandoffIdForSessionAuth({ current: auth(), initiator: auth() })
     ).toBeUndefined();
     expect(
-      sourceHandoffIdForSessionAuth({ current: null, initiator: null }),
+      sourceHandoffIdForSessionAuth({ current: null, initiator: null })
     ).toBeUndefined();
     for (const candidate of [
       { current: auth(), initiator: prepared },
@@ -46,27 +46,28 @@ describe("exact forwarded session authority", () => {
         initiator: prepared,
       },
       { current: prepared, initiator: null },
-    ])
+    ]) {
       expect(() => sourceHandoffIdForSessionAuth(candidate)).toThrow(
-        HostedSessionAuthorityError,
+        HostedSessionAuthorityError
       );
+    }
   });
   it("returns one exact current and initiating tenant authority", () => {
     expect(
-      exactForwardedSessionAuthority({ current: auth(), initiator: auth() }),
+      exactForwardedSessionAuthority({ current: auth(), initiator: auth() })
     ).toEqual({
       authority: {
-        issuer: "https://builder.example.test/api/auth",
         audience: "https://builder.example.test/mcp",
-        workspaceId: "workspace_1",
+        issuer: "https://builder.example.test/api/auth",
         ownerUserId: "user_1",
+        workspaceId: "workspace_1",
       },
       principal: {
-        issuer: "https://builder.example.test/api/auth",
         audience: "https://builder.example.test/mcp",
-        workspaceId: "workspace_1",
+        issuer: "https://builder.example.test/api/auth",
         ownerUserId: "user_1",
         scopes: ["eve:start"],
+        workspaceId: "workspace_1",
       },
     });
   });
@@ -86,7 +87,7 @@ describe("exact forwarded session authority", () => {
       },
     ]) {
       expect(() => exactForwardedSessionAuthority(candidate)).toThrow(
-        HostedSessionAuthorityError,
+        HostedSessionAuthorityError
       );
     }
   });

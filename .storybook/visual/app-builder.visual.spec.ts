@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "playwright/test";
+import { expect, test } from "playwright/test";
+import type { Page } from "playwright/test";
 
 const authenticatedStory =
   "/iframe.html?id=create-app-flow-page--default&viewMode=story";
@@ -16,13 +17,13 @@ async function openAuthenticatedStory(page: Page) {
 async function openAnonymousStory(page: Page) {
   await page.goto(anonymousStory);
   await expect(
-    page.getByRole("heading", { name: "Build an app" }),
+    page.getByRole("heading", { name: "Build an app" })
   ).toBeVisible();
   await expect(page.getByLabel("What should this app do?")).toBeVisible();
 }
 
 test.describe("App Builder Storybook flows — desktop", () => {
-  test.use({ viewport: { width: 1280, height: 900 } });
+  test.use({ viewport: { height: 900, width: 1280 } });
 
   test("authenticated", async ({ page }) => {
     await openAuthenticatedStory(page);

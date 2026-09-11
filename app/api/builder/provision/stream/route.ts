@@ -7,7 +7,7 @@ const heartbeatIntervalMs = 10_000;
 
 function event(data: unknown, id: string, name = "snapshot") {
   return encoder.encode(
-    `id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
+    `id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`
   );
 }
 
@@ -23,8 +23,9 @@ function heartbeat() {
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
-  if (!requestId)
+  if (!requestId) {
     return Response.json({ error: "request_invalid" }, { status: 400 });
+  }
 
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
@@ -33,12 +34,14 @@ export async function GET(request: Request) {
     handler(
       new Request(
         `${source.origin}/api/builder/provision?requestId=${encodeURIComponent(requestId)}`,
-        { method: "GET", headers },
-      ),
+        { headers, method: "GET" }
+      )
     );
 
   const first = await read();
-  if (!first.ok) return first;
+  if (!first.ok) {
+    return first;
+  }
   const initial = await first.json();
   const lastEventId = request.headers.get("last-event-id");
   let cancelled = false;
@@ -56,7 +59,9 @@ export async function GET(request: Request) {
     cancel() {
       // The polling loop observes this flag before and after each await.
       cancelled = true;
-      if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       timer = undefined;
     },
     async start(controller) {
@@ -65,7 +70,9 @@ export async function GET(request: Request) {
       let current = initial as { status?: string; updatedAt?: string };
       try {
         while (true) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const updatedAt = current.updatedAt ?? "";
           if (updatedAt !== lastUpdatedAt) {
             controller.enqueue(event(current, updatedAt));
@@ -85,11 +92,13 @@ export async function GET(request: Request) {
             lastWrite = Date.now();
           }
           await delay(pollIntervalMs);
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const response = await read();
           if (!response.ok) {
             controller.enqueue(
-              event({ error: "provisioning_unavailable" }, "error", "error"),
+              event({ error: "provisioning_unavailable" }, "error", "error")
             );
             controller.close();
             return;
@@ -99,7 +108,7 @@ export async function GET(request: Request) {
       } catch {
         if (!cancelled) {
           controller.enqueue(
-            event({ error: "provisioning_stream_failed" }, "error", "error"),
+            event({ error: "provisioning_stream_failed" }, "error", "error")
           );
           controller.close();
         }

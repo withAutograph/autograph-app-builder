@@ -1,7 +1,5 @@
-import {
-  readHostedDeploymentEnvironment,
-  type HostedDeploymentEnvironment,
-} from "../hosted/deployment-environment";
+import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
+import type { HostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
 export type SandboxBackendKind =
   | "fixture-just-bash"
@@ -13,13 +11,13 @@ export type SandboxBackendKind =
   | "unsupported-development"
   | "unsupported-vercel";
 
-export type SandboxBackendPlan = {
+export interface SandboxBackendPlan {
   kind: SandboxBackendKind;
   blockers: string[];
-};
+}
 
 export function isHostedVercelRuntime(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = process.env
 ): boolean {
   return environment.VERCEL === "1";
 }
@@ -31,25 +29,27 @@ export function sandboxBackendPlan(input: {
   localImageConfigured: boolean;
 }): SandboxBackendPlan {
   const environment = input.environment ?? process.env;
-  if (input.fixture) return { kind: "fixture-just-bash", blockers: [] };
+  if (input.fixture) {
+    return { kind: "fixture-just-bash", blockers: [] };
+  }
   if (isHostedVercelRuntime(environment)) {
     let deploymentEnvironment: HostedDeploymentEnvironment;
     try {
       deploymentEnvironment = readHostedDeploymentEnvironment(environment);
     } catch {
       return {
-        kind: "unsupported-vercel",
         blockers: [
           "The hosted App Builder sandbox requires an exact matching Preview or Production environment binding.",
         ],
+        kind: "unsupported-vercel",
       };
     }
     return {
+      blockers: [],
       kind:
         deploymentEnvironment === "preview"
           ? "vercel-preview"
           : "vercel-production",
-      blockers: [],
     };
   }
   const developmentBinding = [
@@ -61,20 +61,23 @@ export function sandboxBackendPlan(input: {
     developmentBinding[0] === "development" &&
     developmentBinding[1] === "vercel" &&
     developmentBinding[2] === "local-development"
-  )
+  ) {
     return { kind: "vercel-development", blockers: [] };
-  if (developmentBinding.some((value) => value !== undefined && value !== ""))
+  }
+  if (developmentBinding.some((value) => value !== undefined && value !== "")) {
     return {
       kind: "unsupported-development",
       blockers: [
         "Development execution requires the exact local Vercel Sandbox binding.",
       ],
     };
-  if (input.localImageConfigured)
+  }
+  if (input.localImageConfigured) {
     return { kind: "local-microsandbox", blockers: [] };
+  }
   return {
-    kind: "local-just-bash",
     blockers: ["No immutable local sandbox image is configured."],
+    kind: "local-just-bash",
   };
 }
 
@@ -85,19 +88,24 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
     localMicrosandbox: () => Local;
     nonExecuting: () => NonExecuting;
     vercelHosted: () => Hosted;
-  },
+  }
 ): Hosted | Local | NonExecuting {
-  if (kind === "unsupported-development" || kind === "unsupported-vercel")
+  if (kind === "unsupported-development" || kind === "unsupported-vercel") {
     throw new Error(
-      "The App Builder sandbox environment binding is unsupported.",
+      "The App Builder sandbox environment binding is unsupported."
     );
-  if (isVercelSandboxBackend(kind)) return factories.vercelHosted();
-  if (kind === "local-microsandbox") return factories.localMicrosandbox();
+  }
+  if (isVercelSandboxBackend(kind)) {
+    return factories.vercelHosted();
+  }
+  if (kind === "local-microsandbox") {
+    return factories.localMicrosandbox();
+  }
   return factories.nonExecuting();
 }
 
 export function isVercelSandboxBackend(
-  kind: SandboxBackendKind,
+  kind: SandboxBackendKind
 ): kind is "vercel-development" | "vercel-preview" | "vercel-production" {
   return (
     kind === "vercel-development" ||
@@ -107,7 +115,7 @@ export function isVercelSandboxBackend(
 }
 
 export function isHostedVercelSandboxBackend(
-  kind: SandboxBackendKind,
+  kind: SandboxBackendKind
 ): kind is "vercel-preview" | "vercel-production" {
   return kind === "vercel-preview" || kind === "vercel-production";
 }

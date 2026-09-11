@@ -25,9 +25,9 @@ describe("Preview Better Auth UI", () => {
         "/workspace?source=one#first",
         "/workspace?source=two#second",
       ],
-      redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
-      passkey: "unavailable",
       omitted: undefined,
+      passkey: "unavailable",
+      redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
     });
     const parsed = new URLSearchParams(search);
 
@@ -36,7 +36,7 @@ describe("Preview Better Auth UI", () => {
       "/workspace?source=two#second",
     ]);
     expect(parsed.get("redirectTo")).toBe(
-      "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
+      "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested"
     );
     expect(parsed.get("passkey")).toBe("unavailable");
     expect(parsed.has("omitted")).toBe(false);
@@ -51,10 +51,10 @@ describe("Preview Better Auth UI", () => {
       resolvePasskeyRedirectTo(
         DEFAULT_AUTH_REDIRECT_TO,
         search,
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe(
-      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dsigned-in%23complete",
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dsigned-in%23complete"
     );
   });
 
@@ -69,8 +69,8 @@ describe("Preview Better Auth UI", () => {
         serializeAuthPageSearchParams({
           redirectTo: [safeRedirect, externalRedirect],
         }),
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe(safeRedirect);
     expect(
       resolvePasskeyRedirectTo(
@@ -78,20 +78,20 @@ describe("Preview Better Auth UI", () => {
         serializeAuthPageSearchParams({
           redirectTo: [externalRedirect, safeRedirect],
         }),
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe(DEFAULT_AUTH_REDIRECT_TO);
   });
 
   it("keeps the product callback override and defaults ordinary sign-in", () => {
     expect(resolveAuthCallbackURL("https://builder.example.test/", "")).toBe(
-      "https://builder.example.test/",
+      "https://builder.example.test/"
     );
     expect(
       resolveAuthCallbackURL(
         "https://builder.example.test/",
-        "?callbackURL=%2F",
-      ),
+        "?callbackURL=%2F"
+      )
     ).toBe("/");
   });
 
@@ -103,8 +103,8 @@ describe("Preview Better Auth UI", () => {
     expect(
       resolveAuthCallbackURL(
         "/",
-        `?callbackURL=${encodeURIComponent(callbackURL)}`,
-      ),
+        `?callbackURL=${encodeURIComponent(callbackURL)}`
+      )
     ).toBe("/");
   });
 
@@ -112,8 +112,8 @@ describe("Preview Better Auth UI", () => {
     expect(
       resolveAuthCallbackURL(
         "/",
-        "?callbackURL=%2F%3Fsource%3Doauth%23complete",
-      ),
+        "?callbackURL=%2F%3Fsource%3Doauth%23complete"
+      )
     ).toBe("/?source=oauth#complete");
   });
 
@@ -122,8 +122,8 @@ describe("Preview Better Auth UI", () => {
       resolveAuthCallbackURL(
         "/",
         `?callbackURL=${encodeURIComponent("https://builder.example.test/?source=oauth")}`,
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe("/?source=oauth");
   });
 
@@ -132,10 +132,10 @@ describe("Preview Better Auth UI", () => {
       resolveProviderCallbackURL(
         "/auth/setting-up?callbackURL=%2F",
         "/?source=oauth",
-        "https://builder.example.test",
-      ).toString(),
+        "https://builder.example.test"
+      ).toString()
     ).toBe(
-      "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth",
+      "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth"
     );
   });
 
@@ -144,10 +144,10 @@ describe("Preview Better Auth UI", () => {
       resolvePasskeyRedirectTo(
         "/auth/setting-up?callbackURL=%2F",
         "?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe(
-      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
+      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete"
     );
   });
 
@@ -156,8 +156,8 @@ describe("Preview Better Auth UI", () => {
       resolvePasskeyRedirectTo(
         "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief",
         "?redirectTo=%2Fauth%2Fsetting-up%3FcallbackURL%3D%252Fworkspace%253Fsource%253Dbrief",
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe("/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief");
   });
 
@@ -166,8 +166,8 @@ describe("Preview Better Auth UI", () => {
       resolvePasskeyRedirectTo(
         "/auth/setting-up?callbackURL=%2F",
         "?redirectTo=https%3A%2F%2Fexternal.example%2Fsteal",
-        "https://builder.example.test",
-      ),
+        "https://builder.example.test"
+      )
     ).toBe("/auth/setting-up?callbackURL=%2F");
   });
 
@@ -181,9 +181,9 @@ describe("Preview Better Auth UI", () => {
       value: { location: { search } },
     });
     const request = {
-      method: "POST",
-      headers: new Headers({ "content-type": "application/json" }),
       body: JSON.stringify({ provider: "github", callbackURL: "/" }),
+      headers: new Headers({ "content-type": "application/json" }),
+      method: "POST",
     };
     const clientPlugin = oauthProviderClient();
     const onRequest = clientPlugin.fetchPlugins?.[0]?.hooks?.onRequest;

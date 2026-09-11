@@ -22,13 +22,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                     |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| hierarchy      | 4/4   | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected record details, replenishment recommendation, and action. Selected-row treatment, cover values, severity pills, and the prominent suggested-order heading make priorities immediately scannable.                       |
-| layout         | 3/4   | The split list/detail composition is consistently aligned and appropriately dense at 1440px and 1920px, while the 700px view cleanly changes to list and drill-in states. The 1024×768 capture has a small 24px document overflow, and the narrow list could communicate row navigation more explicitly.                                   |
-| typography     | 4/4   | Heading levels, product names, metadata, values, and explanatory copy are visually consistent and readable across all supplied sizes. Bold numeric values and restrained secondary text support rapid inventory review without introducing competing type treatments.                                                                      |
-| responsive     | 3/4   | The composition scales from a centered wide layout to a compact two-panel 1024px layout and then an effective single-view drill-in flow at 700px, with filters and controls remaining usable. The slight full-page overflow at the 768px-high window keeps this from being exceptional, although the primary action remains visible.       |
-| productClarity | 4/4   | The interface clearly explains that products need review, exposes location and severity filters, groups records by urgency, shows stock and supplier tabs, and labels replenishment as a simulation. Messages such as “Preview only,” “No supplier contacted,” and “Stock unchanged” make the mock action’s consequences especially clear. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected record details, replenishment recommendation, and action. Selected-row treatment, cover values, severity pills, and the prominent suggested-order heading make priorities immediately scannable. |
+| layout | 3/4 | The split list/detail composition is consistently aligned and appropriately dense at 1440px and 1920px, while the 700px view cleanly changes to list and drill-in states. The 1024×768 capture has a small 24px document overflow, and the narrow list could communicate row navigation more explicitly. |
+| typography | 4/4 | Heading levels, product names, metadata, values, and explanatory copy are visually consistent and readable across all supplied sizes. Bold numeric values and restrained secondary text support rapid inventory review without introducing competing type treatments. |
+| responsive | 3/4 | The composition scales from a centered wide layout to a compact two-panel 1024px layout and then an effective single-view drill-in flow at 700px, with filters and controls remaining usable. The slight full-page overflow at the 768px-high window keeps this from being exceptional, although the primary action remains visible. |
+| productClarity | 4/4 | The interface clearly explains that products need review, exposes location and severity filters, groups records by urgency, shows stock and supplier tabs, and labels replenishment as a simulation. Messages such as “Preview only,” “No supplier contacted,” and “Stock unchanged” make the mock action’s consequences especially clear. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/227) |
-| desktop-0                | typography | 0/0                         | 0% (0/557) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/137) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/227) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/227) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/198) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/489) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/265) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/99)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/119) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/105) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/227) |
+| desktop-0 | typography | 0/0 | 0% (0/557) |
+| desktop-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/137) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/227) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/137) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/227) |
+| desktop-window-0 | typography | 0/0 | 0% (0/557) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/137) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/198) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/489) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/265) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/99) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/119) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/105) |
 
 ## Latest-run screenshots
 

@@ -17,7 +17,7 @@ export const sha256 = (value: Uint8Array | string) =>
 /** Matches one exact canonical fetch remote, allowing Git's optional .git suffix. */
 export function hasCanonicalFetchRemote(
   remoteOutput: string,
-  expectedRepository: string,
+  expectedRepository: string
 ) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
@@ -25,8 +25,9 @@ export function hasCanonicalFetchRemote(
       (fields.length !== 3 && fields.length !== 4) ||
       fields[2] !== "(fetch)" ||
       (fields.length === 4 && fields[3] !== "[blob:none]")
-    )
+    ) {
       return false;
+    }
     const remoteUrl = fields[1];
     return (
       remoteUrl === expectedRepository ||
@@ -36,7 +37,9 @@ export function hasCanonicalFetchRemote(
 }
 
 export function releaseEndpoint(value: string | undefined) {
-  if (!value) throw new Error("Usage: --endpoint https://agent.example.com");
+  if (!value) {
+    throw new Error("Usage: --endpoint https://agent.example.com");
+  }
   const endpoint = new URL(value);
   if (
     endpoint.protocol !== "https:" ||
@@ -48,10 +51,11 @@ export function releaseEndpoint(value: string | undefined) {
     endpoint.hostname.endsWith(".") ||
     isReservedPublicReleaseHostname(endpoint.hostname) ||
     value !== endpoint.origin
-  )
+  ) {
     throw new Error(
-      "Endpoint must be a credential-free, deployed, literal HTTPS origin.",
+      "Endpoint must be a credential-free, deployed, literal HTTPS origin."
     );
+  }
   return endpoint.origin;
 }
 
@@ -63,10 +67,11 @@ export function registeredAutographToolNames(handlerSource: string) {
     names.length !== TOOL_NAMES.length ||
     new Set(names).size !== names.length ||
     names.some((name, index) => name !== TOOL_NAMES[index])
-  )
+  ) {
     throw new Error(
-      `The MCP handler must register exactly ${TOOL_NAMES.join(", ")} in order.`,
+      `The MCP handler must register exactly ${TOOL_NAMES.join(", ")} in order.`
     );
+  }
   return names as unknown as typeof TOOL_NAMES;
 }
 
@@ -81,10 +86,11 @@ const octal = (value: number, length: number) =>
 export function deterministicTar(files: ReadonlyMap<string, Uint8Array>) {
   const chunks: Buffer[] = [];
   for (const [name, content] of [...files].sort(([a], [b]) =>
-    a.localeCompare(b),
+    a.localeCompare(b)
   )) {
-    if (Buffer.byteLength(name) > 100)
+    if (Buffer.byteLength(name) > 100) {
       throw new Error(`Archive path too long: ${name}`);
+    }
     const header = Buffer.alloc(512);
     write(header, 0, name, 100);
     write(header, 100, octal(0o644, 8), 8);
@@ -100,7 +106,9 @@ export function deterministicTar(files: ReadonlyMap<string, Uint8Array>) {
     write(header, 148, octal(checksum, 8), 8);
     chunks.push(header, Buffer.from(content));
     const remainder = content.byteLength % 512;
-    if (remainder) chunks.push(Buffer.alloc(512 - remainder));
+    if (remainder) {
+      chunks.push(Buffer.alloc(512 - remainder));
+    }
   }
   return Buffer.concat([...chunks, Buffer.alloc(1024)]);
 }

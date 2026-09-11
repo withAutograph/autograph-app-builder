@@ -2,32 +2,32 @@ import { describe, expect, it } from "vitest";
 
 import { builderIntegrationStateSchema } from "./builder-state";
 
-const models = { status: "unavailable", entries: [], cached: false } as const;
+const models = { cached: false, entries: [], status: "unavailable" } as const;
 
 describe("builder integration state", () => {
   it("requires an allowlisted reason for every unavailable provider", () => {
     expect(
       builderIntegrationStateSchema.safeParse({
-        vercel: {
-          status: "unavailable",
-          scopes: [],
-          unavailableReason: "configuration-unavailable",
-        },
         github: {
-          status: "unavailable",
           scopes: [],
+          status: "unavailable",
           unavailableReason: "configuration-unavailable",
         },
         models,
-      }).success,
+        vercel: {
+          scopes: [],
+          status: "unavailable",
+          unavailableReason: "configuration-unavailable",
+        },
+      }).success
     ).toBe(true);
 
     expect(
       builderIntegrationStateSchema.safeParse({
-        vercel: { status: "unavailable", scopes: [] },
-        github: { status: "disconnected", scopes: [] },
+        github: { scopes: [], status: "disconnected" },
         models,
-      }).success,
+        vercel: { scopes: [], status: "unavailable" },
+      }).success
     ).toBe(false);
   });
 });

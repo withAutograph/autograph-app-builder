@@ -17,26 +17,26 @@ describe("Vercel feature flags", () => {
     expect(builderConnectionsFlag.key).toBe("builder-connections");
     expect(builderConnectionsFlag.defaultValue).toBe(false);
     expect(builderConnectionsFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
     expect(builderComingSoonFlag.key).toBe("builder-coming-soon");
     expect(builderComingSoonFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.key).toBe("self-service-signup");
     expect(selfServiceSignupFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
     expect(builderResourceProvisioningFlag.key).toBe(
-      "builder-resource-provisioning",
+      "builder-resource-provisioning"
     );
     expect(builderResourceProvisioningFlag.defaultValue).toBe(false);
     expect(passkeysFlag.key).toBe("passkeys");
     expect(passkeysFlag.defaultValue).toBe(false);
     expect(passkeysFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
   });
 
@@ -50,7 +50,7 @@ describe("Vercel feature flags", () => {
       unavailableFlag.run({
         identify: {},
         request: new Request("https://agent.example.com"),
-      }),
+      })
     ).resolves.toBe(false);
   });
 
@@ -69,7 +69,7 @@ describe("Vercel feature flags", () => {
       delayedFlag.run({
         identify: {},
         request: new Request("https://agent.example.com"),
-      }),
+      })
     ).resolves.toBe(true);
     expect(createVercelAdapter).toHaveBeenCalledWith("server-sdk-key");
     expect(decide).toHaveBeenCalledOnce();

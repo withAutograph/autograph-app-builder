@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected product, evidence, and replenishment action form a clear review sequence. Severity pills, selected-row treatment, and large modeled quantities support fast scanning, though the initial selected styling conflicts slightly with copy saying the item is only “ready to open.”                                    |
-| layout         | 3/4   | The wide list-detail composition is consistently aligned and comfortably dense at 1024–1920 px, with clear card boundaries and orderly label-value columns. The constrained detail view is also usable, but its record header reserves noticeably more vertical space than its content and action require.                                                           |
-| typography     | 4/4   | Type is highly readable and consistent across all captures: strong page and product headings, distinct section titles, compact field labels, and prominent modeled quantities. Product names, SKUs, locations, severity, and supporting explanations remain legible at every supplied desktop size.                                                                  |
-| responsive     | 4/4   | The composition adapts successfully across the supplied 700, 1024, 1440, and 1920 px desktop windows. At 700 px it changes from list-detail to a focused detail view with a clear “Back to exceptions” control, while filters, action groups, quantity cards, and supplier facts remain usable without horizontal overflow.                                          |
-| productClarity | 4/4   | The task is explicit: filter exceptions, inspect stock and supplier evidence, and try a replenishment simulation. The confirmation and result states clearly distinguish current, added, and projected quantities and repeatedly state that no order is placed or inventory changed; the only minor ambiguity is the default-highlight wording in the initial state. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected product, evidence, and replenishment action form a clear review sequence. Severity pills, selected-row treatment, and large modeled quantities support fast scanning, though the initial selected styling conflicts slightly with copy saying the item is only “ready to open.” |
+| layout | 3/4 | The wide list-detail composition is consistently aligned and comfortably dense at 1024–1920 px, with clear card boundaries and orderly label-value columns. The constrained detail view is also usable, but its record header reserves noticeably more vertical space than its content and action require. |
+| typography | 4/4 | Type is highly readable and consistent across all captures: strong page and product headings, distinct section titles, compact field labels, and prominent modeled quantities. Product names, SKUs, locations, severity, and supporting explanations remain legible at every supplied desktop size. |
+| responsive | 4/4 | The composition adapts successfully across the supplied 700, 1024, 1440, and 1920 px desktop windows. At 700 px it changes from list-detail to a focused detail view with a clear “Back to exceptions” control, while filters, action groups, quantity cards, and supplier facts remain usable without horizontal overflow. |
+| productClarity | 4/4 | The task is explicit: filter exceptions, inspect stock and supplier evidence, and try a replenishment simulation. The confirmation and result states clearly distinguish current, added, and projected quantities and repeatedly state that no order is placed or inventory changed; the only minor ambiguity is the default-highlight wording in the initial state. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/141) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/292) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/164) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/70)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/78)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/74)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/141) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/292) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/164) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/70) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/78) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/74) |
 
 ## Latest-run screenshots
 

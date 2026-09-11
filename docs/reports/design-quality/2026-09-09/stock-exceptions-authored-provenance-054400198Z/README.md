@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, filter controls, exception list, selected-record header, evidence sections, and single replenishment action form a clear scan path in desktop-0. Selection is visible through the tinted row and rail, while desktop-1 gives modeled quantity and projected on-hand headline priority. Some secondary labels and severity pills are visually understated for operational scanning.                                |
-| layout         | 3/4   | The two-column master-detail composition is consistently aligned at 1024, 1440, and 1920 widths, with orderly row spacing and stable action placement. The centered maximum-width treatment is comfortable, although desktop-wide-0 leaves substantial unused space and the modeled-result panel becomes vertically long at 1024.                                                                                                 |
-| typography     | 3/4   | Titles, section headings, product names, and numeric values are consistent and readable across captures. Small muted field labels and compact status-pill text are less robust; automated checks repeatedly flag those text treatments as borderline or insufficient contrast. The Arrusted palette remains authoritative, so improvements should use supported typography or compositional variants rather than color overrides. |
-| responsive     | 3/4   | The composition adapts well from a side-by-side view at 1024–1920 pixels to a focused detail view with Back navigation at 700 pixels. Controls remain usable and horizontal overflow is absent. Expanded and result states require modest vertical scrolling at smaller desktop windows, and the Reset mock action falls well below the initial 768-pixel viewport in desktop-window-1.                                           |
-| productClarity | 4/4   | The task is immediately understandable: filter exceptions by location and severity, select an item, review stock and supplier evidence, and try a mock replenishment. The modeled state clearly reports quantities, assumptions, and the explicit assurance that no order was placed and stock is unchanged; reset and disclosure affordances are also clearly labeled.                                                           |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filter controls, exception list, selected-record header, evidence sections, and single replenishment action form a clear scan path in desktop-0. Selection is visible through the tinted row and rail, while desktop-1 gives modeled quantity and projected on-hand headline priority. Some secondary labels and severity pills are visually understated for operational scanning. |
+| layout | 3/4 | The two-column master-detail composition is consistently aligned at 1024, 1440, and 1920 widths, with orderly row spacing and stable action placement. The centered maximum-width treatment is comfortable, although desktop-wide-0 leaves substantial unused space and the modeled-result panel becomes vertically long at 1024. |
+| typography | 3/4 | Titles, section headings, product names, and numeric values are consistent and readable across captures. Small muted field labels and compact status-pill text are less robust; automated checks repeatedly flag those text treatments as borderline or insufficient contrast. The Arrusted palette remains authoritative, so improvements should use supported typography or compositional variants rather than color overrides. |
+| responsive | 3/4 | The composition adapts well from a side-by-side view at 1024–1920 pixels to a focused detail view with Back navigation at 700 pixels. Controls remain usable and horizontal overflow is absent. Expanded and result states require modest vertical scrolling at smaller desktop windows, and the Reset mock action falls well below the initial 768-pixel viewport in desktop-window-1. |
+| productClarity | 4/4 | The task is immediately understandable: filter exceptions by location and severity, select an item, review stock and supplier evidence, and try a mock replenishment. The modeled state clearly reports quantities, assumptions, and the explicit assurance that no order was placed and stock is unchanged; reset and disclosure affordances are also clearly labeled. |
 
 ## Strengths
 
@@ -50,32 +50,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/228) |
-| desktop-0                | typography | 0/0                         | 0% (0/518) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/274) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/130) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/518) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/274) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/518) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/274) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/162) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/410) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/186) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/82)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/86)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/82)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/228) |
+| desktop-0 | typography | 0/0 | 0% (0/518) |
+| desktop-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/130) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/228) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/518) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/130) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/228) |
+| desktop-window-0 | typography | 0/0 | 0% (0/518) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/274) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/130) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/162) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/410) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/186) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/82) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/86) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/82) |
 
 ## Latest-run screenshots
 

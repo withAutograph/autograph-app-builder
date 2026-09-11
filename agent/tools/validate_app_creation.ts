@@ -17,9 +17,6 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the validation result. This does not publish or otherwise change an external repository.",
-  inputSchema: z.object({
-    implementationFiles: implementationFilesSchema.default([]),
-  }),
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -29,7 +26,7 @@ export default defineTool({
       current.phase !== "validated"
     )
       throw new Error(
-        "Apply the requested changes before running the repository checks.",
+        "Apply the requested changes before running the repository checks."
       );
     if (current.phase === "validated") {
       return {
@@ -41,7 +38,7 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(
       /^\/workspace\//u,
-      "",
+      ""
     );
     for (const file of input.implementationFiles)
       await sandbox.writeTextFile({
@@ -51,7 +48,7 @@ export default defineTool({
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(
       current.applyReceipt,
-      ctx.callId,
+      ctx.callId
     );
     const base = {
       version: APP_BUILDER_WORKFLOW_VERSION,
@@ -108,4 +105,7 @@ export default defineTool({
       reused: false,
     };
   },
+  inputSchema: z.object({
+    implementationFiles: implementationFilesSchema.default([]),
+  }),
 });

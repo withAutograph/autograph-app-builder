@@ -1,6 +1,7 @@
 "use client";
 
-import { type AuthView, authMutationKeys } from "@better-auth-ui/core";
+import { authMutationKeys } from "@better-auth-ui/core";
+import type { AuthView } from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {
@@ -21,14 +22,16 @@ import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
-export type PasskeyButtonProps = {
+export interface PasskeyButtonProps {
   /** @remarks `AuthView` */
   view?: AuthView;
-};
+}
 
-type OnboardingResponse = { context?: unknown };
+interface OnboardingResponse {
+  context?: unknown;
+}
 
-const passkeyResponseTimeoutMs = 3_000;
+const passkeyResponseTimeoutMs = 3000;
 
 async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;
@@ -38,12 +41,14 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
       new Promise<never>((_resolve, reject) => {
         timeout = window.setTimeout(
           () => reject(new Error("Passkey verification timed out.")),
-          passkeyResponseTimeoutMs,
+          passkeyResponseTimeoutMs
         );
       }),
     ]);
   } finally {
-    if (timeout !== undefined) window.clearTimeout(timeout);
+    if (timeout !== undefined) {
+      window.clearTimeout(timeout);
+    }
   }
 }
 
@@ -77,7 +82,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         to: resolvePasskeyRedirectTo(
           redirectTo,
           window.location.search,
-          window.location.origin,
+          window.location.origin
         ),
       }),
   });
@@ -96,7 +101,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     const resolvedRedirectTo = resolvePasskeyRedirectTo(
       redirectTo,
       window.location.search,
-      window.location.origin,
+      window.location.origin
     );
 
     try {
@@ -104,10 +109,12 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         signInPasskey.mutateAsync({
           autoFill: false,
           returnWebAuthnResponse: true,
-        }),
+        })
       );
       const resultError = passkeyClientError(result);
-      if (resultError) throw resultError;
+      if (resultError) {
+        throw resultError;
+      }
       navigate({ to: resolvedRedirectTo });
     } catch {
       setFailed(true);
@@ -125,21 +132,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       const resolvedRedirectTo = resolvePasskeyRedirectTo(
         redirectTo,
         window.location.search,
-        window.location.origin,
+        window.location.origin
       );
       authenticatedRedirectTo = resolvedRedirectTo;
       const [response, authenticatorAttachment] = await Promise.all([
         fetch("/api/auth/passkey/onboarding-context", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: "{}",
           cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
         }),
         preferredPasskeyAuthenticatorAttachment(),
       ]);
       const body = (await response.json()) as OnboardingResponse;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
-        navigate({ to: resolvedRedirectTo, replace: true });
+        navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
       if (!response.ok || typeof body.context !== "string") {
@@ -153,18 +160,20 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
       });
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
-        navigate({ to: resolvedRedirectTo, replace: true });
+        navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
       const resultError = passkeyClientError(result);
-      if (resultError) throw resultError;
+      if (resultError) {
+        throw resultError;
+      }
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
       if (
         authenticatedRedirectTo &&
         isPasskeyOnboardingAlreadyAuthenticated(error)
       ) {
-        navigate({ to: authenticatedRedirectTo, replace: true });
+        navigate({ replace: true, to: authenticatedRedirectTo });
         return;
       }
       setFailed(true);
@@ -183,7 +192,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           "w-full",
           (isPending || pending) && "pointer-events-none opacity-50",
           failed &&
-            "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
+            "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
         )}
         onClick={view === "signUp" ? createPasskey : continueWithPasskey}
       >
@@ -192,7 +201,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           ? "Passkey failed (try again)"
           : localization.auth.continueWith.replace(
               "{{provider}}",
-              passkeyLocalization.passkey,
+              passkeyLocalization.passkey
             )}
       </Button>
     </div>

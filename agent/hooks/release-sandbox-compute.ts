@@ -1,4 +1,5 @@
-import { defineHook, type HookContext } from "eve/hooks";
+import { defineHook } from "eve/hooks";
+import type { HookContext } from "eve/hooks";
 
 import {
   acquireHostedSandboxExecutionLease,
@@ -13,17 +14,19 @@ async function release(
     | "turn-cancelled"
     | "turn-failed"
     | "session-completed"
-    | "session-failed",
+    | "session-failed"
 ) {
   const environment = process.env;
-  if (!isHostedSandboxExecutionEnabled(environment)) return;
+  if (!isHostedSandboxExecutionEnabled(environment)) {
+    return;
+  }
   try {
     await releaseHostedSandboxExecutionLease({
-      sessionId: ctx.session.id,
-      sessionAuth: ctx.session.auth,
-      sandbox: await ctx.getSandbox(),
       environment,
       reason,
+      sandbox: await ctx.getSandbox(),
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
     });
   } catch {
     // The hard provider timeout remains authoritative. Keep the durable lease
@@ -33,6 +36,21 @@ async function release(
 
 export default defineHook({
   events: {
+    "session.completed"(_event, ctx) {
+      return release(ctx, "session-completed");
+    },
+    "session.failed"(_event, ctx) {
+      return release(ctx, "session-failed");
+    },
+    "turn.cancelled"(_event, ctx) {
+      return release(ctx, "turn-cancelled");
+    },
+    "turn.completed"(_event, ctx) {
+      return release(ctx, "turn-completed");
+    },
+    "turn.failed"(_event, ctx) {
+      return release(ctx, "turn-failed");
+    },
     async "turn.started"(_event, ctx) {
       const environment = process.env;
       if (!isHostedSandboxExecutionEnabled(environment)) return;
@@ -42,21 +60,6 @@ export default defineHook({
         sandbox: await ctx.getSandbox(),
         environment,
       });
-    },
-    "turn.completed"(_event, ctx) {
-      return release(ctx, "turn-completed");
-    },
-    "turn.cancelled"(_event, ctx) {
-      return release(ctx, "turn-cancelled");
-    },
-    "turn.failed"(_event, ctx) {
-      return release(ctx, "turn-failed");
-    },
-    "session.completed"(_event, ctx) {
-      return release(ctx, "session-completed");
-    },
-    "session.failed"(_event, ctx) {
-      return release(ctx, "session-failed");
     },
   },
 });

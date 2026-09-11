@@ -4,10 +4,10 @@ import { z } from "zod";
 
 const migrationRowSchema = z
   .object({
-    issuer: z.string().min(1),
     audience: z.string().min(1),
-    workspaceId: z.string().min(1),
+    issuer: z.string().min(1),
     userId: z.string().min(1),
+    workspaceId: z.string().min(1),
   })
   .strict();
 
@@ -17,19 +17,19 @@ const migratedRowSchema = migrationRowSchema
 
 export const betterAuthMembershipReadBackSchema = z
   .object({
-    transactionReadOnly: z.literal(true),
     activeLegacyRows: z.array(migrationRowSchema),
-    migratedRows: z.array(migratedRowSchema),
     inactiveLegacyCount: z.number().int().nonnegative(),
-    pendingInvitationCount: z.number().int().nonnegative(),
+    migratedRows: z.array(migratedRowSchema),
     nativeOrganizationCount: z.number().int().nonnegative(),
     orphanedActiveSessionCount: z.literal(0),
+    pendingInvitationCount: z.number().int().nonnegative(),
+    transactionReadOnly: z.literal(true),
   })
   .strict();
 
-function canonicalRows(rows: Array<z.infer<typeof migrationRowSchema>>) {
+function canonicalRows(rows: z.infer<typeof migrationRowSchema>[]) {
   return [...rows].sort((left, right) =>
-    JSON.stringify(left).localeCompare(JSON.stringify(right)),
+    JSON.stringify(left).localeCompare(JSON.stringify(right))
   );
 }
 
@@ -43,21 +43,21 @@ export function verifyBetterAuthMembershipReadBack(input: {
 }) {
   const readBack = betterAuthMembershipReadBackSchema.parse(input.readBack);
   if (!Number.isFinite(input.observedAt.getTime())) {
-    throw new Error("Better Auth membership observation time is invalid.");
+    throw new TypeError("Better Auth membership observation time is invalid.");
   }
 
   const legacyRows = canonicalRows(readBack.activeLegacyRows);
   const migratedRows = canonicalRows(
     readBack.migratedRows.map((row) => ({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       userId: row.userId,
-    })),
+      workspaceId: row.workspaceId,
+    }))
   );
   if (JSON.stringify(legacyRows) !== JSON.stringify(migratedRows)) {
     throw new Error(
-      "Better Auth organization membership does not exactly match active legacy authority.",
+      "Better Auth organization membership does not exactly match active legacy authority."
     );
   }
 
@@ -66,32 +66,32 @@ export function verifyBetterAuthMembershipReadBack(input: {
     migratedMembershipDigest: sha256(JSON.stringify(migratedRows)),
   };
   const unsigned = {
-    version: 1 as const,
+    betterAuth: {
+      nativeOrganizations: readBack.nativeOrganizationCount,
+      orphanedActiveSessions: 0 as const,
+      pendingInvitations: readBack.pendingInvitationCount,
+    },
+    disclosure: {
+      emailsIncluded: false as const,
+      secretsIncluded: false as const,
+      userIdsIncluded: false as const,
+      workspaceIdsIncluded: false as const,
+    },
     format: "autograph-better-auth-membership-migration-v1" as const,
-    status: "migration-verified" as const,
     observedAt: input.observedAt.toISOString(),
     parity: {
       activeLegacyMemberships: legacyRows.length,
-      migratedOrganizationMemberships: migratedRows.length,
       exact: true as const,
+      migratedOrganizationMemberships: migratedRows.length,
       ...evidence,
     },
     retainedLegacyAuthority: {
-      inactiveMemberships: readBack.inactiveLegacyCount,
-      deletionPerformed: false as const,
       authPathRetirementProven: false as const,
+      deletionPerformed: false as const,
+      inactiveMemberships: readBack.inactiveLegacyCount,
     },
-    betterAuth: {
-      pendingInvitations: readBack.pendingInvitationCount,
-      nativeOrganizations: readBack.nativeOrganizationCount,
-      orphanedActiveSessions: 0 as const,
-    },
-    disclosure: {
-      userIdsIncluded: false as const,
-      emailsIncluded: false as const,
-      workspaceIdsIncluded: false as const,
-      secretsIncluded: false as const,
-    },
+    status: "migration-verified" as const,
+    version: 1 as const,
   };
   return {
     ...unsigned,

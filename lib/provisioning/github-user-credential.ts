@@ -14,7 +14,7 @@ const credentialConfigSchema = z
 export type GitHubUserCredentialConfig = z.infer<typeof credentialConfigSchema>;
 
 export function readGitHubUserCredentialEnvironment(
-  environment: Readonly<Record<string, string | undefined>>,
+  environment: Readonly<Record<string, string | undefined>>
 ): GitHubUserCredentialConfig {
   return credentialConfigSchema.parse({
     key: Buffer.from(environment.GITHUB_APP_USER_TOKEN_KEY ?? "", "base64"),
@@ -45,14 +45,14 @@ export const githubUserTokenSetSchema = z
   });
 
 export type GitHubUserTokenSet = z.infer<typeof githubUserTokenSetSchema>;
-export type GitHubUserCredential = {
+export interface GitHubUserCredential {
   providerUserId: string;
   providerLogin: string;
   tokens: GitHubUserTokenSet;
   revision: number;
   active: boolean;
   updatedAt: Date;
-};
+}
 
 export interface GitHubUserCredentialStore {
   bind(input: {
@@ -100,13 +100,13 @@ export function encryptGitHubUserTokens(input: {
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
   const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(tokens), "utf8"),
+    cipher.update(JSON.stringify(tokens), "utf-8"),
     cipher.final(),
   ]);
   return {
-    encryptedCredential: encrypted.toString("base64"),
     credentialIv: iv.toString("base64"),
     credentialTag: cipher.getAuthTag().toString("base64"),
+    encryptedCredential: encrypted.toString("base64"),
   };
 }
 
@@ -120,7 +120,7 @@ export function decryptGitHubUserTokens(input: {
   const decipher = createDecipheriv(
     "aes-256-gcm",
     input.key,
-    Buffer.from(input.credentialIv, "base64"),
+    Buffer.from(input.credentialIv, "base64")
   );
   decipher.setAAD(Buffer.from(input.associatedData));
   decipher.setAuthTag(Buffer.from(input.credentialTag, "base64"));
@@ -129,7 +129,7 @@ export function decryptGitHubUserTokens(input: {
       Buffer.concat([
         decipher.update(Buffer.from(input.encryptedCredential, "base64")),
         decipher.final(),
-      ]).toString("utf8"),
-    ) as unknown,
+      ]).toString("utf-8")
+    ) as unknown
   );
 }

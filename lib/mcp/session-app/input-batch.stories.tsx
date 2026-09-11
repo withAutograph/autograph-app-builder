@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+
 import {
   approvalRequest,
   authorizationRequest,
@@ -8,6 +9,7 @@ import {
   repositoryScopeRequest,
   sessionResult,
 } from "@/.storybook/create-app/mcp-fixtures";
+
 import { SessionAppView } from "./view";
 
 const mixedResult = sessionResult([
@@ -17,17 +19,17 @@ const mixedResult = sessionResult([
   authorizationRequest,
 ]);
 const meta = {
-  title: "MCP/Inputs/Input Batch",
-  component: SessionAppView,
   args: {
     canCallTools: true,
     canOpenLinks: true,
-    result: mixedResult,
     onOpenLink: fn(async () => {}),
     onRefresh: fn(async () => {}),
     onRespond: fn(async () => {}),
+    result: mixedResult,
   },
+  component: SessionAppView,
   parameters: { layout: "fullscreen" },
+  title: "MCP/Inputs/Input Batch",
 } satisfies Meta<typeof SessionAppView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -35,17 +37,17 @@ export const MixedRequests: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      canvas.getByRole("button", { name: "Continue" }),
+      canvas.getByRole("button", { name: "Continue" })
     ).toBeDisabled();
     await expect(
-      canvas.getByText("Answer all 3 remaining requests to continue."),
+      canvas.getByText("Answer all 3 remaining requests to continue.")
     ).toBeVisible();
   },
 };
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {
-    result: { ...mixedResult, status: "working", inputRequests: undefined },
+    result: { ...mixedResult, inputRequests: undefined, status: "working" },
   },
 };
 export const CompleteBatchAction: Story = {
@@ -57,7 +59,7 @@ export const CompleteBatchAction: Story = {
     await userEvent.click(canvas.getByText("Cursor"));
     await userEvent.type(
       canvas.getByLabelText("Who will use this app?"),
-      "Finance operators",
+      "Finance operators"
     );
     await userEvent.click(canvas.getByRole("button", { name: "Build app" }));
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
@@ -98,8 +100,8 @@ export const RepositoryScopeKeyboardSelection: Story = {
 };
 export const SubmittingAndDuplicateProtection: Story = {
   args: {
-    result: sessionResult([choiceRequest]),
     onRespond: fn(() => new Promise<void>(() => {})),
+    result: sessionResult([choiceRequest]),
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
@@ -108,23 +110,23 @@ export const SubmittingAndDuplicateProtection: Story = {
     await userEvent.dblClick(button);
     await expect(args.onRespond).toHaveBeenCalledOnce();
     await expect(
-      canvas.getByRole("button", { name: "Submitting…" }),
+      canvas.getByRole("button", { name: "Submitting…" })
     ).toBeDisabled();
   },
 };
 export const ActionableFailure: Story = {
   args: {
-    result: sessionResult([choiceRequest]),
     onRespond: fn(async () => {
       throw new Error("rejected");
     }),
+    result: sessionResult([choiceRequest]),
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText("Cursor"));
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(await canvas.findByRole("alert")).toHaveTextContent(
-      "Your answers could not be submitted",
+      "Your answers could not be submitted"
     );
   },
 };

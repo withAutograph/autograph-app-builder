@@ -12,129 +12,129 @@ const sha = "1".repeat(40);
 const tree = "2".repeat(40);
 const accessDigest = "3".repeat(64);
 const access = {
-  status: "ready",
+  accessDigest,
   repository: {
-    repositoryId: "200",
-    owner: "withAutograph",
-    name: "app-builder-dogfood",
     archived: false,
-    visibility: "private",
     defaultBranch: "main",
     headSha: sha,
     headTree: tree,
+    name: "app-builder-dogfood",
+    owner: "withAutograph",
+    repositoryId: "200",
     repositoryVariableNames: [],
+    visibility: "private",
   },
   scope: {
-    installationId: "10",
     accountLogin: "withAutograph",
     accountType: "Organization",
+    installationId: "10",
   },
-  accessDigest,
+  status: "ready",
 } satisfies Extract<RepositoryAccessResult, { status: "ready" }>;
 
 describe("session-bound repository access receipt", () => {
   it("records one closed canonical receipt and reuses it after the same fresh read-back", () => {
     const first = recordRepositoryAccessReceipt({
+      access,
+      confirmedByCallId: "call_one",
       current: undefined,
       sessionId: "ses_one",
-      confirmedByCallId: "call_one",
-      access,
     });
     const retried = recordRepositoryAccessReceipt({
+      access,
+      confirmedByCallId: "call_retry",
       current: first,
       sessionId: "ses_one",
-      confirmedByCallId: "call_retry",
-      access,
     });
 
     expect(retried).toEqual(first);
     expect(first).toMatchObject({
-      version: 1,
-      sessionId: "ses_one",
+      confirmedByCallId: "call_one",
+      digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      providerAccessDigest: accessDigest,
       repository: {
-        repositoryId: "200",
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
         defaultBranch: "main",
         headSha: sha,
         headTree: tree,
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
+        repositoryId: "200",
       },
       scope: { installationId: "10" },
-      providerAccessDigest: accessDigest,
-      confirmedByCallId: "call_one",
-      digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      sessionId: "ses_one",
+      version: 1,
     });
     expect(first.repository).not.toHaveProperty("repositoryVariableNames");
   });
 
   it("rotates on same-session provider drift and rejects cross-session state", () => {
     const first = recordRepositoryAccessReceipt({
+      access,
+      confirmedByCallId: "call_one",
       current: undefined,
       sessionId: "ses_one",
-      confirmedByCallId: "call_one",
-      access,
     });
     const changedHead = recordRepositoryAccessReceipt({
-      current: first,
-      sessionId: "ses_one",
-      confirmedByCallId: "call_two",
       access: {
         ...access,
         repository: { ...access.repository, headSha: "4".repeat(40) },
       },
+      confirmedByCallId: "call_two",
+      current: first,
+      sessionId: "ses_one",
     });
     expect(changedHead.digest).not.toBe(first.digest);
     expect(() =>
       recordRepositoryAccessReceipt({
-        current: changedHead,
-        sessionId: "ses_two",
-        confirmedByCallId: "call_three",
         access: {
           ...access,
           repository: { ...access.repository, headSha: "4".repeat(40) },
         },
-      }),
+        confirmedByCallId: "call_three",
+        current: changedHead,
+        sessionId: "ses_two",
+      })
     ).toThrow("Repository access state belongs to a different session.");
   });
 
   it("rejects tampering, extra fields, and stale source bindings", () => {
     const receipt = recordRepositoryAccessReceipt({
+      access,
+      confirmedByCallId: "call_one",
       current: undefined,
       sessionId: "ses_one",
-      confirmedByCallId: "call_one",
-      access,
     });
     expect(() =>
       repositoryAccessReceiptSchema.parse({
         ...receipt,
         digest: "0".repeat(64),
-      }),
+      })
     ).toThrow("Repository access receipt digest is invalid.");
     expect(() =>
-      repositoryAccessReceiptSchema.parse({ ...receipt, token: "secret" }),
+      repositoryAccessReceiptSchema.parse({ ...receipt, token: "secret" })
     ).toThrow();
     expect(() =>
       recordRepositoryAccessReceipt({
-        current: { ...receipt, digest: "0".repeat(64) },
-        sessionId: "ses_one",
-        confirmedByCallId: "call_two",
         access: {
           ...access,
           repository: { ...access.repository, headSha: "4".repeat(40) },
         },
-      }),
+        confirmedByCallId: "call_two",
+        current: { ...receipt, digest: "0".repeat(64) },
+        sessionId: "ses_one",
+      })
     ).toThrow("Repository access receipt digest is invalid.");
 
     expect(
       assertRepositoryAccessReceiptForSource({
-        receipt,
         expectedDigest: receipt.digest,
-        sessionId: "ses_one",
-        repositoryId: "200",
-        ref: "refs/heads/main",
         expectedSha: sha,
         expectedTree: tree,
-      }),
+        receipt,
+        ref: "refs/heads/main",
+        repositoryId: "200",
+        sessionId: "ses_one",
+      })
     ).toEqual(receipt);
 
     for (const changed of [
@@ -147,56 +147,56 @@ describe("session-bound repository access receipt", () => {
     ]) {
       expect(() =>
         assertRepositoryAccessReceiptForSource({
-          receipt,
           expectedDigest: receipt.digest,
-          sessionId: "ses_one",
-          repositoryId: "200",
-          ref: "refs/heads/main",
           expectedSha: sha,
           expectedTree: tree,
+          receipt,
+          ref: "refs/heads/main",
+          repositoryId: "200",
+          sessionId: "ses_one",
           ...changed,
-        }),
+        })
       ).toThrow(
-        "The repository access receipt does not match this session and source.",
+        "The repository access receipt does not match this session and source."
       );
     }
   });
 
   it("binds the independently resolved source to the exact access observation", () => {
     const receipt = recordRepositoryAccessReceipt({
+      access,
+      confirmedByCallId: "call_one",
       current: undefined,
       sessionId: "ses_one",
-      confirmedByCallId: "call_one",
-      access,
     });
     const source = {
-      version: 2 as const,
+      digest: "9".repeat(64),
+      installationIdentityDigest: "7".repeat(64),
       repository: {
-        version: 2 as const,
-        repositoryId: "200",
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
-        visibility: "private" as const,
         defaultBranch: "main",
+        digest: "8".repeat(64),
         headSha: sha,
         headTree: tree,
         installationIdentityDigest: "7".repeat(64),
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
         releaseGate: {
-          name: "REPOSITORY_RELEASE_ENABLED" as const,
           configured: false,
+          name: "REPOSITORY_RELEASE_ENABLED" as const,
         },
-        digest: "8".repeat(64),
+        repositoryId: "200",
+        version: 2 as const,
+        visibility: "private" as const,
       },
+      resolvedByCallId: "call_resolve",
       resolvedRef: "refs/heads/main",
       resolvedSha: sha,
       resolvedTree: tree,
-      installationIdentityDigest: "7".repeat(64),
-      resolvedByCallId: "call_resolve",
-      digest: "9".repeat(64),
+      version: 2 as const,
     };
 
     expect(() =>
-      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source }),
+      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source })
     ).not.toThrow();
     expect(() =>
       assertResolvedSourceMatchesRepositoryAccess({
@@ -205,9 +205,9 @@ describe("session-bound repository access receipt", () => {
           ...source,
           repository: { ...source.repository, name: "another-repository" },
         },
-      }),
+      })
     ).toThrow(
-      "The live GitHub source does not match the confirmed repository access receipt.",
+      "The live GitHub source does not match the confirmed repository access receipt."
     );
   });
 });

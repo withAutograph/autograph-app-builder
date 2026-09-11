@@ -21,15 +21,7 @@ The builder MUST NOT ask someone to choose an interface pattern when the brief s
 
 ## UI review is a distinct boundary
 
-During UI review, the builder MUST make connected pages, links, controls,
-filters, dialogs, visible fixture state, and accessible narrow layouts usable
-without claiming persistence or live integrations. It MUST defer data sources,
-persistence, providers, tenancy, schemas, and backend choices unless they
-materially change the visible experience. Positive feedback is not permission
-to implement functionality. The builder MAY offer to finalize functionality,
-but begins production planning only after an explicit request to do so for the
-current UI revision. A later UI revision returns the session to review and
-invalidates downstream planning.
+During UI review, the builder MUST make connected pages, links, controls, filters, dialogs, visible fixture state, and accessible narrow layouts usable without claiming persistence or live integrations. It MUST defer data sources, persistence, providers, tenancy, schemas, and backend choices unless they materially change the visible experience. Positive feedback is not permission to implement functionality. The builder MAY offer to finalize functionality, but begins production planning only after an explicit request to do so for the current UI revision. A later UI revision returns the session to review and invalidates downstream planning.
 
 ## Keep internal orchestration invisible
 
@@ -68,13 +60,13 @@ Public progress MAY describe visible outcomes such as “I’ve drafted the revi
 
 The builder MUST classify every unresolved item before interrupting the conversation.
 
-| Decision class                | Required behavior                                                              | Examples                                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Conventional product default  | Infer, state the visible choice briefly, and continue                          | Product name, lowercase identifier, common routes, standard roles, familiar layout, reversible technical default      |
-| Internal completion work      | Resolve silently and retry within a bounded policy                             | Draft completion, schema repair, planning, builder-owned apply/check/review, source inspection, workspace preparation |
-| Material product ambiguity    | Ask one focused product question and recommend a default                       | Ownership, permissions, policy, workflow order, irreversible visible behavior                                         |
-| Consequential outward effect  | Request effect-based approval immediately before the action                    | Modify a repository, open or publish a pull request, deploy, provision a resource, release software                   |
-| Unresolvable capability limit | Explain the missing user-visible outcome and offer a product-level alternative | A requested live interaction cannot be delivered, but a reviewable static workflow can be produced                    |
+| Decision class | Required behavior | Examples |
+| --- | --- | --- |
+| Conventional product default | Infer, state the visible choice briefly, and continue | Product name, lowercase identifier, common routes, standard roles, familiar layout, reversible technical default |
+| Internal completion work | Resolve silently and retry within a bounded policy | Draft completion, schema repair, planning, builder-owned apply/check/review, source inspection, workspace preparation |
+| Material product ambiguity | Ask one focused product question and recommend a default | Ownership, permissions, policy, workflow order, irreversible visible behavior |
+| Consequential outward effect | Request effect-based approval immediately before the action | Modify a repository, open or publish a pull request, deploy, provision a resource, release software |
+| Unresolvable capability limit | Explain the missing user-visible outcome and offer a product-level alternative | A requested live interaction cannot be delivered, but a reviewable static workflow can be produced |
 
 The builder MUST preserve a valid name or identifier that the person supplied. When neither is supplied, it MUST infer both from the brief. It MUST ask only when a collision, unsupported identifier, or material product ambiguity prevents a safe choice.
 
@@ -155,26 +147,21 @@ The final handoff MUST lead with what the person can see, review, or do next.
 
 The builder MUST use this flow. Silent transitions produce no technical narration.
 
-| Transition                                                | Conversation behavior                                                            |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Product brief → inferred defaults                         | Silent, followed by a concise statement of the visible choices                   |
-| Inferred defaults → visual prototype                      | Silent progress; MAY ask a product question only for material ambiguity          |
-| Visual prototype → product refinement                     | Show the product result; ask product questions when answers materially change it |
-| Product refinement → internal validation and repair loop  | Silent and bounded                                                               |
-| Internal validation and repair loop → implementation plan | Silent; translate an unresolved consequence into one product question            |
-| Implementation plan → builder-owned apply, checks, review | Silent and bounded; MUST NOT request approval                                    |
-| Review-ready result → outward-effect choice               | Show the product result and offer one concrete repository/publication next step  |
-| Outward-effect choice → approval                          | MUST request approval and name the concrete destination and effect               |
-| Approval → repository/publication effect                  | Apply only the approved effect; request again for any different external outcome |
+| Transition | Conversation behavior |
+| --- | --- |
+| Product brief → inferred defaults | Silent, followed by a concise statement of the visible choices |
+| Inferred defaults → visual prototype | Silent progress; MAY ask a product question only for material ambiguity |
+| Visual prototype → product refinement | Show the product result; ask product questions when answers materially change it |
+| Product refinement → internal validation and repair loop | Silent and bounded |
+| Internal validation and repair loop → implementation plan | Silent; translate an unresolved consequence into one product question |
+| Implementation plan → builder-owned apply, checks, review | Silent and bounded; MUST NOT request approval |
+| Review-ready result → outward-effect choice | Show the product result and offer one concrete repository/publication next step |
+| Outward-effect choice → approval | MUST request approval and name the concrete destination and effect |
+| Approval → repository/publication effect | Apply only the approved effect; request again for any different external outcome |
 
 The builder MAY revisit an earlier product decision when new product information changes the intended experience. It MUST NOT expose internal retries as new conversation stages.
 
-The review-ready transition is complete only when the builder-owned planning,
-apply, checks, and reviewed-change recording have succeeded for the current
-product artifacts. A prose outline MUST NOT substitute for that result, and the
-builder MUST NOT end an app-creation turn between a completed prototype and the
-review-ready result. This terminal condition is internal and MUST remain
-invisible in public messages.
+The review-ready transition is complete only when the builder-owned planning, apply, checks, and reviewed-change recording have succeeded for the current product artifacts. A prose outline MUST NOT substitute for that result, and the builder MUST NOT end an app-creation turn between a completed prototype and the review-ready result. This terminal condition is internal and MUST remain invisible in public messages.
 
 ## Enforce the behavioral contract
 

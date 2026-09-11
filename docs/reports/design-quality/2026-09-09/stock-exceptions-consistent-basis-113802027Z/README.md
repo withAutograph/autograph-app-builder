@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                    |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title and purpose lead clearly, followed by filters, the prioritized exception list, and selected-record evidence. Selected-row treatment, severity pills, prominent projected quantity, and distinct review/completed headings make each workflow state easy to scan.                                                                                           |
-| layout         | 3/4   | The two-pane composition is consistently aligned at 1024–1920 px, with balanced spacing, compact list rows, and well-structured detail cards. The 700 px list header becomes somewhat crowded, and the capped shell leaves substantial unused canvas on very wide windows, though neither prevents use.                                                                   |
-| typography     | 4/4   | Type sizes and weights consistently distinguish page, record, section, field, and KPI levels. Product names, quantities, supporting metadata, and simulation warnings remain readable across all supplied desktop widths without visible clipping.                                                                                                                        |
-| responsive     | 4/4   | The interface preserves a useful two-pane review layout at 1024 px and deliberately switches to a deferred list/detail flow at 700 px with a clear “Back to exceptions” control. Actions wrap without clipping, expanded disclosures use document scrolling, and all measured controls remain available in the shown states.                                              |
-| productClarity | 4/4   | The task is explicit: filter low-stock exceptions, select a product, inspect stock and supplier facts, and model replenishment. Labels such as “Try mock replenishment,” “Simulation only,” “Mock completed,” and “No order was placed” clearly separate the prototype action from a real inventory change, while the calculation disclosure explains the 96-unit result. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title and purpose lead clearly, followed by filters, the prioritized exception list, and selected-record evidence. Selected-row treatment, severity pills, prominent projected quantity, and distinct review/completed headings make each workflow state easy to scan. |
+| layout | 3/4 | The two-pane composition is consistently aligned at 1024–1920 px, with balanced spacing, compact list rows, and well-structured detail cards. The 700 px list header becomes somewhat crowded, and the capped shell leaves substantial unused canvas on very wide windows, though neither prevents use. |
+| typography | 4/4 | Type sizes and weights consistently distinguish page, record, section, field, and KPI levels. Product names, quantities, supporting metadata, and simulation warnings remain readable across all supplied desktop widths without visible clipping. |
+| responsive | 4/4 | The interface preserves a useful two-pane review layout at 1024 px and deliberately switches to a deferred list/detail flow at 700 px with a clear “Back to exceptions” control. Actions wrap without clipping, expanded disclosures use document scrolling, and all measured controls remain available in the shown states. |
+| productClarity | 4/4 | The task is explicit: filter low-stock exceptions, select a product, inspect stock and supplier facts, and model replenishment. Labels such as “Try mock replenishment,” “Simulation only,” “Mock completed,” and “No order was placed” clearly separate the prototype action from a real inventory change, while the calculation disclosure explains the 96-unit result. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/267) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/126) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/267) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/126) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/267) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/126) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/142) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/297) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/166) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/71)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/79)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/75)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/126) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/126) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/267) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/126) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/142) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/297) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/166) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/71) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/79) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/75) |
 
 ## Latest-run screenshots
 

@@ -1,6 +1,7 @@
 import type { SandboxSession } from "eve/sandbox";
 
-import { type UiPreviewInput, uiPreviewSourceDigest } from "./ui-preview";
+import { uiPreviewSourceDigest } from "./ui-preview";
+import type { UiPreviewInput } from "./ui-preview";
 
 const chartCompositions = new Set([
   "AgChartsHost",
@@ -21,7 +22,7 @@ export function uiPreviewRendererFiles(input: UiPreviewInput) {
   // These public compositions use Arrusted's AG Charts runtime. Match its
   // Storybook setup only when the submitted interface actually uses charts.
   const chartInitialization = input.manifest.productionCompositions.some(
-    ({ name }) => chartCompositions.has(name),
+    ({ name }) => chartCompositions.has(name)
   )
     ? `import { bootstrapAgCharts } from "@autograph/compositions";
 bootstrapAgCharts({ allowMissingLicense: true });`
@@ -29,7 +30,7 @@ bootstrapAgCharts({ allowMissingLicense: true });`
   const imports = input.manifest.screens
     .map(
       (screen, index) =>
-        `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`,
+        `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`
     )
     .join("\n");
   const routes = input.manifest.screens
@@ -89,25 +90,26 @@ const bundledStyle = bundledCss.join("\\n").replace(/<\\/style/gi, "<\\\\/style"
 const script = js.replace(/<\\/script/gi, "<\\\\/script");
 await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + themeStyle + '</style><style>' + bundledStyle + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
   return {
-    root,
     files: [
       ...input.files,
       { path: "entry.tsx", content: entry },
       { path: "render.mts", content: renderer },
     ],
+    root,
   };
 }
 
 export async function renderUiPreview(
   input: UiPreviewInput,
-  sandbox: SandboxSession,
+  sandbox: SandboxSession
 ): Promise<string> {
   const bundle = uiPreviewRendererFiles(input);
-  for (const file of bundle.files)
+  for (const file of bundle.files) {
     await sandbox.writeTextFile({
       path: `/workspace/repository/${bundle.root}/${file.path}`,
       content: file.content,
     });
+  }
   // The command contains only a fixed executable and a builder-generated hex
   // directory. Submitted source is file content, never shell interpolation.
   const compile = () =>
@@ -119,29 +121,32 @@ export async function renderUiPreview(
   if (
     result.exitCode !== 0 &&
     /could not resolve|cannot find (?:module|package)/iu.test(
-      `${result.stderr}\n${result.stdout}`,
+      `${result.stderr}\n${result.stdout}`
     )
   ) {
     const installation = await sandbox.run({
       command: "bun install",
       workingDirectory: "/workspace/repository",
     });
-    if (installation.exitCode !== 0)
+    if (installation.exitCode !== 0) {
       throw new Error(
         installation.stderr ||
           installation.stdout ||
-          "Dependency installation failed.",
+          "Dependency installation failed."
       );
+    }
     result = await compile();
   }
-  if (result.exitCode !== 0)
+  if (result.exitCode !== 0) {
     throw new Error(
-      result.stderr || result.stdout || "The preview compiler failed.",
+      result.stderr || result.stdout || "The preview compiler failed."
     );
+  }
   const html = await sandbox.readTextFile({
     path: `/workspace/repository/${bundle.root}/index.html`,
   });
-  if (html === null)
+  if (html === null) {
     throw new Error("The preview compiler did not produce a document.");
+  }
   return html;
 }

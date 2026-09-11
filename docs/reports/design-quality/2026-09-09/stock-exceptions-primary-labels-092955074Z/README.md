@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                        |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page establishes a clear sequence from title and filtering, to the exception list, selected record, evidence, and replenishment action. Selected-row treatment, severity pills, detail headings, and the three modeled-quantity cards make priorities immediately scannable.                                                              |
-| layout         | 3/4   | Alignment and spacing are consistently strong across the filters, list rows, fact labels, and action footers. The 700px confirmation pane is somewhat dense because all three quantity cards remain in one row, and expanded supplier facts at 1024×768 move the primary action below the initial viewport.                                   |
-| typography     | 4/4   | A restrained and consistent type scale clearly distinguishes page titles, record titles, section headings, labels, values, and explanatory copy. Inventory quantities receive useful emphasis without overwhelming the surrounding evidence.                                                                                                  |
-| responsive     | 3/4   | The composition adapts effectively from centered wide layouts at 1920px to split panes at 1440px and 1024px, then switches to a focused detail view with a Back control at 700px. There is no observed horizontal overflow, but the expanded supplier state at 1024×768 requires page scrolling before the replenishment action is available. |
-| productClarity | 4/4   | Location and severity filters are plainly labeled; each exception exposes product, SKU, location, shortage, severity, and days of cover. Stock and supplier evidence are connected to a clearly marked mock flow, and confirmation/result copy repeatedly explains that no real order or inventory change occurs.                             |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page establishes a clear sequence from title and filtering, to the exception list, selected record, evidence, and replenishment action. Selected-row treatment, severity pills, detail headings, and the three modeled-quantity cards make priorities immediately scannable. |
+| layout | 3/4 | Alignment and spacing are consistently strong across the filters, list rows, fact labels, and action footers. The 700px confirmation pane is somewhat dense because all three quantity cards remain in one row, and expanded supplier facts at 1024×768 move the primary action below the initial viewport. |
+| typography | 4/4 | A restrained and consistent type scale clearly distinguishes page titles, record titles, section headings, labels, values, and explanatory copy. Inventory quantities receive useful emphasis without overwhelming the surrounding evidence. |
+| responsive | 3/4 | The composition adapts effectively from centered wide layouts at 1920px to split panes at 1440px and 1024px, then switches to a focused detail view with a Back control at 700px. There is no observed horizontal overflow, but the expanded supplier state at 1024×768 requires page scrolling before the replenishment action is available. |
+| productClarity | 4/4 | Location and severity filters are plainly labeled; each exception exposes product, SKU, location, shortage, severity, and days of cover. Stock and supplier evidence are connected to a clearly marked mock flow, and confirmation/result copy repeatedly explains that no real order or inventory change occurs. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/139) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/287) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/162) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/69)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/77)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/73)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/139) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/287) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/162) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/69) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/77) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/73) |
 
 ## Latest-run screenshots
 

@@ -6,15 +6,15 @@ import {
   assertPublicationJournalStatus,
 } from "@/lib/agent/workflow-state";
 import {
-  readLocalPublicationJournal,
-  deriveLocalPublicationProposal,
-  verifyPublishedChangeSet,
-} from "@/lib/repository/node-local-publication";
-import {
   assertCanonicalLocalPublicationJournal,
   exactProposalMatch,
   proposalFromJournal,
 } from "@/lib/repository/local-publication";
+import {
+  readLocalPublicationJournal,
+  deriveLocalPublicationProposal,
+  verifyPublishedChangeSet,
+} from "@/lib/repository/node-local-publication";
 
 function publicationWorkflow() {
   const workflow = appBuilderWorkflowState.get();
@@ -23,10 +23,11 @@ function publicationWorkflow() {
     workflow.phase !== "publication_pending" &&
     workflow.phase !== "publication_failed" &&
     workflow.phase !== "published_local"
-  )
+  ) {
     throw new Error(
-      "An exact separately reviewed change set is required before local publication.",
+      "An exact separately reviewed change set is required before local publication."
     );
+  }
   return workflow;
 }
 
@@ -34,7 +35,7 @@ function assertJournalMatchesWorkflow(
   workflow: ReturnType<typeof publicationWorkflow>,
   destinationPath: string,
   expectedReviewDigest: string,
-  journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
+  journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>
 ) {
   if (
     destinationPath !== workflow.sourceReceipt.sourcePath ||
@@ -46,27 +47,30 @@ function assertJournalMatchesWorkflow(
     journal.baseSha !== workflow.sourceReceipt.sourceSha ||
     journal.sourceTree !== workflow.sourceReceipt.sourceTree ||
     journal.contractDigest !== workflow.sourceReceipt.contractDigest
-  )
+  ) {
     throw new Error(
-      "The durable local-publication journal does not belong to the current workflow.",
+      "The durable local-publication journal does not belong to the current workflow."
     );
-  if (workflow.phase === "reviewed")
+  }
+  if (workflow.phase === "reviewed") {
     throw new Error(
-      "A reviewed workflow must not have a durable local-publication journal.",
+      "A reviewed workflow must not have a durable local-publication journal."
     );
+  }
   assertPublicationJournalStatus(workflow.phase, journal.status);
   assertCanonicalLocalPublicationJournal(journal);
   if (workflow.phase === "publication_pending") {
     if (
       !exactProposalMatch(
         proposalFromJournal(journal),
-        workflow.publicationProposal,
+        workflow.publicationProposal
       ) ||
       journal.publishedByCallId !== workflow.publicationCallId
-    )
+    ) {
       throw new Error(
-        "The pending workflow does not have its exact publication journal.",
+        "The pending workflow does not have its exact publication journal."
       );
+    }
     return;
   }
   const expectedStatus =
@@ -74,10 +78,11 @@ function assertJournalMatchesWorkflow(
   if (
     journal.status !== expectedStatus ||
     workflow.publicationReceipt.digest !== journal.digest
-  )
+  ) {
     throw new Error(
-      "The terminal workflow does not have its exact terminal publication journal.",
+      "The terminal workflow does not have its exact terminal publication journal."
     );
+  }
 }
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -86,23 +91,26 @@ export async function exactLocalPublicationProposal(input: {
   destinationPath: string;
   expectedReviewDigest: string;
 }) {
-  if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1")
+  if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1") {
     throw new Error(
-      "Local publication is disabled until APP_BUILDER_LOCAL_PUBLICATION=1 is explicitly configured.",
+      "Local publication is disabled until APP_BUILDER_LOCAL_PUBLICATION=1 is explicitly configured."
     );
+  }
   const workflow = publicationWorkflow();
-  if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
+  if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
     throw new Error(
-      "The reviewed change-set receipt changed before local publication.",
+      "The reviewed change-set receipt changed before local publication."
     );
-  if (workflow.sourceReceipt.sourceKind !== "existing-repository")
+  }
+  if (workflow.sourceReceipt.sourceKind !== "existing-repository") {
     throw new Error(
-      "Local publication accepts only the original existing-repository source.",
+      "Local publication accepts only the original existing-repository source."
     );
+  }
   const proposal = await deriveLocalPublicationProposal({
     destinationPath: input.destinationPath,
-    sourceReceipt: workflow.sourceReceipt,
     review: workflow.reviewReceipt,
+    sourceReceipt: workflow.sourceReceipt,
   });
   if (
     proposal.destinationPath !== workflow.sourceReceipt.sourcePath ||
@@ -110,20 +118,17 @@ export async function exactLocalPublicationProposal(input: {
     proposal.baseSha !== workflow.sourceReceipt.sourceSha ||
     workflow.workspace.sourceTree !== workflow.sourceReceipt.sourceTree ||
     workflow.workspace.sourceSha !== workflow.sourceReceipt.sourceSha
-  )
+  ) {
     throw new Error(
-      "The selected destination is not the exact original source checkout.",
+      "The selected destination is not the exact original source checkout."
     );
+  }
   return proposal;
 }
 
 export default defineTool({
   description:
     "Read the exact local-publication proposal for an explicitly selected allowed existing checkout. It verifies destination identity, base SHA, clean approved paths, and preimages without writing, committing, or publishing remotely.",
-  inputSchema: z.strictObject({
-    destinationPath: z.string().min(1),
-    expectedReviewDigest: digest,
-  }),
   async execute(input) {
     const workflow = publicationWorkflow();
     const durable = await readLocalPublicationJournal(input.destinationPath);
@@ -133,7 +138,7 @@ export default defineTool({
         workflow,
         input.destinationPath,
         input.expectedReviewDigest,
-        durable,
+        durable
       );
     if (workflow.phase === "publication_pending" && durable === undefined)
       return {
@@ -146,7 +151,7 @@ export default defineTool({
       assertCanonicalLocalPublicationJournal(workflow.publicationReceipt);
       if (workflow.publicationReceipt.reason !== "precondition-failed")
         throw new Error(
-          "Only a canonical pre-journal precondition failure may omit its durable journal.",
+          "Only a canonical pre-journal precondition failure may omit its durable journal."
         );
       return {
         ...workflow.publicationReceipt,
@@ -161,7 +166,7 @@ export default defineTool({
         input.destinationPath !== durable.destinationPath
       )
         throw new Error(
-          "The durable local-publication success does not match this status request.",
+          "The durable local-publication success does not match this status request."
         );
       await verifyPublishedChangeSet({
         receipt: durable,
@@ -186,4 +191,8 @@ export default defineTool({
     const proposal = await exactLocalPublicationProposal(input);
     return { ...proposal, workflowPhase: workflow.phase };
   },
+  inputSchema: z.strictObject({
+    destinationPath: z.string().min(1),
+    expectedReviewDigest: digest,
+  }),
 });

@@ -7,37 +7,37 @@ import type {
 import {
   classifyGitHubRepositoryAccess,
   parseRepositoryReference,
-  type GitHubRepositoryAccessProvider,
 } from "./repository-access";
+import type { GitHubRepositoryAccessProvider } from "./repository-access";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 };
 
 function binding(
   installationId: string,
-  accountLogin = "withAutograph",
+  accountLogin = "withAutograph"
 ): HostedGitHubInstallationBinding {
   return {
-    installationId,
     accountId: `${Number(installationId) + 100}`,
     accountLogin,
     accountType: "Organization",
     active: true,
+    installationId,
     updatedAt: new Date("2026-09-01T12:00:00.000Z"),
   };
 }
 
 function store(
-  bindings: HostedGitHubInstallationBinding[],
+  bindings: HostedGitHubInstallationBinding[]
 ): HostedGitHubInstallationStore {
   return {
-    read: vi.fn(async () => undefined),
-    list: vi.fn(async () => bindings),
     bind: vi.fn(),
+    list: vi.fn(async () => bindings),
+    read: vi.fn(async () => undefined),
   };
 }
 
@@ -45,32 +45,32 @@ function provider(
   installation: HostedGitHubInstallationBinding,
   repositoryId?: string,
   repositorySelection: "all" | "selected" = "selected",
-  repositoryOverride: Record<string, unknown> = {},
+  repositoryOverride: Record<string, unknown> = {}
 ): GitHubRepositoryAccessProvider {
   return {
     async inspectInstallation({ requestedPermissions }) {
       return {
-        installationId: installation.installationId,
         accountId: installation.accountId,
         accountLogin: installation.accountLogin,
         accountType: installation.accountType,
+        grantedPermissions: requestedPermissions,
+        installationId: installation.installationId,
         repositorySelection,
         selectedRepositoryIds: repositoryId ? [repositoryId] : [],
-        grantedPermissions: requestedPermissions,
       };
     },
     async inspectRepositoryByName() {
       return repositoryId
         ? {
-            repositoryId,
-            owner: "withAutograph",
-            name: "app-builder-dogfood",
             archived: false,
-            visibility: "private",
             defaultBranch: "main",
             headSha: "1".repeat(40),
             headTree: "2".repeat(40),
+            name: "app-builder-dogfood",
+            owner: "withAutograph",
+            repositoryId,
             repositoryVariableNames: [],
+            visibility: "private",
             ...repositoryOverride,
           }
         : undefined;
@@ -83,13 +83,13 @@ describe("tenant-bound GitHub repository access", () => {
     await expect(
       classifyGitHubRepositoryAccess({
         authority,
-        repository: "withAutograph/app-builder-dogfood",
         installations: store([]),
         providerFactory: vi.fn(),
-      }),
+        repository: "withAutograph/app-builder-dogfood",
+      })
     ).resolves.toMatchObject({
-      status: "authorization-required",
       action: "connect",
+      status: "authorization-required",
     });
   });
 
@@ -98,14 +98,14 @@ describe("tenant-bound GitHub repository access", () => {
     await expect(
       classifyGitHubRepositoryAccess({
         authority,
-        repository: "withAutograph/app-builder-dogfood",
         installations: store([connected]),
         providerFactory: async () => provider(connected),
-      }),
+        repository: "withAutograph/app-builder-dogfood",
+      })
     ).resolves.toMatchObject({
-      status: "authorization-required",
       action: "update",
       scopes: [{ installationId: "10" }],
+      status: "authorization-required",
     });
   });
 
@@ -113,24 +113,24 @@ describe("tenant-bound GitHub repository access", () => {
     const connected = binding("10");
     const result = await classifyGitHubRepositoryAccess({
       authority,
-      repository: "withAutograph/app-builder-dogfood",
       installations: store([connected]),
       providerFactory: async () => provider(connected, "200"),
+      repository: "withAutograph/app-builder-dogfood",
     });
     expect(result).toMatchObject({
-      status: "ready",
       repository: {
-        repositoryId: "200",
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
         headSha: "1".repeat(40),
         headTree: "2".repeat(40),
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
+        repositoryId: "200",
       },
       scope: { installationId: "10" },
+      status: "ready",
     });
     expect(result).toHaveProperty(
       "accessDigest",
-      expect.stringMatching(/^[0-9a-f]{64}$/u),
+      expect.stringMatching(/^[0-9a-f]{64}$/u)
     );
   });
 
@@ -138,14 +138,14 @@ describe("tenant-bound GitHub repository access", () => {
     const connected = binding("10");
     const result = await classifyGitHubRepositoryAccess({
       authority,
-      repository: "withAutograph/app-builder-dogfood",
       installations: store([connected]),
       providerFactory: async () => provider(connected, "200", "all"),
+      repository: "withAutograph/app-builder-dogfood",
     });
     expect(result).toMatchObject({
-      status: "ready",
       repository: { repositoryId: "200" },
       scope: { installationId: "10" },
+      status: "ready",
     });
   });
 
@@ -155,14 +155,14 @@ describe("tenant-bound GitHub repository access", () => {
     await expect(
       classifyGitHubRepositoryAccess({
         authority,
-        repository: "withAutograph/app-builder-dogfood",
         installations: store([first, second]),
         providerFactory: async ({ installation }) =>
           provider(installation, "200"),
-      }),
+        repository: "withAutograph/app-builder-dogfood",
+      })
     ).resolves.toMatchObject({
-      status: "scope-selection-required",
       scopes: [{ installationId: "10" }, { installationId: "11" }],
+      status: "scope-selection-required",
     });
   });
 
@@ -172,14 +172,14 @@ describe("tenant-bound GitHub repository access", () => {
     await expect(
       classifyGitHubRepositoryAccess({
         authority,
-        repository: "withAutograph/app-builder-dogfood",
-        selectedInstallationId: "11",
         installations: store([first, second]),
         providerFactory: async () => provider(second),
-      }),
+        repository: "withAutograph/app-builder-dogfood",
+        selectedInstallationId: "11",
+      })
     ).resolves.toMatchObject({
-      status: "authorization-required",
       action: "update",
+      status: "authorization-required",
     });
   });
 
@@ -193,21 +193,21 @@ describe("tenant-bound GitHub repository access", () => {
       await expect(
         classifyGitHubRepositoryAccess({
           authority,
-          repository: "withAutograph/app-builder-dogfood",
           installations: store([connected]),
           providerFactory: async () =>
             provider(connected, "200", "selected", repositoryOverride),
-        }),
+          repository: "withAutograph/app-builder-dogfood",
+        })
       ).resolves.toMatchObject({ status: "provider-unavailable" });
     }
   });
 
   it("rejects malformed repository references", () => {
     expect(() => parseRepositoryReference("selected")).toThrow(
-      "repository-reference-invalid",
+      "repository-reference-invalid"
     );
     expect(() => parseRepositoryReference("owner/repo/extra")).toThrow(
-      "repository-reference-invalid",
+      "repository-reference-invalid"
     );
   });
 });

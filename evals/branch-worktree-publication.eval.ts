@@ -7,7 +7,7 @@ import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 const git = (root: string, args: string[]) =>
-  execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  execFileSync("git", args, { cwd: root, encoding: "utf-8" });
 
 export default defineEval({
   description:
@@ -30,16 +30,18 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("new deterministic branch worktree"));
     t.check(t.reply, includes("no commit, push, GitHub, provider"));
-    if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead)
+    if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead) {
       throw new Error("The original checkout HEAD changed.");
+    }
     if (
       git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]) !==
       beforeStatus
-    )
+    ) {
       throw new Error("The original checkout status changed.");
+    }
     t.check(
       git(repository, ["branch", "--list", "app-builder/*"]),
-      includes("app-builder/review-"),
+      includes("app-builder/review-")
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

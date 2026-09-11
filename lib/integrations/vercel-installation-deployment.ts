@@ -1,35 +1,35 @@
 import { z } from "zod";
 
-import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
+import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
+import {
+  signInForWorkspaceRedirect,
+  workspaceOnboardingRedirect,
+} from "../auth/workspace-onboarding";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "./local-provider-emulation";
 import {
   createPostgresVercelAuthorizationStateStore,
   createPostgresVercelInstallationStore,
 } from "./postgres-vercel-installation";
 import { logProviderConnectionFailure } from "./provider-connection-logging";
-import type { ProviderConnectionFailureReason } from "./provider-connection-status";
 import {
   providerConnectionRedirect,
   providerConnectionReturnFromFormData,
-  type ProviderConnectionReturn,
 } from "./provider-connection-return";
+import type { ProviderConnectionReturn } from "./provider-connection-return";
+import type { ProviderConnectionFailureReason } from "./provider-connection-status";
+import { providerEmulationFetch } from "./provider-emulation-fetch";
 import {
   createVercelInstallationAuthorization,
   readVercelIntegrationEnvironment,
   VercelInstallationAuthorizationError,
   verifyVercelWebhook,
 } from "./vercel-installation";
-import {
-  providerEmulationEnvironment,
-  readProviderEmulation,
-} from "./local-provider-emulation";
-import { providerEmulationFetch } from "./provider-emulation-fetch";
-import {
-  signInForWorkspaceRedirect,
-  workspaceOnboardingRedirect,
-} from "../auth/workspace-onboarding";
 
 const noStoreHeaders = {
   "Cache-Control": "no-store",
@@ -37,7 +37,7 @@ const noStoreHeaders = {
 } as const;
 
 function deployment(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const preview = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
@@ -45,12 +45,12 @@ function deployment(
   const emulation = readProviderEmulation(resolvedEnvironment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
-    issuer: preview.issuer,
     audience: preview.resource,
+    issuer: preview.issuer,
   });
   const installations = createPostgresVercelInstallationStore({
-    database,
     config,
+    database,
   });
   const authorityForRequest = async (request: Request) => {
     const session = await ensurePreviewOAuthDeploymentSessionOrganization({
@@ -59,16 +59,14 @@ function deployment(
     });
     return session
       ? {
-          issuer: preview.issuer,
           audience: preview.resource,
-          workspaceId: session.organization.workspaceId,
+          issuer: preview.issuer,
           ownerUserId: session.user.id,
+          workspaceId: session.organization.workspaceId,
         }
       : undefined;
   };
   return {
-    config,
-    installations,
     authorityForRequest,
     authorization: createVercelInstallationAuthorization({
       config,
@@ -83,25 +81,25 @@ function deployment(
             providerEmulationFetch(resource as string | URL, init, emulation)
         : undefined,
     }),
+    config,
+    installations,
   };
 }
 
 export function createVercelInstallationDeploymentHandler(
   kind: "start" | "callback",
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
   return async (request: Request) => {
     const startedAt = Date.now();
     const resolvedEnvironment = providerEmulationEnvironment(environment);
-    const origin = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url)
-      .origin;
+    const { origin } = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url);
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,
-      returnState?: ProviderConnectionReturn,
+      returnState?: ProviderConnectionReturn
     ) =>
       new Response(null, {
-        status: 303,
         headers: {
           ...noStoreHeaders,
           Location: providerConnectionRedirect({
@@ -112,16 +110,17 @@ export function createVercelInstallationDeploymentHandler(
             returnState,
           }),
         },
+        status: 303,
       });
     const fail = (
       reason: ProviderConnectionFailureReason,
-      returnState?: ProviderConnectionReturn,
+      returnState?: ProviderConnectionReturn
     ) => {
       logProviderConnectionFailure({
-        request,
-        provider: "vercel",
         phase: kind,
+        provider: "vercel",
         reason,
+        request,
         startedAt,
       });
       return redirect("failed", reason, returnState);
@@ -150,17 +149,17 @@ export function createVercelInstallationDeploymentHandler(
       authority = await runtime.authorityForRequest(request);
     } catch {
       return new Response(null, {
-        status: 303,
         headers: {
           ...noStoreHeaders,
           Location: workspaceOnboardingRedirect(
             origin,
-            "workspace-setup-retry",
+            "workspace-setup-retry"
           ),
         },
+        status: 303,
       });
     }
-    if (!authority)
+    if (!authority) {
       return new Response(null, {
         status: 303,
         headers: {
@@ -168,23 +167,24 @@ export function createVercelInstallationDeploymentHandler(
           Location: signInForWorkspaceRedirect(origin),
         },
       });
+    }
 
     try {
       if (kind === "start") {
         const returnState = providerConnectionReturnFromFormData(
-          await request.formData(),
+          await request.formData()
         );
         return new Response(null, {
-          status: 303,
           headers: {
             ...noStoreHeaders,
             Location: await runtime.authorization.begin(authority, returnState),
           },
+          status: 303,
         });
       }
       const result = await runtime.authorization.complete(
         request.url,
-        authority,
+        authority
       );
       return redirect("connected", undefined, result.returnState);
     } catch (error) {
@@ -192,24 +192,24 @@ export function createVercelInstallationDeploymentHandler(
         const detail =
           error instanceof Error &&
           /^(?:token-exchange-failed:[0-9]{3}:[a-z0-9_-]+|scope-read-failed|state-invalid|membership-inactive)$/u.test(
-            error.message,
+            error.message
           )
             ? error.message
             : "invalid-response";
         console.error(
           JSON.stringify({
+            detail,
             level: "error",
             message: "provider_connection_callback_detail",
             provider: "vercel",
-            detail,
-          }),
+          })
         );
       }
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",
         error instanceof VercelInstallationAuthorizationError
           ? error.returnState
-          : undefined,
+          : undefined
       );
     }
   };
@@ -217,7 +217,6 @@ export function createVercelInstallationDeploymentHandler(
 
 const webhookSchema = z
   .object({
-    type: z.string(),
     payload: z
       .object({
         configuration: z
@@ -227,11 +226,12 @@ const webhookSchema = z
         configurationId: z.string().min(1).optional(),
       })
       .passthrough(),
+    type: z.string(),
   })
   .passthrough();
 
 export function createVercelWebhookDeploymentHandler(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
   return async (request: Request) => {
     try {
@@ -240,16 +240,19 @@ export function createVercelWebhookDeploymentHandler(
       if (
         !verifyVercelWebhook({
           body,
-          signature: request.headers.get("x-vercel-signature"),
           secret: runtime.config.clientSecret,
+          signature: request.headers.get("x-vercel-signature"),
         })
-      )
+      ) {
         return new Response("Invalid signature", { status: 401 });
+      }
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
         const id =
           event.payload.configuration?.id ?? event.payload.configurationId;
-        if (!id) return new Response("Invalid event", { status: 400 });
+        if (!id) {
+          return new Response("Invalid event", { status: 400 });
+        }
         await runtime.installations.deactivate(id, new Date());
       }
       return new Response(null, { status: 204 });

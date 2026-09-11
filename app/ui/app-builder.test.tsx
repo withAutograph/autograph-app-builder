@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 
+import axe from "axe-core";
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ const builderActions = vi.hoisted(() => ({
       draftId: input.draftId,
       revision: input.expectedRevision + 1,
       updatedAt: "2030-01-01T00:00:00.000Z",
-    }),
+    })
   ),
   loadActiveBuilderDraft: vi.fn(async () => undefined),
   clearBuilderDraft: vi.fn(),
@@ -33,7 +33,7 @@ async function defaultContinuation(
       githubInstallationId?: string;
       vercelInstallationId?: string;
     };
-  },
+  }
 ) {
   return {
     status: "ready" as const,
@@ -92,9 +92,9 @@ const draftFetch = vi.hoisted(() =>
         revision: input.expectedRevision + 1,
         updatedAt: "2030-01-01T00:00:00.000Z",
       }),
-      { status: 200 },
+      { status: 200 }
     );
-  }),
+  })
 );
 
 vi.mock("next/navigation", () => ({
@@ -197,7 +197,7 @@ const refreshedHandoffId = "123e4567-e89b-42d3-a456-426614174002";
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
     user?: { name: string; email: string };
-  },
+  }
 ) {
   const {
     user,
@@ -236,7 +236,7 @@ async function render(ui: ReactNode) {
 
 async function fill(
   control: HTMLInputElement | HTMLTextAreaElement,
-  value: string,
+  value: string
 ) {
   const prototype =
     control instanceof HTMLTextAreaElement
@@ -259,7 +259,7 @@ async function focus(element: HTMLElement) {
 
 async function press(element: HTMLElement, key: string) {
   await act(async () =>
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))
   );
 }
 
@@ -283,7 +283,7 @@ afterEach(async () => {
 describe("Vercel-faithful App Builder flow", () => {
   it("hides Coming soon elements by default", async () => {
     const view = await render(
-      <AppBuilderComponent authenticated integrations={integrationState} />,
+      <AppBuilderComponent authenticated integrations={integrationState} />
     );
 
     expect(view.textContent).not.toContain("Coming soon");
@@ -293,33 +293,31 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("renders the anonymous composer with authentication handoff", async () => {
     const view = await render(
-      <AppBuilder authenticated={false} user={{ name: "", email: "" }} />,
+      <AppBuilder authenticated={false} user={{ name: "", email: "" }} />
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).toContain("What should this app do?");
     expect(
-      view.querySelector('a[href="/auth/sign-in?callbackURL=%2F"]')
-        ?.textContent,
+      view.querySelector('a[href="/auth/sign-in?callbackURL=%2F"]')?.textContent
     ).toBe("Sign In");
     expect(
-      view.querySelector('a[href="/auth/sign-up?callbackURL=%2F"]')
-        ?.textContent,
+      view.querySelector('a[href="/auth/sign-up?callbackURL=%2F"]')?.textContent
     ).toBe("Sign Up");
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
     expect(view.querySelector("header")?.textContent).toContain("Autograph");
 
     const suggestion = [...view.querySelectorAll("button")].find(
-      (button) => button.textContent === "Build a customer feedback portal",
+      (button) => button.textContent === "Build a customer feedback portal"
     );
     expect(suggestion).toBeDefined();
     await click(suggestion!);
     expect(
-      view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value,
+      view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value
     ).toBe("Build a customer feedback portal");
     expect(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue",
-      )?.disabled,
+        (button) => button.textContent === "Continue"
+      )?.disabled
     ).toBe(false);
   });
 
@@ -329,7 +327,7 @@ describe("Vercel-faithful App Builder flow", () => {
         authenticated
         connectionsEnabled={false}
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     expect(view.textContent).not.toContain("Connections");
@@ -342,7 +340,7 @@ describe("Vercel-faithful App Builder flow", () => {
         authenticated
         connectionsEnabled
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     expect(view.textContent).toContain("Connections");
@@ -354,12 +352,12 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).not.toContain("Vercel Team (Optional)");
     expect(view.textContent).not.toContain(
-      "Connect Vercel and Autograph can create and deploy the project for you.",
+      "Connect Vercel and Autograph can create and deploy the project for you."
     );
     expect(view.textContent).toContain("Git Scope");
     expect(view.textContent).toContain("App Name");
@@ -381,8 +379,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       Array.from(
         view.querySelectorAll<HTMLElement>("[data-create-app-section]"),
-        (section) => section.dataset.createAppSection,
-      ),
+        (section) => section.dataset.createAppSection
+      )
     ).toEqual([
       "app-details",
       "build-with",
@@ -393,17 +391,17 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(
       Array.from(
         view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
-        (heading) => heading.textContent,
-      ),
+        (heading) => heading.textContent
+      )
     ).toEqual(["Build with", "Store in", "Deploy to", "Connections"]);
     expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
     expect(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,
+      view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder
     ).toBe("Describe the app you want to build…");
 
     const destinations = [
       ...view.querySelectorAll<HTMLInputElement>(
-        'input[name="build-destination"]',
+        'input[name="build-destination"]'
       ),
     ];
     expect(destinations.map((input) => input.value)).toEqual([
@@ -419,12 +417,12 @@ describe("Vercel-faithful App Builder flow", () => {
 
     const storageOptions = [
       ...view.querySelectorAll<HTMLInputElement>(
-        '[role="group"][aria-label="Storage provider"] input',
+        '[role="group"][aria-label="Storage provider"] input'
       ),
     ];
     const deploymentOptions = [
       ...view.querySelectorAll<HTMLInputElement>(
-        '[role="group"][aria-label="Deployment provider"] input',
+        '[role="group"][aria-label="Deployment provider"] input'
       ),
     ];
     expect(storageOptions.map((option) => option.value)).toEqual([
@@ -443,8 +441,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(deploymentOptions[1]?.disabled).toBe(true);
     expect(
       [...view.querySelectorAll("[data-provider]")].every((option) =>
-        Boolean(option.querySelector("svg")),
-      ),
+        Boolean(option.querySelector("svg"))
+      )
     ).toBe(true);
     expect(view.querySelector("#git-scope")).not.toBeNull();
     expect(view.querySelector("#vercel-team")).toBeNull();
@@ -492,7 +490,7 @@ describe("Vercel-faithful App Builder flow", () => {
         focusOrigin: "vercel",
         appNameEditedByUser: true,
         repositoryEditedByUser: true,
-      }),
+      })
     );
     const view = await render(
       <AppBuilderComponent
@@ -500,32 +498,32 @@ describe("Vercel-faithful App Builder flow", () => {
         comingSoonEnabled
         providerResumeKey={resumeKey}
         integrations={integrationState}
-      />,
+      />
     );
 
     const buildWith = [...view.querySelectorAll("legend")].find(
-      (legend) => legend.textContent === "Build with",
+      (legend) => legend.textContent === "Build with"
     )!;
     const model = [...view.querySelectorAll("legend")].find(
-      (legend) => legend.textContent === "Model",
+      (legend) => legend.textContent === "Model"
     )!;
     expect(
       buildWith.parentElement!.compareDocumentPosition(model.parentElement!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(view.querySelector('[aria-label="GPT 5.6 Terra"]')).not.toBeNull();
     expect(
       view.querySelector(
-        'button[aria-label="Only use providers that support Zero Data Retention."]',
-      ),
+        'button[aria-label="Only use providers that support Zero Data Retention."]'
+      )
     ).not.toBeNull();
     expect(
-      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked,
+      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked
     ).toBe(false);
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="web"]',
-      )?.checked,
+        'input[name="build-destination"][value="web"]'
+      )?.checked
     ).toBe(true);
   });
 
@@ -551,40 +549,40 @@ describe("Vercel-faithful App Builder flow", () => {
           { provider: "vercel", status: "failed" },
           { provider: "github", status: "connected" },
         ]}
-      />,
+      />
     );
 
     expect(view.textContent).toContain("Vercel could not be connected");
     expect(view.textContent).toContain("GitHub connected successfully");
     expect(view.textContent).not.toContain(
-      "administrator needs to finish provider setup",
+      "administrator needs to finish provider setup"
     );
     expect(view.textContent).not.toContain("active App Builder workspace");
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )?.disabled,
+        'input[name="deployment-provider"][value="vercel"]'
+      )?.disabled
     ).toBe(true);
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )?.checked,
+        'input[name="deployment-provider"][value="vercel"]'
+      )?.checked
     ).toBe(false);
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="storage-provider"][value="github"]',
-      )?.disabled,
+        'input[name="storage-provider"][value="github"]'
+      )?.disabled
     ).toBe(true);
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="storage-provider"][value="github"]',
-      )?.checked,
+        'input[name="storage-provider"][value="github"]'
+      )?.checked
     ).toBe(false);
     expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
     expect(
       [...view.querySelectorAll('a[href="/github/installations"]')].some(
-        (link) => link.textContent === "Connect GitHub",
-      ),
+        (link) => link.textContent === "Connect GitHub"
+      )
     ).toBe(false);
 
     const accessibility = await axe.run(view, {
@@ -602,7 +600,7 @@ describe("Vercel-faithful App Builder flow", () => {
         providerNotices={[
           { provider: "github", status: "failed", reason: "callback-invalid" },
         ]}
-      />,
+      />
     );
 
     expect(view.textContent).not.toContain("GitHub could not be connected");
@@ -617,14 +615,14 @@ describe("Vercel-faithful App Builder flow", () => {
           ...integrationState,
           github: { status: "disconnected", scopes: [] },
         }}
-      />,
+      />
     );
 
     expect(view.querySelector("#repository-name")).toBeNull();
     expect(view.querySelector('[aria-label="Private repository"]')).toBeNull();
     expect(view.textContent).not.toContain("Private Repository Name");
     expect(view.textContent).not.toContain(
-      "Connect GitHub and Autograph can create and configure the repository for you.",
+      "Connect GitHub and Autograph can create and configure the repository for you."
     );
   });
 
@@ -633,7 +631,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     const beforeEditing = new Event("beforeunload", { cancelable: true });
@@ -642,7 +640,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await fill(
       view.querySelector<HTMLInputElement>("#app-name")!,
-      "Changed App",
+      "Changed App"
     );
 
     const afterEditing = new Event("beforeunload", { cancelable: true });
@@ -656,7 +654,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
@@ -670,12 +668,12 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Keep this draft.",
+      "Keep this draft."
     );
     await act(async () => vi.advanceTimersByTimeAsync(500));
 
@@ -687,7 +685,7 @@ describe("Vercel-faithful App Builder flow", () => {
             form: expect.objectContaining({ brief: "Keep this draft." }),
           }),
         }),
-      }),
+      })
     );
     expect(view.textContent).toContain("Draft saved");
   });
@@ -699,7 +697,7 @@ describe("Vercel-faithful App Builder flow", () => {
         user={{ name: "Taylor", email: "taylor@example.com" }}
         durableDraftId="d1210e56-ded0-436d-a6b8-ae96ddec17e0"
         durableDraftRevision={1}
-      />,
+      />
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     await fill(brief, "This local edit will be replaced.");
@@ -764,13 +762,13 @@ describe("Vercel-faithful App Builder flow", () => {
       () =>
         new Promise((resolve) => {
           resolveSave = resolve;
-        }),
+        })
     );
     const view = await render(
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     await fill(brief, "First local edit.");
@@ -823,35 +821,35 @@ describe("Vercel-faithful App Builder flow", () => {
         saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
         loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
         clearBuilderDraftAction={builderActions.clearBuilderDraft}
-      />,
+      />
     );
     await fill(
       view.querySelector<HTMLInputElement>("#app-name")!,
-      "Restored App",
+      "Restored App"
     );
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# Restored App\n\nKeep this brief through the provider flow.",
+      "# Restored App\n\nKeep this brief through the provider flow."
     );
     await click(
       view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
+        'input[name="deployment-provider"][value="vercel"]'
+      )!
     );
     await click(
       [...view.querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === "Connect to Vercel",
-      )!,
+        (button) => button.textContent === "Connect to Vercel"
+      )!
     );
 
     expect(navigation.push).toHaveBeenCalledWith(
-      `/vercel/installations?returnTo=%2F&resume=${canonicalDraftId}`,
+      `/vercel/installations?returnTo=%2F&resume=${canonicalDraftId}`
     );
     expect(
-      sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
+      sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`)
     ).toContain("Restored App");
     expect(
-      sessionStorage.getItem(`autograph-builder-draft:${canonicalDraftId}`),
+      sessionStorage.getItem(`autograph-builder-draft:${canonicalDraftId}`)
     ).toContain("Restored App");
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -865,7 +863,7 @@ describe("Vercel-faithful App Builder flow", () => {
             focusOrigin: "vercel",
           }),
         }),
-      }),
+      })
     );
   });
 
@@ -896,7 +894,7 @@ describe("Vercel-faithful App Builder flow", () => {
         focusOrigin: "vercel",
         appNameEditedByUser: true,
         repositoryEditedByUser: true,
-      }),
+      })
     );
     const view = await render(
       <AppBuilderComponent
@@ -905,23 +903,23 @@ describe("Vercel-faithful App Builder flow", () => {
         providerResumeKey={resumeKey}
         providerNotices={[{ provider: "vercel", status: "failed" }]}
         integrations={integrationState}
-      />,
+      />
     );
     await act(async () => new Promise(requestAnimationFrame));
 
     expect(view.querySelector<HTMLInputElement>("#app-name")?.value).toBe(
-      "Restored App",
+      "Restored App"
     );
     expect(view.querySelector("#repository-name")).toBeNull();
     expect(view.querySelector<HTMLInputElement>("#vercel-team")).toBe(
-      document.activeElement,
+      document.activeElement
     );
     expect(view.textContent).toContain("Vercel could not be connected");
     expect(view.textContent).toContain("QuickBooks");
     expect(
       view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="codex"]',
-      )?.checked,
+        'input[name="build-destination"][value="codex"]'
+      )?.checked
     ).toBe(true);
   });
 
@@ -930,11 +928,11 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     const anotherExample = view.querySelector<HTMLButtonElement>(
-      '[aria-label="Try another app brief example"]',
+      '[aria-label="Try another app brief example"]'
     )!;
     const examples: string[] = [];
 
@@ -951,21 +949,21 @@ describe("Vercel-faithful App Builder flow", () => {
   it("keeps generated names in sync until the user edits each field", async () => {
     expect(
       appNameFromBrief(
-        "# Customer Feedback Portal\n\nLet customers vote on ideas.",
-      ),
+        "# Customer Feedback Portal\n\nLet customers vote on ideas."
+      )
     ).toBe("Customer Feedback Portal");
     expect(repositoryNameFromAppName("Café & Orders")).toBe("cafe-and-orders");
     expect(appNameFromBrief("x".repeat(8_100))).toHaveLength(120);
 
     sessionStorage.setItem(
       "autograph-app-brief",
-      "# Vendor Onboarding\n\nCollect and review vendor details.",
+      "# Vendor Onboarding\n\nCollect and review vendor details."
     );
     const view = await render(
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     await act(async () => new Promise(requestAnimationFrame));
 
@@ -977,7 +975,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# Customer Success Hub\n\nHelp customers reach their goals.",
+      "# Customer Success Hub\n\nHelp customers reach their goals."
     );
     expect(appName.value).toBe("Customer Success Hub");
     expect(repository.value).toBe("customer-success-hub");
@@ -986,7 +984,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(repository.value).toBe("existing-name");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# A Different Product\n\nDo something else.",
+      "# A Different Product\n\nDo something else."
     );
     expect(appName.value).toBe("Existing Name");
     expect(repository.value).toBe("existing-name");
@@ -995,7 +993,7 @@ describe("Vercel-faithful App Builder flow", () => {
     await fill(repository, "existing-repository");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# One More Product\n\nDo one more thing.",
+      "# One More Product\n\nDo one more thing."
     );
     expect(appName.value).toBe("Existing Name");
     expect(repository.value).toBe("existing-repository");
@@ -1004,13 +1002,13 @@ describe("Vercel-faithful App Builder flow", () => {
   it("updates a generated app name while preserving a user-entered repository", async () => {
     sessionStorage.setItem(
       "autograph-app-brief",
-      "# Vendor Onboarding\n\nCollect and review vendor details.",
+      "# Vendor Onboarding\n\nCollect and review vendor details."
     );
     const view = await render(
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     await act(async () => new Promise(requestAnimationFrame));
 
@@ -1020,7 +1018,7 @@ describe("Vercel-faithful App Builder flow", () => {
     await fill(repository, "my-existing-repository");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# Customer Success Hub\n\nHelp customers reach their goals.",
+      "# Customer Success Hub\n\nHelp customers reach their goals."
     );
 
     expect(appName.value).toBe("Customer Success Hub");
@@ -1033,7 +1031,7 @@ describe("Vercel-faithful App Builder flow", () => {
         authenticated
         generatedNameSeed="request-stable-seed"
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")?.value;
@@ -1041,12 +1039,12 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(brief).toContain("Build a focused app");
     expect(appName).toBe("Product");
     expect(
-      view.querySelector<HTMLInputElement>("#repository-name")?.value,
+      view.querySelector<HTMLInputElement>("#repository-name")?.value
     ).toBe(repositoryNameFromAppName(appName ?? ""));
     expect(
       [...view.querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === "Create App",
-      )?.disabled,
+        (button) => button.textContent === "Create App"
+      )?.disabled
     ).toBe(false);
   });
 
@@ -1055,14 +1053,14 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
     const repository =
       view.querySelector<HTMLInputElement>("#repository-name")!;
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     const create = [...view.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Create App",
+      (button) => button.textContent === "Create App"
     )!;
 
     await fill(appName, "");
@@ -1083,7 +1081,7 @@ describe("Vercel-faithful App Builder flow", () => {
         authenticated
         generatedNameSeed="request-stable-seed"
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
 
@@ -1098,26 +1096,26 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await click(
       view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
+        'input[name="deployment-provider"][value="vercel"]'
+      )!
     );
     const team = view.querySelector<HTMLInputElement>(
-      '[aria-label="Select a Vercel Team"]',
+      '[aria-label="Select a Vercel Team"]'
     )!;
     await focus(team);
     expect(
-      view.querySelector('[data-option-value="vercel-pylee"]'),
+      view.querySelector('[data-option-value="vercel-pylee"]')
     ).not.toBeNull();
     expect(
-      view.querySelector('[data-option-value="vercel-autograph"]'),
+      view.querySelector('[data-option-value="vercel-autograph"]')
     ).not.toBeNull();
     await click(
-      view.querySelector<HTMLElement>('[data-option-value="vercel-pylee"]')!,
+      view.querySelector<HTMLElement>('[data-option-value="vercel-pylee"]')!
     );
     expect(team.value).toBe("pylee");
     await fill(team, "missing");
@@ -1126,7 +1124,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(team.value).toBe("pylee");
 
     const gitScope = view.querySelector<HTMLInputElement>(
-      '[aria-label="Git Scope"]',
+      '[aria-label="Git Scope"]'
     )!;
     await focus(gitScope);
     await fill(gitScope, "withAuto");
@@ -1147,28 +1145,28 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await fill(
       view.querySelector<HTMLInputElement>("#app-name")!,
-      "support-app",
+      "support-app"
     );
     await fill(
       view.querySelector<HTMLInputElement>("#repository-name")!,
-      "support-app",
+      "support-app"
     );
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# Support App\n\nHelp customers resolve support requests.",
+      "# Support App\n\nHelp customers resolve support requests."
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {});
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
       undefined,
@@ -1179,7 +1177,7 @@ describe("Vercel-faithful App Builder flow", () => {
           repository: "support-app",
           privateRepository: true,
         }),
-      }),
+      })
     );
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(view.textContent).toContain("Preparing secure handoff");
@@ -1188,30 +1186,30 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Launch requested");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
+        (button) => button.textContent === "Open in ChatGPT / Codex"
+      )!
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Use the official Autograph App Builder plugin"),
+      expect.stringContaining("Use the official Autograph App Builder plugin")
     );
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining(
-        "codex plugin marketplace add withAutograph/marketplace --ref main",
-      ),
+        "codex plugin marketplace add withAutograph/marketplace --ref main"
+      )
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(opaqueHandoffId),
+      expect.stringContaining(opaqueHandoffId)
     );
     const copiedPrompt = String(writeText.mock.calls[0]?.[0]);
     expect(copiedPrompt).not.toContain("support-app");
     expect(copiedPrompt).not.toContain("Help customers resolve");
     expect(copiedPrompt).not.toMatch(
-      /Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
+      /Installation[ _-]?ID|Repository ID|Head SHA|digest/iu
     );
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(/^codex:\/\/new\?prompt=/u),
       "_blank",
-      "noopener,noreferrer",
+      "noopener,noreferrer"
     );
     const initialUrl = open.mock.calls[1]?.[0] as string;
     expect(new URL(initialUrl).searchParams.get("prompt")).toBe(copiedPrompt);
@@ -1222,13 +1220,13 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).toContain("Open in ChatGPT / Codex");
     expect(view.textContent).toContain(
-      "codex plugin add app-builder@autograph",
+      "codex plugin add app-builder@autograph"
     );
     expect(view.textContent).not.toContain("npx plugins add");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
+        (button) => button.textContent === "Open in ChatGPT / Codex"
+      )!
     );
     expect(open).toHaveBeenCalledTimes(4);
     expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
@@ -1275,33 +1273,33 @@ describe("Vercel-faithful App Builder flow", () => {
             expiresAt: "2026-09-08T12:00:00.000Z",
           },
         };
-      },
+      }
     );
     const view = await render(
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a retry-safe handoff.",
+      "Build a retry-safe handoff."
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
-    await act(async () => Promise.resolve());
+    await act(async () => {});
     expect(view.textContent).toContain(
-      "We couldn’t finish preparing this handoff.",
+      "We couldn’t finish preparing this handoff."
     );
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
 
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Try again",
-      )!,
+        (button) => button.textContent === "Try again"
+      )!
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(creationRequestIds).toHaveLength(2);
@@ -1394,32 +1392,32 @@ describe("Vercel-faithful App Builder flow", () => {
             expiresAt: "2026-09-08T12:00:00.000Z",
           },
         };
-      },
+      }
     );
     const view = await render(
       <AppBuilder
         authenticated
         provisioningEnabled
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     await click(
       view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
+        'input[name="deployment-provider"][value="vercel"]'
+      )!
     );
     await fill(
       view.querySelector<HTMLInputElement>("#app-name")!,
-      "Provider App",
+      "Provider App"
     );
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a provider-linked app.",
+      "Build a provider-linked app."
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(events).toEqual(["continuation"]);
@@ -1432,8 +1430,8 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Retry",
-      )!,
+        (button) => button.textContent === "Retry"
+      )!
     );
     await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledTimes(2);
@@ -1444,8 +1442,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(open).toHaveBeenCalledTimes(2);
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
+        (button) => button.textContent === "Open in ChatGPT / Codex"
+      )!
     );
     expect(open).toHaveBeenCalledTimes(3);
     expect(writeText.mock.calls.at(-1)?.[0]).toContain(refreshedHandoffId);
@@ -1495,23 +1493,23 @@ describe("Vercel-faithful App Builder flow", () => {
           handoffId: opaqueHandoffId,
           expiresAt: "2026-09-08T12:00:00.000Z",
         },
-      }),
+      })
     );
     const view = await render(
       <AppBuilder
         authenticated
         provisioningEnabled
         user={{ name: "", email: "" }}
-      />,
+      />
     );
     await act(async () => new Promise(requestAnimationFrame));
     expect(view.textContent).toContain("App created with an issue");
     expect(view.textContent).toContain("Restored App");
     expect(navigation.replace).toHaveBeenCalledWith(
-      `/handoff/${opaqueHandoffId}`,
+      `/handoff/${opaqueHandoffId}`
     );
     expect(view.textContent).toContain(
-      "GitHub: the provider could not be reached",
+      "GitHub: the provider could not be reached"
     );
     expect(open).not.toHaveBeenCalled();
   });
@@ -1528,22 +1526,22 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a billing dashboard in Cursor.",
+      "Build a billing dashboard in Cursor."
     );
     await click(
       view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="cursor"]',
-      )!,
+        'input[name="build-destination"][value="cursor"]'
+      )!
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
@@ -1551,24 +1549,24 @@ describe("Vercel-faithful App Builder flow", () => {
       undefined,
       expect.objectContaining({
         form: expect.objectContaining({ buildDestination: "cursor" }),
-      }),
+      })
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in Cursor",
-      )!,
+        (button) => button.textContent === "Open in Cursor"
+      )!
     );
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(
-        /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u,
+        /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u
       ),
       "_blank",
-      "noopener,noreferrer",
+      "noopener,noreferrer"
     );
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(opaqueHandoffId),
+      expect.stringContaining(opaqueHandoffId)
     );
     const copiedPrompt = writeText.mock.calls[0]?.[0];
     expect(copiedPrompt).not.toContain("codex plugin");
@@ -1582,8 +1580,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("Open in Cursor");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in Cursor",
-      )!,
+        (button) => button.textContent === "Open in Cursor"
+      )!
     );
     expect(open).toHaveBeenCalledTimes(4);
     expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
@@ -1602,17 +1600,17 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a fallback status test.",
+      "Build a fallback status test."
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
     for (let index = 0; index < 6; index += 1) {
       await act(async () => vi.advanceTimersByTimeAsync(700));
@@ -1621,8 +1619,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
+        (button) => button.textContent === "Open in ChatGPT / Codex"
+      )!
     );
     expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
     expect(view.textContent).toContain("Clipboard access was blocked.");
@@ -1640,17 +1638,17 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "A".repeat(8_000),
+      "A".repeat(8_000)
     );
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+        (button) => button.textContent === "Create App"
+      )!
     );
     for (let index = 0; index < 6; index += 1) {
       await act(async () => vi.advanceTimersByTimeAsync(700));
@@ -1659,8 +1657,8 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(open).toHaveBeenCalledTimes(2);
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
+        (button) => button.textContent === "Open in ChatGPT / Codex"
+      )!
     );
     expect(open).toHaveBeenCalledTimes(3);
     const launchedUrl = open.mock.calls[1]?.[0] as string;
@@ -1674,7 +1672,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
     expect(view.querySelector('[aria-label="Account"]')).not.toBeNull();
     expect(view.textContent).not.toContain("Feedback");
@@ -1687,22 +1685,22 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     const privacy = view.querySelector<HTMLInputElement>(
-      '[aria-label="Private repository"] input',
+      '[aria-label="Private repository"] input'
     )!;
     expect(privacy.checked).toBe(true);
     expect(view.textContent).toContain("Private Repository Name");
     expect(view.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe(
-      "This repository will be private.",
+      "This repository will be private."
     );
     await click(privacy);
     expect(privacy.checked).toBe(false);
     expect(view.textContent).toContain("Public Repository Name");
     expect(view.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe(
-      "This repository will be public.",
+      "This repository will be public."
     );
 
     for (const connection of ["QuickBooks", "Ramp"]) {
@@ -1716,7 +1714,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).not.toContain("Xero");
     expect(view.textContent).not.toContain("Sage Intacct");
     const ramp = view.querySelector<HTMLButtonElement>(
-      '[aria-label="Ramp coming soon"]',
+      '[aria-label="Ramp coming soon"]'
     )!;
     expect(ramp.disabled).toBe(true);
     expect(ramp.textContent).toContain("Coming soon");
@@ -1724,23 +1722,23 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('[aria-label="Added connections"]')).toBeNull();
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Show more connections",
-      )!,
+        (button) => button.textContent === "Show more connections"
+      )!
     );
     for (const connection of ["NetSuite", "Xero", "Sage Intacct"]) {
       const button = view.querySelector<HTMLButtonElement>(
-        `[aria-label="${connection} coming soon"]`,
+        `[aria-label="${connection} coming soon"]`
       )!;
       expect(button.disabled).toBe(true);
       expect(button.textContent).toContain("Coming soon");
     }
     expect(view.querySelector('[data-kind="netsuite"] svg')).toBeNull();
     expect(
-      view.querySelector('input[name="deployment-provider"][value="vercel"]'),
+      view.querySelector('input[name="deployment-provider"][value="vercel"]')
     ).not.toBeNull();
 
     const connectionSearch = view.querySelector<HTMLInputElement>(
-      'input[placeholder="Search connections…"]',
+      'input[placeholder="Search connections…"]'
     )!;
     await fill(connectionSearch, "xero");
     expect(view.textContent).toContain("Xero");
@@ -1752,32 +1750,32 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder
         authenticated
         user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      />
     );
 
     await click(
-      view.querySelector<HTMLButtonElement>('[aria-label="Add QuickBooks"]')!,
+      view.querySelector<HTMLButtonElement>('[aria-label="Add QuickBooks"]')!
     );
     expect(view.querySelector("#connection-drawer-title")).toBeNull();
     expect(
-      view.querySelector('[aria-label="Added connections"]'),
+      view.querySelector('[aria-label="Added connections"]')
     ).not.toBeNull();
     expect(
-      view.querySelector('[aria-label="Remove QuickBooks"]'),
+      view.querySelector('[aria-label="Remove QuickBooks"]')
     ).not.toBeNull();
     expect(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Connect",
-      ),
+        (button) => button.textContent === "Connect"
+      )
     ).not.toBeUndefined();
 
     await click(
       view
         .querySelector<HTMLDivElement>('[aria-label="Added connections"]')!
-        .querySelector<HTMLButtonElement>("button")!,
+        .querySelector<HTMLButtonElement>("button")!
     );
     expect(view.querySelector("#connection-drawer-title")?.textContent).toBe(
-      "Add Connection",
+      "Add Connection"
     );
     expect(view.textContent).toContain("Connect QuickBooks");
 
@@ -1788,40 +1786,38 @@ describe("Vercel-faithful App Builder flow", () => {
 
     await click(
       [...view.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Connect QuickBooks"),
-      )!,
+        button.textContent?.includes("Connect QuickBooks")
+      )!
     );
     expect(view.textContent).toContain("Connection successful");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Return",
-      )!,
+        (button) => button.textContent === "Return"
+      )!
     );
     expect(view.textContent).toContain("Connection Name");
 
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue",
-      )!,
+        (button) => button.textContent === "Continue"
+      )!
     );
     expect(view.textContent).toContain("Display Name");
     await click(
       [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Add Connection",
-      )!,
+        (button) => button.textContent === "Add Connection"
+      )!
     );
     expect(
-      view.querySelector('[aria-label="Added connections"]'),
+      view.querySelector('[aria-label="Added connections"]')
     ).not.toBeNull();
     expect(
-      view.querySelector('[aria-label="Remove QuickBooks"]'),
+      view.querySelector('[aria-label="Remove QuickBooks"]')
     ).not.toBeNull();
     expect(view.textContent).toContain("Customize");
 
     await click(
-      view.querySelector<HTMLButtonElement>(
-        '[aria-label="Remove QuickBooks"]',
-      )!,
+      view.querySelector<HTMLButtonElement>('[aria-label="Remove QuickBooks"]')!
     );
     expect(view.querySelector('[aria-label="Remove QuickBooks"]')).toBeNull();
     expect(view.querySelector('[aria-label="Add QuickBooks"]')).not.toBeNull();

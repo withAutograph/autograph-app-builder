@@ -9,20 +9,20 @@ import {
 describe("EmulationApproval", () => {
   it.each([
     {
-      provider: "github" as const,
-      environment: "Local development" as const,
       account: "Autograph Developer",
-      handle: "@autograph-dev",
       detail: { label: "Repository", value: "autograph-local/demo-app" },
+      environment: "Local development" as const,
+      handle: "@autograph-dev",
       label: "Connect emulated GitHub",
+      provider: "github" as const,
     },
     {
-      provider: "vercel" as const,
-      environment: "Preview deployment" as const,
       account: "Autograph Developer",
-      handle: "autograph-dev",
       detail: { label: "Team", value: "Autograph Local" },
+      environment: "Preview deployment" as const,
+      handle: "autograph-dev",
       label: "Connect emulated Vercel",
+      provider: "vercel" as const,
     },
   ])("renders the $provider approval with its exact seeded scope", (input) => {
     const html = renderToStaticMarkup(
@@ -41,7 +41,7 @@ describe("EmulationApproval", () => {
             {input.label}
           </button>
         }
-      />,
+      />
     );
 
     expect(html).toContain(input.label);

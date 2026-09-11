@@ -2,7 +2,9 @@
 
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -40,7 +42,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
-    if (!email) return;
+    if (!email) {
+      return;
+    }
     signIn.mutate({ email, password });
   };
 

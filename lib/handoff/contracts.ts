@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import { builderProvisionResponseSchema } from "../provisioning/contracts";
 import { builderAppIdSchema } from "../provisioning/names";
-import { activeBuilderModelIdSchema } from "../integrations/active-model";
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
 const repositoryName = z
@@ -34,8 +34,8 @@ export const builderHandoffIntentSchema = z
     brief: z.string().trim().min(1).max(32_000),
     repository: z
       .object({
-        requestedName: repositoryName,
         private: z.boolean(),
+        requestedName: repositoryName,
         resolvedFullName: fullRepositoryName.optional(),
       })
       .strict(),
@@ -60,86 +60,100 @@ export const builderHandoffIntentSchema = z
     if (
       (intent.provisioningRequestId === undefined) !==
       (intent.provisioningRequestDigest === undefined)
-    )
+    ) {
       context.addIssue({
         code: "custom",
         path: ["provisioningRequestId"],
         message:
           "A provisioning request ID and digest must be recorded together.",
       });
+    }
     if (
       intent.provisioning !== undefined &&
       (intent.provisioning.requestId !== intent.provisioningRequestId ||
         intent.provisioning.requestDigest !== intent.provisioningRequestDigest)
-    )
+    ) {
       context.addIssue({
         code: "custom",
         path: ["provisioning"],
         message:
           "A provisioning outcome must match its exact server-owned request.",
       });
+    }
     if (
       intent.provisioning === undefined &&
       intent.provisioningRequestId !== undefined
-    )
+    ) {
       context.addIssue({
         code: "custom",
         path: ["provisioning"],
         message: "A referenced provisioning request requires its readback.",
       });
+    }
   });
 
 export type BuilderHandoffIntent = z.infer<typeof builderHandoffIntentSchema>;
 
 export const builderHandoffRecordSchema = z
   .object({
-    version: z.literal(1),
-    handoffId: builderHandoffIdSchema,
     authority: hostedTenantAuthoritySchema,
-    creationRequestId: z.string().uuid(),
-    requestDigest: sha256,
-    intent: builderHandoffIntentSchema,
     createdAt: z.date(),
+    creationRequestId: z.string().uuid(),
     expiresAt: z.date(),
+    handoffId: builderHandoffIdSchema,
+    intent: builderHandoffIntentSchema,
     redeemedAt: z.date().optional(),
+    requestDigest: sha256,
     sessionId: z.string().min(1).max(200).optional(),
+    version: z.literal(1),
   })
   .strict()
   .superRefine((record, context) => {
-    if (record.expiresAt <= record.createdAt)
+    if (record.expiresAt <= record.createdAt) {
       context.addIssue({
         code: "custom",
         path: ["expiresAt"],
         message: "A handoff must expire after it is created.",
       });
-    if ((record.redeemedAt === undefined) !== (record.sessionId === undefined))
+    }
+    if (
+      (record.redeemedAt === undefined) !==
+      (record.sessionId === undefined)
+    ) {
       context.addIssue({
         code: "custom",
         path: ["sessionId"],
         message: "A redeemed handoff must bind exactly one session.",
       });
+    }
     if (
       record.redeemedAt !== undefined &&
       (record.redeemedAt < record.createdAt ||
         record.redeemedAt > record.expiresAt)
-    )
+    ) {
       context.addIssue({
         code: "custom",
         path: ["redeemedAt"],
         message: "A handoff must be redeemed during its initial lifetime.",
       });
+    }
   });
 
 export type BuilderHandoffRecord = z.infer<typeof builderHandoffRecordSchema>;
 
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value instanceof Date) return JSON.stringify(value.toISOString());
-  if (value !== null && typeof value === "object")
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+  if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
       .join(",")}}`;
+  }
   return JSON.stringify(value);
 }
 
@@ -151,11 +165,11 @@ export function builderHandoffRequestDigest(input: {
   return createHash("sha256")
     .update(
       canonical({
-        version: 1,
         authority: hostedTenantAuthoritySchema.parse(input.authority),
         creationRequestId: z.string().uuid().parse(input.creationRequestId),
         intent: builderHandoffIntentSchema.parse(input.intent),
-      }),
+        version: 1,
+      })
     )
     .digest("hex");
 }

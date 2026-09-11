@@ -15,8 +15,11 @@ const originalEnvironment = {
 
 function restoreEnvironment() {
   for (const [key, value] of Object.entries(originalEnvironment)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
   }
 }
 
@@ -28,8 +31,8 @@ afterEach(() => {
 describe("Eve durable turn execution envelope", () => {
   it("acquires before dynamic tools at turn.started and releases only at terminal boundaries", async () => {
     const [hook, sandbox] = await Promise.all([
-      readFile("agent/hooks/release-sandbox-compute.ts", "utf8"),
-      readFile("agent/sandbox.ts", "utf8"),
+      readFile("agent/hooks/release-sandbox-compute.ts", "utf-8"),
+      readFile("agent/sandbox.ts", "utf-8"),
     ]);
     expect(hook).toContain('"turn.started"');
     expect(hook).toContain("acquireHostedSandboxExecutionLease");
@@ -73,10 +76,10 @@ describe("Eve durable turn execution envelope", () => {
       const isMember = vi.fn(async () => true);
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled,
-        store,
         isMember,
+        store,
       });
-      const stop = vi.fn(async () => undefined);
+      const stop = vi.fn(async () => {});
       const getSandbox = vi.fn(async () => ({
         id: "provider_session_1",
         stop,
@@ -98,6 +101,6 @@ describe("Eve durable turn execution envelope", () => {
       expect(enabled).not.toHaveBeenCalled();
       expect(store).not.toHaveBeenCalled();
       expect(isMember).not.toHaveBeenCalled();
-    },
+    }
   );
 });

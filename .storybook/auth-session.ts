@@ -1,6 +1,6 @@
 import type { SessionData } from "@better-auth-ui/core";
 
-import { authClient } from "../lib/auth-client";
+import type { authClient } from "../lib/auth-client";
 
 const fixtureDate = new Date("2026-01-01T00:00:00.000Z");
 
@@ -12,22 +12,22 @@ const fixtureDate = new Date("2026-01-01T00:00:00.000Z");
  */
 export const storybookAuthenticatedSession = {
   session: {
-    id: "storybook-session",
-    userId: "storybook-user",
-    token: "storybook-session-token",
-    expiresAt: new Date("2030-01-01T00:00:00.000Z"),
     createdAt: fixtureDate,
-    updatedAt: fixtureDate,
+    expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+    id: "storybook-session",
     ipAddress: null,
+    token: "storybook-session-token",
+    updatedAt: fixtureDate,
     userAgent: null,
+    userId: "storybook-user",
   },
   user: {
-    id: "storybook-user",
-    name: "Autograph User",
+    createdAt: fixtureDate,
     email: "storybook-user@example.com",
     emailVerified: true,
+    id: "storybook-user",
     image: null,
-    createdAt: fixtureDate,
+    name: "Autograph User",
     updatedAt: fixtureDate,
   },
 } satisfies NonNullable<SessionData<typeof authClient>>;

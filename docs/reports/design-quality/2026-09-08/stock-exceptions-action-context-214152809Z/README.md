@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                              |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected-item detail, and replenishment action. Selected rows, section headings, cover values, suggested quantities, and the primary action are consistently prominent across the supplied states.                                       |
-| layout         | 3/4   | The two-column master-detail composition is aligned and comfortably dense at 1024–1920px, with consistent card spacing and stable detail structure. At 700px it stacks cleanly, but the complete six-item list precedes the detail panel, placing review content and the action far below the selected record.                                      |
-| typography     | 4/4   | Type sizing, weight, and alignment consistently distinguish titles, group headings, product names, metadata, values, assumptions, and actions. Short labels and right-aligned inventory values remain readable even in the 1024px and 700px captures.                                                                                               |
-| responsive     | 3/4   | The interface remains usable without horizontal overflow from 1920px down to the supplied 700px desktop window, and controls resize or stack appropriately. The narrow stacked state is functional but inefficient: in the unfiltered captures the detail begins around y=807 and the action appears around y=1248, well beyond the 900px viewport. |
-| productClarity | 4/4   | The task is immediately understandable: filter exceptions, select a product, switch between stock and supplier details, and simulate a suggested order. Copy such as “Preview only · No supplier contacted,” delivery-gap explanations, and “Simulated — no order sent” clearly communicates the mock action and its consequences.                  |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected-item detail, and replenishment action. Selected rows, section headings, cover values, suggested quantities, and the primary action are consistently prominent across the supplied states. |
+| layout | 3/4 | The two-column master-detail composition is aligned and comfortably dense at 1024–1920px, with consistent card spacing and stable detail structure. At 700px it stacks cleanly, but the complete six-item list precedes the detail panel, placing review content and the action far below the selected record. |
+| typography | 4/4 | Type sizing, weight, and alignment consistently distinguish titles, group headings, product names, metadata, values, assumptions, and actions. Short labels and right-aligned inventory values remain readable even in the 1024px and 700px captures. |
+| responsive | 3/4 | The interface remains usable without horizontal overflow from 1920px down to the supplied 700px desktop window, and controls resize or stack appropriately. The narrow stacked state is functional but inefficient: in the unfiltered captures the detail begins around y=807 and the action appears around y=1248, well beyond the 900px viewport. |
+| productClarity | 4/4 | The task is immediately understandable: filter exceptions, select a product, switch between stock and supplier details, and simulate a suggested order. Copy such as “Preview only · No supplier contacted,” delivery-gap explanations, and “Simulated — no order sent” clearly communicates the mock action and its consequences. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/221) |
-| desktop-0                | typography | 0/0                         | 0% (0/557) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/293) |
-| desktop-0                | radius     | 0/0                         | 0% (0/114) |
-| desktop-0                | border     | 0/0                         | 0% (0/140) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/221) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/293) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/140) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/221) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/293) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/140) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/223) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/557) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/289) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/114) |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/137) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/120) |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/221) |
+| desktop-0 | typography | 0/0 | 0% (0/557) |
+| desktop-0 | spacing | 0/0 | 0% (0/293) |
+| desktop-0 | radius | 0/0 | 0% (0/114) |
+| desktop-0 | border | 0/0 | 0% (0/140) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/221) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/293) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
+| desktop-wide-0 | border | 0/0 | 0% (0/140) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/221) |
+| desktop-window-0 | typography | 0/0 | 0% (0/557) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/293) |
+| desktop-window-0 | radius | 0/0 | 0% (0/114) |
+| desktop-window-0 | border | 0/0 | 0% (0/140) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/223) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/557) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/289) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/114) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/137) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/120) |
 
 ## Latest-run screenshots
 

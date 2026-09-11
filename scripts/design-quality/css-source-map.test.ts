@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { originalCssSource } from "./css-source-map";
 
 describe("CSS source-map provenance", () => {
@@ -12,15 +13,15 @@ describe("CSS source-map provenance", () => {
 
   it("attributes only the exact mapped declaration line", () => {
     expect(originalCssSource(map, 0, 14)).toEqual({
-      path: "../source/src/generated.css",
-      line: 1,
       column: 1,
+      line: 1,
+      path: "../source/src/generated.css",
       sourceIndex: 0,
     });
     expect(originalCssSource(map, 1, 14)).toEqual({
-      path: "../source/packages/design-systems/shared.css",
-      line: 2,
       column: 1,
+      line: 2,
+      path: "../source/packages/design-systems/shared.css",
       sourceIndex: 1,
     });
   });
@@ -32,7 +33,7 @@ describe("CSS source-map provenance", () => {
 
   it("does not inherit a preceding mapping across an explicit unmapped span", () => {
     expect(
-      originalCssSource({ ...map, mappings: "AAAA,K" }, 0, 5),
+      originalCssSource({ ...map, mappings: "AAAA,K" }, 0, 5)
     ).toBeUndefined();
   });
 
@@ -41,15 +42,15 @@ describe("CSS source-map provenance", () => {
       originalCssSource(
         { ...map, sources: [null] } as unknown as typeof map,
         0,
-        0,
-      ),
+        0
+      )
     ).toBeUndefined();
     expect(
       originalCssSource(
         { ...map, sourceRoot: {} } as unknown as typeof map,
         0,
-        0,
-      ),
+        0
+      )
     ).toBeUndefined();
   });
 });

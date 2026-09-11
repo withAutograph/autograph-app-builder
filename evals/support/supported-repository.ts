@@ -35,22 +35,22 @@ export const SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE = [
  */
 export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
   {
-    version: 1,
     kind: "arrusted-component-composition-v1",
+    providers: ["@autograph/components/providers"],
     publicImports: [
       "@autograph/components",
       "@autograph/compositions",
       "@autograph/icons",
     ],
-    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
-    providers: ["@autograph/components/providers"],
     routeGlue: {
       allowedFiles: ["app/layout.tsx", "app/page.tsx"],
       allowedStyleFiles: [],
     },
+    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+    version: 1,
   },
   null,
-  2,
+  2
 )}\n`;
 
 function fixtureGit(root: string, args: string[]): void {
@@ -65,18 +65,19 @@ function fixtureGit(root: string, args: string[]): void {
       "commit.gpgsign=false",
       ...args,
     ],
-    { cwd: root, env: { ...process.env, HK: "0" } },
+    { cwd: root, env: { ...process.env, HK: "0" } }
   );
 }
 
 export function createSupportedRepositoryFixture(): string {
-  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1")
+  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1") {
     mkdirSync(join(tmpdir(), "autograph-app-builder-branch-publication"), {
       recursive: true,
       mode: 0o700,
     });
+  }
   const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")),
+    mkdtempSync(join(tmpdir(), "app-builder-eval-repository-"))
   );
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
@@ -95,22 +96,6 @@ export function createSupportedRepositoryFixture(): string {
       '[tasks."app:test"]',
       'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
-    ".config/mise/tasks/repository/exec": [
-      "#!/usr/bin/env bash",
-      'exec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"',
-      "",
-    ].join("\n"),
-    ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
-    "microfrontends.json": "{}\n",
-    "package.json": `${JSON.stringify(
-      {
-        name: "@autograph/supported-repository-fixture",
-        private: true,
-        dependencies: { next: "16.1.6" },
-      },
-      null,
-      2,
-    )}\n`,
     ".config/mise/scripts/repository/app-contract.ts":
       'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts":
@@ -124,11 +109,27 @@ export function createSupportedRepositoryFixture(): string {
       'const preflight = "mise run repository:preflight";',
       'const validation = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];',
     ].join("\n"),
+    ".config/mise/tasks/repository/exec": [
+      "#!/usr/bin/env bash",
+      'exec mise exec -- bun ".config/mise/scripts/repository/$1" "${@:2}"',
+      "",
+    ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs":
       "export default {};\n",
+    ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     "docs/component-composition.json": ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
+    "microfrontends.json": "{}\n",
+    "package.json": `${JSON.stringify(
+      {
+        name: "@autograph/supported-repository-fixture",
+        private: true,
+        dependencies: { next: "16.1.6" },
+      },
+      null,
+      2
+    )}\n`,
   };
   for (const [path, content] of Object.entries(files)) {
     const absolute = join(root, path);

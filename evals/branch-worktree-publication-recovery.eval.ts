@@ -12,7 +12,7 @@ export default defineEval({
     await prepareReviewedWorkflow(
       t,
       repository,
-      "branch-publication-partial-failure",
+      "branch-publication-partial-failure"
     );
 
     await t.send("Publish reviewed change set to a new branch worktree.");

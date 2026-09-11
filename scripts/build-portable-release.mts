@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   cp,
   lstat,
@@ -9,8 +10,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
+import { readTrackedTreeBlob } from "./git-tree-blob";
 import {
   deterministicGzip,
   deterministicTar,
@@ -19,14 +21,16 @@ import {
   releaseEndpoint,
   sha256,
 } from "./portable-release";
-import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index < 0) return undefined;
+  if (index === -1) {
+    return undefined;
+  }
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--"))
+  if (!value || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
+  }
   return value;
 };
 
@@ -34,23 +38,25 @@ const repositoryRoot = resolve(".");
 const git = (...args: string[]) =>
   execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: {
-      PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
       LC_ALL: "C",
       NODE_ENV: "production",
+      PATH: "/usr/bin:/bin",
     },
   }).trim();
 const sourceStatus = git("status", "--porcelain=v1");
-if (sourceStatus !== "")
+if (sourceStatus !== "") {
   throw new Error(
-    `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
+    `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`
   );
+}
 const sourceRepository =
   "https://github.com/withAutograph/autograph-app-builder";
-if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
+if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository)) {
   throw new Error("Portable releases require the canonical source remote.");
+}
 const source = {
   repository: sourceRepository,
   sha: git("rev-parse", "HEAD"),
@@ -58,39 +64,42 @@ const source = {
 };
 const endpoint = releaseEndpoint(argument("--endpoint"));
 const requestedOutput = resolve(
-  argument("--output") ?? ".artifacts/portable-release/app-builder",
+  argument("--output") ?? ".artifacts/portable-release/app-builder"
 );
 try {
   await lstat(requestedOutput);
   throw new Error(`Release output already exists: ${requestedOutput}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    throw error;
+  }
 }
 const requestedParent = resolve(requestedOutput, "..");
-await mkdir(requestedParent, { recursive: true, mode: 0o700 });
+await mkdir(requestedParent, { mode: 0o700, recursive: true });
 const output = join(await realpath(requestedParent), basename(requestedOutput));
 await mkdir(output, { mode: 0o700 });
 const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
   const source = resolve(repositoryRoot, path);
-  if ((await lstat(source)).isSymbolicLink())
+  if ((await lstat(source)).isSymbolicLink()) {
     throw new Error(`Portable source cannot be a symbolic link: ${path}`);
+  }
   await cp(source, join(core, path), { recursive: true });
 }
-const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf8"));
+const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));
 mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
 await writeFile(join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
 await validateAgentPluginPackage({
-  pluginRoot: core,
-  repositoryRoot,
-  release: true,
   packageKind: "generated-artifact",
+  pluginRoot: core,
+  release: true,
+  repositoryRoot,
 });
 
 const handlerSource = await readFile(
   resolve("lib/mcp/request-handler.ts"),
-  "utf8",
+  "utf-8"
 );
 const tools = registeredAutographToolNames(handlerSource);
 const mockRoot = join(output, "mock");
@@ -99,13 +108,13 @@ await writeFile(
   join(mockRoot, "tools-list.json"),
   `${JSON.stringify(
     {
-      jsonrpc: "2.0",
       id: 1,
+      jsonrpc: "2.0",
       result: { tools: tools.map((name) => ({ name })) },
     },
     null,
-    2,
-  )}\n`,
+    2
+  )}\n`
 );
 
 const clientRoot = join(output, "clients");
@@ -115,18 +124,18 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
     join(clientRoot, `${client}.client-harness.json`),
     `${JSON.stringify(
       {
-        format: "agent-plugins-client-harness-v2",
         client,
-        pluginRoot: "../app-builder",
+        format: "agent-plugins-client-harness-v2",
         mcp: "../app-builder/mcp.json",
-        transport: { type: "streamable-http", url: `${endpoint}/mcp` },
         oauth: {
           protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
         },
+        pluginRoot: "../app-builder",
+        transport: { type: "streamable-http", url: `${endpoint}/mcp` },
       },
       null,
-      2,
-    )}\n`,
+      2
+    )}\n`
   );
 }
 
@@ -135,33 +144,37 @@ async function collect(directory: string) {
   for (const entry of (await readdir(directory)).sort()) {
     const path = join(directory, entry);
     const info = await stat(path);
-    if (info.isDirectory()) await collect(path);
-    else files.set(relative(output, path), await readFile(path));
+    if (info.isDirectory()) {
+      await collect(path);
+    } else {
+      files.set(relative(output, path), await readFile(path));
+    }
   }
 }
 await collect(core);
 const archive = deterministicGzip(deterministicTar(files));
-const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf8"));
+const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf-8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(join(output, archiveName), archive);
 
 const marketplaceRoot = join(output, "codex-marketplace");
 const marketplacePluginRoot = join(marketplaceRoot, "plugins", portable.name);
 await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
-  recursive: true,
   mode: 0o755,
+  recursive: true,
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
 const codexManifest = JSON.parse(
-  await readFile(resolve(".codex-plugin/plugin.json"), "utf8"),
+  await readFile(resolve(".codex-plugin/plugin.json"), "utf-8")
 );
 if (
   codexManifest.name !== portable.name ||
   codexManifest.version !== portable.version
-)
+) {
   throw new Error(
-    "The Codex adapter name and version must match the portable manifest.",
+    "The Codex adapter name and version must match the portable manifest."
   );
+}
 const codexAssetReferences = [
   codexManifest.interface?.composerIcon,
   codexManifest.interface?.logo,
@@ -176,26 +189,27 @@ for (const reference of new Set(codexAssetReferences)) {
       .slice(2)
       .split("/")
       .some((part: string) => part === "" || part === "." || part === "..")
-  )
+  ) {
     throw new Error(
-      "Codex manifest asset references must be safe relative paths.",
+      "Codex manifest asset references must be safe relative paths."
     );
+  }
   const relativeAssetPath = reference.slice(2);
   const sourceAsset = readTrackedTreeBlob({
+    path: relativeAssetPath,
     repositoryRoot,
     tree: source.tree,
-    path: relativeAssetPath,
   });
   const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
-  await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
+  await mkdir(dirname(destinationAsset), { mode: 0o755, recursive: true });
   await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
   codexMarketplaceAssetPaths.push(
-    `plugins/${portable.name}/${relativeAssetPath}`,
+    `plugins/${portable.name}/${relativeAssetPath}`
   );
 }
 await writeFile(
   join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
-  `${JSON.stringify(codexManifest, null, 2)}\n`,
+  `${JSON.stringify(codexManifest, null, 2)}\n`
 );
 await writeFile(
   join(marketplacePluginRoot, ".mcp.json"),
@@ -203,29 +217,29 @@ await writeFile(
     {
       mcpServers: {
         [portable.name]: {
+          oauth_resource: `${endpoint}/mcp`,
           type: "http",
           url: `${endpoint}/mcp`,
-          oauth_resource: `${endpoint}/mcp`,
         },
       },
     },
     null,
-    2,
-  )}\n`,
+    2
+  )}\n`
 );
 const marketplacePath = join(
   marketplaceRoot,
   ".agents",
   "plugins",
-  "marketplace.json",
+  "marketplace.json"
 );
-await mkdir(dirname(marketplacePath), { recursive: true, mode: 0o755 });
+await mkdir(dirname(marketplacePath), { mode: 0o755, recursive: true });
 await writeFile(
   marketplacePath,
   `${JSON.stringify(
     {
-      name: "autograph",
       interface: { displayName: "Autograph" },
+      name: "autograph",
       plugins: [
         {
           name: portable.name,
@@ -242,25 +256,27 @@ await writeFile(
       ],
     },
     null,
-    2,
-  )}\n`,
+    2
+  )}\n`
 );
 const marketplaceFiles = new Map<string, Uint8Array>();
 async function collectMarketplace(directory: string) {
   for (const entry of (await readdir(directory)).sort()) {
     const path = join(directory, entry);
     const info = await stat(path);
-    if (info.isDirectory()) await collectMarketplace(path);
-    else
+    if (info.isDirectory()) {
+      await collectMarketplace(path);
+    } else {
       marketplaceFiles.set(
         relative(marketplaceRoot, path),
-        await readFile(path),
+        await readFile(path)
       );
+    }
   }
 }
 await collectMarketplace(marketplaceRoot);
 const marketplaceArchive = deterministicGzip(
-  deterministicTar(marketplaceFiles),
+  deterministicTar(marketplaceFiles)
 );
 const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.version}.tar.gz`;
 await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);
@@ -273,13 +289,10 @@ for (const directory of [mockRoot, clientRoot]) {
   }
 }
 const receipt = {
-  format: "autograph-portable-plugin-release-v3",
-  specification: "1.0.0",
-  name: portable.name,
-  version: portable.version,
-  source,
-  endpoint: `${endpoint}/mcp`,
   archive: { name: archiveName, sha256: sha256(archive) },
+  auxiliaryFiles: Object.fromEntries(
+    [...auxiliaryFiles].sort().map(([path, content]) => [path, sha256(content)])
+  ),
   codexMarketplaceArchive: {
     name: marketplaceArchiveName,
     sha256: sha256(marketplaceArchive),
@@ -290,26 +303,28 @@ const receipt = {
       if (!content)
         throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
       return [path, sha256(content)];
-    }),
+    })
   ),
   coreFiles: Object.fromEntries(
-    [...files].sort().map(([path, content]) => [path, sha256(content)]),
+    [...files].sort().map(([path, content]) => [path, sha256(content)])
   ),
-  auxiliaryFiles: Object.fromEntries(
-    [...auxiliaryFiles]
-      .sort()
-      .map(([path, content]) => [path, sha256(content)]),
-  ),
+  endpoint: `${endpoint}/mcp`,
+  format: "autograph-portable-plugin-release-v3",
+  name: portable.name,
+  source,
+  specification: "1.0.0",
   tools,
+  version: portable.version,
 };
 await writeFile(
   join(output, "release-receipt.json"),
-  `${JSON.stringify(receipt, null, 2)}\n`,
+  `${JSON.stringify(receipt, null, 2)}\n`
 );
 await writeFile(
   join(output, "SHA256SUMS"),
-  `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`,
+  `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`
 );
-if ((await realpath(core)) !== core)
+if ((await realpath(core)) !== core) {
   throw new Error("Portable core path was not canonical.");
+}
 console.log(`Sealed ${archiveName}: ${receipt.archive.sha256}`);

@@ -9,16 +9,16 @@ import {
 } from "./app-spec-validation";
 
 function completeAppSpec(
-  handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE,
+  handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE
 ): string {
   return `${REQUIRED_APP_SPEC_HEADINGS.filter(
-    (heading) => heading !== "Build handoff",
+    (heading) => heading !== "Build handoff"
   )
     .map((heading) => `## ${heading}\n\nProduct decision.`)
     .join("\n\n")}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(
     handoff,
     null,
-    2,
+    2
   )}\n\`\`\``;
 }
 
@@ -38,33 +38,33 @@ describe("build-ready AppSpec validation", () => {
       validateBuildReadyAppSpec(
         completeAppSpec().replace(
           "## Build handoff\n\n```json",
-          headingAndFence,
-        ),
-      ),
+          headingAndFence
+        )
+      )
     ).toEqual({ valid: true });
   });
 
   it("accepts CRLF and trailing whitespace", () => {
     expect(
       validateBuildReadyAppSpec(
-        `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `,
-      ),
+        `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `
+      )
     ).toEqual({ valid: true });
   });
 
   it("normalizes mechanical handoff drift before validation", () => {
     const normalized = normalizeBuildReadyAppSpec(
       completeAppSpec({
-        status: "ready",
-        owner: " operations ",
-        schema: { kind: "operational", entities: ["exception"] },
         additionalPublicRoutes: ["/z", "/bad/[id]", "/a", "/a"],
-        optionalCapabilities: {
-          integrations: ["inventory-sync", "inventory-sync", "Bad"],
-          hostedResources: ["relational-database"],
-        },
         ignored: true,
-      }),
+        optionalCapabilities: {
+          hostedResources: ["relational-database"],
+          integrations: ["inventory-sync", "inventory-sync", "Bad"],
+        },
+        owner: " operations ",
+        schema: { entities: ["exception"], kind: "operational" },
+        status: "ready",
+      })
     );
 
     expect(validateBuildReadyAppSpec(normalized)).toEqual({ valid: true });
@@ -79,31 +79,33 @@ describe("build-ready AppSpec validation", () => {
     ["wrong fence language", completeAppSpec().replace("```json", "```yaml")],
   ])("rejects %s after the terminal handoff", (_label, content) => {
     expect(validateBuildReadyAppSpec(content)).toMatchObject({
-      valid: false,
       issues: expect.arrayContaining([
         expect.objectContaining({ code: "build_handoff_format" }),
       ]),
+      valid: false,
     });
   });
 
   it("returns exact repair instructions for missing sections and handoff", () => {
     const result = validateBuildReadyAppSpec(
-      "## Status and prototype\n\nA first prototype.",
+      "## Status and prototype\n\nA first prototype."
     );
     expect(result.valid).toBe(false);
-    if (result.valid) throw new Error("expected invalid AppSpec");
+    if (result.valid) {
+      throw new Error("expected invalid AppSpec");
+    }
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: "missing_heading",
-          path: "User and outcome",
           message: 'Add exactly one "## User and outcome" section.',
+          path: "User and outcome",
         }),
         expect.objectContaining({
           code: "build_handoff_format",
           path: "Build handoff",
         }),
-      ]),
+      ])
     );
     const diagnostic = JSON.parse(appSpecRepairDiagnostic(result)) as {
       code: string;
@@ -112,9 +114,9 @@ describe("build-ready AppSpec validation", () => {
       buildHandoffExample: unknown;
     };
     expect(diagnostic).toMatchObject({
+      buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",
       instruction: expect.stringContaining("without asking the user"),
-      buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
     });
     expect(diagnostic.requiredHeadings).toHaveLength(14);
   });
@@ -122,11 +124,11 @@ describe("build-ready AppSpec validation", () => {
   it("identifies malformed JSON and closed-shape errors without raw content", () => {
     const malformed = completeAppSpec().replace(
       JSON.stringify(BUILD_READY_HANDOFF_EXAMPLE, null, 2),
-      "{ invalid",
+      "{ invalid"
     );
     expect(validateBuildReadyAppSpec(malformed)).toMatchObject({
-      valid: false,
       issues: [{ code: "build_handoff_json", path: "Build handoff" }],
+      valid: false,
     });
 
     const extra = completeAppSpec({
@@ -136,7 +138,9 @@ describe("build-ready AppSpec validation", () => {
     });
     const result = validateBuildReadyAppSpec(extra);
     expect(result.valid).toBe(false);
-    if (result.valid) throw new Error("expected invalid AppSpec");
+    if (result.valid) {
+      throw new Error("expected invalid AppSpec");
+    }
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -147,7 +151,7 @@ describe("build-ready AppSpec validation", () => {
           code: "build_handoff_shape",
           path: "Build handoff",
         }),
-      ]),
+      ])
     );
     expect(appSpecRepairDiagnostic(result)).not.toContain("private-value");
   });

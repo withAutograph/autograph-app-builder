@@ -2,5 +2,5 @@ import { createVercelInstallationDeploymentHandler } from "@/lib/integrations/ve
 
 export const GET = createVercelInstallationDeploymentHandler(
   "callback",
-  process.env,
+  process.env
 );

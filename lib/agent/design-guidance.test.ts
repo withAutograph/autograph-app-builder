@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf8");
+const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf-8");
 const reviewExperiences = readFileSync(
   "docs/ui-preview-review-experiences.md",
-  "utf8",
+  "utf-8"
 );
 
 describe("high-fidelity design guidance", () => {
@@ -18,16 +18,16 @@ describe("high-fidelity design guidance", () => {
     ].map((value) => skill.indexOf(value));
     expect(evidence.every((index) => index >= 0)).toBe(true);
     expect(evidence).toEqual(
-      [...evidence].toSorted((left, right) => left - right),
+      [...evidence].toSorted((left, right) => left - right)
     );
   });
 
   it("prefers compositions and records justified catalog gaps", () => {
     expect(skill).toContain(
-      "Prefer the cheapest public composition that makes the user's decision visible.",
+      "Prefer the cheapest public composition that makes the user's decision visible."
     );
     expect(skill).toMatch(
-      /catalog\s+gap is a reason to adapt the design using available components/u,
+      /catalog\s+gap is a reason to adapt the design using available components/u
     );
     expect(skill).toContain("Do not add local component implementations");
     expect(skill).toContain("target-owned token entrypoint directly");
@@ -48,7 +48,7 @@ describe("high-fidelity design guidance", () => {
     expect(reviewExperiences).toContain("Persistent three-view workbench");
     expect(reviewExperiences).toMatch(/not\s+implemented/u);
     expect(skill).toContain(
-      "Context, Draft spec, internal receipts, and implementation plans do not leak",
+      "Context, Draft spec, internal receipts, and implementation plans do not leak"
     );
   });
 

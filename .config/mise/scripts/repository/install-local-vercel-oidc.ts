@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   chmodSync,
   closeSync,
@@ -8,7 +9,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
 
 import {
   parseLinkedVercelProject,
@@ -28,25 +28,25 @@ const environment = readOwnerBoundLocalFile(environmentPath, {
   confidential: false,
 });
 const project = parseLinkedVercelProject(
-  readOwnerBoundLocalFile(projectPath, { confidential: false }),
+  readOwnerBoundLocalFile(projectPath, { confidential: false })
 );
 const token = parseLocalVercelOidcToken(environment);
 const claims = validateLocalVercelOidcClaims({
-  token,
-  project,
   nowEpochSeconds: Math.floor(Date.now() / 1000),
+  project,
+  token,
 });
 
 const temporaryPath = resolve(
   dirname(environmentPath),
-  `.env.local.install-${randomBytes(12).toString("hex")}`,
+  `.env.local.install-${randomBytes(12).toString("hex")}`
 );
 let temporaryExists = false;
 try {
   const descriptor = openSync(temporaryPath, "wx", 0o600);
   temporaryExists = true;
   try {
-    writeFileSync(descriptor, environment, "utf8");
+    writeFileSync(descriptor, environment, "utf-8");
     fsyncSync(descriptor);
   } finally {
     closeSync(descriptor);
@@ -61,14 +61,16 @@ try {
     closeSync(directory);
   }
 } finally {
-  if (temporaryExists) unlinkSync(temporaryPath);
+  if (temporaryExists) {
+    unlinkSync(temporaryPath);
+  }
 }
 
 process.stdout.write(
   `${JSON.stringify({
-    schemaVersion: 1,
+    claims,
     installed: ".env.local",
     mode: "0600",
-    claims,
-  })}\n`,
+    schemaVersion: 1,
+  })}\n`
 );

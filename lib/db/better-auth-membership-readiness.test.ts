@@ -5,41 +5,41 @@ import { describe, expect, it } from "vitest";
 import { verifyBetterAuthMembershipReadBack } from "./better-auth-membership-readiness";
 
 const row = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-a",
+  issuer: "https://builder.example/api/auth",
   userId: "user-a",
+  workspaceId: "workspace-a",
 };
 
 function readBack() {
   return {
-    transactionReadOnly: true as const,
     activeLegacyRows: [row],
-    migratedRows: [{ ...row, role: "owner" as const }],
     inactiveLegacyCount: 1,
-    pendingInvitationCount: 2,
+    migratedRows: [{ ...row, role: "owner" as const }],
     nativeOrganizationCount: 0,
     orphanedActiveSessionCount: 0 as const,
+    pendingInvitationCount: 2,
+    transactionReadOnly: true as const,
   };
 }
 
 describe("Better Auth membership migration readiness", () => {
   it("returns a sanitized deterministic parity receipt", () => {
     const receipt = verifyBetterAuthMembershipReadBack({
-      readBack: readBack(),
       observedAt: new Date("2026-08-29T12:00:00.000Z"),
+      readBack: readBack(),
     });
 
     expect(receipt.status).toBe("migration-verified");
     expect(receipt.parity).toMatchObject({
       activeLegacyMemberships: 1,
-      migratedOrganizationMemberships: 1,
       exact: true,
+      migratedOrganizationMemberships: 1,
     });
     expect(receipt.retainedLegacyAuthority).toEqual({
-      inactiveMemberships: 1,
-      deletionPerformed: false,
       authPathRetirementProven: false,
+      deletionPerformed: false,
+      inactiveMemberships: 1,
     });
     expect(JSON.stringify(receipt)).not.toContain("workspace-a");
     expect(JSON.stringify(receipt)).not.toContain("user-a");
@@ -49,12 +49,13 @@ describe("Better Auth membership migration readiness", () => {
   it("rejects missing, extra, non-owner, and orphaned authority", () => {
     expect(() =>
       verifyBetterAuthMembershipReadBack({
-        readBack: { ...readBack(), migratedRows: [] },
         observedAt: new Date(),
-      }),
+        readBack: { ...readBack(), migratedRows: [] },
+      })
     ).toThrow("does not exactly match");
     expect(() =>
       verifyBetterAuthMembershipReadBack({
+        observedAt: new Date(),
         readBack: {
           ...readBack(),
           migratedRows: [
@@ -62,41 +63,43 @@ describe("Better Auth membership migration readiness", () => {
             { ...row, userId: "unexpected", role: "owner" },
           ],
         },
-        observedAt: new Date(),
-      }),
+      })
     ).toThrow("does not exactly match");
     expect(() =>
       verifyBetterAuthMembershipReadBack({
+        observedAt: new Date(),
         readBack: {
           ...readBack(),
           migratedRows: [{ ...row, role: "member" }],
         },
-        observedAt: new Date(),
-      }),
+      })
     ).toThrow();
     expect(() =>
       verifyBetterAuthMembershipReadBack({
-        readBack: { ...readBack(), orphanedActiveSessionCount: 1 },
         observedAt: new Date(),
-      }),
+        readBack: { ...readBack(), orphanedActiveSessionCount: 1 },
+      })
     ).toThrow();
   });
 
   it("keeps migration and readback task fail-closed and secret-blind", async () => {
     const [migration, task, cli] = await Promise.all([
-      readFile("drizzle/0010_better_auth_organizations.sql", "utf8"),
-      readFile(".config/mise/tasks/hosted/membership-migration-verify", "utf8"),
-      readFile("lib/db/better-auth-membership-readiness-cli.mts", "utf8"),
+      readFile("drizzle/0010_better_auth_organizations.sql", "utf-8"),
+      readFile(
+        ".config/mise/tasks/hosted/membership-migration-verify",
+        "utf-8"
+      ),
+      readFile("lib/db/better-auth-membership-readiness-cli.mts", "utf-8"),
     ]);
 
     expect(migration).toContain('CREATE TABLE "organization"');
     expect(migration).toContain('CREATE TABLE "member"');
     expect(migration).toContain('CREATE TABLE "invitation"');
     expect(migration).toContain(
-      'ON "organization" ("issuer", "audience", "workspace_id")',
+      'ON "organization" ("issuer", "audience", "workspace_id")'
     );
     expect(migration).toContain(
-      "active hosted workspace membership has no Better Auth user",
+      "active hosted workspace membership has no Better Auth user"
     );
     expect(migration).toContain("'owner'");
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/iu);

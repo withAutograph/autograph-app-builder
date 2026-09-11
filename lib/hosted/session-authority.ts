@@ -4,16 +4,16 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   hostedIdentifierSchema,
   hostedPrincipalSchema,
-  type HostedPrincipal,
 } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 
 const forwardedAttributesSchema = z
   .object({
+    "autograph:source-handoff-id": z.string().uuid().optional(),
+    "eve:forwarded-by": hostedIdentifierSchema.optional(),
     "mcp:audience": z.string().url().startsWith("https://"),
     "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
     "mcp:workspace-id": z.string().min(1).max(200),
-    "eve:forwarded-by": hostedIdentifierSchema.optional(),
-    "autograph:source-handoff-id": z.string().uuid().optional(),
   })
   .strict();
 
@@ -65,10 +65,10 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
       throw new HostedSessionAuthorityError("subject");
     }
     return {
-      issuer: context.issuer,
       audience: context.attributes["mcp:audience"],
-      workspaceId: context.attributes["mcp:workspace-id"],
+      issuer: context.issuer,
       ownerUserId: context.subject,
+      workspaceId: context.attributes["mcp:workspace-id"],
     };
   }
 
@@ -90,8 +90,9 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
     !authorityResult.success ||
     !currentPrincipal.success ||
     !initiatorPrincipal.success
-  )
+  ) {
     throw new HostedSessionAuthorityError("invalid");
+  }
   const authority = authorityResult.data;
   return { authority, principal: currentPrincipal.data };
 }
@@ -105,14 +106,17 @@ export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
     const current = (
       sessionAuth as { current?: { authenticator?: string } } | null
     )?.current;
-    if (current?.authenticator === "mcp-oauth-jwks")
+    if (current?.authenticator === "mcp-oauth-jwks") {
       throw new HostedSessionAuthorityError("invalid");
-    return undefined;
+    }
+    return;
   }
   exactForwardedSessionAuthority(sessionAuth);
   const current = parsed.data.current.attributes["autograph:source-handoff-id"];
   const initiator =
     parsed.data.initiator.attributes["autograph:source-handoff-id"];
-  if (current !== initiator) throw new HostedSessionAuthorityError("mismatch");
+  if (current !== initiator) {
+    throw new HostedSessionAuthorityError("mismatch");
+  }
   return initiator;
 }

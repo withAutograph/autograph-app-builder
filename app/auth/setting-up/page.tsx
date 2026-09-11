@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 
+import { WorkspaceSetupStatus } from "@/app/ui/workspace-setup-status";
 import { authClient } from "@/lib/auth-client";
 import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
-import { WorkspaceSetupStatus } from "@/app/ui/workspace-setup-status";
 
-const subscribeToLocation = () => () => undefined;
+const subscribeToLocation = () => () => {};
 const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 
@@ -17,7 +17,7 @@ export default function SettingUpPage() {
   const callbackSearch = useSyncExternalStore(
     subscribeToLocation,
     getLocationSearch,
-    getServerLocationSearch,
+    getServerLocationSearch
   );
 
   useEffect(() => {

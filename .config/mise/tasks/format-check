@@ -1,6 +1,6 @@
 #!/bin/sh
-#MISE description="Check repository formatting with the pinned runtime"
+#MISE description="Check repository formatting with Ultracite"
 set -eu
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/prettier/bin/prettier.cjs --check .
+  node_modules/oxfmt/bin/oxfmt --check .

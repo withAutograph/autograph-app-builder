@@ -1,7 +1,8 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type { BuilderHandoffIntent } from "../handoff/contracts";
-import * as databaseSchema from "../db/schema";
+
+import type * as databaseSchema from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
   exactForwardedSessionAuthority,
   HostedSessionAuthorityError,
@@ -15,18 +16,16 @@ import {
   createPostgresHostedGitHubInstallationStore,
   hostedGitHubInstallationBindingSchema,
   mergeHostedGitHubInstallationBindings,
-  type HostedGitHubInstallationBinding,
-  type HostedGitHubInstallationStore,
-  type HostedGitHubTenantAuthority,
 } from "../repository/postgres-github-installation-store";
-import {
-  createPostgresGitHubPublicationStores,
-  type GitHubPublicationProposalStore,
-} from "../repository/postgres-github-publication-store";
-import {
-  composeGitHubPublicationRuntime,
-  type GitHubPublicationRuntime,
-} from "./github-publication-runtime";
+import type {
+  HostedGitHubInstallationBinding,
+  HostedGitHubInstallationStore,
+  HostedGitHubTenantAuthority,
+} from "../repository/postgres-github-installation-store";
+import { createPostgresGitHubPublicationStores } from "../repository/postgres-github-publication-store";
+import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
+import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
@@ -44,26 +43,27 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
     return exactForwardedSessionAuthority(sessionAuth);
   } catch (error) {
     if (error instanceof HostedSessionAuthorityError) {
-      throw new Error(
+      throw new TypeError(
         error.code === "mismatch"
           ? "Hosted GitHub publication requires matching current and initiating authority."
           : error.code === "subject"
             ? "Hosted GitHub publication requires one exact forwarded user subject."
             : "Hosted GitHub publication requires exact forwarded user authority.",
+        { cause: error }
       );
     }
     throw error;
   }
 }
 
-type PublicationStores = {
+interface PublicationStores {
   proposals: GitHubPublicationProposalStore;
   receipts: GitHubPublicationReceiptStore;
-};
+}
 
-export type HostedGitHubPublicationRuntimeResolverDependencies = {
+export interface HostedGitHubPublicationRuntimeResolverDependencies {
   readPreparedHandoff(
-    sessionAuth: unknown,
+    sessionAuth: unknown
   ): Promise<
     | (BuilderHandoffIntent & { providers?: { githubInstallationId?: string } })
     | undefined
@@ -72,19 +72,19 @@ export type HostedGitHubPublicationRuntimeResolverDependencies = {
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (
     database: Database,
-    authority: HostedGitHubTenantAuthority,
+    authority: HostedGitHubTenantAuthority
   ) => PublicationStores;
-};
+}
 
 const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies =
   {
+    installations: createPostgresHostedGitHubInstallationStore,
+    membership: createPostgresWorkspaceMembership,
+    publicationStores: createPostgresGitHubPublicationStores,
     async readPreparedHandoff(sessionAuth) {
       const { readPreparedHandoffContext } = await import("./handoff-context");
       return readPreparedHandoffContext(sessionAuth);
     },
-    membership: createPostgresWorkspaceMembership,
-    installations: createPostgresHostedGitHubInstallationStore,
-    publicationStores: createPostgresGitHubPublicationStores,
   };
 
 /**
@@ -150,15 +150,15 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
           ? legacy
           : mergeHostedGitHubInstallationBindings(
               (await installations.list?.(authority)) ?? [],
-              legacy,
+              legacy
             ).find(
-              (binding) => binding.installationId === selectedInstallationId,
+              (binding) => binding.installationId === selectedInstallationId
             );
       const installationResult =
         hostedGitHubInstallationBindingSchema.safeParse(selected);
       if (!installationResult.success || !installationResult.data.active) {
         throw new Error(
-          "Hosted GitHub publication installation is inactive or unavailable.",
+          "Hosted GitHub publication installation is inactive or unavailable."
         );
       }
       const installation = installationResult.data;
@@ -166,8 +166,8 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });
       return composeGitHubPublicationRuntime({
-        enabled: true,
         adapter,
+        enabled: true,
         proposals: stores.proposals,
         receipts: stores.receipts,
       });

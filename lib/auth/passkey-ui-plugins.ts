@@ -1,6 +1,6 @@
 export function passkeyUiPlugins<Plugin>(
   enabled: boolean,
-  createPlugin: () => Plugin,
+  createPlugin: () => Plugin
 ) {
   return enabled ? [createPlugin()] : [];
 }

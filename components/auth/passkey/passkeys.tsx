@@ -16,9 +16,9 @@ import { Passkey } from "./passkey";
 import { PasskeySkeleton } from "./passkey-skeleton";
 import { PasskeysEmpty } from "./passkeys-empty";
 
-export type PasskeysProps = {
+export interface PasskeysProps {
   className?: string;
-};
+}
 
 export function Passkeys({ className }: PasskeysProps) {
   const { authClient } = useAuth<PasskeyAuthClient>();
@@ -49,9 +49,7 @@ export function Passkeys({ className }: PasskeysProps) {
         <CardContent className="p-0">
           {isPending ? (
             <PasskeySkeleton />
-          ) : !passkeys?.length ? (
-            <PasskeysEmpty onAddPress={() => setAddOpen(true)} />
-          ) : (
+          ) : passkeys?.length ? (
             <ItemGroup className="gap-0">
               {passkeys.map((passkey, index) => (
                 <Fragment key={passkey.id}>
@@ -60,6 +58,8 @@ export function Passkeys({ className }: PasskeysProps) {
                 </Fragment>
               ))}
             </ItemGroup>
+          ) : (
+            <PasskeysEmpty onAddPress={() => setAddOpen(true)} />
           )}
         </CardContent>
       </Card>

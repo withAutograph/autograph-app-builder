@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   hostedEveOperationScopes,
   HostedAuthorizationError,
-  type HostedPrincipal,
 } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   createHostedEveSessionService,
   hostedEveProjectionForTesting,
@@ -16,25 +16,29 @@ import {
   HostedRejectedOperationError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
-  type HostedEngineSnapshot,
-  type HostedEveTransport,
+} from "./hosted-service";
+import type {
+  HostedEngineSnapshot,
+  HostedEveTransport,
 } from "./hosted-service";
 import {
   hostedOperationRecordSchema,
   InMemoryHostedEveStore,
-  type HostedEveStore,
-  type HostedOperationRecord,
-  type ReserveOperationResult,
-  type HostedSessionTimeoutPolicy,
+} from "./hosted-store";
+import type {
+  HostedEveStore,
+  HostedOperationRecord,
+  ReserveOperationResult,
+  HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import type { EveSessionService } from "./service";
 
 const principal: HostedPrincipal = {
-  issuer: "https://identity.example.test",
   audience: "autograph-app-builder",
-  workspaceId: "workspace_1",
+  issuer: "https://identity.example.test",
   ownerUserId: "user_1",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace_1",
 };
 
 describe("prepared handoff session continuity", () => {
@@ -42,18 +46,18 @@ describe("prepared handoff session continuity", () => {
   it("retains the internal reference across service recreation, follow-ups, and approval responses", async () => {
     const store = new InMemoryHostedEveStore();
     const adapter = transport({
+      get: vi.fn(async () => approvalSnapshot(["build"])),
       start: vi.fn(async () => ({
         adapterSessionId: "eve_prepared",
         snapshot: approvalSnapshot(["build"]),
       })),
-      get: vi.fn(async () => approvalSnapshot(["build"])),
     });
     const createService = () =>
       createHostedEveSessionService({ principal, store, transport: adapter });
     const request = {
+      clientRequestId: "prepared-start",
       prompt: "Prepared app",
       sourceHandoffId,
-      clientRequestId: "prepared-start",
     };
     const result = await createService().start(request);
     expect(await createService().start(request)).toEqual(result);
@@ -63,20 +67,20 @@ describe("prepared handoff session continuity", () => {
     });
     expect(JSON.stringify(result)).not.toContain(sourceHandoffId);
     await createService().send({
-      sessionId: result.sessionId,
-      message: "Continue",
       clientRequestId: "prepared-send",
+      message: "Continue",
+      sessionId: result.sessionId,
     });
     expect(adapter.send).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceHandoffId }),
+      expect.objectContaining({ sourceHandoffId })
     );
     await createService().respond({
-      sessionId: result.sessionId,
       clientRequestId: "prepared-respond",
       responses: [{ requestId: "build", response: { kind: "approve" } }],
+      sessionId: result.sessionId,
     });
     expect(adapter.respond).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceHandoffId }),
+      expect.objectContaining({ sourceHandoffId })
     );
   });
 
@@ -86,26 +90,26 @@ describe("prepared handoff session continuity", () => {
     const adapter = transport({
       start: vi.fn(async () => ({
         adapterSessionId: `eve_${++starts}`,
-        snapshot: { status: "completed" as const, events: [] },
+        snapshot: { events: [], status: "completed" as const },
       })),
     });
     const createService = () =>
       createHostedEveSessionService({ principal, store, transport: adapter });
     const first = await createService().start({
+      clientRequestId: "prepared-start",
       prompt: "Prepared app",
       sourceHandoffId,
-      clientRequestId: "prepared-start",
     });
     const recovered = await createService().start({
-      resumeSessionId: first.sessionId,
       clientRequestId: "prepared-resume",
+      resumeSessionId: first.sessionId,
     });
     expect(adapter.start).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sourceHandoffId }),
+      expect.objectContaining({ sourceHandoffId })
     );
     expect(
-      await store.getSession(principal, recovered.sessionId),
-    ).toMatchObject({ sourceHandoffId, parentSessionId: first.sessionId });
+      await store.getSession(principal, recovered.sessionId)
+    ).toMatchObject({ parentSessionId: first.sessionId, sourceHandoffId });
   });
 
   it("converges simultaneous prepared starts and a lost response on one session", async () => {
@@ -124,27 +128,27 @@ describe("prepared handoff session continuity", () => {
           new Promise((resolve) => {
             accept = resolve;
             dispatched();
-          }),
+          })
       ),
     });
     const createService = () =>
       createHostedEveSessionService({ principal, store, transport: adapter });
     const request = {
+      clientRequestId: "same-preparation",
       prompt: "Prepared app",
       sourceHandoffId,
-      clientRequestId: "same-preparation",
     };
     const first = createService().start(request);
     await dispatchStarted;
     await expect(createService().start(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     accept({ adapterSessionId: "eve_prepared", snapshot });
     const original = await first;
     expect(await createService().start(request)).toEqual(original);
     expect(adapter.start).toHaveBeenCalledOnce();
     expect(await store.getSession(principal, original.sessionId)).toMatchObject(
-      { sourceHandoffId },
+      { sourceHandoffId }
     );
   });
 
@@ -153,55 +157,54 @@ describe("prepared handoff session continuity", () => {
     let missing = false;
     let starts = 0;
     const adapter = transport({
-      start: vi.fn(async () => ({
-        adapterSessionId: `eve_${++starts}`,
-        snapshot,
-      })),
       get: vi.fn(async () => {
         if (missing) throw new HostedAdapterSessionUnavailableError();
         return snapshot;
       }),
+      start: vi.fn(async () => ({
+        adapterSessionId: `eve_${++starts}`,
+        snapshot,
+      })),
     });
     const beforeRead = vi.fn(async () => {});
     const createService = () =>
       createHostedEveSessionService({
+        beforeRead,
         principal,
         store,
         transport: adapter,
-        beforeRead,
       });
     const first = await createService().start({
+      clientRequestId: "prepared-start",
       prompt: "Prepared app",
       sourceHandoffId,
-      clientRequestId: "prepared-start",
     });
     missing = true;
     const recovered = await createService().start({
-      resumeSessionId: first.sessionId,
       clientRequestId: "prepared-resume",
+      resumeSessionId: first.sessionId,
     });
     expect(recovered.sessionId).toBe(first.sessionId);
     expect(adapter.start).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sourceHandoffId }),
+      expect.objectContaining({ sourceHandoffId })
     );
     expect(await store.getSession(principal, first.sessionId)).toMatchObject({
-      sourceHandoffId,
       adapterGeneration: 2,
+      sourceHandoffId,
     });
     missing = false;
     await createService().get({
-      sessionId: first.sessionId,
       cursor: 0,
       limit: 100,
+      sessionId: first.sessionId,
     });
     expect(beforeRead).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sourceHandoffId }),
+      expect.objectContaining({ sourceHandoffId })
     );
   });
 });
 
 const snapshot: HostedEngineSnapshot = {
-  status: "waiting",
   events: [
     {
       type: "assistant.message",
@@ -213,11 +216,11 @@ const snapshot: HostedEngineSnapshot = {
     { type: "tool.result", index: 2, message: "private tool output" },
     { type: "status", index: 3, status: "waiting" },
   ],
+  status: "waiting",
 };
 
 function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
   return {
-    status: "input_required",
     events: requestIds.map((requestId, index) => ({
       type: "input.requested",
       index,
@@ -228,24 +231,31 @@ function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
         allowFreeform: false,
       },
     })),
+    status: "input_required",
   };
 }
 
 function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
-    get: vi.fn(async () => snapshot),
-    send: vi.fn(async () => snapshot),
-    respond: vi.fn(async () => snapshot),
     cancel: vi.fn(async () => snapshot),
+    get: vi.fn(async () => snapshot),
+    respond: vi.fn(async () => snapshot),
+    send: vi.fn(async () => snapshot),
+    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
 }
 
 function reservationStore(
-  makeReservation: (candidate: HostedOperationRecord) => unknown,
+  makeReservation: (candidate: HostedOperationRecord) => unknown
 ): HostedEveStore {
   return {
+    async getSession() {
+      return null;
+    },
+    async listSessions() {
+      return { sessions: [], cursor: 0 };
+    },
     async reserveOperation(_principal, candidate) {
       return makeReservation(candidate) as ReserveOperationResult;
     },
@@ -255,38 +265,37 @@ function reservationStore(
     async settleUnsuccessful() {
       throw new Error("settleUnsuccessful must not be reached");
     },
-    async getSession() {
-      return null;
-    },
-    async listSessions() {
-      return { sessions: [], cursor: 0 };
-    },
   };
 }
 
 async function invokeHostedOperation(
   service: EveSessionService,
-  operation: keyof typeof hostedEveOperationScopes,
+  operation: keyof typeof hostedEveOperationScopes
 ) {
   switch (operation) {
-    case "start":
+    case "start": {
       return service.start({ prompt: "Build", clientRequestId: "scope_start" });
-    case "get":
+    }
+    case "get": {
       return service.get({ sessionId: "session_1", cursor: 0, limit: 1 });
-    case "send":
+    }
+    case "send": {
       return service.send({
         sessionId: "session_1",
         message: "Continue",
         clientRequestId: "scope_send",
       });
-    case "respond":
+    }
+    case "respond": {
       return service.respond({
         sessionId: "session_1",
         responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         clientRequestId: "scope_respond",
       });
-    case "cancel":
+    }
+    case "cancel": {
       return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
+    }
   }
 }
 
@@ -303,10 +312,10 @@ async function started(input?: {
   const store = input?.store ?? new InMemoryHostedEveStore();
   const adapter = input?.transport ?? transport();
   const service = createHostedEveSessionService({
+    now: input?.now ?? (() => 1_000),
     principal: input?.principal ?? principal,
     store,
     transport: adapter,
-    now: input?.now ?? (() => 1_000),
     ...(input?.beforeRead === undefined
       ? {}
       : { beforeRead: input.beforeRead }),
@@ -315,10 +324,10 @@ async function started(input?: {
       : { sessionTimeoutPolicy: input.sessionTimeoutPolicy }),
   });
   const result = await service.start({
-    prompt: "Build an app",
     clientRequestId: "request_1",
+    prompt: "Build an app",
   });
-  return { store, adapter, service, result };
+  return { adapter, result, service, store };
 }
 
 describe("hosted Eve service core", () => {
@@ -333,12 +342,12 @@ describe("hosted Eve service core", () => {
     const beforeRead = vi.fn(async ({ adapterSessionId }) => {
       calls.push(`recovery:${adapterSessionId}`);
     });
-    const running = await started({ transport: adapter, beforeRead });
+    const running = await started({ beforeRead, transport: adapter });
 
     await running.service.get({
-      sessionId: running.result.sessionId,
       cursor: 0,
       limit: 100,
+      sessionId: running.result.sessionId,
     });
 
     expect(calls).toEqual(["recovery:eve_1", "transport"]);
@@ -356,15 +365,15 @@ describe("hosted Eve service core", () => {
       transport: adapter,
     });
     const result = await startedService.start({
-      prompt: "Build an app",
       clientRequestId: "start-scope-only",
+      prompt: "Build an app",
     });
     await expect(
       startedService.recoverStart?.({
-        sessionId: result.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: result.sessionId,
+      })
     ).resolves.toMatchObject({ sessionId: result.sessionId });
 
     const getOnly = createHostedEveSessionService({
@@ -377,70 +386,70 @@ describe("hosted Eve service core", () => {
     });
     await expect(
       getOnly.recoverStart?.({
-        sessionId: result.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: result.sessionId,
+      })
     ).rejects.toMatchObject({
-      name: HostedAuthorizationError.name,
       code: "insufficient_scope",
+      name: HostedAuthorizationError.name,
     });
   });
 
   it("keeps the verified implementation plan outside cursor pagination", () => {
     const implementationPlan = {
       appId: "vendor-onboarding",
-      runtime: "nextjs" as const,
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
-      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
       readOnly: true as const,
+      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      runtime: "nextjs" as const,
     };
     expect(
       hostedEveProjectionForTesting(
         "session_1",
         {
-          status: "completed",
           events: [{ type: "status", index: 0, status: "completed" }],
           implementationPlan,
+          status: "completed",
         },
         1,
-        100,
-      ),
+        100
+      )
     ).toEqual({
-      sessionId: "session_1",
-      status: "completed",
       cursor: 1,
       events: [],
       implementationPlan,
+      sessionId: "session_1",
+      status: "completed",
     });
   });
 
   it("keeps the latest prototype outside cursor pagination", () => {
     const prototype = {
-      path: "prototype/vendor-onboarding/index.html",
-      mediaType: "text/html" as const,
       content: "<!doctype html><html><body>Vendor queue</body></html>",
       digest: "a".repeat(64),
+      mediaType: "text/html" as const,
+      path: "prototype/vendor-onboarding/index.html",
       revision: "b".repeat(64),
     };
     expect(
       hostedEveProjectionForTesting(
         "session_1",
         {
-          status: "completed",
           events: [{ type: "status", index: 0, status: "completed" }],
           prototype,
+          status: "completed",
         },
         1,
-        100,
-      ),
+        100
+      )
     ).toEqual({
-      sessionId: "session_1",
-      status: "completed",
       cursor: 1,
       events: [],
       prototype,
+      sessionId: "session_1",
+      status: "completed",
     });
   });
 
@@ -450,14 +459,14 @@ describe("hosted Eve service core", () => {
         principal: { ...principal, unverifiedRole: "admin" } as HostedPrincipal,
         store: new InMemoryHostedEveStore(),
         transport: transport(),
-      }),
+      })
     ).toThrow();
   });
 
   it.each(
-    Object.keys(hostedEveOperationScopes) as Array<
-      keyof typeof hostedEveOperationScopes
-    >,
+    Object.keys(
+      hostedEveOperationScopes
+    ) as (keyof typeof hostedEveOperationScopes)[]
   )("requires the exact %s scope before store access", async (operation) => {
     const store = new InMemoryHostedEveStore();
     const reserve = vi.spyOn(store, "reserveOperation");
@@ -467,7 +476,7 @@ describe("hosted Eve service core", () => {
       principal: {
         ...principal,
         scopes: principal.scopes.filter(
-          (scope) => scope !== hostedEveOperationScopes[operation],
+          (scope) => scope !== hostedEveOperationScopes[operation]
         ),
       },
       store,
@@ -475,10 +484,10 @@ describe("hosted Eve service core", () => {
     });
 
     await expect(
-      invokeHostedOperation(service, operation),
+      invokeHostedOperation(service, operation)
     ).rejects.toMatchObject({
-      name: HostedAuthorizationError.name,
       code: "insufficient_scope",
+      name: HostedAuthorizationError.name,
     });
     expect(reserve).not.toHaveBeenCalled();
     expect(getSession).not.toHaveBeenCalled();
@@ -535,8 +544,8 @@ describe("hosted Eve service core", () => {
         disposition: "reserved",
         operation: {
           ...candidate,
-          state: "submission_unknown",
           safeErrorCode: "submission_unknown",
+          state: "submission_unknown",
         },
       }),
     ],
@@ -549,7 +558,7 @@ describe("hosted Eve service core", () => {
       transport: adapter,
     });
     await expect(
-      service.start({ prompt: "Build", clientRequestId: "malicious_store" }),
+      service.start({ clientRequestId: "malicious_store", prompt: "Build" })
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(adapter.start).not.toHaveBeenCalled();
   });
@@ -561,27 +570,27 @@ describe("hosted Eve service core", () => {
       .mockResolvedValue(approvalSnapshot(["approval_1"]));
     expect(result.events).toEqual([
       {
-        type: "assistant_message",
         index: 0,
-        turnId: "turn_1",
         text: "Ready.",
+        turnId: "turn_1",
+        type: "assistant_message",
       },
-      { type: "status", index: 1, status: "waiting" },
+      { index: 1, status: "waiting", type: "status" },
     ]);
     expect(result.cursor).toBe(2);
 
     await expect(
-      service.get({ sessionId: result.sessionId, cursor: 1, limit: 2 }),
+      service.get({ cursor: 1, limit: 2, sessionId: result.sessionId })
     ).resolves.toMatchObject({ cursor: 2, events: [{ index: 1 }] });
     await service.send({
-      sessionId: result.sessionId,
-      message: "Continue",
       clientRequestId: "request_2",
+      message: "Continue",
+      sessionId: result.sessionId,
     });
     await service.respond({
-      sessionId: result.sessionId,
-      responses: [{ requestId: "approval_1", response: { kind: "approve" } }],
       clientRequestId: "request_3",
+      responses: [{ requestId: "approval_1", response: { kind: "approve" } }],
+      sessionId: result.sessionId,
     });
     await service.cancel({ sessionId: result.sessionId, turnId: "turn_1" });
 
@@ -600,11 +609,11 @@ describe("hosted Eve service core", () => {
     const { service, result } = await started({ transport: adapter });
 
     await expect(
-      service.cancel({ sessionId: result.sessionId, turnId: "turn_0" }),
+      service.cancel({ sessionId: result.sessionId, turnId: "turn_0" })
     ).rejects.toMatchObject({
-      name: HostedRejectedOperationError.name,
       code: "turn_changed",
       message: "The hosted Eve operation was rejected before a durable result.",
+      name: HostedRejectedOperationError.name,
     });
     expect(adapter.cancel).toHaveBeenCalledTimes(1);
   });
@@ -613,67 +622,67 @@ describe("hosted Eve service core", () => {
     const adapter = transport();
     const { service, result } = await started({ transport: adapter });
     const retried = await service.start({
-      prompt: "Build an app",
       clientRequestId: "request_1",
+      prompt: "Build an app",
     });
     expect(retried).toEqual(result);
     expect(adapter.start).toHaveBeenCalledTimes(1);
   });
 
   it("keeps user-visible handles readable beyond the compute idle lease", async () => {
-    let now = 1_000;
+    let now = 1000;
     const adapter = transport();
     const first = await started({
-      transport: adapter,
       now: () => now,
       sessionTimeoutPolicy: {
         idleTimeoutMs: 60_000,
         maxLifetimeMs: 120_000,
       },
+      transport: adapter,
     });
     now = 62_000;
 
     await expect(
       first.service.get({
-        sessionId: first.result.sessionId,
         cursor: 0,
         limit: 1,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).resolves.toMatchObject({ sessionId: first.result.sessionId });
     await expect(
       first.service.start({
-        prompt: "Build an app",
         clientRequestId: "request_1",
-      }),
+        prompt: "Build an app",
+      })
     ).resolves.toEqual(first.result);
     expect(adapter.start).toHaveBeenCalledTimes(1);
     expect(adapter.get).toHaveBeenCalledTimes(1);
   });
 
   it("keeps user-visible handles readable beyond the compute maximum lifetime", async () => {
-    let now = 1_000;
+    let now = 1000;
     const adapter = transport();
     const first = await started({
-      transport: adapter,
       now: () => now,
       sessionTimeoutPolicy: {
         idleTimeoutMs: 120_000,
         maxLifetimeMs: 120_000,
       },
+      transport: adapter,
     });
     now = 61_000;
     await first.service.get({
-      sessionId: first.result.sessionId,
       cursor: 0,
       limit: 1,
+      sessionId: first.result.sessionId,
     });
     now = 122_000;
     await expect(
       first.service.get({
-        sessionId: first.result.sessionId,
         cursor: 0,
         limit: 1,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).resolves.toMatchObject({ sessionId: first.result.sessionId });
     expect(adapter.get).toHaveBeenCalledTimes(2);
   });
@@ -682,16 +691,16 @@ describe("hosted Eve service core", () => {
     const store = new InMemoryHostedEveStore();
     const first = await started({ store });
     const second = await first.service.start({
-      prompt: "Build a vendor workspace",
       clientRequestId: "request_2",
+      prompt: "Build a vendor workspace",
     });
     const other = await started({
-      store,
       principal: {
         ...principal,
-        workspaceId: "workspace_other",
         ownerUserId: "user_other",
+        workspaceId: "workspace_other",
       },
+      store,
     });
 
     const pageOne = await first.service.list({ cursor: 0, limit: 1 });
@@ -702,119 +711,120 @@ describe("hosted Eve service core", () => {
     expect(
       [...pageOne.sessions, ...pageTwo.sessions]
         .map(({ sessionId }) => sessionId)
-        .sort(),
+        .sort()
     ).toEqual([first.result.sessionId, second.sessionId].sort());
     expect(JSON.stringify([pageOne, pageTwo])).not.toContain(
-      other.result.sessionId,
+      other.result.sessionId
     );
   });
 
   it("lists legacy rows and lazily backfills a checkpoint on first read", async () => {
     const store = new InMemoryHostedEveStore();
     const candidate = hostedOperationRecordSchema.parse({
-      version: 1,
+      clientRequestId: "start_legacy",
+      createdAtEpochMs: 1_000,
+      kind: "start",
       operationId: "op_legacy",
       principal,
-      kind: "start",
-      clientRequestId: "start_legacy",
       requestDigest: `sha256:${"a".repeat(64)}`,
       state: "reserved",
-      createdAtEpochMs: 1_000,
       updatedAtEpochMs: 1_000,
+      version: 1,
     });
     expect(await store.reserveOperation(principal, candidate)).toMatchObject({
       disposition: "reserved",
     });
     await store.settleSucceeded({
-      principal,
+      nowEpochMs: 1_000,
       operationId: candidate.operationId,
+      principal,
       requestDigest: candidate.requestDigest,
       result: {
-        sessionId: "session_legacy",
-        status: "waiting",
         cursor: 0,
         events: [],
+        sessionId: "session_legacy",
+        status: "waiting",
       },
       session: {
-        version: 1,
-        sessionId: "session_legacy",
-        principal,
         adapterSessionId: "eve_legacy",
-        status: "waiting",
         createdAtEpochMs: 1_000,
+        principal,
+        sessionId: "session_legacy",
+        status: "waiting",
         updatedAtEpochMs: 1_000,
+        version: 1,
       },
-      nowEpochMs: 1_000,
     });
     const service = createHostedEveSessionService({
+      now: () => 2_000,
       principal,
       store,
       transport: transport(),
-      now: () => 2_000,
     });
     await expect(service.list({ cursor: 0, limit: 10 })).resolves.toMatchObject(
       {
         sessions: [
           {
+            resumability: "restart_required",
             sessionId: "session_legacy",
             title: "Previous App Builder session",
-            resumability: "restart_required",
           },
         ],
-      },
+      }
     );
-    await service.get({ sessionId: "session_legacy", cursor: 0, limit: 100 });
+    await service.get({ cursor: 0, limit: 100, sessionId: "session_legacy" });
     const upgraded = await store.getSession(principal, "session_legacy");
     expect(upgraded).toMatchObject({
-      version: 2,
       adapterGeneration: 1,
       resumability: "live",
+      version: 2,
     });
-    if (upgraded?.version !== 2)
+    if (upgraded?.version !== 2) {
       throw new Error("Expected lazy durable-session upgrade.");
+    }
     expect(upgraded.checkpoint).toBeDefined();
   });
 
   it("backfills a healthy terminal legacy adapter before creating its resumed child", async () => {
     const store = new InMemoryHostedEveStore();
     const candidate = hostedOperationRecordSchema.parse({
-      version: 1,
+      clientRequestId: "start_legacy_terminal",
+      createdAtEpochMs: 1_000,
+      kind: "start",
       operationId: "op_legacy_terminal",
       principal,
-      kind: "start",
-      clientRequestId: "start_legacy_terminal",
       requestDigest: `sha256:${"b".repeat(64)}`,
       state: "reserved",
-      createdAtEpochMs: 1_000,
       updatedAtEpochMs: 1_000,
+      version: 1,
     });
     expect(await store.reserveOperation(principal, candidate)).toMatchObject({
       disposition: "reserved",
     });
     await store.settleSucceeded({
-      principal,
+      nowEpochMs: 1_000,
       operationId: candidate.operationId,
+      principal,
       requestDigest: candidate.requestDigest,
       result: {
-        sessionId: "session_legacy_terminal",
-        status: "completed",
         cursor: 0,
         events: [],
+        sessionId: "session_legacy_terminal",
+        status: "completed",
       },
       session: {
-        version: 1,
-        sessionId: "session_legacy_terminal",
-        principal,
         adapterSessionId: "eve_legacy_terminal",
-        status: "completed",
         createdAtEpochMs: 1_000,
+        principal,
+        sessionId: "session_legacy_terminal",
+        status: "completed",
         updatedAtEpochMs: 1_000,
+        version: 1,
       },
-      nowEpochMs: 1_000,
     });
     const terminalSnapshot: HostedEngineSnapshot = {
-      status: "completed",
       events: [{ type: "status", index: 0, status: "completed" }],
+      status: "completed",
     };
     const adapter = transport({
       get: vi.fn(async () => terminalSnapshot),
@@ -824,32 +834,32 @@ describe("hosted Eve service core", () => {
       })),
     });
     const service = createHostedEveSessionService({
+      now: () => 2_000,
       principal,
       store,
       transport: adapter,
-      now: () => 2_000,
     });
 
     const resumed = await service.start({
-      resumeSessionId: "session_legacy_terminal",
       clientRequestId: "resume_legacy_terminal",
+      resumeSessionId: "session_legacy_terminal",
     });
 
     expect(adapter.get).toHaveBeenCalledTimes(1);
     expect(adapter.start).toHaveBeenCalledTimes(1);
     expect(resumed.sessionId).not.toBe("session_legacy_terminal");
     await expect(
-      store.getSession(principal, "session_legacy_terminal"),
+      store.getSession(principal, "session_legacy_terminal")
     ).resolves.toMatchObject({
-      version: 2,
-      resumability: "terminal",
       checkpoint: { status: "completed" },
+      resumability: "terminal",
+      version: 2,
     });
     await expect(
-      store.getSession(principal, resumed.sessionId),
+      store.getSession(principal, resumed.sessionId)
     ).resolves.toMatchObject({
-      version: 2,
       parentSessionId: "session_legacy_terminal",
+      version: 2,
     });
   });
 
@@ -862,27 +872,30 @@ describe("hosted Eve service core", () => {
     });
     const first = await started({ transport: adapter });
     vi.mocked(adapter.get).mockRejectedValueOnce(
-      new HostedAdapterSessionUnavailableError(),
+      new HostedAdapterSessionUnavailableError()
     );
 
     await expect(
       first.service.get({
-        sessionId: first.result.sessionId,
         cursor: first.result.cursor,
         limit: 100,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).resolves.toMatchObject({
-      status: "input_required",
       inputRequests: [
         { requestId: "approve_one" },
         { requestId: "approve_two" },
       ],
+      status: "input_required",
     });
   });
 
   it("reissues exact outstanding input context when replacing a missing adapter", async () => {
     let recovery = "";
     const adapter = transport({
+      get: vi.fn(async () => {
+        throw new HostedAdapterSessionUnavailableError();
+      }),
       start: vi
         .fn()
         .mockResolvedValueOnce({
@@ -896,53 +909,50 @@ describe("hosted Eve service core", () => {
             snapshot: approvalSnapshot(["approve_one", "approve_two"]),
           };
         }),
-      get: vi.fn(async () => {
-        throw new HostedAdapterSessionUnavailableError();
-      }),
     });
     const first = await started({ transport: adapter });
 
     const resumed = await first.service.start({
-      resumeSessionId: first.result.sessionId,
       clientRequestId: "resume_input_boundary",
+      resumeSessionId: first.result.sessionId,
     });
 
     expect(resumed).toMatchObject({
-      sessionId: first.result.sessionId,
-      status: "input_required",
       inputRequests: [
         { requestId: "approve_one", title: "approve_one" },
         { requestId: "approve_two", title: "approve_two" },
       ],
+      sessionId: first.result.sessionId,
+      status: "input_required",
     });
     expect(recovery).toContain("Outstanding unresolved product requests");
     expect(recovery).toContain('"requestId":"approve_one"');
     expect(recovery).toContain('"requestId":"approve_two"');
     expect(recovery).toContain("Reissue every unresolved product request");
     await expect(
-      first.store.getSession(principal, first.result.sessionId),
+      first.store.getSession(principal, first.result.sessionId)
     ).resolves.toMatchObject({
-      version: 2,
-      adapterSessionId: "eve_input_new",
       adapterGeneration: 2,
+      adapterSessionId: "eve_input_new",
       checkpoint: {
         inputRequests: [
           { requestId: "approve_one" },
           { requestId: "approve_two" },
         ],
       },
+      version: 2,
     });
   });
 
   it("bounds durable checkpoints by event count and encoded bytes", async () => {
     const largeSnapshot: HostedEngineSnapshot = {
-      status: "waiting",
       events: Array.from({ length: 600 }, (_, index) => ({
         type: "assistant.message",
         index,
         turnId: `turn_${index}`,
         text: `${index}:`.padEnd(10_000, "x"),
       })),
+      status: "waiting",
     };
     const store = new InMemoryHostedEveStore();
     const first = await started({
@@ -956,22 +966,23 @@ describe("hosted Eve service core", () => {
     });
     const record = await store.getSession(principal, first.result.sessionId);
     expect(record?.version).toBe(2);
-    if (record?.version !== 2) throw new Error("Expected durable session.");
+    if (record?.version !== 2) {
+      throw new Error("Expected durable session.");
+    }
     expect(record.checkpoint?.events.length).toBeLessThanOrEqual(512);
     expect(
-      new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
-    ).toBeLessThanOrEqual(512 * 1_024);
+      new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength
+    ).toBeLessThanOrEqual(512 * 1024);
     expect(record.checkpoint?.truncatedBeforeIndex).toBeGreaterThan(0);
   });
 
   it("compacts max-shape user fields without losing outstanding request IDs", async () => {
     const requestIds = Array.from(
       { length: 32 },
-      (_, index) => `request_${index.toString().padStart(2, "0")}`,
+      (_, index) => `request_${index.toString().padStart(2, "0")}`
     );
     const oversized = "A".repeat(65_536);
     const richSnapshot: HostedEngineSnapshot = {
-      status: "input_required",
       events: requestIds.map((requestId, index) => ({
         type: "input.requested",
         index,
@@ -987,24 +998,25 @@ describe("hosted Eve service core", () => {
           allowFreeform: false,
         },
       })),
-      prototype: {
-        path: "prototype/stock-exceptions/index.html",
-        mediaType: "text/html",
-        content: "P".repeat(262_144),
-        digest: "a".repeat(64),
-        revision: "b".repeat(64),
-      },
       implementationPlan: {
         appId: "stock-exceptions",
-        runtime: "nextjs",
         packageName: "@autograph/stock-exceptions",
         projectName: "apps-stock-exceptions",
+        readOnly: true,
         routes: Array.from(
           { length: 48 },
-          (_, index) => `/${index}-${"r".repeat(1_024)}`,
+          (_, index) => `/${index}-${"r".repeat(1_024)}`
         ),
-        readOnly: true,
+        runtime: "nextjs",
       },
+      prototype: {
+        content: "P".repeat(262_144),
+        digest: "a".repeat(64),
+        mediaType: "text/html",
+        path: "prototype/stock-exceptions/index.html",
+        revision: "b".repeat(64),
+      },
+      status: "input_required",
     };
     const store = new InMemoryHostedEveStore();
 
@@ -1020,30 +1032,33 @@ describe("hosted Eve service core", () => {
 
     const record = await store.getSession(principal, first.result.sessionId);
     expect(record?.version).toBe(2);
-    if (record?.version !== 2) throw new Error("Expected durable session.");
+    if (record?.version !== 2) {
+      throw new Error("Expected durable session.");
+    }
     expect(
-      new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
-    ).toBeLessThanOrEqual(512 * 1_024);
+      new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength
+    ).toBeLessThanOrEqual(512 * 1024);
     expect(record.checkpoint?.prototype).toBeDefined();
     expect(record.checkpoint?.implementationPlan).toBeDefined();
     expect(
-      record.checkpoint?.inputRequests?.map(({ requestId }) => requestId),
+      record.checkpoint?.inputRequests?.map(({ requestId }) => requestId)
     ).toEqual(requestIds);
     expect(record.checkpoint?.inputRequests?.[0]?.title.length).toBeLessThan(
-      oversized.length,
+      oversized.length
     );
     expect(
-      record.checkpoint?.inputRequests?.[0]?.description?.length,
+      record.checkpoint?.inputRequests?.[0]?.description?.length
     ).toBeLessThan(oversized.length);
   });
 
   it("stops refreshing an abandoned working lease and resumes as a child", async () => {
-    let now = 1_000;
+    let now = 1000;
     const working: HostedEngineSnapshot = {
-      status: "working",
       events: [{ type: "status", index: 0, status: "working" }],
+      status: "working",
     };
     const adapter = transport({
+      get: vi.fn(async () => working),
       start: vi
         .fn()
         .mockResolvedValueOnce({
@@ -1054,34 +1069,33 @@ describe("hosted Eve service core", () => {
           adapterSessionId: "eve_child",
           snapshot,
         }),
-      get: vi.fn(async () => working),
     });
     const first = await started({
-      transport: adapter,
       now: () => now,
       sessionTimeoutPolicy: {
         idleTimeoutMs: 60_000,
         maxLifetimeMs: 120_000,
       },
+      transport: adapter,
     });
     now = 61_001;
     await expect(
       first.service.get({
-        sessionId: first.result.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).resolves.toMatchObject({ status: "waiting" });
 
     const resumed = await first.service.start({
-      resumeSessionId: first.result.sessionId,
       clientRequestId: "resume_stuck",
+      resumeSessionId: first.result.sessionId,
     });
     expect(resumed.sessionId).not.toBe(first.result.sessionId);
     const child = await first.store.getSession(principal, resumed.sessionId);
     expect(child).toMatchObject({
-      version: 2,
       parentSessionId: first.result.sessionId,
+      version: 2,
     });
   });
 
@@ -1090,35 +1104,35 @@ describe("hosted Eve service core", () => {
     const healthyAdapter = transport();
     const healthy = await started({ store, transport: healthyAdapter });
     const same = await healthy.service.start({
-      resumeSessionId: healthy.result.sessionId,
       clientRequestId: "resume_healthy",
+      resumeSessionId: healthy.result.sessionId,
     });
     expect(same.sessionId).toBe(healthy.result.sessionId);
     expect(healthyAdapter.start).toHaveBeenCalledTimes(1);
 
     const missingAdapter = transport({
+      get: vi.fn(async () => {
+        throw new HostedAdapterSessionUnavailableError();
+      }),
       start: vi
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_old", snapshot })
         .mockResolvedValueOnce({ adapterSessionId: "eve_new", snapshot }),
-      get: vi.fn(async () => {
-        throw new HostedAdapterSessionUnavailableError();
-      }),
     });
     const recovering = await started({ transport: missingAdapter });
     const recovered = await recovering.service.start({
-      resumeSessionId: recovering.result.sessionId,
       clientRequestId: "resume_missing",
+      resumeSessionId: recovering.result.sessionId,
     });
     expect(recovered.sessionId).toBe(recovering.result.sessionId);
     const record = await recovering.store.getSession(
       principal,
-      recovering.result.sessionId,
+      recovering.result.sessionId
     );
     expect(record).toMatchObject({
-      version: 2,
-      adapterSessionId: "eve_new",
       adapterGeneration: 2,
+      adapterSessionId: "eve_new",
+      version: 2,
     });
   });
 
@@ -1129,22 +1143,22 @@ describe("hosted Eve service core", () => {
         () =>
           new Promise<HostedEngineSnapshot>((resolve) => {
             resolveSend = resolve;
-          }),
+          })
       ),
     });
     const first = await started({ transport: adapter });
     const active = first.service.send({
-      sessionId: first.result.sessionId,
-      message: "First",
       clientRequestId: "send_active",
+      message: "First",
+      sessionId: first.result.sessionId,
     });
     await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(1));
     await expect(
       first.service.send({
-        sessionId: first.result.sessionId,
-        message: "Second",
         clientRequestId: "send_competing",
-      }),
+        message: "Second",
+        sessionId: first.result.sessionId,
+      })
     ).rejects.toBeInstanceOf(HostedSessionBusyError);
     resolveSend(snapshot);
     await expect(active).resolves.toMatchObject({ status: "waiting" });
@@ -1156,8 +1170,8 @@ describe("hosted Eve service core", () => {
       snapshot: HostedEngineSnapshot;
     }) => void;
     const terminalSnapshot: HostedEngineSnapshot = {
-      status: "completed",
       events: [{ type: "status", index: 0, status: "completed" }],
+      status: "completed",
     };
     const adapter = transport({
       start: vi
@@ -1170,20 +1184,20 @@ describe("hosted Eve service core", () => {
           () =>
             new Promise((resolve) => {
               resolveResume = resolve;
-            }),
+            })
         ),
     });
     const first = await started({ transport: adapter });
     const active = first.service.start({
-      resumeSessionId: first.result.sessionId,
       clientRequestId: "resume_active",
+      resumeSessionId: first.result.sessionId,
     });
     await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledTimes(2));
     await expect(
       first.service.start({
-        resumeSessionId: first.result.sessionId,
         clientRequestId: "resume_competing",
-      }),
+        resumeSessionId: first.result.sessionId,
+      })
     ).rejects.toBeInstanceOf(HostedSessionBusyError);
     resolveResume({ adapterSessionId: "eve_child", snapshot });
     await expect(active).resolves.toMatchObject({ status: "waiting" });
@@ -1195,10 +1209,6 @@ describe("hosted Eve service core", () => {
       const base = new InMemoryHostedEveStore();
       const first = await started({ store: base });
       const retryStore: HostedEveStore = {
-        reserveOperation: (requestPrincipal, candidate) =>
-          base.reserveOperation(requestPrincipal, candidate),
-        settleSucceeded: (settlement) => base.settleSucceeded(settlement),
-        settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
         async getSession(requestPrincipal, sessionId) {
           const session = await base.getSession(requestPrincipal, sessionId);
           if (condition === "missing") return null;
@@ -1207,31 +1217,35 @@ describe("hosted Eve service core", () => {
             : { ...session, adapterSessionId: "eve_mismatched" };
         },
         listSessions: (request) => base.listSessions(request),
+        reserveOperation: (requestPrincipal, candidate) =>
+          base.reserveOperation(requestPrincipal, candidate),
+        settleSucceeded: (settlement) => base.settleSucceeded(settlement),
+        settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
       };
       const retry = createHostedEveSessionService({
+        now: () => 1_000,
         principal,
         store: retryStore,
         transport: first.adapter,
-        now: () => 1_000,
       });
 
       await expect(
         retry.start({
-          prompt: "Build an app",
           clientRequestId: "request_1",
-        }),
+          prompt: "Build an app",
+        })
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(first.adapter.start).toHaveBeenCalledTimes(1);
-    },
+    }
   );
 
   it("rejects reuse of a client request identifier for changed bytes", async () => {
     const { service, adapter } = await started();
     await expect(
       service.start({
-        prompt: "Build a different app",
         clientRequestId: "request_1",
-      }),
+        prompt: "Build a different app",
+      })
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.start).toHaveBeenCalledTimes(1);
   });
@@ -1250,15 +1264,15 @@ describe("hosted Eve service core", () => {
       },
     ];
     const request = {
-      sessionId: result.sessionId,
-      responses,
       clientRequestId: "respond_batch",
+      responses,
+      sessionId: result.sessionId,
     };
     await service.respond(request);
     await service.respond(request);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
     await expect(
-      service.respond({ ...request, responses: [...responses].reverse() }),
+      service.respond({ ...request, responses: [...responses].reverse() })
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
   });
@@ -1273,16 +1287,16 @@ describe("hosted Eve service core", () => {
     });
     const { service, result } = await started({ transport: adapter });
     const request = {
-      sessionId: result.sessionId,
       clientRequestId: "respond_unsettled",
       responses: [{ requestId, response: { kind: "deny" as const } }],
+      sessionId: result.sessionId,
     };
 
     await expect(service.respond(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     await expect(service.respond(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     expect(adapter.respond).toHaveBeenCalledTimes(1);
   });
@@ -1294,16 +1308,16 @@ describe("hosted Eve service core", () => {
     const { service, result } = await started({ transport: adapter });
     await expect(
       service.respond({
-        sessionId: result.sessionId,
         clientRequestId: "incomplete_batch",
         responses: [
           { requestId: "one", response: { kind: "approve" } },
           { requestId: "two", response: { kind: "approve" } },
         ],
-      }),
+        sessionId: result.sessionId,
+      })
     ).rejects.toMatchObject({
-      name: HostedRejectedOperationError.name,
       code: "input_batch_changed",
+      name: HostedRejectedOperationError.name,
     });
     expect(adapter.respond).not.toHaveBeenCalled();
   });
@@ -1313,20 +1327,20 @@ describe("hosted Eve service core", () => {
       throw new SubmissionOutcomeUnknownError();
     });
     const service = createHostedEveSessionService({
+      now: () => 2_000,
       principal,
       store: new InMemoryHostedEveStore(),
       transport: transport({ start }),
-      now: () => 2_000,
     });
     const request = {
-      prompt: "Build an app",
       clientRequestId: "lost_response",
+      prompt: "Build an app",
     };
     await expect(service.start(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     await expect(service.start(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     expect(start).toHaveBeenCalledTimes(1);
   });
@@ -1340,12 +1354,12 @@ describe("hosted Eve service core", () => {
       store: new InMemoryHostedEveStore(),
       transport: transport({ start }),
     });
-    const request = { prompt: "Build", clientRequestId: "socket_closed" };
+    const request = { clientRequestId: "socket_closed", prompt: "Build" };
     await expect(service.start(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     await expect(service.start(request)).rejects.toBeInstanceOf(
-      HostedSubmissionUnknownError,
+      HostedSubmissionUnknownError
     );
     expect(start).toHaveBeenCalledTimes(1);
   });
@@ -1359,14 +1373,14 @@ describe("hosted Eve service core", () => {
       store: new InMemoryHostedEveStore(),
       transport: transport({ start }),
     });
-    const request = { prompt: "Build", clientRequestId: "rejected" };
+    const request = { clientRequestId: "rejected", prompt: "Build" };
     await expect(service.start(request)).rejects.toMatchObject({
-      name: HostedRejectedOperationError.name,
       code: "credential_expired",
       message: "The hosted Eve operation was rejected before a durable result.",
+      name: HostedRejectedOperationError.name,
     });
     await expect(service.start(request)).rejects.toBeInstanceOf(
-      HostedRejectedOperationError,
+      HostedRejectedOperationError
     );
     expect(start).toHaveBeenCalledTimes(1);
   });
@@ -1376,8 +1390,8 @@ describe("hosted Eve service core", () => {
       "state",
       (record: HostedOperationRecord) => ({
         ...record,
-        state: "submission_unknown",
         safeErrorCode: "submission_unknown",
+        state: "submission_unknown",
       }),
     ],
     [
@@ -1414,6 +1428,9 @@ describe("hosted Eve service core", () => {
     async (_label, transform) => {
       const base = new InMemoryHostedEveStore();
       const maliciousStore: HostedEveStore = {
+        getSession: (requestPrincipal, sessionId) =>
+          base.getSession(requestPrincipal, sessionId),
+        listSessions: (request) => base.listSessions(request),
         reserveOperation: (requestPrincipal, candidate) =>
           base.reserveOperation(requestPrincipal, candidate),
         settleSucceeded: (settlement) => base.settleSucceeded(settlement),
@@ -1421,9 +1438,6 @@ describe("hosted Eve service core", () => {
           const record = await base.settleUnsuccessful(settlement);
           return transform(record) as HostedOperationRecord;
         },
-        getSession: (requestPrincipal, sessionId) =>
-          base.getSession(requestPrincipal, sessionId),
-        listSessions: (request) => base.listSessions(request),
       };
       const start = vi.fn(async () => {
         throw new SubmissionRejectedBeforeDispatchError("credential_expired");
@@ -1435,12 +1449,12 @@ describe("hosted Eve service core", () => {
       });
       await expect(
         service.start({
-          prompt: "Build",
           clientRequestId: `bad_settlement_${_label}`,
-        }),
+          prompt: "Build",
+        })
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(start).toHaveBeenCalledTimes(1);
-    },
+    }
   );
 
   it.each(["result", "events", "session ID", "stored session"] as const)(
@@ -1448,6 +1462,13 @@ describe("hosted Eve service core", () => {
     async (substitution) => {
       const base = new InMemoryHostedEveStore();
       const maliciousStore: HostedEveStore = {
+        async getSession(requestPrincipal, sessionId) {
+          const session = await base.getSession(requestPrincipal, sessionId);
+          return substitution === "stored session" && session !== null
+            ? { ...session, adapterSessionId: "eve_substituted" }
+            : session;
+        },
+        listSessions: (request) => base.listSessions(request),
         reserveOperation: (requestPrincipal, candidate) =>
           base.reserveOperation(requestPrincipal, candidate),
         async settleSucceeded(settlement) {
@@ -1490,30 +1511,23 @@ describe("hosted Eve service core", () => {
           return record;
         },
         settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
-        async getSession(requestPrincipal, sessionId) {
-          const session = await base.getSession(requestPrincipal, sessionId);
-          return substitution === "stored session" && session !== null
-            ? { ...session, adapterSessionId: "eve_substituted" }
-            : session;
-        },
-        listSessions: (request) => base.listSessions(request),
       };
       const adapter = transport();
       const service = createHostedEveSessionService({
+        now: () => 4_000,
         principal,
         store: maliciousStore,
         transport: adapter,
-        now: () => 4_000,
       });
 
       await expect(
         service.start({
-          prompt: "Build",
           clientRequestId: `substituted_${substitution.replace(" ", "_")}`,
-        }),
+          prompt: "Build",
+        })
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(adapter.start).toHaveBeenCalledTimes(1);
-    },
+    }
   );
 
   it("does not disclose or operate on another tenant's session", async () => {
@@ -1521,8 +1535,8 @@ describe("hosted Eve service core", () => {
     const first = await started({ store: sharedStore });
     const otherPrincipal = {
       ...principal,
-      workspaceId: "workspace_2",
       ownerUserId: "user_2",
+      workspaceId: "workspace_2",
     };
     const otherTransport = transport();
     const otherService = createHostedEveSessionService({
@@ -1533,17 +1547,17 @@ describe("hosted Eve service core", () => {
 
     await expect(
       otherService.get({
-        sessionId: first.result.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
     await expect(
       otherService.send({
-        sessionId: first.result.sessionId,
-        message: "Steal session",
         clientRequestId: "cross_tenant",
-      }),
+        message: "Steal session",
+        sessionId: first.result.sessionId,
+      })
     ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
     expect(otherTransport.get).not.toHaveBeenCalled();
     expect(otherTransport.send).not.toHaveBeenCalled();
@@ -1560,10 +1574,10 @@ describe("hosted Eve service core", () => {
     });
     await expect(
       otherService.get({
-        sessionId: first.result.sessionId,
         cursor: 0,
         limit: 100,
-      }),
+        sessionId: first.result.sessionId,
+      })
     ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
     expect(otherTransport.get).not.toHaveBeenCalled();
   });
@@ -1571,94 +1585,94 @@ describe("hosted Eve service core", () => {
   it("rejects unknown durable record fields", () => {
     expect(
       hostedOperationRecordSchema.safeParse({
-        version: 1,
+        clientRequestId: "request_1",
+        continuationToken: "must-not-be-stored-here",
+        createdAtEpochMs: 1,
+        kind: "start",
         operationId: "op_1",
         principal,
-        kind: "start",
-        clientRequestId: "request_1",
         requestDigest: `sha256:${"a".repeat(64)}`,
         state: "reserved",
-        createdAtEpochMs: 1,
         updatedAtEpochMs: 1,
-        continuationToken: "must-not-be-stored-here",
-      }).success,
+        version: 1,
+      }).success
     ).toBe(false);
   });
 
   it("rejects a terminal operation whose public result names another session", () => {
     expect(
       hostedOperationRecordSchema.safeParse({
-        version: 1,
+        clientRequestId: "request_1",
+        createdAtEpochMs: 1,
+        kind: "send",
         operationId: "op_1",
         principal,
-        kind: "send",
-        clientRequestId: "request_1",
         requestDigest: `sha256:${"a".repeat(64)}`,
-        state: "succeeded",
-        sessionId: "session_1",
         result: {
-          sessionId: "session_2",
-          status: "waiting",
           cursor: 0,
           events: [],
+          sessionId: "session_2",
+          status: "waiting",
         },
-        createdAtEpochMs: 1,
+        sessionId: "session_1",
+        state: "succeeded",
         updatedAtEpochMs: 2,
-      }).success,
+        version: 1,
+      }).success
     ).toBe(false);
   });
 
   it("enforces state-specific closed operation fields", () => {
     const common = {
-      version: 1,
+      clientRequestId: "request_1",
+      createdAtEpochMs: 1,
+      kind: "start",
       operationId: "op_1",
       principal,
-      kind: "start",
-      clientRequestId: "request_1",
       requestDigest: `sha256:${"a".repeat(64)}`,
-      createdAtEpochMs: 1,
       updatedAtEpochMs: 2,
+      version: 1,
     };
     expect(
       hostedOperationRecordSchema.safeParse({
         ...common,
-        state: "reserved",
         safeErrorCode: "not_allowed",
-      }).success,
+        state: "reserved",
+      }).success
     ).toBe(false);
     expect(
       hostedOperationRecordSchema.safeParse({
         ...common,
-        state: "succeeded",
-        sessionId: "session_1",
         result: {
+          cursor: 0,
+          events: [],
           sessionId: "session_1",
           status: "waiting",
+        },
+        sessionId: "session_1",
+        state: "succeeded",
+      }).success
+    ).toBe(false);
+    expect(
+      hostedOperationRecordSchema.safeParse({
+        ...common,
+        safeErrorCode: "rejected",
+        sessionId: "invented_session",
+        state: "rejected",
+      }).success
+    ).toBe(false);
+    expect(
+      hostedOperationRecordSchema.safeParse({
+        ...common,
+        result: {
           cursor: 0,
           events: [],
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      hostedOperationRecordSchema.safeParse({
-        ...common,
-        state: "rejected",
-        sessionId: "invented_session",
-        safeErrorCode: "rejected",
-      }).success,
-    ).toBe(false);
-    expect(
-      hostedOperationRecordSchema.safeParse({
-        ...common,
-        state: "submission_unknown",
-        safeErrorCode: "submission_unknown",
-        result: {
           sessionId: "invented_session",
           status: "waiting",
-          cursor: 0,
-          events: [],
         },
-      }).success,
+        safeErrorCode: "submission_unknown",
+        state: "submission_unknown",
+      }).success
     ).toBe(false);
   });
 });

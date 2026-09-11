@@ -1,16 +1,18 @@
 "use client";
 
-import { type AuthView, getProviderId } from "@better-auth-ui/core";
+import { getProviderId } from "@better-auth-ui/core";
+import type { AuthView } from "@better-auth-ui/core";
 import { useAuth } from "@better-auth-ui/react";
 import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
+
 import { ProviderButton } from "./provider-button";
 
-export type ProviderButtonsProps = {
+export interface ProviderButtonsProps {
   socialLayout?: SocialLayout;
   view?: AuthView;
-};
+}
 
 export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
 
@@ -44,7 +46,7 @@ export function ProviderButtons({
         "gap-3",
         resolvedSocialLayout === "grid" && "grid grid-cols-2",
         resolvedSocialLayout === "vertical" && "flex flex-col",
-        resolvedSocialLayout === "horizontal" && "flex flex-row flex-wrap",
+        resolvedSocialLayout === "horizontal" && "flex flex-row flex-wrap"
       )}
     >
       {socialProviders?.map((provider) => (

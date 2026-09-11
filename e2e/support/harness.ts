@@ -1,5 +1,6 @@
+import { expect } from "playwright/test";
+import type { BrowserContext, Page } from "playwright/test";
 import postgres from "postgres";
-import { expect, type BrowserContext, type Page } from "playwright/test";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 
@@ -17,30 +18,30 @@ export type EmulatedProvider = (typeof emulatedProviders)[number];
 
 const providerDescriptors = {
   GitHub: {
-    slug: "github",
-    installationButton: "Install or update GitHub access",
     approvalButton: "Connect emulated GitHub",
+    authorizationStateTable: "github_installation_authorization_state",
+    bindingCount: "githubInstallations",
+    callbackPath: "/github/installations/callback",
+    emulatorOrigin: githubEmulatorOrigin,
+    installationButton: "Install or update GitHub access",
+    reconnectButton: "Update GitHub access",
     seededScopes: ["autograph-local/demo-app"],
     selectedControl: "Git Scope",
     selectedValue: "autograph-local",
-    reconnectButton: "Update GitHub access",
-    emulatorOrigin: githubEmulatorOrigin,
-    callbackPath: "/github/installations/callback",
-    authorizationStateTable: "github_installation_authorization_state",
-    bindingCount: "githubInstallations",
+    slug: "github",
   },
   Vercel: {
-    slug: "vercel",
-    installationButton: "Connect to Vercel",
     approvalButton: "Connect emulated Vercel",
+    authorizationStateTable: "vercel_installation_authorization_state",
+    bindingCount: "vercelInstallations",
+    callbackPath: "/vercel/installations/callback",
+    emulatorOrigin: vercelEmulatorOrigin,
+    installationButton: "Connect to Vercel",
+    reconnectButton: "Connect another Vercel team",
     seededScopes: ["autograph-local", "icfg_local_1"],
     selectedControl: "Select a Vercel Team",
     selectedValue: "Autograph Local",
-    reconnectButton: "Connect another Vercel team",
-    emulatorOrigin: vercelEmulatorOrigin,
-    callbackPath: "/vercel/installations/callback",
-    authorizationStateTable: "vercel_installation_authorization_state",
-    bindingCount: "vercelInstallations",
+    slug: "vercel",
   },
 } as const;
 
@@ -58,7 +59,7 @@ export async function resetApplicationState() {
     // Recover cleanly if the rollback E2E was interrupted after installing its
     // task-owned failure trigger but before its local finally block ran.
     await sql.unsafe(
-      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"',
+      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"'
     );
     await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.unsafe(`
@@ -84,7 +85,7 @@ export async function applicationCounts() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
     const [counts] = await sql<
-      Array<{
+      {
         users: number;
         passkeys: number;
         organizations: number;
@@ -94,7 +95,7 @@ export async function applicationCounts() {
         passkeyOnboardingContexts: number;
         githubInstallations: number;
         vercelInstallations: number;
-      }>
+      }[]
     >`
       SELECT
         (SELECT count(*)::int FROM "user") AS users,
@@ -116,7 +117,9 @@ export async function applicationCounts() {
 export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
-    if (!response.ok()) return null;
+    if (!response.ok()) {
+      return null;
+    }
     return response.json();
   } catch {
     return null;
@@ -132,15 +135,15 @@ export async function signOut(page: Page) {
 export async function finishOAuth(
   page: Page,
   provider: EmulatedProvider,
-  callbackURL = "/",
+  callbackURL = "/"
 ) {
   await page.goto(
-    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
+    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect(page).toHaveURL(
     new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`),
-    { timeout: 30_000 },
+    { timeout: 30_000 }
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
@@ -159,11 +162,11 @@ export async function waitForBuilderReady(page: Page) {
 export async function registerPasskey(
   context: BrowserContext,
   page: Page,
-  callbackURL = "/",
+  callbackURL = "/"
 ) {
   const authenticator = await VirtualAuthenticator.create(context, page);
   await page.goto(
-    `/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`,
+    `/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`
   );
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
@@ -174,7 +177,7 @@ export async function registerPasskey(
 
 export async function openProviderConnection(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
@@ -185,37 +188,39 @@ export async function openProviderConnection(
     .click();
   await expect(page).toHaveURL(
     new RegExp(`/${descriptor.slug}/installations`, "u"),
-    { timeout: 30_000 },
+    { timeout: 30_000 }
   );
 }
 
 export async function advanceProviderConnectionToApproval(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   await page
     .getByRole("button", { name: descriptor.installationButton })
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`/local-connections/${descriptor.slug}`, "u"),
+    new RegExp(`/local-connections/${descriptor.slug}`, "u")
   );
-  for (const scope of descriptor.seededScopes)
+  for (const scope of descriptor.seededScopes) {
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
+  }
 }
 
 export async function selectProviderIdentity(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
-  for (const scope of descriptor.seededScopes)
+  for (const scope of descriptor.seededScopes) {
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
+  }
   await page.getByRole("button", { name: descriptor.approvalButton }).click();
   if (provider === "GitHub") {
     await expect(page).toHaveURL(
-      /\/local-connections\/github\?.*phase=authorize/u,
+      /\/local-connections\/github\?.*phase=authorize/u
     );
     await expect(page.getByText("Authorize GitHub connection")).toBeVisible();
     await page
@@ -230,12 +235,12 @@ export async function selectProviderIdentity(
 
 export async function approveProviderConnection(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   await selectProviderIdentity(page, provider);
   await expect(
-    page.getByText(`${provider} connected successfully.`),
+    page.getByText(`${provider} connected successfully.`)
   ).toBeVisible();
   await expect(page.getByLabel(descriptor.selectedControl)).toBeFocused();
 }
@@ -248,35 +253,36 @@ export async function installProvider(page: Page, provider: EmulatedProvider) {
 
 export async function reopenProviderConnection(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   const reconnect = page.getByRole("button", {
     name: descriptor.reconnectButton,
   });
-  if (!(await reconnect.isVisible()))
+  if (!(await reconnect.isVisible())) {
     await page.getByLabel(descriptor.selectedControl).click();
+  }
   await reconnect.click();
   await expect(page).toHaveURL(
-    new RegExp(`/${descriptor.slug}/installations`, "u"),
+    new RegExp(`/${descriptor.slug}/installations`, "u")
   );
 }
 
 export async function expectProviderSelection(
   page: Page,
-  provider: EmulatedProvider,
+  provider: EmulatedProvider
 ) {
   const descriptor = providerDescriptor(provider);
   await waitForBuilderReady(page);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
   await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(
-    descriptor.selectedValue,
+    descriptor.selectedValue
   );
 }
 
 export async function installBrowserBoundaries(
   context: BrowserContext,
-  mode: "success" | "blocked" = "success",
+  mode: "success" | "blocked" = "success"
 ) {
   await context.addInitScript((boundaryMode) => {
     const state = {
@@ -291,18 +297,27 @@ export async function installBrowserBoundaries(
       configurable: true,
       value: {
         writeText: async (value: string) => {
-          if (boundaryMode === "blocked") throw new Error("Clipboard blocked");
+          if (boundaryMode === "blocked") {
+            throw new Error("Clipboard blocked");
+          }
           state.clipboard.push(value);
         },
       },
     });
     window.open = ((url?: string | URL) => {
-      if (boundaryMode === "blocked") throw new Error("Protocol blocked");
+      if (boundaryMode === "blocked") {
+        throw new Error("Protocol blocked");
+      }
       const value = String(url ?? "");
-      if (value !== "about:blank") state.opened.push(value);
+      if (value !== "about:blank") {
+        state.opened.push(value);
+      }
       return {
         close() {},
         location: {
+          get href() {
+            return state.opened.at(-1) ?? "about:blank";
+          },
           set href(next: string) {
             state.opened.push(next);
           },

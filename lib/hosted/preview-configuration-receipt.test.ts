@@ -7,20 +7,11 @@ import {
 
 const configuration = {
   auth: {
-    issuer: "https://builder.example.test/api/auth",
-    audience: "https://builder.example.test/mcp",
-    jwksUrl: "https://builder.example.test/api/auth/jwks",
     algorithm: "ES256",
+    audience: "https://builder.example.test/mcp",
+    issuer: "https://builder.example.test/api/auth",
+    jwksUrl: "https://builder.example.test/api/auth/jwks",
     resourceUrl: "https://builder.example.test/mcp",
-  },
-  forwarder: {
-    teamSlug: "withAutograph",
-    projectName: "autograph-app-builder",
-    environment: "preview",
-  },
-  eve: {
-    baseUrl: "https://builder.example.test",
-    packageVersion: "0.43.0",
   },
   database: {
     dialect: "postgresql",
@@ -33,30 +24,39 @@ const configuration = {
       "0005_github_publication_journal",
     ],
   },
+  eve: {
+    baseUrl: "https://builder.example.test",
+    packageVersion: "0.43.0",
+  },
+  forwarder: {
+    environment: "preview",
+    projectName: "autograph-app-builder",
+    teamSlug: "withAutograph",
+  },
 } as const;
 
 describe("hosted Preview receipt boundaries", () => {
   it("is deterministic, closed, and contains no endpoint or provider identity", () => {
     const input = {
+      configuration,
       sourceSha: "a".repeat(40),
       sourceTree: "b".repeat(40),
-      configuration,
     };
     const first = buildHostedPreviewSourceConfigurationReceipt(input);
     expect(buildHostedPreviewSourceConfigurationReceipt(input)).toEqual(first);
     expect(first).toMatchObject({
-      runtime: "hosted-preview",
-      evidenceLevel: "source-configuration-only",
       activation: { status: "not-proven" },
       claims: {
-        workspaceSelector: "signed-workspace_id-only",
-        maximumAccessTokenLifetimeSeconds: 300,
-        liveMembershipCheck: true,
         immediateTokenRevocationClaimed: false,
+        liveMembershipCheck: true,
+        maximumAccessTokenLifetimeSeconds: 300,
+        workspaceSelector: "signed-workspace_id-only",
       },
+      evidenceLevel: "source-configuration-only",
+      runtime: "hosted-preview",
       secrets: {
-        included: false,
         databaseUrlTransport: "runtime-environment-only",
+        included: false,
         workloadIdentityTransport: "per-hop-vercel-oidc",
       },
     });
@@ -91,10 +91,10 @@ describe("hosted Preview receipt boundaries", () => {
     ]) {
       expect(() =>
         buildHostedPreviewSourceConfigurationReceipt({
+          configuration: drift,
           sourceSha: "a".repeat(40),
           sourceTree: "b".repeat(40),
-          configuration: drift,
-        }),
+        })
       ).toThrow();
     }
   });
@@ -102,45 +102,45 @@ describe("hosted Preview receipt boundaries", () => {
   it("keeps future live activation evidence closed and separate", () => {
     const digest = `sha256:${"d".repeat(64)}`;
     const activation = {
-      version: 1,
-      runtime: "hosted-preview",
-      evidenceLevel: "live-activation",
+      claims: {
+        databaseMigrated: true,
+        fiveToolLifecycleVerified: true,
+        mintedTokenVerified: true,
+        oauthMounted: true,
+        productionClaimed: false,
+        tenantIsolationVerified: true,
+        workloadIdentityVerified: true,
+      },
+      databaseMigrationReadbackDigest: digest,
+      deploymentReadbackDigest: digest,
       environment: "preview",
+      evidenceLevel: "live-activation",
+      fiveToolLifecycleProofDigest: digest,
+      mintedTokenContractDigest: digest,
+      oauthMetadataReadbackDigest: digest,
+      runtime: "hosted-preview",
+      secrets: { included: false },
+      sourceConfigurationReceiptDigest: digest,
       sourceSha: "a".repeat(40),
       sourceTree: "b".repeat(40),
-      sourceConfigurationReceiptDigest: digest,
-      deploymentReadbackDigest: digest,
-      oauthMetadataReadbackDigest: digest,
-      mintedTokenContractDigest: digest,
-      databaseMigrationReadbackDigest: digest,
-      workloadIdentityProofDigest: digest,
       tenantIsolationProofDigest: digest,
-      fiveToolLifecycleProofDigest: digest,
-      claims: {
-        oauthMounted: true,
-        databaseMigrated: true,
-        mintedTokenVerified: true,
-        workloadIdentityVerified: true,
-        tenantIsolationVerified: true,
-        fiveToolLifecycleVerified: true,
-        productionClaimed: false,
-      },
-      secrets: { included: false },
+      version: 1,
+      workloadIdentityProofDigest: digest,
     } as const;
     expect(hostedPreviewActivationReceiptSchema.parse(activation)).toEqual(
-      activation,
+      activation
     );
     expect(() =>
       hostedPreviewActivationReceiptSchema.parse({
         ...activation,
         environment: "production",
-      }),
+      })
     ).toThrow();
     expect(() =>
       hostedPreviewActivationReceiptSchema.parse({
         ...activation,
         claims: { ...activation.claims, oauthMounted: false },
-      }),
+      })
     ).toThrow();
   });
 });

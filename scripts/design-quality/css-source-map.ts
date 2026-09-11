@@ -1,10 +1,10 @@
-export type CssSourceMap = {
+export interface CssSourceMap {
   version: number;
   sourceRoot?: string;
   sources: string[];
   sourcesContent?: Array<string | null>;
   mappings: string;
-};
+}
 
 const base64 =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -15,14 +15,17 @@ function decodeVlq(value: string, start: number) {
   let index = start;
   while (index < value.length) {
     const digit = base64.indexOf(value[index]!);
-    if (digit < 0) return undefined;
+    if (digit === -1) {
+      return undefined;
+    }
     index++;
     result += (digit & 31) << shift;
     shift += 5;
-    if (!(digit & 32))
+    if (!(digit & 32)) {
       return { value: result & 1 ? -(result >> 1) : result >> 1, index };
+    }
   }
-  return undefined;
+  return;
 }
 
 /**
@@ -33,7 +36,7 @@ function decodeVlq(value: string, start: number) {
 export function originalCssSource(
   map: CssSourceMap,
   generatedLine: number,
-  generatedColumn: number,
+  generatedColumn: number
 ) {
   if (
     map.version !== 3 ||
@@ -42,8 +45,9 @@ export function originalCssSource(
     !Array.isArray(map.sources) ||
     !map.sources.every((source) => typeof source === "string") ||
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
-  )
+  ) {
     return undefined;
+  }
   let source = 0;
   let originalLine = 0;
   let originalColumn = 0;
@@ -59,39 +63,49 @@ export function originalCssSource(
       let index = 0;
       while (index < segment.length) {
         const decoded = decodeVlq(segment, index);
-        if (!decoded) return undefined;
+        if (!decoded) {
+          return undefined;
+        }
         fields.push(decoded.value);
         index = decoded.index;
       }
-      if (!fields.length) continue;
+      if (!fields.length) {
+        continue;
+      }
       generated += fields[0]!;
       // A one-field segment is an explicit unmapped span. It must not inherit
       // the preceding segment's source merely because this lookup is later on
       // the same generated line.
       if (fields.length === 1) {
-        if (line === generatedLine && generated <= generatedColumn)
+        if (line === generatedLine && generated <= generatedColumn) {
           candidate = undefined;
+        }
         continue;
       }
-      if (fields.length !== 4 && fields.length !== 5) return undefined;
+      if (fields.length !== 4 && fields.length !== 5) {
+        return undefined;
+      }
       source += fields[1]!;
       originalLine += fields[2]!;
       originalColumn += fields[3]!;
-      if (line === generatedLine && generated <= generatedColumn)
+      if (line === generatedLine && generated <= generatedColumn) {
         candidate = { source, originalLine, originalColumn };
+      }
     }
     if (line === generatedLine && candidate) {
       const path = map.sources[candidate.source];
-      if (typeof path !== "string" || !path) return undefined;
+      if (typeof path !== "string" || !path) {
+        return undefined;
+      }
       return {
+        column: candidate.originalColumn + 1,
+        line: candidate.originalLine + 1,
         path: map.sourceRoot
           ? `${map.sourceRoot.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
           : path,
-        line: candidate.originalLine + 1,
-        column: candidate.originalColumn + 1,
         sourceIndex: candidate.source,
       };
     }
   }
-  return undefined;
+  return;
 }

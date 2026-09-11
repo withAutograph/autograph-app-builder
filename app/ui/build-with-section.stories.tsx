@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
+
 import { BuildWithSection } from "./app-builder";
 
 const meta = {
-  title: "Components/Create App/Sections/Build With",
+  args: { onChange: fn(), selected: "codex" },
   component: BuildWithSection,
-  args: { selected: "codex", onChange: fn() },
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -14,6 +15,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/Build With",
 } satisfies Meta<typeof BuildWithSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -25,7 +27,7 @@ export const SelectCursor: Story = {
     await userEvent.click(within(canvasElement).getByText("Cursor"));
     await expect(args.onChange).toHaveBeenCalledWith("cursor");
     await expect(
-      within(canvasElement).getByRole("radio", { name: /Web Chat/ }),
+      within(canvasElement).getByRole("radio", { name: /Web Chat/ })
     ).toBeDisabled();
   },
 };

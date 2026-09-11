@@ -1,5 +1,5 @@
-import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
 import { resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -9,17 +9,17 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const preload = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-preload.mjs"),
+  resolve(import.meta.dirname, "test-capability-preload.mjs")
 ).href;
 const workerFixture = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
+  resolve(import.meta.dirname, "test-capability-worker-fixture.mjs")
 );
 const timeoutWorkerFixture = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
+  resolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs")
 );
 const registryPath = resolve(
   repositoryRoot,
-  "lib/testing/test-capability-registry.cjs",
+  "lib/testing/test-capability-registry.cjs"
 );
 const capabilityExpression = `createRequire(import.meta.url)(${JSON.stringify(registryPath)}).current(process)`;
 const inspectionSource = `
@@ -39,9 +39,9 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
     ["--input-type=module", "--eval", inspectionSource],
     {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: environment,
-    },
+    }
   );
   expect(result.status, result.stderr).toBe(0);
   return JSON.parse(result.stdout) as {
@@ -56,37 +56,38 @@ describe("test capability preload", () => {
       process as unknown as Record<symbol, (() => unknown) | undefined>
     )[
       Symbol.for(
-        "withAutograph.autograph-app-builder.test-capability-registry.v2",
+        "withAutograph.autograph-app-builder.test-capability-registry.v2"
       )
     ];
     const capability = accessor?.() as
-      { id: string; version: number; capabilities: string[] } | undefined;
+      | { id: string; version: number; capabilities: string[] }
+      | undefined;
     expect(capability).toMatchObject({
-      version: 1,
       capabilities: fullCapabilities,
+      version: 1,
     });
     const worker = new Worker(workerFixture, {
-      workerData: { spawnNested: true },
       env: {
         ...process.env,
+        APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
+        APP_BUILDER_BRANCH_WORKTREE_ROOT: "",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PUBLICATION: "1",
+        APP_BUILDER_SANDBOX_IMAGE: "",
+        EVE_AGENT_HOST: "http://127.0.0.1:9999",
         EVE_DEV: "1",
+        EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
         EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root",
+        EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
+        EVE_EVALUATION: "1",
+        EVE_EVALUATION_RUN_ID: "hostile-evaluation",
+        PORT: "43123",
+        REPOSITORY_LOCAL_ROOTS: "/hostile",
         WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
         WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile-timeout",
         WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile-timeout",
-        PORT: "43123",
-        EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
-        EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
-        EVE_EVALUATION: "1",
-        EVE_EVALUATION_RUN_ID: "hostile-evaluation",
-        APP_BUILDER_LOCAL_PUBLICATION: "1",
-        APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
-        APP_BUILDER_BRANCH_WORKTREE_ROOT: "",
-        APP_BUILDER_SANDBOX_IMAGE: "",
-        APP_BUILDER_LOCAL_ADAPTER: "1",
-        EVE_AGENT_HOST: "http://127.0.0.1:9999",
-        REPOSITORY_LOCAL_ROOTS: "/hostile",
       },
+      workerData: { spawnNested: true },
     });
     const result = await new Promise<{
       capability: typeof capability;
@@ -137,7 +138,7 @@ describe("test capability preload", () => {
         (resolveMessage, reject) => {
           hostileWorker.once("message", resolveMessage);
           hostileWorker.once("error", reject);
-        },
+        }
       );
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
@@ -166,10 +167,10 @@ describe("test capability preload", () => {
     expect(
       inspectAmbientPreload({
         ...process.env,
-        NODE_OPTIONS: `--import=${preload}`,
-        APP_BUILDER_TEST_MODEL: "1",
         APP_BUILDER_TEST_CAPABILITY_ID: "a".repeat(64),
-      }),
+        APP_BUILDER_TEST_MODEL: "1",
+        NODE_OPTIONS: `--import=${preload}`,
+      })
     ).toEqual({ capability: null, nodeOptions: null });
   });
 
@@ -191,7 +192,7 @@ describe("test capability preload", () => {
     `;
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: { ...process.env, NODE_OPTIONS: undefined },
     });
     expect(result.status, result.stderr).toBe(0);
@@ -224,8 +225,8 @@ describe("test capability preload", () => {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const child = spawn(process.execPath, ["-e", source], {
         cwd: repositoryRoot,
+        env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "pipe", "pipe"],
-        env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
       });
       const authorization = child.stdio[3] as Duplex;
       const authorizationErrors: string[] = [];
@@ -237,17 +238,17 @@ describe("test capability preload", () => {
       });
       authorization.end(
         `${JSON.stringify({
-          version: 2,
           publicKey: attackerPublicKey,
-        })}\n`,
+          version: 2,
+        })}\n`
       );
       let stdout = "";
       let stderr = "";
       child.stdout
-        ?.setEncoding("utf8")
+        ?.setEncoding("utf-8")
         .on("data", (chunk) => (stdout += chunk));
       child.stderr
-        ?.setEncoding("utf8")
+        ?.setEncoding("utf-8")
         .on("data", (chunk) => (stderr += chunk));
       const status = await new Promise<number | null>((resolveExit, reject) => {
         child.once("error", reject);
@@ -258,8 +259,8 @@ describe("test capability preload", () => {
       expect(stdout).toBe("false");
       expect(
         authorizationErrors.every((code) =>
-          ["ECONNRESET", "EPIPE"].includes(code),
-        ),
+          ["ECONNRESET", "EPIPE"].includes(code)
+        )
       ).toBe(true);
     }
   }, 15_000);
@@ -279,9 +280,9 @@ describe("test capability preload", () => {
     `;
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
-      encoding: "utf8",
-      env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
-      timeout: 5_000,
+      encoding: "utf-8",
+      env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      timeout: 5000,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("null");

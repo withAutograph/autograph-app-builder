@@ -8,21 +8,24 @@ import {
   builderProvisionResponseSchema,
   githubProvisionResultSchema,
   vercelProvisionResultSchema,
-  type BuilderProvisionRequest,
-  type BuilderProvisionResponse,
+} from "./contracts";
+import type {
+  BuilderProvisionRequest,
+  BuilderProvisionResponse,
 } from "./contracts";
 import type { GitHubProvisioningConfig } from "./github-provider";
 import { provisionGitHubRepository } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
-import {
-  updateBuilderProvisionJournal,
-  type BuilderProvisionAuthority,
-  type BuilderProvisionJournalStore,
+import { updateBuilderProvisionJournal } from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalStore,
 } from "./journal";
-import { cloneStarterSource, type StarterSource } from "./starter-source";
+import { cloneStarterSource } from "./starter-source";
+import type { StarterSource } from "./starter-source";
 import { provisionVercelProject } from "./vercel-provider";
 
-type VercelCredential = {
+interface VercelCredential {
   binding: {
     installationId: string;
     scopeId: string;
@@ -34,7 +37,7 @@ type VercelCredential = {
     updatedAt: Date;
   };
   token: string;
-};
+}
 
 export interface BuilderProvisioningDependencies {
   journal: BuilderProvisionJournalStore;
@@ -50,7 +53,7 @@ export interface BuilderProvisioningDependencies {
   }): Promise<VercelCredential | undefined>;
   deactivateVercelInstallation(
     installationId: string,
-    now: Date,
+    now: Date
   ): Promise<number>;
   fetch?: typeof fetch;
   now?: () => number;
@@ -61,7 +64,7 @@ const LEASE_MS = 15 * 60_000;
 
 function sameIntent(
   request: BuilderProvisionRequest,
-  stored: Omit<BuilderProvisionRequest, "operation">,
+  stored: Omit<BuilderProvisionRequest, "operation">
 ) {
   return (
     builderProvisionRequestDigest(request) ===
@@ -78,20 +81,23 @@ export async function executeBuilderProvisioning(input: {
   const now = input.dependencies.now ?? Date.now;
   const reserved = await input.dependencies.journal.reserve({
     authority: input.authority,
-    request,
     now: new Date(now()),
+    request,
   });
-  if (!sameIntent(request, reserved.record.request))
+  if (!sameIntent(request, reserved.record.request)) {
     throw new Error("provision-request-id-reused");
+  }
   const existing = reserved.record.response[request.operation];
-  if (existing.status === "succeeded") return reserved.record.response;
+  if (existing.status === "succeeded") {
+    return reserved.record.response;
+  }
 
   const leaseId = (input.dependencies.leaseId ?? randomUUID)();
   const leased = await updateBuilderProvisionJournal({
-    store: input.dependencies.journal,
     authority: input.authority,
-    requestId: request.requestId,
     now,
+    requestId: request.requestId,
+    store: input.dependencies.journal,
     update(current) {
       const operation = current.operations[request.operation];
       if (
@@ -105,15 +111,16 @@ export async function executeBuilderProvisioning(input: {
       return current;
     },
   });
-  if (leased.record.operations[request.operation].leaseId !== leaseId)
+  if (leased.record.operations[request.operation].leaseId !== leaseId) {
     return leased.record.response;
+  }
 
   const persist = async (kind: "candidate" | "absent", candidate: string) => {
     await updateBuilderProvisionJournal({
-      store: input.dependencies.journal,
       authority: input.authority,
-      requestId: request.requestId,
       now,
+      requestId: request.requestId,
+      store: input.dependencies.journal,
       update(current) {
         const values =
           kind === "candidate"
@@ -133,15 +140,9 @@ export async function executeBuilderProvisioning(input: {
     const installation = bindings.find(
       (binding) =>
         binding.installationId === request.providers.githubInstallationId &&
-        binding.active,
+        binding.active
     );
-    if (!installation) {
-      result = {
-        status: "failed",
-        code: "installation_inactive",
-        retryable: true,
-      };
-    } else {
+    if (installation) {
       try {
         const source = await (
           input.dependencies.loadStarterSource ?? cloneStarterSource
@@ -178,24 +179,26 @@ export async function executeBuilderProvisioning(input: {
           retryable: true,
         };
       }
+    } else {
+      result = {
+        status: "failed",
+        code: "installation_inactive",
+        retryable: true,
+      };
     }
   } else {
     const current = await input.dependencies.journal.read({
       authority: input.authority,
       requestId: request.requestId,
     });
-    if (!current) throw new Error("provision-journal-missing");
+    if (!current) {
+      throw new Error("provision-journal-missing");
+    }
     const credential = await input.dependencies.readVercelCredential({
       authority: input.authority,
       installationId: request.providers.vercelInstallationId!,
     });
-    if (!credential?.binding.active) {
-      result = {
-        status: "failed",
-        code: "installation_inactive",
-        retryable: true,
-      };
-    } else {
+    if (credential?.binding.active) {
       result = await provisionVercelProject({
         installation: credential.binding,
         token: credential.token,
@@ -215,17 +218,23 @@ export async function executeBuilderProvisioning(input: {
       ) {
         await input.dependencies.deactivateVercelInstallation(
           credential.binding.installationId,
-          new Date(now()),
+          new Date(now())
         );
       }
+    } else {
+      result = {
+        status: "failed",
+        code: "installation_inactive",
+        retryable: true,
+      };
     }
   }
 
   const completed = await updateBuilderProvisionJournal({
-    store: input.dependencies.journal,
     authority: input.authority,
-    requestId: request.requestId,
     now,
+    requestId: request.requestId,
+    store: input.dependencies.journal,
     update(current) {
       if (request.operation === "github")
         current.response.github = githubProvisionResultSchema.parse(result);

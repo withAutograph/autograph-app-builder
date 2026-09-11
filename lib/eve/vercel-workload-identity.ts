@@ -2,7 +2,7 @@ import { getVercelOidcToken } from "@vercel/oidc";
 
 import type { HostedWorkloadIdentity } from "./same-origin-http";
 
-const MAX_TOKEN_BYTES = 8_192;
+const MAX_TOKEN_BYTES = 8192;
 
 function exactToken(value: string): string {
   if (
@@ -27,7 +27,7 @@ function exactToken(value: string): string {
 export function createVercelWorkloadIdentity(
   dependencies: {
     getToken?: () => Promise<string>;
-  } = {},
+  } = {}
 ): HostedWorkloadIdentity {
   const getToken = dependencies.getToken ?? getVercelOidcToken;
 

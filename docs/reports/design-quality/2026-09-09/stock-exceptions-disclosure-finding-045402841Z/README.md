@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected-product heading, evidence, supplier section, and primary mock action form a clear review sequence. Selection highlighting and repeated severity labels support scanning, though the apparently expanded but empty supplier section interrupts the information hierarchy.                                                                                               |
-| layout         | 3/4   | The two-pane composition is consistently aligned and comfortably dense at 1024–1920 px, with compact 72 px list rows and orderly label/value columns. At 700 px it appropriately switches to a detail view with Back navigation. Some wide-window space is underused, but it does not impair the task.                                                                                                                   |
-| typography     | 3/4   | Headings, product names, values, and controls use a consistent typographic system and remain readable across captures. Numerous 10–12 px muted labels and severity pills were flagged for marginal or insufficient contrast, making secondary information harder to read; this can be improved through supported typography size or weight variants while retaining the Arrusted palette.                                |
-| responsive     | 3/4   | The interface remains usable at 1920, 1440, 1024, and 700 px desktop widths. It moves from side-by-side list/detail to a constrained detail view with a clear Back control, and expanded mock results remain accessible through ordinary page scrolling. No captures demonstrate narrower panels or arbitrary intermediate resizing, so excellent coverage cannot be confirmed.                                          |
-| productClarity | 2/4   | Location and severity filters, selected-record state, stock fields, an explicit mock action, reversible result state, and empty-state recovery are understandable. However, the Secondary supplier facts disclosure appears expanded without showing the expected terms, and the mock calculation does not clarify how reserved stock affects the modeled quantity, leaving important replenishment evidence incomplete. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected-product heading, evidence, supplier section, and primary mock action form a clear review sequence. Selection highlighting and repeated severity labels support scanning, though the apparently expanded but empty supplier section interrupts the information hierarchy. |
+| layout | 3/4 | The two-pane composition is consistently aligned and comfortably dense at 1024–1920 px, with compact 72 px list rows and orderly label/value columns. At 700 px it appropriately switches to a detail view with Back navigation. Some wide-window space is underused, but it does not impair the task. |
+| typography | 3/4 | Headings, product names, values, and controls use a consistent typographic system and remain readable across captures. Numerous 10–12 px muted labels and severity pills were flagged for marginal or insufficient contrast, making secondary information harder to read; this can be improved through supported typography size or weight variants while retaining the Arrusted palette. |
+| responsive | 3/4 | The interface remains usable at 1920, 1440, 1024, and 700 px desktop widths. It moves from side-by-side list/detail to a constrained detail view with a clear Back control, and expanded mock results remain accessible through ordinary page scrolling. No captures demonstrate narrower panels or arbitrary intermediate resizing, so excellent coverage cannot be confirmed. |
+| productClarity | 2/4 | Location and severity filters, selected-record state, stock fields, an explicit mock action, reversible result state, and empty-state recovery are understandable. However, the Secondary supplier facts disclosure appears expanded without showing the expected terms, and the mock calculation does not clarify how reserved stock affects the modeled quantity, leaving important replenishment evidence incomplete. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/228) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/276) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/130) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/276) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/276) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/190) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/474) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/221) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/96)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/103) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/96)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/228) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/130) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/228) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/130) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/228) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/130) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/190) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/474) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/221) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/96) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/103) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/96) |
 
 ## Latest-run screenshots
 

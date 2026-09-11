@@ -1,15 +1,15 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import * as databaseSchema from "../db/schema";
+import { selfServiceSignupFlag } from "../feature-flags";
+import { readProviderEmulation } from "../integrations/local-provider-emulation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import {
   createPreviewOAuthServer,
   readPreviewOAuthRuntimeConfig,
-  type PreviewOAuthRuntimeConfig,
 } from "./preview-oauth-runtime";
-import { selfServiceSignupFlag } from "../feature-flags";
-import { readProviderEmulation } from "../integrations/local-provider-emulation";
-import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
+import type { PreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 
 type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
@@ -27,7 +27,7 @@ let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
 export function selfServiceSignupAuthority(
   environment: PreviewOAuthRuntimeConfig["environment"],
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
-  emulated = false,
+  emulated = false
 ) {
   return environment === "local" || emulated
     ? async () => true
@@ -35,50 +35,52 @@ export function selfServiceSignupAuthority(
 }
 
 function getPreviewOAuthDeploymentRuntime(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ): PreviewOAuthDeploymentRuntime {
-  if (deploymentRuntime !== undefined) return deploymentRuntime;
+  if (deploymentRuntime !== undefined) {
+    return deploymentRuntime;
+  }
   let providerEmulation: ReturnType<typeof readProviderEmulation>;
   try {
     providerEmulation = readProviderEmulation(environment);
-  } catch (cause) {
+  } catch (error) {
     const invalidFields =
-      cause &&
-      typeof cause === "object" &&
-      "issues" in cause &&
-      Array.isArray(cause.issues)
-        ? cause.issues
+      error &&
+      typeof error === "object" &&
+      "issues" in error &&
+      Array.isArray(error.issues)
+        ? error.issues
             .map((issue) =>
               issue && typeof issue === "object" && "path" in issue
                 ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
-                : "unknown",
+                : "unknown"
             )
             .join(",")
         : "unknown";
     throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
-      cause,
+      error,
     });
   }
   let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
   try {
     config = readPreviewOAuthRuntimeConfig(environment);
-  } catch (cause) {
-    throw new Error("preview-oauth-config", { cause });
+  } catch (error) {
+    throw new Error("preview-oauth-config", { error });
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
     {
-      issuer: config.issuer,
       audience: config.resource,
+      issuer: config.issuer,
     },
     {
       isSelfServiceSignupEnabled: selfServiceSignupAuthority(
         config.environment,
         selfServiceSignupFlag,
-        Boolean(providerEmulation),
+        Boolean(providerEmulation)
       ),
-    },
+    }
   );
   let auth: PreviewOAuthServer;
   try {
@@ -89,24 +91,24 @@ function getPreviewOAuthDeploymentRuntime(
         schema: databaseSchema,
         transaction: true,
       }),
-      membership: organizationAuthority,
-      userManagement: organizationAuthority,
       infrastructure: {
         environment: {
-          BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
           BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
+          BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
         },
         organizationAuthorityReady:
           environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY ===
           "verified-v1",
       },
+      membership: organizationAuthority,
+      userManagement: organizationAuthority,
     });
-  } catch (cause) {
-    throw new Error("preview-oauth-server", { cause });
+  } catch (error) {
+    throw new Error("preview-oauth-server", { error });
   }
   deploymentRuntime = {
-    organizationAuthority,
     auth,
+    organizationAuthority,
     origin: new URL(config.resource).origin,
   };
   return deploymentRuntime;
@@ -119,13 +121,13 @@ function getPreviewOAuthDeploymentRuntime(
  * present and exact.
  */
 export function getPreviewOAuthDeploymentAuth(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
   return getPreviewOAuthDeploymentRuntime(environment).auth;
 }
 
 export function getPreviewOAuthDeploymentOrigin(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
 ) {
   return getPreviewOAuthDeploymentRuntime(environment).origin;
 }
@@ -135,7 +137,7 @@ export function getPreviewOAuthDeploymentSession(input: {
   headers: Headers;
 }) {
   return getPreviewOAuthDeploymentRuntime(
-    input.environment,
+    input.environment
   ).auth.api.getSession({ headers: input.headers });
 }
 
@@ -164,15 +166,17 @@ export async function ensurePreviewSessionOrganization(input: {
   headers: Headers;
 }) {
   const current = await input.auth.api.getSession({ headers: input.headers });
-  if (!current?.user) return undefined;
+  if (!current?.user) {
+    return undefined;
+  }
 
   const ensured = await input.authority.ensureOrganizationForVerifiedUser({
     userId: current.user.id,
   });
   if (current.session.activeOrganizationId !== ensured.organizationId) {
     const active = await input.auth.api.setActiveOrganization({
-      headers: input.headers,
       body: { organizationId: ensured.organizationId },
+      headers: input.headers,
     });
     if (active?.id !== ensured.organizationId) {
       throw new Error("Unable to activate the provisioned organization.");
@@ -180,8 +184,8 @@ export async function ensurePreviewSessionOrganization(input: {
   }
 
   return {
-    user: current.user,
     organization: ensured,
+    user: current.user,
   };
 }
 
@@ -204,7 +208,7 @@ export function createPreviewOAuthRequestHandler(input: {
   return async (request: Request): Promise<Response> => {
     try {
       const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(
-        input.environment,
+        input.environment
       );
       const response = await auth.handler(request);
       if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
@@ -217,11 +221,11 @@ export function createPreviewOAuthRequestHandler(input: {
         }
         console.info(
           JSON.stringify({
+            hasRedirect,
             level: "info",
             message: "preview_oauth_sign_in_response",
             status: response.status,
-            hasRedirect,
-          }),
+          })
         );
       }
       return response;
@@ -234,14 +238,14 @@ export function createPreviewOAuthRequestHandler(input: {
             error instanceof Error && error.message.startsWith("preview-oauth-")
               ? error.message
               : "preview-oauth-request",
-        }),
+        })
       );
       return Response.json(
         { error: "preview_oauth_unavailable" },
         {
-          status: 503,
           headers: { "Cache-Control": "no-store" },
-        },
+          status: 503,
+        }
       );
     }
   };
@@ -257,9 +261,9 @@ export function createPreviewOAuthWellKnownHandler(input: {
     url.pathname = "/api/auth/.well-known/oauth-authorization-server";
     return requestHandler(
       new Request(url, {
-        method: "GET",
         headers: request.headers,
-      }),
+        method: "GET",
+      })
     );
   };
 }

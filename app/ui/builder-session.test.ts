@@ -13,30 +13,30 @@ describe("provider draft recovery bridge", () => {
     persistBuilderDraft(
       resumeKey,
       {
-        version: 1,
+        appNameEditedByUser: true,
+        connectedConnections: [],
+        deploymentProvider: null,
+        focusOrigin: "github",
         form: {
           appName: "Recovered App",
-          repository: "recovered-app",
           brief: "Keep this acknowledged provider checkpoint.",
-          privateRepository: true,
           buildDestination: "codex",
           connections: [],
           modelId: "openai/gpt-5.6-sol",
+          privateRepository: true,
+          repository: "recovered-app",
         },
-        team: "team",
         gitScope: "scope",
         model: "openai/gpt-5.6-sol",
-        zdrOnly: false,
-        showMoreConnections: false,
-        search: "",
-        connectedConnections: [],
-        storageProvider: "github",
-        deploymentProvider: null,
-        focusOrigin: "github",
-        appNameEditedByUser: true,
         repositoryEditedByUser: true,
+        search: "",
+        showMoreConnections: false,
+        storageProvider: "github",
+        team: "team",
+        version: 1,
+        zdrOnly: false,
       },
-      4,
+      4
     );
 
     expect(readBuilderDraftResume(resumeKey)).toMatchObject({

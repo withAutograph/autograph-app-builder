@@ -1,8 +1,8 @@
 import type { RuntimeSandboxSession } from "eve/sandbox";
 
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
-import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import type { HostedPrincipal } from "../eve/hosted-auth";
+import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
@@ -19,37 +19,37 @@ import { createPostgresSandboxExecutionLeaseStore } from "./postgres-execution-l
 
 export const HOSTED_SANDBOX_EXECUTION_ACTIVATION = "enabled-v1";
 const cleanupEvidenceKey = Symbol.for(
-  "autograph.app-builder.sandbox-cleanup-evidence.v1",
+  "autograph.app-builder.sandbox-cleanup-evidence.v1"
 );
 
-export type SandboxCleanupEvidence = {
+export interface SandboxCleanupEvidence {
   attempted: true;
   stopped: boolean;
   timedOut: boolean;
-};
+}
 
-type CommandAuthority = {
+interface CommandAuthority {
   lease: SandboxExecutionLease;
   store: SandboxExecutionLeaseStore;
-};
+}
 
-type RuntimeDependencies = {
+interface RuntimeDependencies {
   enabled(environment: Readonly<Record<string, string | undefined>>): boolean;
   store(
-    environment: Readonly<Record<string, string | undefined>>,
+    environment: Readonly<Record<string, string | undefined>>
   ): SandboxExecutionLeaseStore;
   isMember(input: {
     principal: HostedPrincipal;
     workspaceId: string;
     environment: Readonly<Record<string, string | undefined>>;
   }): Promise<boolean>;
-};
+}
 
 const commandAuthorities = new Map<string, CommandAuthority>();
 let database: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 
 export function isHostedSandboxExecutionEnabled(
-  environment: Readonly<Record<string, string | undefined>>,
+  environment: Readonly<Record<string, string | undefined>>
 ) {
   return (
     environment.EVE_HOSTED_ADAPTER === "1" &&
@@ -59,38 +59,40 @@ export function isHostedSandboxExecutionEnabled(
 }
 
 function hostedLeaseEnabled(
-  environment: Readonly<Record<string, string | undefined>>,
+  environment: Readonly<Record<string, string | undefined>>
 ) {
-  if (!isHostedSandboxExecutionEnabled(environment)) return false;
+  if (!isHostedSandboxExecutionEnabled(environment)) {
+    return false;
+  }
   readHostedDeploymentEnvironment(environment);
   return true;
 }
 
 function hostedLeaseDatabase(
-  environment: Readonly<Record<string, string | undefined>>,
+  environment: Readonly<Record<string, string | undefined>>
 ) {
   database ??= openHostedPostgresDatabase(
-    parseHostedDatabaseUrl(environment.DATABASE_URL),
+    parseHostedDatabaseUrl(environment.DATABASE_URL)
   );
   return database;
 }
 
 const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
-  store: (environment) =>
-    createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
   async isMember({ principal, workspaceId, environment }) {
     return createPostgresWorkspaceMembership(
-      hostedLeaseDatabase(environment),
+      hostedLeaseDatabase(environment)
     ).isMember({ principal, workspaceId });
   },
+  store: (environment) =>
+    createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
 };
 
 let dependencies = defaultDependencies;
 
 function errorWithCleanupEvidence(
   error: unknown,
-  evidence: SandboxCleanupEvidence,
+  evidence: SandboxCleanupEvidence
 ) {
   const preserved =
     error instanceof Error
@@ -116,11 +118,11 @@ export function sandboxCleanupEvidence(error: unknown) {
 
 async function stopWithin(
   sandbox: Pick<RuntimeSandboxSession, "stop">,
-  timeoutMs = SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+  timeoutMs = SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs
 ): Promise<SandboxCleanupEvidence> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = Promise.resolve(sandbox.stop());
-  stop.catch(() => undefined);
+  stop.catch(() => {});
   const timeout = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), timeoutMs);
     timer.unref?.();
@@ -156,27 +158,29 @@ export async function acquireHostedSandboxExecutionLease(input: {
     const evidence = await stopWithin(input.sandbox);
     throw errorWithCleanupEvidence(error, evidence);
   }
-  if (!enabled) return undefined;
+  if (!enabled) {
+    return undefined;
+  }
   try {
     const { authority, principal } = exactForwardedSessionAuthority(
-      input.sessionAuth,
+      input.sessionAuth
     );
     if (
       !(await dependencies.isMember({
+        environment,
         principal,
         workspaceId: authority.workspaceId,
-        environment,
       }))
     ) {
       throw new Error("Hosted sandbox execution membership is not active.");
     }
     const store = dependencies.store(environment);
     const result = await store.acquire({
-      principal,
       adapterSessionId: input.sessionId,
-      providerSandboxId: input.sandbox.id,
-      policy: SANDBOX_EXECUTION_POLICY,
       nowEpochMs: input.nowEpochMs ?? Date.now(),
+      policy: SANDBOX_EXECUTION_POLICY,
+      principal,
+      providerSandboxId: input.sandbox.id,
     });
     if (result.disposition === "rejected") {
       throw new Error("Hosted sandbox recovery is still in progress.");
@@ -199,29 +203,31 @@ export async function assertHostedSandboxCommandAuthority(input: {
   nowEpochMs?: number;
 }) {
   const environment = input.environment ?? process.env;
-  if (!dependencies.enabled(environment)) return undefined;
+  if (!dependencies.enabled(environment)) {
+    return undefined;
+  }
   const active = commandAuthorities.get(input.sessionId);
   if (active === undefined) {
     throw new Error("Hosted sandbox command authority is unavailable.");
   }
   const nowEpochMs = input.nowEpochMs ?? Date.now();
   let lease = await active.store.assertCurrent({
-    principal: active.lease.principal,
     adapterSessionId: active.lease.adapterSessionId,
-    providerSandboxId: active.lease.providerSandboxId,
     epoch: active.lease.epoch,
-    policyDigest: active.lease.policyDigest,
     nowEpochMs,
+    policyDigest: active.lease.policyDigest,
+    principal: active.lease.principal,
+    providerSandboxId: active.lease.providerSandboxId,
   });
   if (
     nowEpochMs - lease.heartbeatAtEpochMs >=
     SANDBOX_EXECUTION_POLICY.lease.heartbeatMs
   ) {
     lease = await active.store.heartbeat({
-      principal: lease.principal,
       adapterSessionId: lease.adapterSessionId,
       epoch: lease.epoch,
       nowEpochMs,
+      principal: lease.principal,
     });
     commandAuthorities.set(input.sessionId, { ...active, lease });
   }
@@ -238,7 +244,9 @@ export async function releaseHostedSandboxExecutionLease(input: {
   nowEpochMs?: number;
 }) {
   const environment = input.environment ?? process.env;
-  if (!dependencies.enabled(environment)) return { released: false } as const;
+  if (!dependencies.enabled(environment)) {
+    return { released: false } as const;
+  }
   let principal: HostedPrincipal;
   try {
     ({ principal } = exactForwardedSessionAuthority(input.sessionAuth));
@@ -250,25 +258,25 @@ export async function releaseHostedSandboxExecutionLease(input: {
   if (!evidence.stopped) {
     throw errorWithCleanupEvidence(
       new Error("Hosted sandbox compute did not stop at the turn boundary."),
-      evidence,
+      evidence
     );
   }
   const released = await dependencies.store(environment).releaseCurrent({
-    principal,
     adapterSessionId: input.sessionId,
-    providerSandboxId: input.sandbox.id,
-    policyDigest: sandboxExecutionPolicyDigest(),
-    reason: input.reason,
     nowEpochMs: input.nowEpochMs ?? Date.now(),
+    policyDigest: sandboxExecutionPolicyDigest(),
+    principal,
+    providerSandboxId: input.sandbox.id,
+    reason: input.reason,
   });
   commandAuthorities.delete(input.sessionId);
   return released === null
     ? ({ released: false } as const)
-    : ({ released: true, lease: released } as const);
+    : ({ lease: released, released: true } as const);
 }
 
 export function setHostedSandboxExecutionLeaseDependenciesForTest(
-  replacement: RuntimeDependencies,
+  replacement: RuntimeDependencies
 ) {
   dependencies = replacement;
 }

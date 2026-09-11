@@ -1,6 +1,6 @@
 #!/bin/sh
-#MISE description="Lint repository sources with the pinned runtime"
+#MISE description="Lint repository sources with Ultracite"
 set -eu
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/eslint/bin/eslint.js .
+  "$(mise which node)" node_modules/ultracite/dist/index.js check

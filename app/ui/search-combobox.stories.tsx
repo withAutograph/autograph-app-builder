@@ -1,22 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
+
 import { SearchCombobox } from "./search-combobox";
 
 const options = [
-  { value: "autograph", label: "Autograph", detail: "Pro" },
-  { value: "sandbox", label: "Sandbox", detail: "Hobby" },
+  { detail: "Pro", label: "Autograph", value: "autograph" },
+  { detail: "Hobby", label: "Sandbox", value: "sandbox" },
 ];
 const meta = {
-  title: "Components/Create App/Primitives/Search Combobox",
-  component: SearchCombobox,
   args: {
     label: "Select a Vercel Team",
-    value: "autograph",
-    options,
     onChange: fn(),
+    options,
     prefix: <span>●</span>,
+    value: "autograph",
   },
+  component: SearchCombobox,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -24,13 +25,14 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Primitives/Search Combobox",
 } satisfies Meta<typeof SearchCombobox>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 export const Disabled: Story = { args: { disabled: true } };
 export const Empty: Story = {
-  args: { value: "", options: [], placeholder: "No teams" },
+  args: { options: [], placeholder: "No teams", value: "" },
 };
 export const SelectOption: Story = {
   play: async ({ canvasElement, args }) => {
@@ -42,14 +44,14 @@ export const SelectOption: Story = {
 };
 export const FooterAction: Story = {
   args: {
-    menuFooter: { value: "create-team", label: "Connect another Vercel team" },
+    menuFooter: { label: "Connect another Vercel team", value: "create-team" },
     onFooterSelect: fn(),
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Select a Vercel Team"));
     await userEvent.click(
-      canvas.getByRole("button", { name: "Connect another Vercel team" }),
+      canvas.getByRole("button", { name: "Connect another Vercel team" })
     );
     await expect(args.onFooterSelect).toHaveBeenCalledOnce();
   },

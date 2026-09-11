@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected-record header, evidence, supplier disclosure, and primary mock action form a clear progression. Selection is reinforced by a tinted row and accent edge, while severity and days of cover are easy to scan. The mock result is less hierarchical because several calculations and the no-order disclaimer are combined into one paragraph. |
-| layout         | 3/4   | The two-column review composition is consistently aligned at 1024–1920 px, with orderly label/value rows and stable action placement. The centered maximum-width layout prevents excessive stretching, though the sparse filter and empty-state containers consume substantial horizontal area, and expanded result states add avoidable vertical length.                                    |
-| typography     | 3/4   | Heading sizes, weights, labels, values, and button text are visually consistent and readable overall. However, automated evidence repeatedly flags small muted metadata, field labels, and status text as marginal or insufficient contrast; using supported larger or stronger typography variants would improve readability without changing the authoritative palette.                    |
-| responsive     | 4/4   | The composition adapts effectively across the supplied desktop widths: 1024 px retains a usable list-detail split, while 700 px switches to a focused detail view with a Back control. Filters remain usable and no horizontal overflow is reported. Expanded mock results require ordinary vertical scrolling at shorter windows, but controls remain available.                            |
-| productClarity | 3/4   | The purpose is stated directly, filters are labeled, rows expose product, location, severity, and cover, and the result explicitly says no order was placed or stock changed. The count label “1 of 4” is ambiguous after filtering, and the fixed mock calculation could be presented more transparently as distinct inputs and outputs.                                                    |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected-record header, evidence, supplier disclosure, and primary mock action form a clear progression. Selection is reinforced by a tinted row and accent edge, while severity and days of cover are easy to scan. The mock result is less hierarchical because several calculations and the no-order disclaimer are combined into one paragraph. |
+| layout | 3/4 | The two-column review composition is consistently aligned at 1024–1920 px, with orderly label/value rows and stable action placement. The centered maximum-width layout prevents excessive stretching, though the sparse filter and empty-state containers consume substantial horizontal area, and expanded result states add avoidable vertical length. |
+| typography | 3/4 | Heading sizes, weights, labels, values, and button text are visually consistent and readable overall. However, automated evidence repeatedly flags small muted metadata, field labels, and status text as marginal or insufficient contrast; using supported larger or stronger typography variants would improve readability without changing the authoritative palette. |
+| responsive | 4/4 | The composition adapts effectively across the supplied desktop widths: 1024 px retains a usable list-detail split, while 700 px switches to a focused detail view with a Back control. Filters remain usable and no horizontal overflow is reported. Expanded mock results require ordinary vertical scrolling at shorter windows, but controls remain available. |
+| productClarity | 3/4 | The purpose is stated directly, filters are labeled, rows expose product, location, severity, and cover, and the result explicitly says no order was placed or stock changed. The count label “1 of 4” is ambiguous after filtering, and the fixed mock calculation could be presented more transparently as distinct inputs and outputs. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/228) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/276) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/130) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/276) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/276) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/190) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/474) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/221) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/96)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/103) |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/96)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/228) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/130) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/228) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/130) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/228) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/276) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/130) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/190) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/474) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/221) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/96) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/103) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/96) |
 
 ## Latest-run screenshots
 

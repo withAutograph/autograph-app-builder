@@ -11,10 +11,10 @@ describe("workspace onboarding", () => {
   it("allows the signed-in product only after workspace setup succeeds", async () => {
     const value = { userId: "user_one", workspaceId: "workspace_one" };
     await expect(
-      resolveWorkspaceOnboardingState(async () => value),
+      resolveWorkspaceOnboardingState(async () => value)
     ).resolves.toEqual({ status: "ready", value });
     await expect(
-      resolveWorkspaceOnboardingState(async () => undefined),
+      resolveWorkspaceOnboardingState(async () => {})
     ).resolves.toEqual({ status: "anonymous" });
   });
 
@@ -28,7 +28,7 @@ describe("workspace onboarding", () => {
     await expect(
       resolveWorkspaceOnboardingState(async () => {
         throw new OrganizationProvisioningError(reason);
-      }),
+      })
     ).resolves.toEqual({ status });
   });
 
@@ -36,11 +36,11 @@ describe("workspace onboarding", () => {
     expect(
       workspaceOnboardingRedirect(
         "https://builder.example",
-        "workspace-setup-retry",
-      ),
+        "workspace-setup-retry"
+      )
     ).toBe("https://builder.example/?onboarding=workspace-setup-retry");
     expect(signInForWorkspaceRedirect("https://builder.example")).toBe(
-      "https://builder.example/auth/sign-in?callbackURL=%2F",
+      "https://builder.example/auth/sign-in?callbackURL=%2F"
     );
   });
 });

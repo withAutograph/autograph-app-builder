@@ -7,7 +7,6 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 export default defineTool({
   description:
     "Diagnostic-only planning setup. Records checkout-backed dependency metadata; it does not install or verify dependencies. Normal planning performs this automatically. No provider or target-repository mutation is available.",
-  inputSchema: z.object({}),
   async execute(_, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -17,7 +16,7 @@ export default defineTool({
       current.phase === "ui_accepted"
     )
       throw new Error(
-        "Finalize the UI and accept a build-ready AppSpec before preparing target dependencies.",
+        "Finalize the UI and accept a build-ready AppSpec before preparing target dependencies."
       );
     const prepared = await prepareOrReuseDependencies({
       current,
@@ -26,4 +25,5 @@ export default defineTool({
     });
     return { ...prepared.receipt, reused: prepared.reused };
   },
+  inputSchema: z.object({}),
 });

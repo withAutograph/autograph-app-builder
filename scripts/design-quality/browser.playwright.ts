@@ -1,6 +1,8 @@
-import { expect, test } from "playwright/test";
-import { capturePreview, measurePage, measureStyles } from "./browser";
 import { createServer } from "node:http";
+
+import { expect, test } from "playwright/test";
+
+import { capturePreview, measurePage, measureStyles } from "./browser";
 
 test("an unavailable preview is not captured or scored as an empty design", async () => {
   const server = createServer((_request, response) => {
@@ -10,14 +12,16 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("No listener");
+    if (!address || typeof address === "string") {
+      throw new Error("No listener");
+    }
     await expect(
       capturePreview({
-        url: `http://127.0.0.1:${address.port}/missing`,
         output: test.info().outputDir,
-        tokens: {},
         scenarios: [],
-      }),
+        tokens: {},
+        url: `http://127.0.0.1:${address.port}/missing`,
+      })
     ).rejects.toThrow("Preview returned HTTP 404");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -35,41 +39,42 @@ test("measurements distinguish concrete defects from intentional layout", async 
 }) => {
   await page.addInitScript("globalThis.__name = (value) => value;");
   await page.goto("about:blank");
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await page.setContent(
-    `<!doctype html><html lang="en"><title>Good reference</title><main><h1>Inventory</h1><label>Location<select><option>All</option></select></label><div style="width:200px;overflow:auto"><table style="width:500px"><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Bottle</td><td>8</td></tr></tbody></table></div><button>Request stock</button></main></html>`,
+    `<!doctype html><html lang="en"><title>Good reference</title><main><h1>Inventory</h1><label>Location<select><option>All</option></select></label><div style="width:200px;overflow:auto"><table style="width:500px"><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Bottle</td><td>8</td></tr></tbody></table></div><button>Request stock</button></main></html>`
   );
   const good = await measurePage(page);
   expect(
     good.findings.filter(
       (f) =>
         f.kind === "document-overflow" ||
-        f.kind === "possible-column-misalignment",
-    ),
+        f.kind === "possible-column-misalignment"
+    )
   ).toEqual([]);
   expect(good.intentionalScrollContainers.length).toBeGreaterThan(0);
   expect(
-    good.intentionalScrollContainers.some((item) => item.axis === "x"),
+    good.intentionalScrollContainers.some((item) => item.axis === "x")
   ).toBe(true);
   expect(
-    good.accessibility.violations.some((v) => v.id === "button-name"),
+    good.accessibility.violations.some((v) => v.id === "button-name")
   ).toBe(false);
   await test.info().attach("authored-good-reference", {
     body: await page.screenshot(),
     contentType: "image/png",
   });
   await page.setContent(
-    `<!doctype html><html lang="en"><title>Poor reference</title><main style="width:900px"><h1>Inventory</h1><button style="width:50px;height:30px"></button><div role="table"><div role="row"><span role="columnheader">Item</span></div><div role="row"><span role="cell" style="display:inline-block;margin-left:80px">Bottle</span></div></div><div style="width:20px;overflow:hidden"><button style="width:200px">Clipped action</button></div></main></html>`,
+    `<!doctype html><html lang="en"><title>Poor reference</title><main style="width:900px"><h1>Inventory</h1><button style="width:50px;height:30px"></button><div role="table"><div role="row"><span role="columnheader">Item</span></div><div role="row"><span role="cell" style="display:inline-block;margin-left:80px">Bottle</span></div></div><div style="width:20px;overflow:hidden"><button style="width:200px">Clipped action</button></div></main></html>`
   );
   const poor = await measurePage(page);
   for (const kind of [
     "document-overflow",
     "possible-clipping",
     "possible-column-misalignment",
-  ])
+  ]) {
     expect(poor.findings.some((f) => f.kind === kind)).toBe(true);
+  }
   expect(
-    poor.accessibility.violations.some((v) => v.id === "button-name"),
+    poor.accessibility.violations.some((v) => v.id === "button-name")
   ).toBe(true);
   await test.info().attach("authored-poor-reference", {
     body: await page.screenshot(),
@@ -82,16 +87,16 @@ test("reports intentional vertical scrolling as a diagnostic", async ({
 }) => {
   await page.goto("about:blank");
   await page.setContent(
-    `<!doctype html><main style="height:80px;overflow-y:auto"><div style="height:240px">Scrollable details</div></main>`,
+    `<!doctype html><main style="height:80px;overflow-y:auto"><div style="height:240px">Scrollable details</div></main>`
   );
   const measured = await measurePage(page);
   const vertical = measured.intentionalScrollContainers.find(
-    (item) => item.axis === "y",
+    (item) => item.axis === "y"
   );
   expect(vertical).toMatchObject({
     axis: "y",
-    scrollHeight: 240,
     clientHeight: 80,
+    scrollHeight: 240,
   });
 });
 
@@ -107,20 +112,20 @@ test("settles a finite border transition before style evidence", async ({
     .locator(".panel")
     .evaluate((element) => element.classList.add("selected"));
   const styles = await measureStyles(page, {
-    "--color-border-subtle": "rgb(41, 41, 41)",
     "--color-action-primary-ink": "rgb(77, 95, 193)",
+    "--color-border-subtle": "rgb(41, 41, 41)",
   });
   expect(
     await page
       .locator(".panel")
-      .evaluate((element) => getComputedStyle(element).borderTopColor),
+      .evaluate((element) => getComputedStyle(element).borderTopColor)
   ).toBe("rgb(77, 95, 193)");
   expect(
     styles.observations.some(
       (item) =>
         item.property === "border-top-color" &&
-        item.computed === "rgb(77, 95, 193)",
-    ),
+        item.computed === "rgb(77, 95, 193)"
+    )
   ).toBe(true);
 });
 
@@ -128,7 +133,7 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
   page,
 }) => {
   await page.goto("about:blank");
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ height: 900, width: 1440 });
   await page.setContent(`<!doctype html><style>
     :root { --theme-text: rgb(20, 20, 20) }
     .dark { --theme-text: rgb(230, 230, 230) }
@@ -145,13 +150,13 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
     styles.observations.some(
       (item) =>
         item.computed === "rgb(230, 230, 230)" &&
-        item.classification === "semantic-token-reference",
-    ),
+        item.classification === "semantic-token-reference"
+    )
   ).toBe(true);
   // No stylesheet URL was supplied by this fixture; browser evidence must not
   // manufacture generated provenance from a visual token match.
   expect(
-    styles.observations.some((item) => item.provenance === "generated"),
+    styles.observations.some((item) => item.provenance === "generated")
   ).toBe(false);
 });
 
@@ -165,9 +170,9 @@ test("browser signature attribution is reviewer evidence, not score provenance",
   </style><section class="generated-card tokenized">Stock</section>`);
   const generated = collectIntrinsicClassSignatures([
     {
-      path: "src/Stock.tsx",
       content:
         'export function Stock(){ return <section className="generated-card tokenized">Stock</section> }',
+      path: "src/Stock.tsx",
     },
   ]);
   const candidate = await measureStyles(
@@ -175,7 +180,7 @@ test("browser signature attribution is reviewer evidence, not score provenance",
     { "--color-text-primary": "rgb(20, 20, 20)" },
     [],
     generated,
-    [],
+    []
   );
   expect(
     candidate.observations.some(
@@ -183,14 +188,14 @@ test("browser signature attribution is reviewer evidence, not score provenance",
         item.property === "color" &&
         item.provenance === "unknown" &&
         item.verdict === "unassessed" &&
-        item.originCandidate?.provenance === "generated",
-    ),
+        item.originCandidate?.provenance === "generated"
+    )
   ).toBe(true);
   const sharedDynamic = collectIntrinsicClassSignatures([
     {
-      path: "packages/design-systems/Card.tsx",
       content:
         'const classes = "generated-card tokenized"; export function Card(){ return <section className={classes}>Shared</section> }',
+      path: "packages/design-systems/Card.tsx",
     },
   ]);
   // Dynamic shared classes do not appear in the static inventory, which is why
@@ -201,15 +206,15 @@ test("browser signature attribution is reviewer evidence, not score provenance",
     { "--color-text-primary": "rgb(20, 20, 20)" },
     [],
     generated,
-    sharedDynamic,
+    sharedDynamic
   );
   expect(
     collision.observations.some(
       (item) =>
         item.property === "color" &&
         item.provenance === "unknown" &&
-        item.verdict === "unassessed",
-    ),
+        item.verdict === "unassessed"
+    )
   ).toBe(true);
 });
 
@@ -236,8 +241,8 @@ test("uses only a one-value gap shorthand as longhand diagnostic evidence", asyn
           item.declarations[0] === "var(--space-1)" &&
           item.classification === "semantic-token-reference" &&
           item.provenance === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+          item.verdict === "unassessed"
+      )
     ).toBe(true);
     expect(
       styles.observations.some(
@@ -246,8 +251,8 @@ test("uses only a one-value gap shorthand as longhand diagnostic evidence", asyn
           item.declarations.includes("var(--space-1)") &&
           item.declarations.includes("var(--space-2)") &&
           item.classification === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+          item.verdict === "unassessed"
+      )
     ).toBe(true);
     expect(
       styles.observations.some(
@@ -256,8 +261,8 @@ test("uses only a one-value gap shorthand as longhand diagnostic evidence", asyn
           item.declarations.length === 1 &&
           item.declarations[0] === "" &&
           item.classification === "unknown" &&
-          item.verdict === "unassessed",
-      ),
+          item.verdict === "unassessed"
+      )
     ).toBe(true);
   }
 });
@@ -272,9 +277,9 @@ test("reports a unique escaped utility token as a shared reviewer candidate", as
   </style><button data-selected="true" class="data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)] extra">Stock</button>`);
   const sharedTokens = collectClassTokenEvidence([
     {
-      path: "packages/design-systems/RecordList.tsx",
       content:
         'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
+      path: "packages/design-systems/RecordList.tsx",
     },
   ]);
   const styles = await measureStyles(
@@ -288,7 +293,7 @@ test("reports a unique escaped utility token as a shared reviewer candidate", as
     [],
     [],
     [],
-    sharedTokens,
+    sharedTokens
   );
   expect(
     styles.observations.some(
@@ -298,11 +303,11 @@ test("reports a unique escaped utility token as a shared reviewer candidate", as
         item.verdict === "unassessed" &&
         item.originCandidate?.provenance === "shared" &&
         item.originCandidate.source.path ===
-          "packages/design-systems/RecordList.tsx",
-    ),
+          "packages/design-systems/RecordList.tsx"
+    )
   ).toBe(true);
   expect(styles.limitations).toContain(
-    "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",
+    "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance."
   );
 });
 
@@ -312,10 +317,10 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
   const css = ".screen { color: var(--color-text-primary); }";
   await page.goto("about:blank");
   await page.setContent(
-    `<style>:root { --color-text-primary: rgb(20, 20, 20) }${css}</style><main class="screen">Stock</main>`,
+    `<style>:root { --color-text-primary: rgb(20, 20, 20) }${css}</style><main class="screen">Stock</main>`
   );
   const rules = collectCssRuleEvidence([
-    { path: "src/screen.css", content: css },
+    { content: css, path: "src/screen.css" },
   ]);
   const styles = await measureStyles(
     page,
@@ -324,7 +329,7 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
     [],
     [],
     rules,
-    [],
+    []
   );
   expect(
     styles.observations.some(
@@ -332,8 +337,8 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
         item.property === "color" &&
         item.provenance === "generated" &&
         item.verdict === "conforming" &&
-        item.source?.path === "src/screen.css",
-    ),
+        item.source?.path === "src/screen.css"
+    )
   ).toBe(true);
 });
 
@@ -353,22 +358,22 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     mappings: "SAAU",
   });
   await page.route("http://example.test/page", (route) =>
-    route.fulfill({ body: "" }),
+    route.fulfill({ body: "" })
   );
   await page.route("http://example.test/generated.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" })
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
-    }),
+      contentType: "text/css",
+    })
   );
   await page.goto("http://example.test/page");
-  const sourceFiles = [{ path: "src/generated.css", content: authoredCss }];
+  const sourceFiles = [{ content: authoredCss, path: "src/generated.css" }];
   const sourceRules = collectCssRuleEvidence(sourceFiles);
   await page.setContent(
-    `<style>${compiledCss}</style><main class="screen">Stock</main>`,
+    `<style>${compiledCss}</style><main class="screen">Stock</main>`
   );
   const withoutMap = await measureStyles(
     page,
@@ -378,15 +383,15 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     undefined,
     sourceRules,
     [],
-    sourceFiles,
+    sourceFiles
   );
   expect(
     withoutMap.observations.some(
-      (item) => item.property === "color" && item.provenance === "generated",
-    ),
+      (item) => item.property === "color" && item.provenance === "generated"
+    )
   ).toBe(false);
   await page.setContent(
-    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`
   );
   await page.locator(".screen").waitFor();
   await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
@@ -398,15 +403,15 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     undefined,
     sourceRules,
     [],
-    sourceFiles,
+    sourceFiles
   );
   expect(
     styles.observations.some(
       (item) =>
         item.property === "color" &&
         item.provenance === "generated" &&
-        item.cssSource?.path === "src/generated.css",
-    ),
+        item.cssSource?.path === "src/generated.css"
+    )
   ).toBe(true);
 });
 
@@ -417,25 +422,25 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
   const authoredCss = ".origin { color: var(--color-text-primary); }";
   const compiledCss = ".screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU",
     sources: [sharedPath],
     sourcesContent: [authoredCss],
-    mappings: "SAAU",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) =>
-    route.fulfill({ body: "" }),
+    route.fulfill({ body: "" })
   );
   await page.route("http://example.test/shared.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" })
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
-    }),
+      contentType: "text/css",
+    })
   );
   await page.goto("http://example.test/page");
-  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   const withoutMap = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -445,15 +450,15 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
     [],
     collectCssRuleEvidence(sharedFiles),
     [],
-    sharedFiles,
+    sharedFiles
   );
   expect(
     withoutMap.observations.some(
-      (item) => item.property === "color" && item.provenance === "shared",
-    ),
+      (item) => item.property === "color" && item.provenance === "shared"
+    )
   ).toBe(false);
   await page.setContent(
-    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`
   );
   await page.locator(".screen").waitFor();
   await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
@@ -466,7 +471,7 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
     [],
     collectCssRuleEvidence(sharedFiles),
     [],
-    sharedFiles,
+    sharedFiles
   );
   expect(
     styles.observations.some(
@@ -474,8 +479,8 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
         item.property === "color" &&
         item.provenance === "shared" &&
         item.verdict === "unassessed" &&
-        item.cssSource?.path === sharedPath,
-    ),
+        item.cssSource?.path === sharedPath
+    )
   ).toBe(true);
 });
 
@@ -485,25 +490,25 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
   const compiledCss =
     ".screen { color: var(--color-text-primary); }\n.screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU;SAAA",
     sources: [sharedPath],
     sourcesContent: [authoredCss],
-    mappings: "SAAU;SAAA",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) =>
-    route.fulfill({ body: "" }),
+    route.fulfill({ body: "" })
   );
   await page.route("http://example.test/ambiguous.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" })
   );
   await page.route("http://example.test/ambiguous.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
-    }),
+      contentType: "text/css",
+    })
   );
   await page.goto("http://example.test/page");
-  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -513,10 +518,10 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
     [],
     collectCssRuleEvidence(sharedFiles),
     [],
-    sharedFiles,
+    sharedFiles
   );
   await page.setContent(
-    `<link rel="stylesheet" href="/ambiguous.css"><main class="screen">Stock</main>`,
+    `<link rel="stylesheet" href="/ambiguous.css"><main class="screen">Stock</main>`
   );
   await page.locator(".screen").waitFor();
   await page.evaluate(() => document.styleSheets[0]?.cssRules.length);
@@ -529,12 +534,12 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
     [],
     collectCssRuleEvidence(sharedFiles),
     [],
-    sharedFiles,
+    sharedFiles
   );
   expect(
     styles.observations.some(
-      (item) => item.property === "color" && item.provenance === "shared",
-    ),
+      (item) => item.property === "color" && item.provenance === "shared"
+    )
   ).toBe(false);
 });
 
@@ -542,26 +547,26 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
   const authoredCss = ".origin { color: var(--color-text-primary); }";
   const compiledCss = ".screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU",
     sources: ["src/generated.css"],
     sourcesContent: [".origin { color: red; }"],
-    mappings: "SAAU",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) =>
-    route.fulfill({ body: "" }),
+    route.fulfill({ body: "" })
   );
   await page.route("http://example.test/generated.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" })
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
-    }),
+      contentType: "text/css",
+    })
   );
   await page.goto("http://example.test/page");
   await page.setContent(
-    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,
+    `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`
   );
   await page.locator(".screen").waitFor();
   const styles = await measureStyles(
@@ -571,17 +576,17 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
     [],
     undefined,
     collectCssRuleEvidence([
-      { path: "src/generated.css", content: authoredCss },
+      { content: authoredCss, path: "src/generated.css" },
     ]),
     [],
-    [{ path: "src/generated.css", content: authoredCss }],
+    [{ content: authoredCss, path: "src/generated.css" }]
   );
   expect(
     styles.observations.some(
       (item) =>
         item.property === "color" &&
         item.provenance === "unknown" &&
-        item.verdict === "unassessed",
-    ),
+        item.verdict === "unassessed"
+    )
   ).toBe(true);
 });

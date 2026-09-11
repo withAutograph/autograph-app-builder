@@ -3,14 +3,16 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,
   initialBuilderProvisionJournalRecord,
-  type BuilderProvisionAuthority,
-  type BuilderProvisionJournalRow,
-  type BuilderProvisionJournalStore,
+} from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalRow,
+  BuilderProvisionJournalStore,
 } from "./journal";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
@@ -21,12 +23,12 @@ function predicate(authority: BuilderProvisionAuthority, requestId: string) {
     eq(builderProvisioningJournals.audience, authority.audience),
     eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
     eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
-    eq(builderProvisioningJournals.requestId, requestId),
+    eq(builderProvisioningJournals.requestId, requestId)
   );
 }
 
 function parseRow(
-  row: typeof builderProvisioningJournals.$inferSelect,
+  row: typeof builderProvisioningJournals.$inferSelect
 ): BuilderProvisionJournalRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
@@ -35,18 +37,18 @@ function parseRow(
       workspaceId: row.workspaceId,
       ownerUserId: row.ownerUserId,
     }),
-    requestId: row.requestId,
-    requestDigest: row.requestDigest,
-    state: row.state as "pending" | "settled",
-    revision: row.revision,
-    record: builderProvisionJournalRecordSchema.parse(row.record),
     createdAt: row.createdAt,
+    record: builderProvisionJournalRecordSchema.parse(row.record),
+    requestDigest: row.requestDigest,
+    requestId: row.requestId,
+    revision: row.revision,
+    state: row.state as "pending" | "settled",
     updatedAt: row.updatedAt,
   };
 }
 
 export function createPostgresBuilderProvisionJournalStore(
-  database: Database,
+  database: Database
 ): BuilderProvisionJournalStore {
   const read: BuilderProvisionJournalStore["read"] = async (input) => {
     const authority = hostedTenantAuthoritySchema.parse(input.authority);
@@ -58,35 +60,6 @@ export function createPostgresBuilderProvisionJournalStore(
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
   return {
-    async reserve(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const requestDigest = builderProvisionRequestDigest(input.request);
-      const rows = await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...authority,
-          requestId: input.request.requestId,
-          requestDigest,
-          state: "pending",
-          revision: 1,
-          record: initialBuilderProvisionJournalRecord(
-            input.request,
-            input.now,
-          ),
-          createdAt: input.now,
-          updatedAt: input.now,
-        })
-        .onConflictDoNothing()
-        .returning();
-      const row = rows[0]
-        ? parseRow(rows[0])
-        : await read({ authority, requestId: input.request.requestId });
-      if (!row) throw new Error("provision-journal-not-durable");
-      if (row.requestDigest !== requestDigest)
-        throw new Error("provision-request-id-reused");
-      return row;
-    },
-    read,
     async compareAndSet(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const record = builderProvisionJournalRecordSchema.parse(input.record);
@@ -101,11 +74,40 @@ export function createPostgresBuilderProvisionJournalStore(
         .where(
           and(
             predicate(authority, input.requestId),
-            eq(builderProvisioningJournals.revision, input.expectedRevision),
-          ),
+            eq(builderProvisioningJournals.revision, input.expectedRevision)
+          )
         )
         .returning();
       return rows[0] ? parseRow(rows[0]) : undefined;
+    },
+    read,
+    async reserve(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const requestDigest = builderProvisionRequestDigest(input.request);
+      const rows = await database
+        .insert(builderProvisioningJournals)
+        .values({
+          ...authority,
+          requestId: input.request.requestId,
+          requestDigest,
+          state: "pending",
+          revision: 1,
+          record: initialBuilderProvisionJournalRecord(
+            input.request,
+            input.now
+          ),
+          createdAt: input.now,
+          updatedAt: input.now,
+        })
+        .onConflictDoNothing()
+        .returning();
+      const row = rows[0]
+        ? parseRow(rows[0])
+        : await read({ authority, requestId: input.request.requestId });
+      if (!row) throw new Error("provision-journal-not-durable");
+      if (row.requestDigest !== requestDigest)
+        throw new Error("provision-request-id-reused");
+      return row;
     },
   };
 }

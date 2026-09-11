@@ -15,15 +15,13 @@ import {
 } from "@/components/ui/item";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 
-import {
-  DeletePasskeyDialog,
-  type ListedPasskey,
-} from "./delete-passkey-dialog";
+import { DeletePasskeyDialog } from "./delete-passkey-dialog";
+import type { ListedPasskey } from "./delete-passkey-dialog";
 import { RenamePasskeyDialog } from "./rename-passkey-dialog";
 
-export type PasskeyProps = {
+export interface PasskeyProps {
   passkey: ListedPasskey;
-};
+}
 
 export function Passkey({ passkey }: PasskeyProps) {
   const { localization } = useAuth();
@@ -58,7 +56,7 @@ export function Passkey({ passkey }: PasskeyProps) {
           onClick={() => setDeleteOpen(true)}
           aria-label={passkeyLocalization.deletePasskey.replace(
             "{{name}}",
-            passkeyName,
+            passkeyName
           )}
         >
           <X />

@@ -9,10 +9,10 @@ const instantSchema = z.string().datetime({ offset: true });
 
 export const hostedTenantAuthoritySchema = z
   .object({
-    issuer: z.string().url().startsWith("https://"),
     audience: z.string().url().startsWith("https://"),
-    workspaceId: hostedIdentifierSchema,
+    issuer: z.string().url().startsWith("https://"),
     ownerUserId: hostedIdentifierSchema,
+    workspaceId: hostedIdentifierSchema,
   })
   .strict()
   .superRefine((authority, context) => {
@@ -27,8 +27,8 @@ export const hostedTenantAuthoritySchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["issuer"],
         message: "Hosted Preview issuer must be the exact /api/auth URL.",
+        path: ["issuer"],
       });
     }
     if (
@@ -40,23 +40,23 @@ export const hostedTenantAuthoritySchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["audience"],
         message: "Hosted Preview audience must be the exact /mcp URL.",
+        path: ["audience"],
       });
     }
     if (issuer.origin !== audience.origin) {
       context.addIssue({
         code: "custom",
-        path: ["audience"],
         message: "Hosted Preview issuer and audience must share one origin.",
+        path: ["audience"],
       });
     }
   });
 
 const requestBase = {
-  version: z.literal(1),
   authority: hostedTenantAuthoritySchema,
   requestedAt: instantSchema,
+  version: z.literal(1),
 };
 
 const seedPlanSchema = z
@@ -104,29 +104,25 @@ export type HostedAdminApplyRequest = z.infer<
 
 const effectsSchema = z
   .object({
+    authorizationStateRowsDeleted: z.number().int().min(0),
+    integrationRowsDeleted: z.number().int().min(0),
     membershipRowsAffected: z.number().int().min(0),
     membershipRowsDeleted: z.number().int().min(0),
     operationRowsDeleted: z.number().int().min(0),
     sessionRowsDeleted: z.number().int().min(0),
-    integrationRowsDeleted: z.number().int().min(0),
-    authorizationStateRowsDeleted: z.number().int().min(0),
   })
   .strict();
 
 export const hostedAdminReceiptSchema = z
   .object({
-    version: z.literal(1),
     action: z.enum([
       "membership.seed",
       "membership.revoke",
       "retention.apply",
       "tenant.delete",
     ]),
-    status: z.enum(["applied", "no-op"]),
-    requestDigest: sha256Schema,
-    authorityDigest: sha256Schema,
     appliedAt: instantSchema,
-    effects: effectsSchema,
+    authorityDigest: sha256Schema,
     database: z
       .object({
         dialect: z.literal("postgresql"),
@@ -134,6 +130,10 @@ export const hostedAdminReceiptSchema = z
         maxConnections: z.literal(1),
       })
       .strict(),
+    effects: effectsSchema,
+    requestDigest: sha256Schema,
+    status: z.enum(["applied", "no-op"]),
+    version: z.literal(1),
   })
   .strict();
 
@@ -173,26 +173,26 @@ function canonicalRequest(request: HostedAdminPlanRequest): string {
   return JSON.stringify(
     request.action === "retention.apply"
       ? {
-          version: request.version,
           action: request.action,
           authority: request.authority,
-          requestedAt: request.requestedAt,
           deleteBefore: request.deleteBefore,
+          requestedAt: request.requestedAt,
+          version: request.version,
         }
       : request.action === "tenant.delete"
         ? {
-            version: request.version,
             action: request.action,
             authority: request.authority,
-            requestedAt: request.requestedAt,
             membershipRevokedBefore: request.membershipRevokedBefore,
+            requestedAt: request.requestedAt,
+            version: request.version,
           }
         : {
-            version: request.version,
             action: request.action,
             authority: request.authority,
             requestedAt: request.requestedAt,
-          },
+            version: request.version,
+          }
   );
 }
 
@@ -203,12 +203,12 @@ function digest(value: string): `sha256:${string}` {
 export function planHostedAdminRequest(input: unknown) {
   const request = hostedAdminPlanRequestSchema.parse(input);
   return {
-    version: 1 as const,
     action: request.action,
-    requestDigest: digest(canonicalRequest(request)),
     authorityDigest: digest(JSON.stringify(request.authority)),
-    requiredConfirmationDigest: digest(`confirm\n${canonicalRequest(request)}`),
+    requestDigest: digest(canonicalRequest(request)),
     requestedAt: request.requestedAt,
+    requiredConfirmationDigest: digest(`confirm\n${canonicalRequest(request)}`),
+    version: 1 as const,
     ...(request.action === "retention.apply"
       ? { deleteBeforeDigest: digest(request.deleteBefore) }
       : {}),
@@ -216,12 +216,12 @@ export function planHostedAdminRequest(input: unknown) {
 }
 
 const emptyEffects = {
+  authorizationStateRowsDeleted: 0,
+  integrationRowsDeleted: 0,
   membershipRowsAffected: 0,
   membershipRowsDeleted: 0,
   operationRowsDeleted: 0,
   sessionRowsDeleted: 0,
-  integrationRowsDeleted: 0,
-  authorizationStateRowsDeleted: 0,
 };
 
 export async function executeHostedAdminRequest(input: {
@@ -233,25 +233,25 @@ export async function executeHostedAdminRequest(input: {
   const planRequest: HostedAdminPlanRequest =
     request.action === "retention.apply"
       ? {
-          version: request.version,
           action: request.action,
           authority: request.authority,
-          requestedAt: request.requestedAt,
           deleteBefore: request.deleteBefore,
+          requestedAt: request.requestedAt,
+          version: request.version,
         }
       : request.action === "tenant.delete"
         ? {
-            version: request.version,
             action: request.action,
             authority: request.authority,
-            requestedAt: request.requestedAt,
             membershipRevokedBefore: request.membershipRevokedBefore,
+            requestedAt: request.requestedAt,
+            version: request.version,
           }
         : {
-            version: request.version,
             action: request.action,
             authority: request.authority,
             requestedAt: request.requestedAt,
+            version: request.version,
           };
   const plan = planHostedAdminRequest(planRequest);
   if (request.confirmationDigest !== plan.requiredConfirmationDigest) {
@@ -278,7 +278,7 @@ export async function executeHostedAdminRequest(input: {
       requestedAtEpochMs - 5 * 60_000
   ) {
     throw new Error(
-      "Hosted tenant deletion requires a five-minute revocation drain.",
+      "Hosted tenant deletion requires a five-minute revocation drain."
     );
   }
 
@@ -320,17 +320,17 @@ export async function executeHostedAdminRequest(input: {
 
   const changed = Object.values(effects).some((count) => count > 0);
   return hostedAdminReceiptSchema.parse({
-    version: 1,
     action: request.action,
-    status: changed ? "applied" : "no-op",
-    requestDigest: plan.requestDigest,
-    authorityDigest: plan.authorityDigest,
     appliedAt: new Date(nowEpochMs).toISOString(),
-    effects,
+    authorityDigest: plan.authorityDigest,
     database: {
       dialect: "postgresql",
-      secretTransport: "task-scoped-stdin",
       maxConnections: 1,
+      secretTransport: "task-scoped-stdin",
     },
+    effects,
+    requestDigest: plan.requestDigest,
+    status: changed ? "applied" : "no-op",
+    version: 1,
   });
 }

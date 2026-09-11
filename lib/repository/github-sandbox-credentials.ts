@@ -8,9 +8,9 @@ export function githubSandboxCredentialPolicy(token: string) {
 
   return {
     allow: {
-      "github.com": rules,
-      "codeload.github.com": rules,
       "*": [],
+      "codeload.github.com": rules,
+      "github.com": rules,
     },
   };
 }

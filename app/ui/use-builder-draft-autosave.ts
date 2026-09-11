@@ -8,44 +8,51 @@ import type {
 } from "./builder-draft-outbox";
 
 export type BuilderDraftAutosaveStatus =
-  "idle" | "saving" | "saved" | "offline" | "error";
+  | "idle"
+  | "saving"
+  | "saved"
+  | "offline"
+  | "error";
 
 export type BuilderDraftAutosaveReason =
-  "debounce" | "flush" | "visibilitychange" | "pagehide";
+  | "debounce"
+  | "flush"
+  | "visibilitychange"
+  | "pagehide";
 
-export type BuilderDraftSaveContext<T> = {
+export interface BuilderDraftSaveContext<T> {
   mutationId: string;
   snapshot: T;
   reason: BuilderDraftAutosaveReason;
   /** True when the caller may use fetch keepalive/beacon semantics. */
   keepalive: boolean;
-};
+}
 
-export type BuilderDraftSaveAcknowledgement = {
+export interface BuilderDraftSaveAcknowledgement {
   /** Must exactly match the dispatched mutation ID before the outbox is cleared. */
   mutationId: string;
   savedAt?: string;
-};
+}
 
-export type BuilderDraftAutosaveOptions<T> = {
+export interface BuilderDraftAutosaveOptions<T> {
   outbox: BuilderDraftOutbox<T>;
   save(
-    context: BuilderDraftSaveContext<T>,
+    context: BuilderDraftSaveContext<T>
   ): Promise<BuilderDraftSaveAcknowledgement>;
   debounceMs?: number;
   /** Defaults to navigator.onLine when available. */
   isOnline?(): boolean;
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
   onVisibilityFlush?(reason: "visibilitychange" | "pagehide"): void;
-};
+}
 
-export type BuilderDraftAutosave<T> = {
+export interface BuilderDraftAutosave<T> {
   status: BuilderDraftAutosaveStatus;
   error: Error | undefined;
   lastSavedAt: string | undefined;
   schedule(snapshot: T): string;
   flush(
-    reason?: Exclude<BuilderDraftAutosaveReason, "debounce">,
+    reason?: Exclude<BuilderDraftAutosaveReason, "debounce">
   ): Promise<void>;
   retry(): Promise<void>;
   /** Reads the recovery snapshot without dispatching it. */
@@ -54,18 +61,24 @@ export type BuilderDraftAutosave<T> = {
   resumePending(): Promise<void>;
   /** Discards local work that a newer server revision has superseded. */
   discardPending(): Promise<void>;
-};
+}
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
 
 function createMutationId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
+  }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function cloneSnapshot<T>(snapshot: T): T {
-  if (typeof structuredClone === "function") return structuredClone(snapshot);
+  if (typeof structuredClone === "function") {
+    return structuredClone(snapshot);
+  }
   return JSON.parse(JSON.stringify(snapshot)) as T;
 }
 
@@ -79,14 +92,14 @@ function browserIsOnline() {
  * provider redirect; browser hiding automatically makes a best-effort flush.
  */
 export function useBuilderDraftAutosave<T>(
-  options: BuilderDraftAutosaveOptions<T>,
+  options: BuilderDraftAutosaveOptions<T>
 ): BuilderDraftAutosave<T> {
   const [status, setStatus] = useState<BuilderDraftAutosaveStatus>("idle");
   const [error, setError] = useState<Error>();
   const [lastSavedAt, setLastSavedAt] = useState<string>();
-  const queued = useRef<Pending<T> | undefined>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const draining = useRef<Promise<boolean> | undefined>(undefined);
+  const queued = useRef<Pending<T> | undefined>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>();
+  const draining = useRef<Promise<boolean> | undefined>();
   const mounted = useRef(true);
   const save = useRef(options.save);
   const isOnline = useRef(options.isOnline);
@@ -100,11 +113,13 @@ export function useBuilderDraftAutosave<T>(
 
   const updateStatus = useCallback(
     (next: BuilderDraftAutosaveStatus, nextError?: Error) => {
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        return;
+      }
       setStatus(next);
       setError(nextError);
     },
-    [],
+    []
   );
 
   const online = useCallback(() => {
@@ -119,7 +134,9 @@ export function useBuilderDraftAutosave<T>(
         timer.current = undefined;
       }
 
-      if (draining.current) return draining.current;
+      if (draining.current) {
+        return draining.current;
+      }
       const run = async () => {
         while (queued.current) {
           if (!online()) {
@@ -127,27 +144,30 @@ export function useBuilderDraftAutosave<T>(
             return false;
           }
 
-          const current = queued.current;
+          const { current } = queued;
           queued.current = undefined;
           updateStatus("saving");
           try {
             const acknowledgement = await save.current({
-              mutationId: current.mutationId,
-              snapshot: current.snapshot,
-              reason,
               keepalive: reason === "visibilitychange" || reason === "pagehide",
+              mutationId: current.mutationId,
+              reason,
+              snapshot: current.snapshot,
             });
-            if (acknowledgement.mutationId !== current.mutationId)
+            if (acknowledgement.mutationId !== current.mutationId) {
               throw new Error("builder-draft-acknowledgement-mismatch");
+            }
             await options.outbox.clearIfMutationId(current.mutationId);
-            if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
-          } catch (caught) {
+            if (mounted.current) {
+              setLastSavedAt(acknowledgement.savedAt);
+            }
+          } catch (error) {
             if (!queued.current) queued.current = current;
             updateStatus(
               online() ? "error" : "offline",
-              caught instanceof Error
-                ? caught
-                : new Error("builder-draft-save-failed"),
+              error instanceof Error
+                ? error
+                : new Error("builder-draft-save-failed")
             );
             return false;
           }
@@ -160,15 +180,17 @@ export function useBuilderDraftAutosave<T>(
       try {
         await pending;
       } finally {
-        if (draining.current === pending) draining.current = undefined;
+        if (draining.current === pending) {
+          draining.current = undefined;
+        }
       }
     },
-    [online, options.outbox, updateStatus],
+    [online, options.outbox, updateStatus]
   );
 
   const flush = useCallback(
     async (
-      reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush",
+      reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush"
     ) => {
       // A newer snapshot can be queued in the narrow window while an older
       // dispatch is completing. In particular, provider redirects must not
@@ -177,41 +199,47 @@ export function useBuilderDraftAutosave<T>(
         const drained = await dispatch(reason);
         // An offline/error result deliberately retains the outbox entry for a
         // later retry. Do not spin indefinitely while the save is unavailable.
-        if (!drained) return;
+        if (!drained) {
+          return;
+        }
       } while (queued.current);
     },
-    [dispatch],
+    [dispatch]
   );
 
   const schedule = useCallback(
     (snapshot: T) => {
       const entry: Pending<T> = {
-        version: 1,
+        createdAt: Date.now(),
         mutationId: createMutationId(),
         snapshot: cloneSnapshot(snapshot),
-        createdAt: Date.now(),
+        version: 1,
       };
       queued.current = entry;
       void options.outbox.write(entry);
       updateStatus(online() ? "saving" : "offline");
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {
+        clearTimeout(timer.current);
+      }
       timer.current = setTimeout(() => {
         timer.current = undefined;
         void dispatch("debounce");
       }, options.debounceMs ?? 500);
       return entry.mutationId;
     },
-    [dispatch, online, options.debounceMs, options.outbox, updateStatus],
+    [dispatch, online, options.debounceMs, options.outbox, updateStatus]
   );
 
   const restorePending = useCallback(
     () => options.outbox.read(),
-    [options.outbox],
+    [options.outbox]
   );
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
-    if (!mounted.current || !entry || queued.current) return;
+    if (!mounted.current || !entry || queued.current) {
+      return;
+    }
     queued.current = entry;
     updateStatus(online() ? "saving" : "offline");
     await flush("flush");
@@ -237,7 +265,9 @@ export function useBuilderDraftAutosave<T>(
 
   useEffect(() => {
     const visibility = () => {
-      if (document.visibilityState !== "hidden") return;
+      if (document.visibilityState !== "hidden") {
+        return;
+      }
       onVisibilityFlush.current?.("visibilitychange");
       void flush("visibilitychange");
     };
@@ -256,20 +286,22 @@ export function useBuilderDraftAutosave<T>(
   useEffect(
     () => () => {
       mounted.current = false;
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {
+        clearTimeout(timer.current);
+      }
     },
-    [],
+    []
   );
 
   return {
-    status,
+    discardPending,
     error,
-    lastSavedAt,
-    schedule,
     flush,
-    retry,
+    lastSavedAt,
     restorePending,
     resumePending,
-    discardPending,
+    retry,
+    schedule,
+    status,
   };
 }

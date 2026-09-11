@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                |
-| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hierarchy      | 4/4   | The page title and task summary establish context immediately, while the split list-detail composition in desktop-0 gives the selected exception, severity, stock evidence, and primary mock action clear priority. Confirmation and result states retain the product identity and elevate the modeled quantity without losing context.                               |
-| layout         | 3/4   | Alignment and spacing are consistent across filters, exception rows, evidence labels, and action footers in desktop-0 and desktop-wide-0. The centered maximum-width composition remains readable on wide windows, though the confirmation body at 1024px becomes vertically constrained and allows the final case-pack row to sit beneath the fixed action footer.   |
-| typography     | 3/4   | Headings, bold field labels, regular values, and status pills form a consistent and readable system across desktop-0 and desktop-custom-700x900-1. Longer confirmation labels wrap understandably, but the dense two-column evidence at 1024px produces several awkward multi-line labels and makes the final row easier to miss.                                     |
-| responsive     | 3/4   | The composition adapts successfully from centered wide layouts to a compact 1024px split view and then to a detail-only panel with a clear Back control at 700px. Controls remain usable and action footers stay available, but desktop-window-1 relies on an internal scroll area that initially obscures confirmation evidence immediately above the action.        |
-| productClarity | 4/4   | The interface clearly supports location and severity filtering, record selection, stock and supplier review, confirmation, a simulation-only result, and reset. Repeated text such as “No order was placed and underlying stock is unchanged” makes the mock nature explicit; the only notable ambiguity is why a 54-unit shortfall produces a 72-unit replenishment. |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 4/4 | The page title and task summary establish context immediately, while the split list-detail composition in desktop-0 gives the selected exception, severity, stock evidence, and primary mock action clear priority. Confirmation and result states retain the product identity and elevate the modeled quantity without losing context. |
+| layout | 3/4 | Alignment and spacing are consistent across filters, exception rows, evidence labels, and action footers in desktop-0 and desktop-wide-0. The centered maximum-width composition remains readable on wide windows, though the confirmation body at 1024px becomes vertically constrained and allows the final case-pack row to sit beneath the fixed action footer. |
+| typography | 3/4 | Headings, bold field labels, regular values, and status pills form a consistent and readable system across desktop-0 and desktop-custom-700x900-1. Longer confirmation labels wrap understandably, but the dense two-column evidence at 1024px produces several awkward multi-line labels and makes the final row easier to miss. |
+| responsive | 3/4 | The composition adapts successfully from centered wide layouts to a compact 1024px split view and then to a detail-only panel with a clear Back control at 700px. Controls remain usable and action footers stay available, but desktop-window-1 relies on an internal scroll area that initially obscures confirmation evidence immediately above the action. |
+| productClarity | 4/4 | The interface clearly supports location and severity filtering, record selection, stock and supplier review, confirmation, a simulation-only result, and reset. Repeated text such as “No order was placed and underlying stock is unchanged” makes the mock nature explicit; the only notable ambiguity is why a 54-unit shortfall produces a 72-unit replenishment. |
 
 ## Strengths
 
@@ -50,32 +50,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/526) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/526) |
+| desktop-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/526) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
 
 ## Latest-run screenshots
 

@@ -5,7 +5,7 @@ export const renewalReviewDesignPrompt =
 
 export const renewalReviewUiPreview = {
   appId: "renewal-review",
-  routes: ["/"],
+  catalogGaps: [],
   files: [
     {
       path: "src/routes/index.tsx",
@@ -35,13 +35,35 @@ export default function RenewalReview() {
     },
   ],
   manifest: {
-    version: 1,
-    screens: [
+    assumptions: [
       {
-        id: "renewal-queue",
-        title: "Renewal queue",
-        route: "/",
-        entry: "src/routes/index.tsx",
+        id: "queue-first",
+        statement:
+          "Customer-success managers start from a prioritized renewal queue.",
+        routes: ["/"],
+      },
+    ],
+    decisions: [],
+    fixtureFacts: [
+      {
+        id: "renewal-window",
+        statement: "The review window is 90 days and contains three renewals.",
+        routes: ["/"],
+      },
+    ],
+    implementationNotes: [
+      {
+        visibleElement: "Open account review",
+        productionMeaning:
+          "Navigates to evidence and recommended next actions for the selected account.",
+        routes: ["/"],
+      },
+    ],
+    openQuestions: [
+      {
+        id: "intervention-owner",
+        statement: "Should the first version assign an intervention owner?",
+        routes: ["/"],
       },
     ],
     productionComponents: [
@@ -54,39 +76,17 @@ export default function RenewalReview() {
       { name: "DataTableComposition", source: "@autograph/compositions" },
     ],
     productionIcons: [],
-    fixtureFacts: [
+    screens: [
       {
-        id: "renewal-window",
-        statement: "The review window is 90 days and contains three renewals.",
-        routes: ["/"],
+        id: "renewal-queue",
+        title: "Renewal queue",
+        route: "/",
+        entry: "src/routes/index.tsx",
       },
     ],
-    decisions: [],
-    assumptions: [
-      {
-        id: "queue-first",
-        statement:
-          "Customer-success managers start from a prioritized renewal queue.",
-        routes: ["/"],
-      },
-    ],
-    openQuestions: [
-      {
-        id: "intervention-owner",
-        statement: "Should the first version assign an intervention owner?",
-        routes: ["/"],
-      },
-    ],
-    implementationNotes: [
-      {
-        visibleElement: "Open account review",
-        productionMeaning:
-          "Navigates to evidence and recommended next actions for the selected account.",
-        routes: ["/"],
-      },
-    ],
+    version: 1,
   },
-  catalogGaps: [],
+  routes: ["/"],
 } satisfies UiPreviewInput;
 
 /** Browser transport derived from the React fixture. Visual semantics are

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type ProviderConnectionProps = {
+interface ProviderConnectionProps {
   action: string;
   buttonLabel: string;
   children: ReactNode;
@@ -21,7 +21,7 @@ type ProviderConnectionProps = {
   returnTo: string;
   resumeKey?: string;
   title: string;
-};
+}
 
 export function ProviderConnection({
   action,
@@ -34,10 +34,10 @@ export function ProviderConnection({
   title,
 }: ProviderConnectionProps) {
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
+    <main className="bg-background text-foreground min-h-svh">
+      <header className="bg-background flex h-14 items-center border-b px-4 text-sm sm:px-8">
         <Link
-          className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-2 transition-colors focus-visible:rounded-md focus-visible:ring-3 focus-visible:outline-none"
           href={
             resumeKey
               ? { pathname: returnTo, query: { resume: resumeKey } }
@@ -52,7 +52,7 @@ export function ProviderConnection({
       <Card className="mx-auto mt-8 w-[calc(100%-2rem)] max-w-md sm:mt-12">
         <CardHeader className="gap-4">
           <span
-            className="grid size-10 place-items-center rounded-lg border bg-background text-foreground shadow-sm"
+            className="bg-background text-foreground grid size-10 place-items-center rounded-lg border shadow-sm"
             aria-hidden="true"
           >
             {icon}
@@ -90,7 +90,7 @@ export function ProviderConnectionNotice({
         "rounded-lg border px-3 py-2.5 text-sm leading-5",
         status === "error"
           ? "border-destructive/30 bg-destructive/10 text-destructive"
-          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
       )}
       role={status === "error" ? "alert" : "status"}
     >

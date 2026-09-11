@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| hierarchy      | 3/4   | The page title, filters, exception list, selected record, and primary mock action form a clear top-to-bottom hierarchy. Selected-row highlighting and prominent modeled quantities aid scanning, though the completed simulation state is visually close to its confirmation state and constrained detail views lose the persistent page-level task heading.                               |
-| layout         | 4/4   | The master-detail composition is consistently aligned and comfortably spaced at 1024, 1440, and 1920 widths. The centered maximum-width treatment avoids overextending content on wide screens, while cards, dividers, definition rows, and action placement remain orderly.                                                                                                               |
-| typography     | 4/4   | Headings, labels, values, metadata, and explanatory copy use a consistent and readable type hierarchy. Large quantity figures are especially effective in the replenishment review, while bold product names and days-of-cover values make list rows easy to compare.                                                                                                                      |
-| responsive     | 3/4   | The interface transitions successfully from a two-pane workspace at 1024–1920 pixels to list-first and detail-only views at 700 pixels, with a visible Back control and usable wrapping action rows. Normal page scrolling accommodates the longer modeled state, but the narrow detail view no longer displays the broader Stock exceptions task heading, slightly weakening orientation. |
-| productClarity | 4/4   | The workflow directly supports location and severity filtering, exception selection, stock and supplier review, and a reversible mock replenishment. Labels such as “Simulation only,” the case-rounding rationale, projected on-hand, and “No order was placed” clearly distinguish modeling from a real inventory change.                                                                |
+| Dimension | Score | Reason |
+| --- | --- | --- |
+| hierarchy | 3/4 | The page title, filters, exception list, selected record, and primary mock action form a clear top-to-bottom hierarchy. Selected-row highlighting and prominent modeled quantities aid scanning, though the completed simulation state is visually close to its confirmation state and constrained detail views lose the persistent page-level task heading. |
+| layout | 4/4 | The master-detail composition is consistently aligned and comfortably spaced at 1024, 1440, and 1920 widths. The centered maximum-width treatment avoids overextending content on wide screens, while cards, dividers, definition rows, and action placement remain orderly. |
+| typography | 4/4 | Headings, labels, values, metadata, and explanatory copy use a consistent and readable type hierarchy. Large quantity figures are especially effective in the replenishment review, while bold product names and days-of-cover values make list rows easy to compare. |
+| responsive | 3/4 | The interface transitions successfully from a two-pane workspace at 1024–1920 pixels to list-first and detail-only views at 700 pixels, with a visible Back control and usable wrapping action rows. Normal page scrolling accommodates the longer modeled state, but the narrow detail view no longer displays the broader Stock exceptions task heading, slightly weakening orientation. |
+| productClarity | 4/4 | The workflow directly supports location and severity filtering, exception selection, stock and supplier review, and a reversible mock replenishment. Labels such as “Simulation only,” the case-rounding rationale, projected on-hand, and “No order was placed” clearly distinguish modeling from a real inventory change. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport                 | Category   | Token references / assessed | Coverage   |
-| ------------------------ | ---------- | --------------------------- | ---------- |
-| desktop-0                | color      | 0/0                         | 0% (0/233) |
-| desktop-0                | typography | 0/0                         | 0% (0/522) |
-| desktop-0                | spacing    | 0/0                         | 0% (0/271) |
-| desktop-0                | radius     | 0/0                         | 0% (0/116) |
-| desktop-0                | border     | 0/0                         | 0% (0/125) |
-| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
-| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
-| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
-| desktop-wide-0           | spacing    | 0/0                         | 0% (0/271) |
-| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
-| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
-| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
-| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
-| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
-| desktop-window-0         | spacing    | 0/0                         | 0% (0/271) |
-| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
-| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
-| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
-| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/142) |
-| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/297) |
-| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/166) |
-| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/71)  |
-| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/79)  |
-| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/75)  |
+| Viewport | Category | Token references / assessed | Coverage |
+| --- | --- | --- | --- |
+| desktop-0 | color | 0/0 | 0% (0/233) |
+| desktop-0 | typography | 0/0 | 0% (0/522) |
+| desktop-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-0 | radius | 0/0 | 0% (0/116) |
+| desktop-0 | border | 0/0 | 0% (0/125) |
+| desktop-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-wide-0 | color | 0/0 | 0% (0/233) |
+| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
+| desktop-wide-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
+| desktop-wide-0 | border | 0/0 | 0% (0/125) |
+| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-window-0 | color | 0/0 | 0% (0/233) |
+| desktop-window-0 | typography | 0/0 | 0% (0/522) |
+| desktop-window-0 | spacing | 0/0 | 0% (0/271) |
+| desktop-window-0 | radius | 0/0 | 0% (0/116) |
+| desktop-window-0 | border | 0/0 | 0% (0/125) |
+| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
+| desktop-custom-700x900-0 | color | 0/0 | 0% (0/142) |
+| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/297) |
+| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/166) |
+| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/71) |
+| desktop-custom-700x900-0 | border | 0/0 | 0% (0/79) |
+| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/75) |
 
 ## Latest-run screenshots
 

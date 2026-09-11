@@ -1,11 +1,13 @@
-import { authQueryKeys, type SessionData } from "@better-auth-ui/core";
+import { authQueryKeys } from "@better-auth-ui/core";
+import type { SessionData } from "@better-auth-ui/core";
 import type { Preview } from "@storybook/nextjs-vite";
 import { expect } from "storybook/test";
 
-import appStyles from "../app/ui/app-builder.module.css";
 import { AppShell } from "../components/app-shell";
-import { authClient } from "../lib/auth-client";
+import type { authClient } from "../lib/auth-client";
 import { getQueryClient } from "../lib/query-client";
+
+import appStyles from "../app/ui/app-builder.module.css";
 import "../app/globals.css";
 import "./preview.css";
 
@@ -27,7 +29,45 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 });
 
 const preview: Preview = {
+  afterEach: ({ canvasElement, title }) => {
+    if (!usesCreateAppShell(title)) return;
+
+    expect(
+      canvasElement.querySelector("[data-create-app-story-environment]")
+    ).toBeInTheDocument();
+  },
+  decorators: [
+    (Story, context) => (
+      <AppShell>
+        {usesCreateAppShell(context.title) ? (
+          <div className={appStyles.appShell} data-create-app-story-environment>
+            <Story />
+          </div>
+        ) : (
+          <Story />
+        )}
+      </AppShell>
+    ),
+  ],
+  loaders: [
+    async ({ parameters }) => {
+      storybookQueryClient.setQueryData(
+        authQueryKeys.session,
+        (parameters.authSession ?? null) as SessionData<typeof authClient>
+      );
+
+      return {};
+    },
+  ],
   parameters: {
+    authSession: null,
+    controls: {
+      matchers: {
+        color: /(background|color)$/i,
+        date: /Date$/i,
+      },
+    },
+    nextjs: { appDirectory: true },
     options: {
       storySort: {
         order: [
@@ -74,44 +114,6 @@ const preview: Preview = {
         ],
       },
     },
-    authSession: null,
-    nextjs: { appDirectory: true },
-    controls: {
-      matchers: {
-        color: /(background|color)$/i,
-        date: /Date$/i,
-      },
-    },
-  },
-  loaders: [
-    async ({ parameters }) => {
-      storybookQueryClient.setQueryData(
-        authQueryKeys.session,
-        (parameters.authSession ?? null) as SessionData<typeof authClient>,
-      );
-
-      return {};
-    },
-  ],
-  decorators: [
-    (Story, context) => (
-      <AppShell>
-        {usesCreateAppShell(context.title) ? (
-          <div className={appStyles.appShell} data-create-app-story-environment>
-            <Story />
-          </div>
-        ) : (
-          <Story />
-        )}
-      </AppShell>
-    ),
-  ],
-  afterEach: ({ canvasElement, title }) => {
-    if (!usesCreateAppShell(title)) return;
-
-    expect(
-      canvasElement.querySelector("[data-create-app-story-environment]"),
-    ).toBeInTheDocument();
   },
 };
 

@@ -6,29 +6,26 @@ import {
   hostedIdentifierSchema,
   hostedPrincipalSchema,
   tenantKeyFor,
-  type HostedPrincipal,
 } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 import {
   SANDBOX_EXECUTION_POLICY,
   sandboxExecutionPolicyDigest,
-  type SandboxExecutionPolicy,
 } from "./execution-policy";
+import type { SandboxExecutionPolicy } from "./execution-policy";
 
 const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
 export const sandboxExecutionLeaseSchema = z
   .object({
-    version: z.literal(1),
-    principal: hostedPrincipalSchema,
-    adapterSessionId: hostedIdentifierSchema,
-    providerSandboxId: hostedIdentifierSchema,
-    epoch: z.number().int().positive(),
-    state: z.enum(["active", "released", "orphaned"]),
-    policyDigest: sha256Digest,
     acquiredAtEpochMs: z.number().int().nonnegative(),
-    heartbeatAtEpochMs: z.number().int().nonnegative(),
+    adapterSessionId: hostedIdentifierSchema,
+    epoch: z.number().int().positive(),
     expiresAtEpochMs: z.number().int().positive(),
-    releasedAtEpochMs: z.number().int().nonnegative().optional(),
+    heartbeatAtEpochMs: z.number().int().nonnegative(),
+    policyDigest: sha256Digest,
+    principal: hostedPrincipalSchema,
+    providerSandboxId: hostedIdentifierSchema,
     releaseReason: z
       .enum([
         "waiting",
@@ -40,6 +37,9 @@ export const sandboxExecutionLeaseSchema = z
         "expired",
       ])
       .optional(),
+    releasedAtEpochMs: z.number().int().nonnegative().optional(),
+    state: z.enum(["active", "released", "orphaned"]),
+    version: z.literal(1),
   })
   .strict()
   .superRefine((lease, context) => {
@@ -122,13 +122,13 @@ export interface SandboxExecutionLeaseStore {
 
 export function sandboxLeaseKey(
   principal: HostedPrincipal,
-  adapterSessionId: string,
+  adapterSessionId: string
 ): string {
   return JSON.stringify([tenantKeyFor(principal), adapterSessionId]);
 }
 
 export function sandboxLeaseReceiptDigest(
-  lease: SandboxExecutionLease,
+  lease: SandboxExecutionLease
 ): string {
   return `sha256:${createHash("sha256")
     .update(JSON.stringify(sandboxExecutionLeaseSchema.parse(lease)))
@@ -139,14 +139,14 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   private readonly leases = new Map<string, SandboxExecutionLease>();
 
   async acquire(
-    input: Parameters<SandboxExecutionLeaseStore["acquire"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["acquire"]>[0]
   ): Promise<AcquireSandboxLeaseResult> {
     const principal = hostedPrincipalSchema.parse(input.principal);
     const adapterSessionId = hostedIdentifierSchema.parse(
-      input.adapterSessionId,
+      input.adapterSessionId
     );
     const providerSandboxId = hostedIdentifierSchema.parse(
-      input.providerSandboxId,
+      input.providerSandboxId
     );
     const policyDigest = sandboxExecutionPolicyDigest(input.policy);
     const key = sandboxLeaseKey(principal, adapterSessionId);
@@ -163,32 +163,32 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
         existing.policyDigest !== policyDigest
       ) {
         throw new Error(
-          "An active sandbox lease is bound to different inputs.",
+          "An active sandbox lease is bound to different inputs."
         );
       }
       return { disposition: "existing", lease: structuredClone(existing) };
     }
     const lease = sandboxExecutionLeaseSchema.parse({
-      version: 1,
-      principal,
-      adapterSessionId,
-      providerSandboxId,
-      epoch: (existing?.epoch ?? 0) + 1,
-      state: "active",
-      policyDigest,
       acquiredAtEpochMs: input.nowEpochMs,
-      heartbeatAtEpochMs: input.nowEpochMs,
+      adapterSessionId,
+      epoch: (existing?.epoch ?? 0) + 1,
       expiresAtEpochMs: input.nowEpochMs + input.policy.lease.ttlMs,
+      heartbeatAtEpochMs: input.nowEpochMs,
+      policyDigest,
+      principal,
+      providerSandboxId,
+      state: "active",
+      version: 1,
     });
     this.leases.set(key, lease);
     return { disposition: "acquired", lease: structuredClone(lease) };
   }
 
   async assertCurrent(
-    input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0]
   ): Promise<SandboxExecutionLease> {
     const lease = this.leases.get(
-      sandboxLeaseKey(input.principal, input.adapterSessionId),
+      sandboxLeaseKey(input.principal, input.adapterSessionId)
     );
     if (
       lease === undefined ||
@@ -204,49 +204,53 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   }
 
   async heartbeat(
-    input: Parameters<SandboxExecutionLeaseStore["heartbeat"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["heartbeat"]>[0]
   ): Promise<SandboxExecutionLease> {
     const key = sandboxLeaseKey(input.principal, input.adapterSessionId);
     const current = await this.assertCurrent({
       ...input,
-      providerSandboxId: this.leases.get(key)?.providerSandboxId ?? "missing",
       policyDigest: this.leases.get(key)?.policyDigest ?? "sha256:missing",
+      providerSandboxId: this.leases.get(key)?.providerSandboxId ?? "missing",
     });
     const lease = sandboxExecutionLeaseSchema.parse({
       ...current,
-      heartbeatAtEpochMs: input.nowEpochMs,
       expiresAtEpochMs: input.nowEpochMs + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      heartbeatAtEpochMs: input.nowEpochMs,
     });
     this.leases.set(key, lease);
     return structuredClone(lease);
   }
 
   async release(
-    input: Parameters<SandboxExecutionLeaseStore["release"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["release"]>[0]
   ): Promise<SandboxExecutionLease> {
     const key = sandboxLeaseKey(input.principal, input.adapterSessionId);
     const current = this.leases.get(key);
     if (current === undefined || current.epoch !== input.epoch) {
       throw new Error("The sandbox execution lease epoch is stale.");
     }
-    if (current.state !== "active") return structuredClone(current);
+    if (current.state !== "active") {
+      return structuredClone(current);
+    }
     const lease = sandboxExecutionLeaseSchema.parse({
       ...current,
-      state: "released",
-      releasedAtEpochMs: input.nowEpochMs,
       releaseReason: input.reason,
+      releasedAtEpochMs: input.nowEpochMs,
+      state: "released",
     });
     this.leases.set(key, lease);
     return structuredClone(lease);
   }
 
   async releaseCurrent(
-    input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0]
   ): Promise<SandboxExecutionLease | null> {
     const current = this.leases.get(
-      sandboxLeaseKey(input.principal, input.adapterSessionId),
+      sandboxLeaseKey(input.principal, input.adapterSessionId)
     );
-    if (current === undefined) return null;
+    if (current === undefined) {
+      return null;
+    }
     if (
       current.providerSandboxId !== input.providerSandboxId ||
       current.policyDigest !== input.policyDigest
@@ -254,16 +258,16 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       throw new Error("The sandbox execution lease authority is stale.");
     }
     return this.release({
-      principal: input.principal,
       adapterSessionId: input.adapterSessionId,
       epoch: current.epoch,
-      reason: input.reason,
       nowEpochMs: input.nowEpochMs,
+      principal: input.principal,
+      reason: input.reason,
     });
   }
 
   async claimExpired(
-    input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0]
   ): Promise<readonly SandboxExecutionLease[]> {
     const claimed: SandboxExecutionLease[] = [];
     for (const [key, current] of [...this.leases.entries()].toSorted()) {
@@ -271,12 +275,13 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
         claimed.length >= input.limit ||
         current.state === "released" ||
         current.expiresAtEpochMs > input.nowEpochMs
-      )
+      ) {
         continue;
+      }
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,
-        state: "orphaned",
         epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
+        state: "orphaned",
       });
       this.leases.set(key, lease);
       claimed.push(structuredClone(lease));
@@ -285,28 +290,29 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   }
 
   async settleRecovery(
-    input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0],
+    input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0]
   ): Promise<SandboxExecutionLease | null> {
     const key = sandboxLeaseKey(
       input.lease.principal,
-      input.lease.adapterSessionId,
+      input.lease.adapterSessionId
     );
     const current = this.leases.get(key);
     if (
       current === undefined ||
       current.state !== "orphaned" ||
       current.epoch !== input.lease.epoch
-    )
+    ) {
       return null;
+    }
     const lease = sandboxExecutionLeaseSchema.parse(
       input.providerOutcome === "stopped"
         ? {
             ...current,
-            state: "released",
-            releasedAtEpochMs: input.nowEpochMs,
             releaseReason: "expired",
+            releasedAtEpochMs: input.nowEpochMs,
+            state: "released",
           }
-        : current,
+        : current
     );
     this.leases.set(key, lease);
     return structuredClone(lease);
@@ -320,8 +326,8 @@ export async function reconcileExpiredSandboxLeases(input: {
   limit?: number;
 }) {
   const leases = await input.store.claimExpired({
-    nowEpochMs: input.nowEpochMs,
     limit: input.limit ?? 32,
+    nowEpochMs: input.nowEpochMs,
   });
   const stopped: string[] = [];
   const providerFailed: string[] = [];
@@ -339,20 +345,23 @@ export async function reconcileExpiredSandboxLeases(input: {
     try {
       const settled = await input.store.settleRecovery({
         lease,
-        providerOutcome,
         nowEpochMs: input.nowEpochMs,
+        providerOutcome,
       });
-      if (settled === null) settlementRaced.push(digest);
-      else if (providerOutcome === "stopped") stopped.push(digest);
+      if (settled === null) {
+        settlementRaced.push(digest);
+      } else if (providerOutcome === "stopped") {
+        stopped.push(digest);
+      }
     } catch {
       settlementFailed.push(digest);
     }
   }
   return {
     claimed: leases.length,
-    stopped,
     providerFailed,
     settlementFailed,
     settlementRaced,
+    stopped,
   } as const;
 }

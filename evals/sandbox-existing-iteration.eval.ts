@@ -8,16 +8,15 @@ const staysProductFacing = satisfies(
   (reply) =>
     isProductFacing(reply) &&
     !/(?:sandbox|image|receipt|dependency cache|publication did not run)/iu.test(
-      String(reply),
+      String(reply)
     ),
-  "assistant reply stays product-facing during existing-app iteration",
+  "assistant reply stays product-facing during existing-app iteration"
 );
 
 export default defineEval({
   description:
     "The exact candidate image inspects and iterates the existing Vendor application through review without publication.",
   tags: ["sandbox-image-proof", "existing-app-iteration"],
-  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
@@ -26,7 +25,7 @@ export default defineEval({
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
     await t.send(
-      `Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`,
+      `Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`
     );
     t.succeeded();
     await t.send("Inspect existing Vendor application.");
@@ -35,7 +34,7 @@ export default defineEval({
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
     await t.send(
-      "Update the Vendor review so operations can see when tax verification is required.",
+      "Update the Vendor review so operations can see when tax verification is required."
     );
     t.succeeded();
     await t.send("Run target identity and planning.");
@@ -76,7 +75,8 @@ export default defineEval({
         productOutcome: "tax-verification status is visible to operations",
         appId: "vendor",
         publicationAttempted: false,
-      })}\n`,
+      })}\n`
     );
   },
+  timeoutMs: 360_000,
 });

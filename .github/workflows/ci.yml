@@ -120,10 +120,7 @@ jobs:
         ports:
           - 54329:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d autograph_app_builder"
-          --health-interval 1s
-          --health-timeout 2s
-          --health-retries 30
+          --health-cmd "pg_isready -U postgres -d autograph_app_builder" --health-interval 1s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3

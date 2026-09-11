@@ -2,33 +2,32 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import { parseProviderConnectionReturn } from "./provider-connection-return";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import {
   hostedVercelInstallations,
   vercelInstallationAuthorizationStates,
 } from "../db/schema";
-import {
-  encryptVercelToken,
-  decryptVercelToken,
-  type VercelAuthorizationStateStore,
-  type VercelInstallationBinding,
-  type VercelIntegrationConfig,
-  type VercelInstallationStore,
+import { parseProviderConnectionReturn } from "./provider-connection-return";
+import { encryptVercelToken, decryptVercelToken } from "./vercel-installation";
+import type {
+  VercelAuthorizationStateStore,
+  VercelInstallationBinding,
+  VercelIntegrationConfig,
+  VercelInstallationStore,
 } from "./vercel-installation";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 function tenant(
   table: typeof hostedVercelInstallations,
-  authorityInput: unknown,
+  authorityInput: unknown
 ) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
     eq(table.issuer, authority.issuer),
     eq(table.audience, authority.audience),
     eq(table.workspaceId, authority.workspaceId),
-    eq(table.ownerUserId, authority.ownerUserId),
+    eq(table.ownerUserId, authority.ownerUserId)
   );
 }
 
@@ -46,52 +45,42 @@ export async function readActiveVercelInstallationToken(input: {
       and(
         tenant(hostedVercelInstallations, authority),
         eq(hostedVercelInstallations.installationId, input.installationId),
-        eq(hostedVercelInstallations.active, true),
-      ),
+        eq(hostedVercelInstallations.active, true)
+      )
     )
     .limit(1);
   const row = rows[0];
-  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion)
+  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) {
     return undefined;
+  }
   return {
     binding: {
+      active: row.active,
+      displayName: row.displayName,
       installationId: row.installationId,
+      plan: row.plan,
       scopeId: row.scopeId,
       scopeType: row.scopeType as "team" | "user",
-      displayName: row.displayName,
       slug: row.slug,
-      plan: row.plan,
-      active: row.active,
       updatedAt: row.updatedAt,
     },
     token: decryptVercelToken({
-      encryptedToken: row.encryptedToken,
-      tokenIv: row.tokenIv,
-      tokenTag: row.tokenTag,
-      key: input.config.tokenKey,
       associatedData: JSON.stringify({
         ...authority,
         installationId: row.installationId,
       }),
+      encryptedToken: row.encryptedToken,
+      key: input.config.tokenKey,
+      tokenIv: row.tokenIv,
+      tokenTag: row.tokenTag,
     }),
   };
 }
 
 export function createPostgresVercelAuthorizationStateStore(
-  database: Database,
+  database: Database
 ): VercelAuthorizationStateStore {
   return {
-    async create(input) {
-      await database.insert(vercelInstallationAuthorizationStates).values({
-        stateDigest: input.stateDigest,
-        ...input.authority,
-        authorityDigest: input.authorityDigest,
-        returnTo: input.returnState.returnTo,
-        resumeKey: input.returnState.resumeKey ?? null,
-        createdAt: input.createdAt,
-        expiresAt: input.expiresAt,
-      });
-    },
     async consume(input) {
       const rows = await database
         .update(vercelInstallationAuthorizationStates)
@@ -100,31 +89,31 @@ export function createPostgresVercelAuthorizationStateStore(
           and(
             eq(
               vercelInstallationAuthorizationStates.stateDigest,
-              input.stateDigest,
+              input.stateDigest
             ),
             eq(
               vercelInstallationAuthorizationStates.authorityDigest,
-              input.authorityDigest,
+              input.authorityDigest
             ),
             eq(
               vercelInstallationAuthorizationStates.issuer,
-              input.authority.issuer,
+              input.authority.issuer
             ),
             eq(
               vercelInstallationAuthorizationStates.audience,
-              input.authority.audience,
+              input.authority.audience
             ),
             eq(
               vercelInstallationAuthorizationStates.workspaceId,
-              input.authority.workspaceId,
+              input.authority.workspaceId
             ),
             eq(
               vercelInstallationAuthorizationStates.ownerUserId,
-              input.authority.ownerUserId,
+              input.authority.ownerUserId
             ),
             isNull(vercelInstallationAuthorizationStates.consumedAt),
-            gt(vercelInstallationAuthorizationStates.expiresAt, input.now),
-          ),
+            gt(vercelInstallationAuthorizationStates.expiresAt, input.now)
+          )
         )
         .returning({
           returnTo: vercelInstallationAuthorizationStates.returnTo,
@@ -134,6 +123,17 @@ export function createPostgresVercelAuthorizationStateStore(
       return parseProviderConnectionReturn({
         returnTo: rows[0]!.returnTo,
         ...(rows[0]?.resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
+      });
+    },
+    async create(input) {
+      await database.insert(vercelInstallationAuthorizationStates).values({
+        stateDigest: input.stateDigest,
+        ...input.authority,
+        authorityDigest: input.authorityDigest,
+        returnTo: input.returnState.returnTo,
+        resumeKey: input.returnState.resumeKey ?? null,
+        createdAt: input.createdAt,
+        expiresAt: input.expiresAt,
       });
     },
     async recover(input) {
@@ -147,29 +147,29 @@ export function createPostgresVercelAuthorizationStateStore(
           and(
             eq(
               vercelInstallationAuthorizationStates.stateDigest,
-              input.stateDigest,
+              input.stateDigest
             ),
             eq(
               vercelInstallationAuthorizationStates.authorityDigest,
-              input.authorityDigest,
+              input.authorityDigest
             ),
             eq(
               vercelInstallationAuthorizationStates.issuer,
-              input.authority.issuer,
+              input.authority.issuer
             ),
             eq(
               vercelInstallationAuthorizationStates.audience,
-              input.authority.audience,
+              input.authority.audience
             ),
             eq(
               vercelInstallationAuthorizationStates.workspaceId,
-              input.authority.workspaceId,
+              input.authority.workspaceId
             ),
             eq(
               vercelInstallationAuthorizationStates.ownerUserId,
-              input.authority.ownerUserId,
-            ),
-          ),
+              input.authority.ownerUserId
+            )
+          )
         )
         .limit(1);
       if (!rows[0]) return undefined;
@@ -186,23 +186,6 @@ export function createPostgresVercelInstallationStore(input: {
   config: VercelIntegrationConfig;
 }): VercelInstallationStore {
   return {
-    async list(authority) {
-      const rows = await input.database
-        .select({
-          installationId: hostedVercelInstallations.installationId,
-          scopeId: hostedVercelInstallations.scopeId,
-          scopeType: hostedVercelInstallations.scopeType,
-          displayName: hostedVercelInstallations.displayName,
-          slug: hostedVercelInstallations.slug,
-          plan: hostedVercelInstallations.plan,
-          active: hostedVercelInstallations.active,
-          updatedAt: hostedVercelInstallations.updatedAt,
-        })
-        .from(hostedVercelInstallations)
-        .where(tenant(hostedVercelInstallations, authority))
-        .orderBy(asc(hostedVercelInstallations.displayName));
-      return rows as VercelInstallationBinding[];
-    },
     async bind(value) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const associatedData = JSON.stringify({
@@ -258,6 +241,23 @@ export function createPostgresVercelInstallationStore(input: {
           installationId: hostedVercelInstallations.installationId,
         });
       return rows.length;
+    },
+    async list(authority) {
+      const rows = await input.database
+        .select({
+          installationId: hostedVercelInstallations.installationId,
+          scopeId: hostedVercelInstallations.scopeId,
+          scopeType: hostedVercelInstallations.scopeType,
+          displayName: hostedVercelInstallations.displayName,
+          slug: hostedVercelInstallations.slug,
+          plan: hostedVercelInstallations.plan,
+          active: hostedVercelInstallations.active,
+          updatedAt: hostedVercelInstallations.updatedAt,
+        })
+        .from(hostedVercelInstallations)
+        .where(tenant(hostedVercelInstallations, authority))
+        .orderBy(asc(hostedVercelInstallations.displayName));
+      return rows as VercelInstallationBinding[];
     },
   };
 }

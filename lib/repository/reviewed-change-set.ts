@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { OverlayChange, TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
 
-export type NormalizedChangeSet = {
+export interface NormalizedChangeSet {
   version: 2;
   validationDigest: string;
   applyDigest: string;
@@ -34,7 +34,7 @@ export type NormalizedChangeSet = {
   changes: readonly OverlayChange[];
   approvedPaths: readonly string[];
   digest: string;
-};
+}
 
 export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
   changeSetDigest: string;
@@ -49,39 +49,39 @@ export function deriveNormalizedChangeSet(
   apply: TargetApplyReceipt,
   validation: TargetValidationReceipt,
   contractDigest: string,
-  repositoryContractDigest: string = contractDigest,
+  repositoryContractDigest: string = contractDigest
 ): NormalizedChangeSet {
   const canonicalChanges = apply.changes;
   const unsigned = {
-    version: 2 as const,
-    validationDigest: validation.digest,
-    applyDigest: apply.digest,
-    proposalDigest: apply.proposalDigest,
-    contractDigest,
-    repositoryContractDigest,
-    sourceSha: apply.sourceSha,
-    sourceTree: apply.sourceTree,
-    sourceReceiptDigest: apply.sourceReceiptDigest,
-    eligibilityDigest: apply.eligibilityDigest,
-    workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
+    applyDigest: apply.digest,
+    approvedPaths: canonicalChanges.map(({ path }) => path),
     artifactRevision: apply.artifactRevision,
-    dependencyReceiptDigest: apply.dependencyReceiptDigest,
-    identityDigest: apply.identityDigest,
-    imageDigest: apply.imageDigest,
-    dependencyCacheDigest: apply.dependencyCacheDigest,
-    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
-    targetReceipt: {
-      version: apply.targetReceipt.version,
-      contractPath: apply.targetReceipt.contractPath,
-      topology: apply.targetReceipt.topology,
-    },
-    preTreeDigest: apply.preTreeDigest,
-    postTreeDigest: apply.postTreeDigest,
     changedContentDigest: apply.changedContentDigest,
     changes: canonicalChanges,
-    approvedPaths: canonicalChanges.map(({ path }) => path),
+    contractDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
+    dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyReceiptDigest: apply.dependencyReceiptDigest,
+    eligibilityDigest: apply.eligibilityDigest,
+    identityDigest: apply.identityDigest,
+    imageDigest: apply.imageDigest,
+    postTreeDigest: apply.postTreeDigest,
+    preTreeDigest: apply.preTreeDigest,
+    proposalDigest: apply.proposalDigest,
+    repositoryContractDigest,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
+    sourceSha: apply.sourceSha,
+    sourceTree: apply.sourceTree,
+    targetReceipt: {
+      contractPath: apply.targetReceipt.contractPath,
+      topology: apply.targetReceipt.topology,
+      version: apply.targetReceipt.version,
+    },
+    validationDigest: validation.digest,
+    version: 2 as const,
+    workspaceDigest: apply.workspaceDigest,
   };
   return {
     ...unsigned,
@@ -91,7 +91,7 @@ export function deriveNormalizedChangeSet(
 
 export function createReviewedChangeSetReceipt(
   changeSet: NormalizedChangeSet,
-  reviewedByCallId: string,
+  reviewedByCallId: string
 ): ReviewedChangeSetReceipt {
   const unsigned = {
     ...changeSet,

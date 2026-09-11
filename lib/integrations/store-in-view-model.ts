@@ -8,8 +8,8 @@ const githubLoginSchema = z
 
 export const githubRepositoryAccessSchema = z
   .object({
-    provider: z.literal("github"),
     action: z.enum(["connect", "update"]),
+    provider: z.literal("github"),
     repository: z
       .object({
         owner: githubLoginSchema,
@@ -42,7 +42,7 @@ export const githubRepositoryAccessSchema = z
             accountLogin: githubLoginSchema,
             accountType: z.enum(["Organization", "User"]),
           })
-          .strict(),
+          .strict()
       )
       .max(100),
   })
@@ -52,13 +52,13 @@ export type GitHubRepositoryAccess = z.infer<
   typeof githubRepositoryAccessSchema
 >;
 
-type StoreInScopeView = {
+interface StoreInScopeView {
   id: string;
   label: string;
   detail?: string;
-};
+}
 
-export type GitHubStoreInViewModel = {
+export interface GitHubStoreInViewModel {
   action: "connect" | "update";
   actionLabel: "Connect GitHub" | "Update GitHub access";
   title: "Connect GitHub" | "Update GitHub access";
@@ -66,7 +66,7 @@ export type GitHubStoreInViewModel = {
   desiredRepository?: string;
   scopes: StoreInScopeView[];
   scopeSummary: string;
-};
+}
 
 export function githubStoreInViewModel(input: {
   action: "connect" | "update";
@@ -105,7 +105,7 @@ export function githubStoreInViewModel(input: {
 }
 
 export function githubRepositoryAccessViewModel(
-  access: GitHubRepositoryAccess,
+  access: GitHubRepositoryAccess
 ): GitHubStoreInViewModel {
   return githubStoreInViewModel({
     action: access.action,
@@ -113,9 +113,9 @@ export function githubRepositoryAccessViewModel(
       ? {}
       : { desiredRepository: access.repository.fullName }),
     scopes: access.scopes.map((scope) => ({
+      detail: scope.accountType,
       id: scope.installationId,
       label: scope.accountLogin,
-      detail: scope.accountType,
     })),
   });
 }

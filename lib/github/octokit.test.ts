@@ -5,15 +5,15 @@ import { createGuardedGitHubFetch } from "./octokit";
 describe("guarded Octokit GitHub transport", () => {
   it("allows only fixed GitHub origins and forces redirects off", async () => {
     const request = vi.fn<typeof fetch>(async () =>
-      Response.json({ ok: true }),
+      Response.json({ ok: true })
     );
     const guarded = createGuardedGitHubFetch(request);
 
     await expect(guarded("https://example.invalid/user")).rejects.toThrow(
-      "github-origin-invalid",
+      "github-origin-invalid"
     );
     await expect(
-      guarded("https://api.github.com/user"),
+      guarded("https://api.github.com/user")
     ).resolves.toBeInstanceOf(Response);
     expect(request).toHaveBeenCalledOnce();
     expect(request.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
@@ -24,12 +24,12 @@ describe("guarded Octokit GitHub transport", () => {
       vi.fn<typeof fetch>(async () =>
         Response.json(
           { private: "provider-body" },
-          { headers: { "content-length": String(2 * 1024 * 1024 + 1) } },
-        ),
-      ),
+          { headers: { "content-length": String(2 * 1024 * 1024 + 1) } }
+        )
+      )
     );
     await expect(declared("https://api.github.com/user")).rejects.toThrow(
-      "github-response-too-large",
+      "github-response-too-large"
     );
 
     const streamed = createGuardedGitHubFetch(
@@ -42,12 +42,12 @@ describe("guarded Octokit GitHub transport", () => {
                 controller.enqueue(new Uint8Array(1));
                 controller.close();
               },
-            }),
-          ),
-      ),
+            })
+          )
+      )
     );
     await expect(streamed("https://api.github.com/user")).rejects.toThrow(
-      "github-response-too-large",
+      "github-response-too-large"
     );
   });
 });

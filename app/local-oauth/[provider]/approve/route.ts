@@ -14,20 +14,22 @@ const authorizationFields = [
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ provider: string }> },
+  context: { params: Promise<{ provider: string }> }
 ) {
   try {
     const emulation = readProviderEmulation(process.env);
-    if (!emulation || emulation.mode !== "preview")
+    if (!emulation || emulation.mode !== "preview") {
       throw new Error("Preview authentication emulation is unavailable.");
+    }
     const referer = new URL(request.headers.get("referer") ?? "");
     const { provider } = await context.params;
     if (
       referer.origin !== emulation.canonicalOrigin ||
       referer.pathname !== `/local-oauth/${provider}/authorize`
-    )
+    ) {
       throw new Error("Invalid approval referer.");
-    const searchParams = new URL(request.url).searchParams;
+    }
+    const { searchParams } = new URL(request.url);
     return completeAuthorization(
       { params: Promise.resolve({ provider }) },
       Object.fromEntries(
@@ -36,28 +38,29 @@ export async function GET(
           searchParams.getAll(name).length === 1
             ? (searchParams.get(name) ?? undefined)
             : undefined,
-        ]),
-      ),
+        ])
+      )
     );
   } catch {
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }
 
 export async function POST(
   request: Request,
-  context: { params: Promise<{ provider: string }> },
+  context: { params: Promise<{ provider: string }> }
 ) {
   try {
     const emulation = readProviderEmulation(process.env);
     if (
       !emulation ||
       request.headers.get("origin") !== emulation.canonicalOrigin
-    )
+    ) {
       throw new Error("Invalid approval origin.");
+    }
     const form = await request.formData();
     return completeAuthorization(
       context,
@@ -67,13 +70,13 @@ export async function POST(
           typeof form.get(name) === "string"
             ? String(form.get(name))
             : undefined,
-        ]),
-      ),
+        ])
+      )
     );
   } catch {
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }

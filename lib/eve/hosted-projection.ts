@@ -7,21 +7,18 @@ import {
   publicPrototypeSchema,
   publicUiPreviewSchema,
   sessionStatusSchema,
-  type EveSessionResult,
 } from "../mcp/contracts";
-import {
-  outstandingInternalEveRequests,
-  toPublicEvent,
-  type InternalEveEvent,
-} from "./public-events";
+import type { EveSessionResult } from "../mcp/contracts";
+import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
   .object({
-    status: sessionStatusSchema,
     events: z.array(z.unknown()).max(100_000),
-    prototype: publicPrototypeSchema.optional(),
-    uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
+    prototype: publicPrototypeSchema.optional(),
+    status: sessionStatusSchema,
+    uiPreview: publicUiPreviewSchema.optional(),
   })
   .strict();
 
@@ -31,14 +28,18 @@ export function projectHostedSnapshot(
   sessionId: string,
   snapshotInput: unknown,
   cursor = 0,
-  limit = 100,
+  limit = 100
 ): EveSessionResult {
   const snapshot = hostedSnapshotSchema.parse(snapshotInput);
   const projected = snapshot.events
     .flatMap((candidate) => {
-      if (candidate === null || typeof candidate !== "object") return [];
+      if (candidate === null || typeof candidate !== "object") {
+        return [];
+      }
       const projected = toPublicEvent(candidate as InternalEveEvent);
-      if (projected === null) return [];
+      if (projected === null) {
+        return [];
+      }
       const parsed = publicEveEventSchema.safeParse(projected);
       return parsed.success ? [parsed.data] : [];
     })
@@ -47,14 +48,14 @@ export function projectHostedSnapshot(
   const inputRequests = outstandingInternalEveRequests(
     snapshot.events.filter(
       (event): event is InternalEveEvent =>
-        event !== null && typeof event === "object",
-    ),
+        event !== null && typeof event === "object"
+    )
   );
   return eveSessionResultSchema.parse({
-    sessionId,
-    status: snapshot.status,
     cursor: Math.min(cursor + events.length, projected.length),
     events,
+    sessionId,
+    status: snapshot.status,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(snapshot.prototype === undefined
       ? {}

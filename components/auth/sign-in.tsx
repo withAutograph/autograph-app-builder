@@ -13,7 +13,8 @@ import {
 } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
-import { type SyntheticEvent, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
+import type { SyntheticEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,15 +38,17 @@ import { Spinner } from "@/components/ui/spinner";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 import { cn } from "@/lib/utils";
-import { LastUsedBadge } from "./last-login-method/last-used-badge";
-import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
-export type SignInProps = {
+import { LastUsedBadge } from "./last-login-method/last-used-badge";
+import { ProviderButtons } from "./provider-buttons";
+import type { SocialLayout } from "./provider-buttons";
+
+export interface SignInProps {
   className?: string;
   signUpRedirectTo?: string;
   socialLayout?: SocialLayout;
   socialPosition?: "top" | "bottom";
-};
+}
 
 /**
  * Render the sign-in form UI with email/password, magic link, and social provider options.
@@ -79,9 +82,9 @@ export function SignIn({
 
   const [password, setPassword] = useState("");
   const currentLocation = useSyncExternalStore(
-    () => () => undefined,
+    () => () => {},
     () => window.location.href,
-    () => "",
+    () => ""
   );
   const currentSearch = currentLocation ? new URL(currentLocation).search : "";
   const currentOrigin = currentLocation ? new URL(currentLocation).origin : "";
@@ -102,7 +105,7 @@ export function SignIn({
         resetFetchOptions();
       },
       onSuccess: (data) => continueSignIn(data),
-    },
+    }
   );
 
   const signInMutating = useIsMutating({
@@ -163,7 +166,7 @@ export function SignIn({
                   key={`${plugin.id}-${index.toString()}`}
                   view="signIn"
                 />
-              )),
+              ))
             )}
             {socialPosition === "top" && (
               <>
@@ -172,7 +175,7 @@ export function SignIn({
                 )}
 
                 {showSeparator && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card m-0 text-xs flex items-center">
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card m-0 flex items-center text-xs">
                     {localization.auth.or}
                   </FieldSeparator>
                 )}
@@ -193,7 +196,7 @@ export function SignIn({
                       type="email"
                       autoComplete={withPasskeyAutoFill(
                         "email",
-                        passkeyAutoFill,
+                        passkeyAutoFill
                       )}
                       placeholder={localization.auth.emailPlaceholder}
                       required
@@ -234,7 +237,7 @@ export function SignIn({
                         type={isPasswordVisible ? "text" : "password"}
                         autoComplete={withPasskeyAutoFill(
                           "current-password",
-                          passkeyAutoFill,
+                          passkeyAutoFill
                         )}
                         value={password}
                         onChange={(e) => {
@@ -260,11 +263,11 @@ export function SignIn({
                             : el.validity.tooShort
                               ? localization.auth.tooShort.replace(
                                   "{{min}}",
-                                  String(min),
+                                  String(min)
                                 )
                               : localization.auth.tooLong.replace(
                                   "{{max}}",
-                                  String(max),
+                                  String(max)
                                 );
 
                           setFieldErrors((prev) => ({
@@ -339,7 +342,7 @@ export function SignIn({
             {socialPosition === "bottom" && (
               <>
                 {showSeparator && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card flex items-center text-xs">
                     {localization.auth.or}
                   </FieldSeparator>
                 )}
@@ -352,7 +355,7 @@ export function SignIn({
           </div>
 
           {emailAndPassword?.enabled && emailAndPassword?.forgotPassword && (
-            <div className="flex flex-col gap-3 items-center w-full mt-4">
+            <div className="mt-4 flex w-full flex-col items-center gap-3">
               <Link
                 href={`${basePaths.auth}/${viewPaths.auth.forgotPassword}`}
                 className="self-center text-sm underline-offset-4 hover:underline"
@@ -369,7 +372,7 @@ export function SignIn({
         <Link
           href={getAuthLinkURL(
             `${basePaths.auth}/${viewPaths.auth.signUp}`,
-            alternateRedirectTo,
+            alternateRedirectTo
           )}
           className="underline underline-offset-4"
         >

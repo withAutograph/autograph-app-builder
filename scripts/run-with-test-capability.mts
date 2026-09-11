@@ -1,10 +1,10 @@
+import { execFileSync, spawn } from "node:child_process";
 import {
   createHash,
   generateKeyPairSync,
   randomBytes,
   sign,
 } from "node:crypto";
-import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
@@ -18,16 +18,17 @@ if (
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
-)
+  (repositoryRootStat.mode & 0o022n) !== 0n
+) {
   throw new Error("The structural test package root was not owner-bound.");
+}
 const preload = pathToFileURL(
-  resolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
+  resolve(repositoryRoot, "scripts/test-capability-preload.mjs")
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = resolve(
   repositoryRoot,
-  ".config/mise/scripts/trusted-node-launcher",
+  ".config/mise/scripts/trusted-node-launcher"
 );
 const launcherDigest =
   "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
@@ -51,13 +52,15 @@ function childEnvironment(): NodeJS.ProcessEnv {
   };
   for (const name of allowedEnvironment) {
     const value = process.env[name];
-    if (value !== undefined) environment[name] = value;
+    if (value !== undefined) {
+      environment[name] = value;
+    }
   }
   return environment as NodeJS.ProcessEnv;
 }
 
 export function gateAEvalWorkflowBodyTimeout(
-  profile: unknown,
+  profile: unknown
 ): string | undefined {
   if (
     typeof profile !== "object" ||
@@ -66,8 +69,9 @@ export function gateAEvalWorkflowBodyTimeout(
     Object.keys(profile).sort().join(",") !==
       "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
-  )
+  ) {
     return undefined;
+  }
   const name = (profile as { profile?: unknown }).profile;
   return name === "sandbox" || name === "hosted-artifact"
     ? "360000"
@@ -76,14 +80,14 @@ export function gateAEvalWorkflowBodyTimeout(
 
 function canonical(proof: Record<string, unknown>) {
   return JSON.stringify({
-    version: proof.version,
-    nonce: proof.nonce,
-    context: proof.context,
     authorization: proof.authorization,
-    expiresAt: proof.expiresAt,
     capabilities: proof.capabilities,
-    publicKey: proof.publicKey,
+    context: proof.context,
+    expiresAt: proof.expiresAt,
     gateAEvalProfile: proof.gateAEvalProfile,
+    nonce: proof.nonce,
+    publicKey: proof.publicKey,
+    version: proof.version,
   });
 }
 
@@ -91,13 +95,15 @@ function exactParentArguments(): readonly string[] {
   const pid = process.ppid;
   const expectedExecutable = realpathSync("/bin/sh");
   if (process.platform === "linux") {
-    if (realpathSync(`/proc/${pid}/exe`) !== expectedExecutable)
+    if (realpathSync(`/proc/${pid}/exe`) !== expectedExecutable) {
       throw new Error("The structural test launcher executable was invalid.");
-    if (realpathSync(`/proc/${pid}/cwd`) !== realpathSync(repositoryRoot))
+    }
+    if (realpathSync(`/proc/${pid}/cwd`) !== realpathSync(repositoryRoot)) {
       throw new Error("The structural test launcher cwd was invalid.");
+    }
     const source = readFileSync(`/proc/${pid}/cmdline`);
     return source
-      .toString("utf8")
+      .toString("utf-8")
       .split("\0")
       .filter((entry) => entry.length > 0);
   }
@@ -119,29 +125,34 @@ function exactParentArguments(): readonly string[] {
     ].join(";");
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
-        encoding: "utf8",
-        env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
-      }),
+        encoding: "utf-8",
+        env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      })
     ) as unknown;
     if (
       !Array.isArray(observed) ||
       observed.some((entry) => typeof entry !== "string")
-    )
+    ) {
       throw new Error("The structural test launcher argv was invalid.");
+    }
     const cwd = execFileSync(
       "/usr/sbin/lsof",
       ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
       {
-        encoding: "utf8",
-        env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+        encoding: "utf-8",
+        env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "ignore"],
-      },
+      }
     )
       .split("\n")
       .find((line) => line.startsWith("n"))
       ?.slice(1);
-    if (cwd === undefined || realpathSync(cwd) !== realpathSync(repositoryRoot))
+    if (
+      cwd === undefined ||
+      realpathSync(cwd) !== realpathSync(repositoryRoot)
+    ) {
       throw new Error("The structural test launcher cwd was invalid.");
+    }
     return observed as string[];
   }
   throw new Error("Structural test launcher inspection is unsupported.");
@@ -153,12 +164,13 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     realpathSync(launcher) !== launcher ||
     !launcherStat.isFile() ||
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-    launcherStat.nlink !== BigInt(1) ||
-    (launcherStat.mode & BigInt(0o022)) !== BigInt(0) ||
+    launcherStat.nlink !== 1n ||
+    (launcherStat.mode & 0o022n) !== 0n ||
     createHash("sha256").update(readFileSync(launcher)).digest("hex") !==
       launcherDigest
-  )
+  ) {
     throw new Error("The structural test launcher source was invalid.");
+  }
   const wrapper =
     profile === "vitest"
       ? "scripts/run-vitest.mts"
@@ -176,8 +188,9 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
   if (
     observed.length !== expected.length ||
     observed.some((value, index) => value !== expected[index])
-  )
+  ) {
     throw new Error("The structural test launcher argv was invalid.");
+  }
 }
 
 export async function runWithTestCapability(options: {
@@ -188,13 +201,14 @@ export async function runWithTestCapability(options: {
   gateAEvalProfile?: unknown;
 }): Promise<number> {
   verifyTrustedLauncher(options.profile);
-  if (process.env.NODE_OPTIONS !== undefined)
+  if (process.env.NODE_OPTIONS !== undefined) {
     throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
+  }
   const expectedEntry = resolve(
     repositoryRoot,
     options.profile === "vitest"
       ? "node_modules/vitest/vitest.mjs"
-      : "node_modules/eve/bin/eve.js",
+      : "node_modules/eve/bin/eve.js"
   );
   if (
     options.command !== process.execPath ||
@@ -203,8 +217,9 @@ export async function runWithTestCapability(options: {
     (options.profile === "eve" &&
       ![1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
-  )
+  ) {
     throw new Error("The structural test wrapper profile was invalid.");
+  }
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const publicKeySource = publicKey
     .export({ format: "der", type: "spki" })
@@ -214,7 +229,6 @@ export async function runWithTestCapability(options: {
     .toString("base64");
   const child = spawn(options.command, [...options.args], {
     cwd: repositoryRoot,
-    stdio: ["inherit", "inherit", "inherit", "pipe"],
     env: {
       ...childEnvironment(),
       EVE_DEV_WORKER_APP_ROOT:
@@ -226,34 +240,40 @@ export async function runWithTestCapability(options: {
           ? mkdtempSync(resolve(tmpdir(), "app-builder-eval-workflow-"))
           : undefined,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
-        options.gateAEvalProfile,
+        options.gateAEvalProfile
       ),
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
-        options.gateAEvalProfile,
+        options.gateAEvalProfile
       ),
       NODE_OPTIONS: `--import=${preload}`,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
     },
+    stdio: ["inherit", "inherit", "inherit", "pipe"],
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
-  if (authorization == null)
+  if (authorization == null) {
     throw new Error("The structural test authorization pipe was not created.");
+  }
   let buffered = "";
   let answered = false;
   authorization.write(
-    `${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`,
+    `${JSON.stringify({ publicKey: publicKeySource, version: 2 })}\n`
   );
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
-  authorization.setEncoding("utf8");
+  authorization.setEncoding("utf-8");
   authorization.on("data", (chunk: string) => {
-    if (answered) return;
+    if (answered) {
+      return;
+    }
     buffered += chunk;
     const newline = buffered.indexOf("\n");
-    if (newline < 0 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
+    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) {
+      return;
+    }
     if (
-      newline < 0 ||
+      newline === -1 ||
       Buffer.byteLength(buffered.slice(0, newline + 1)) > maximumFrameBytes ||
       newline !== buffered.length - 1
     ) {
@@ -272,26 +292,27 @@ export async function runWithTestCapability(options: {
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
         typeof request.context !== "string"
-      )
+      ) {
         throw new Error("Malformed authorization request.");
+      }
       const proof: Record<string, unknown> = {
-        version: 2,
-        nonce: request.nonce,
-        context: request.context,
         authorization: randomBytes(32).toString("hex"),
-        expiresAt: Date.now() + 5_000,
         capabilities: options.capabilities,
-        publicKey: publicKeySource,
+        context: request.context,
+        expiresAt: Date.now() + 5_000,
         gateAEvalProfile: options.gateAEvalProfile ?? null,
+        nonce: request.nonce,
+        publicKey: publicKeySource,
+        version: 2,
       };
       const signature = sign(
         null,
         Buffer.from(canonical(proof)),
-        privateKey,
+        privateKey
       ).toString("base64");
       answered = true;
       authorization.write(
-        `${JSON.stringify({ ...proof, signature, delegationPrivateKey: privateKeySource })}\n`,
+        `${JSON.stringify({ ...proof, delegationPrivateKey: privateKeySource, signature })}\n`
       );
       clearTimeout(timeout);
     } catch {

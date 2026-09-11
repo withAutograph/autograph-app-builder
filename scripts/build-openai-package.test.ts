@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 const runGenerator = (cwd: string, endpoint: string) =>
@@ -15,9 +16,9 @@ const runGenerator = (cwd: string, endpoint: string) =>
         "--endpoint",
         endpoint,
       ],
-      { cwd, stdio: ["ignore", "ignore", "pipe"] },
+      { cwd, stdio: ["ignore", "ignore", "pipe"] }
     );
-    child.stderr.setEncoding("utf8");
+    child.stderr.setEncoding("utf-8");
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
@@ -27,9 +28,9 @@ const runGenerator = (cwd: string, endpoint: string) =>
         ? resolveRun()
         : rejectRun(
             new Error(
-              `OpenAI package generator exited ${code}: ${stderr.trim()}`,
-            ),
-          ),
+              `OpenAI package generator exited ${code}: ${stderr.trim()}`
+            )
+          )
     );
   });
 
@@ -38,20 +39,20 @@ const writeFixture = async (
   {
     version = "0.2.12",
     extraServer = false,
-  }: { version?: string; extraServer?: boolean } = {},
+  }: { version?: string; extraServer?: boolean } = {}
 ) => {
   await writeFile(
     join(root, "plugin.json"),
     JSON.stringify({
-      name: "app-builder",
-      version,
-      description: "test",
       author: { name: "Autograph" },
+      description: "test",
       homepage: "https://github.com/withAutograph/autograph-app-builder",
-      repository: "https://github.com/withAutograph/autograph-app-builder",
-      license: "MIT",
       keywords: [],
-    }),
+      license: "MIT",
+      name: "app-builder",
+      repository: "https://github.com/withAutograph/autograph-app-builder",
+      version,
+    })
   );
   await writeFile(
     join(root, "mcp.json"),
@@ -71,7 +72,7 @@ const writeFixture = async (
             }
           : {}),
       },
-    }),
+    })
   );
 };
 
@@ -85,11 +86,13 @@ describe("OpenAI package generator", () => {
       await runGenerator(root, endpoint);
 
       const portable = JSON.parse(
-        await readFile(join(root, "mcp.json"), "utf8"),
+        await readFile(join(root, "mcp.json"), "utf-8")
       );
-      const codex = JSON.parse(await readFile(join(root, ".mcp.json"), "utf8"));
+      const codex = JSON.parse(
+        await readFile(join(root, ".mcp.json"), "utf-8")
+      );
       const manifest = JSON.parse(
-        await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"),
+        await readFile(join(root, ".codex-plugin/plugin.json"), "utf-8")
       );
       expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
       expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
@@ -98,12 +101,12 @@ describe("OpenAI package generator", () => {
       expect(Object.keys(codex.mcpServers)).toEqual(["app-builder"]);
       expect(manifest.version).toBe("0.2.12");
       expect(manifest.interface).toMatchObject({
+        composerIcon: "./assets/autograph-icon.png",
         displayName: "Autograph App Builder",
-        shortDescription: "Design and create apps with Autograph",
+        logo: "./assets/autograph-icon.png",
         longDescription:
           "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
-        composerIcon: "./assets/autograph-icon.png",
-        logo: "./assets/autograph-icon.png",
+        shortDescription: "Design and create apps with Autograph",
       });
       expect(manifest.interface.defaultPrompt).toHaveLength(3);
       for (const prompt of manifest.interface.defaultPrompt) {
@@ -115,13 +118,13 @@ describe("OpenAI package generator", () => {
         "Design a customer feedback app with a clear review workflow",
       ]);
       expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
-        "App Builder session",
+        "App Builder session"
       );
       expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
-        "through Eve",
+        "through Eve"
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -157,11 +160,11 @@ describe("OpenAI package generator", () => {
       expect(await readFile(join(root, "mcp.json"))).toEqual(originalMcp);
       await expect(readFile(join(root, ".mcp.json"))).rejects.toThrow();
       await expect(
-        readFile(join(root, ".codex-plugin/plugin.json")),
+        readFile(join(root, ".codex-plugin/plugin.json"))
       ).rejects.toThrow();
       await expect(readFile(join(root, ".app.json"))).rejects.toThrow();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -170,10 +173,10 @@ describe("OpenAI package generator", () => {
     try {
       await writeFixture(root, { extraServer: true });
       await expect(
-        runGenerator(root, "https://preview.autograph.dev/mcp"),
+        runGenerator(root, "https://preview.autograph.dev/mcp")
       ).rejects.toThrow();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -184,11 +187,11 @@ describe("OpenAI package generator", () => {
       try {
         await writeFixture(root, { version });
         await expect(
-          runGenerator(root, "https://preview.autograph.dev/mcp"),
+          runGenerator(root, "https://preview.autograph.dev/mcp")
         ).rejects.toThrow();
       } finally {
-        await rm(root, { recursive: true, force: true });
+        await rm(root, { force: true, recursive: true });
       }
-    },
+    }
   );
 });

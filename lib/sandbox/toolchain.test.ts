@@ -13,20 +13,20 @@ describe("sandbox toolchain contract", () => {
   it("accepts only an immutable OCI digest", () => {
     expect(configuredToolchainImage({})).toBeUndefined();
     expect(configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: image })).toBe(
-      image,
+      image
     );
     expect(() =>
       configuredToolchainImage({
         APP_BUILDER_SANDBOX_IMAGE:
           "registry.example/autograph/app-builder:latest",
-      }),
+      })
     ).toThrow("must be an OCI image reference pinned");
     expect(
       configuredToolchainImage({
         APP_BUILDER_SANDBOX_IMAGE: image,
         VERCEL: "1",
         VERCEL_ENV: "preview",
-      }),
+      })
     ).toBeUndefined();
   });
 
@@ -36,16 +36,16 @@ describe("sandbox toolchain contract", () => {
       configuredToolchainImage({
         APP_BUILDER_EXECUTION_MODE: "development",
         APP_BUILDER_SANDBOX_IMAGE: developmentImage,
-      }),
+      })
     ).toBe(developmentImage);
     expect(() =>
-      configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: developmentImage }),
+      configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: developmentImage })
     ).toThrow("pinned");
     expect(() =>
       configuredToolchainImage({
         APP_BUILDER_EXECUTION_MODE: "development",
         APP_BUILDER_SANDBOX_IMAGE: "app-builder-autograph-dev:latest",
-      }),
+      })
     ).toThrow("content-keyed");
   });
 
@@ -58,8 +58,8 @@ describe("sandbox toolchain contract", () => {
   });
 
   it("changes the template key when the configured immutable image changes", () => {
-    expect(sandboxRevalidationKey(undefined)).toBe(
-      "autograph-app-builder-toolchain-v2:local:unconfigured",
+    expect(sandboxRevalidationKey()).toBe(
+      "autograph-app-builder-toolchain-v2:local:unconfigured"
     );
     expect(sandboxRevalidationKey(image)).toContain(image);
   });

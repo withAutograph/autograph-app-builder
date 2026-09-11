@@ -1,11 +1,12 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { currentFreshBootstrapCapability } from "@/lib/agent/fresh-bootstrap-capability";
 import {
   freshBootstrapDigest,
   freshBootstrapIdentitySchema,
 } from "@/lib/agent/fresh-bootstrap-schema";
-import { currentFreshBootstrapCapability } from "@/lib/agent/fresh-bootstrap-capability";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 import {
   appBuilderWorkflowState,
   updateExactWorkflow,
@@ -20,7 +21,6 @@ import {
   readFreshBootstrapJournal,
   verifyFreshBootstrap,
 } from "@/lib/repository/node-fresh-bootstrap";
-import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 function freshWorkflow() {
   const workflow = appBuilderWorkflowState.get();
@@ -29,36 +29,37 @@ function freshWorkflow() {
     workflow.phase !== "fresh_bootstrap_pending" &&
     workflow.phase !== "fresh_bootstrap_failed" &&
     workflow.phase !== "published_fresh_bootstrap"
-  )
+  ) {
     throw new Error("An exact reviewed fresh-template change set is required.");
-  if (workflow.sourceReceipt.sourceKind !== "fresh-template")
+  }
+  if (workflow.sourceReceipt.sourceKind !== "fresh-template") {
     throw new Error(
-      "Fresh bootstrap is unavailable for existing-repository sources.",
+      "Fresh bootstrap is unavailable for existing-repository sources."
     );
+  }
   return workflow;
 }
 
 const inputSchema = z.strictObject({
-  expectedReviewDigest: freshBootstrapDigest,
   destinationPath: z.string().startsWith("/"),
   expectedPrestate: z.enum(["absent", "empty-directory"]),
+  expectedReviewDigest: freshBootstrapDigest,
   repositoryIdentity: freshBootstrapIdentitySchema,
 });
 
 export default defineTool({
   description:
     "Read or derive the exact approval-bound proposal for atomically publishing the reviewed fresh-template result as a new local repository. It fails closed unless the mise-owned host capability is enabled; it may reconcile durable workflow state but never mutates a target, provider, release, or remote.",
-  inputSchema,
   async execute(input, ctx) {
     const capability = await currentFreshBootstrapCapability();
     const workflow = freshWorkflow();
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
       throw new Error(
-        "The reviewed change set changed before fresh-bootstrap status.",
+        "The reviewed change set changed before fresh-bootstrap status."
       );
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(
       /^\/workspace\//u,
-      "",
+      ""
     );
     const sandbox = await ctx.getSandbox();
     const readOverlayFile = async (path: string) =>
@@ -91,7 +92,7 @@ export default defineTool({
       proposal.destinationPrestate.kind !== input.expectedPrestate
     )
       throw new Error(
-        "Fresh-bootstrap status inputs differ from the exact proposal.",
+        "Fresh-bootstrap status inputs differ from the exact proposal."
       );
     const journal = await readFreshBootstrapJournal({ capability, proposal });
     assertFreshBootstrapJournalStatus(workflow.phase, journal?.status);
@@ -104,11 +105,11 @@ export default defineTool({
     if (
       !exactFreshBootstrapProposalMatch(
         proposalFromFreshBootstrapJournal(journal),
-        proposal,
+        proposal
       )
     )
       throw new Error(
-        "The fresh-bootstrap journal belongs to another proposal.",
+        "The fresh-bootstrap journal belongs to another proposal."
       );
     if (journal.status === "succeeded") {
       await verifyFreshBootstrap({
@@ -130,7 +131,7 @@ export default defineTool({
               current.phase !== "fresh_bootstrap_failed"
             )
               throw new Error(
-                "The workflow cannot reconcile fresh-bootstrap success.",
+                "The workflow cannot reconcile fresh-bootstrap success."
               );
             return {
               ...current,
@@ -158,7 +159,7 @@ export default defineTool({
             current.phase !== "fresh_bootstrap_pending"
           )
             throw new Error(
-              "The workflow cannot reconcile fresh-bootstrap failure.",
+              "The workflow cannot reconcile fresh-bootstrap failure."
             );
           return {
             ...current,
@@ -174,7 +175,7 @@ export default defineTool({
         transition: (current) => {
           if (current.phase !== "reviewed")
             throw new Error(
-              "The workflow cannot reconcile fresh-bootstrap pending state.",
+              "The workflow cannot reconcile fresh-bootstrap pending state."
             );
           return {
             ...current,
@@ -194,4 +195,5 @@ export default defineTool({
       recoveryAllowed: true,
     };
   },
+  inputSchema,
 });

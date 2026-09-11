@@ -17,14 +17,14 @@ if (
 
 try {
   ensureLocalDevelopmentOidc({
+    miseExecutable: process.argv[3]!,
     repositoryRoot,
     vercelExecutable: process.argv[2]!,
-    miseExecutable: process.argv[3]!,
   });
 } catch (error) {
   if (error instanceof LocalOidcRefreshFailedError) {
     process.stderr.write(
-      "dev: project OIDC is missing or near expiry and could not be refreshed. Allow this checkout's Vercel OIDC refresh, then rerun `mise run dev`; static credentials are unsupported.\n",
+      "dev: project OIDC is missing or near expiry and could not be refreshed. Allow this checkout's Vercel OIDC refresh, then rerun `mise run dev`; static credentials are unsupported.\n"
     );
     process.exitCode = 78;
   } else {

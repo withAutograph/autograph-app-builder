@@ -1,12 +1,11 @@
 "use client";
 
-import {
-  type AdditionalFieldValue,
-  parseAdditionalFieldValue,
-} from "@better-auth-ui/core";
+import { parseAdditionalFieldValue } from "@better-auth-ui/core";
+import type { AdditionalFieldValue } from "@better-auth-ui/core";
 import type { UsernameAuthClient } from "@better-auth-ui/core/plugins/username";
 import { useAuth, useSession, useUpdateUser } from "@better-auth-ui/react";
-import { type SyntheticEvent, useState } from "react";
+import { useState } from "react";
+import type { SyntheticEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,12 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
 import { AdditionalField } from "../../additional-field";
 import { ChangeAvatar } from "./change-avatar";
 
-export type UserProfileProps = {
+export interface UserProfileProps {
   className?: string;
-};
+}
 
 /**
  * Render a profile card that lets the authenticated user view and update their display name, username, and avatar.
@@ -51,10 +51,12 @@ export function UserProfile({ className }: UserProfileProps) {
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
-      if (field.profile === false || field.readOnly) continue;
+      if (field.profile === false || field.readOnly) {
+        continue;
+      }
       const value = parseAdditionalFieldValue(
         field,
-        formData.get(field.name) as string | null,
+        formData.get(field.name) as string | null
       );
 
       if (field.validate) {
@@ -80,7 +82,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
   return (
     <div>
-      <h2 className="text-sm font-semibold mb-3">
+      <h2 className="mb-3 text-sm font-semibold">
         {localization.settings.userProfile}
       </h2>
 
@@ -128,7 +130,9 @@ export function UserProfile({ className }: UserProfileProps) {
             </Field>
 
             {additionalFields?.map((field) => {
-              if (field.profile === false) return null;
+              if (field.profile === false) {
+                return null;
+              }
 
               if (!session) {
                 if (field.inputType === "hidden") {

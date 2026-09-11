@@ -14,31 +14,31 @@ import {
 describe("development Codex package", () => {
   it("creates a stable loopback-only marketplace with exactly five public tools and no app surface", async () => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "autograph-dev-package-")),
+      await mkdtemp(join(tmpdir(), "autograph-dev-package-"))
     );
     try {
       const result = await createDevelopmentPackage({
-        repositoryRoot: resolve("."),
         outputRoot: root,
         port: 3210,
+        repositoryRoot: resolve("."),
       });
       const marketplace = JSON.parse(
         await readFile(
           join(result.marketplaceRoot, ".agents/plugins/marketplace.json"),
-          "utf8",
-        ),
+          "utf-8"
+        )
       );
       const manifest = JSON.parse(
         await readFile(
           join(result.pluginRoot, ".codex-plugin/plugin.json"),
-          "utf8",
-        ),
+          "utf-8"
+        )
       );
       const mcp = JSON.parse(
-        await readFile(join(result.pluginRoot, ".mcp.json"), "utf8"),
+        await readFile(join(result.pluginRoot, ".mcp.json"), "utf-8")
       );
       const tools = JSON.parse(
-        await readFile(join(result.pluginRoot, "tools-list.json"), "utf8"),
+        await readFile(join(result.pluginRoot, "tools-list.json"), "utf-8")
       );
       expect(result.marketplaceRoot).toBe(join(root, "marketplace"));
       expect(marketplace).toMatchObject({
@@ -47,8 +47,8 @@ describe("development Codex package", () => {
           {
             name: "app-builder",
             source: {
-              source: "local",
               path: "./plugins/app-builder",
+              source: "local",
             },
           },
         ],
@@ -63,48 +63,47 @@ describe("development Codex package", () => {
       expect(mcp).toEqual({
         mcpServers: {
           "app-builder-dev-3210": {
+            oauth_resource: "http://127.0.0.1:3210/mcp",
             type: "http",
             url: "http://127.0.0.1:3210/mcp",
-            oauth_resource: "http://127.0.0.1:3210/mcp",
           },
         },
       });
       expect(tools).toEqual([...TOOL_NAMES]);
       expect(result.receipt).toMatchObject({
         format: "autograph-development-package-v2",
-        selector: "app-builder@autograph-dev",
-        version: "0.0.0-development.3210",
         mcpAppPreview: false,
         publication: false,
+        selector: "app-builder@autograph-dev",
+        version: "0.0.0-development.3210",
       });
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
   it("installs development guidance without enabling it globally", async () => {
     const codexHome = await mkdtemp(join(tmpdir(), "codex-scope-"));
-    const commands: Array<{
+    const commands: {
       args: readonly string[];
       allowFailure: boolean;
-    }> = [];
+    }[] = [];
     try {
       await registerDevelopmentPackage({
         codexBin: "/mise/bin/codex",
         codexHome,
         marketplaceRoot: "/private/dev/marketplace",
-        version: "0.0.0-development.3210",
         runner: async (args, options) => {
           commands.push({ args, allowFailure: options.allowFailure ?? false });
           if (args[0] === "plugin" && args[1] === "add") {
             await writeFile(
               join(codexHome, "config.toml"),
-              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = true\n[plugins."app-builder@autograph"]\nenabled = true\n',
+              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = true\n[plugins."app-builder@autograph"]\nenabled = true\n'
             );
           }
           if (args.includes("list")) {
             expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe(
-              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = false\n[plugins."app-builder@autograph"]\nenabled = true\n',
+              'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = false\n[plugins."app-builder@autograph"]\nenabled = true\n'
             );
           }
           return {
@@ -133,17 +132,19 @@ describe("development Codex package", () => {
             stderr: "",
           };
         },
+        version: "0.0.0-development.3210",
       });
       expect(commands).toEqual([
         {
+          allowFailure: true,
           args: ["plugin", "remove", "app-builder@autograph-dev", "--json"],
-          allowFailure: true,
         },
         {
+          allowFailure: true,
           args: ["plugin", "marketplace", "remove", "autograph-dev", "--json"],
-          allowFailure: true,
         },
         {
+          allowFailure: false,
           args: [
             "plugin",
             "marketplace",
@@ -151,65 +152,64 @@ describe("development Codex package", () => {
             "/private/dev/marketplace",
             "--json",
           ],
-          allowFailure: false,
         },
         {
+          allowFailure: false,
           args: ["plugin", "add", "app-builder@autograph-dev", "--json"],
-          allowFailure: false,
         },
         {
-          args: ["plugin", "list", "--marketplace", "autograph-dev", "--json"],
           allowFailure: false,
+          args: ["plugin", "list", "--marketplace", "autograph-dev", "--json"],
         },
       ]);
     } finally {
-      await rm(codexHome, { recursive: true, force: true });
+      await rm(codexHome, { force: true, recursive: true });
     }
   });
 
   it("closes every publication, hosted, provider, and release capability", () => {
     expect(
       developmentLaunchEnvironment({
-        sourceRoot: "/private/user/arrusted",
-        snapshotRoot: "/private/dev/source",
+        dependencyKey: "a".repeat(64),
         destinationRoot: "/private/dev/destination",
+        evePort: 2000,
+        fingerprint: "f".repeat(64),
+        snapshotRoot: "/private/dev/source",
+        sourceRoot: "/private/user/arrusted",
         sourceSha: "b".repeat(40),
         sourceTree: "c".repeat(40),
-        fingerprint: "f".repeat(64),
-        dependencyKey: "a".repeat(64),
-        evePort: 2000,
-      }),
+      })
     ).toMatchObject({
-      APP_BUILDER_EXECUTION_MODE: "development",
-      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+      APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: "/private/dev/source",
+      APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: "/private/user/arrusted",
       APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "b".repeat(40),
       APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "c".repeat(40),
-      APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: "/private/user/arrusted",
-      APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: "/private/dev/source",
-      APP_BUILDER_LOCAL_PUBLICATION: "0",
-      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-      APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-      EVE_HOSTED_ADAPTER: "0",
-      WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
-      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+      APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+      APP_BUILDER_LOCAL_PUBLICATION: "0",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      EVE_HOSTED_ADAPTER: "0",
       REPOSITORY_LOCAL_ROOTS: "/private/dev/source",
       REPOSITORY_WORKSPACE_ROOT: "/private/dev/destination",
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
     });
     expect(
       developmentLaunchEnvironment({
-        sourceRoot: "/private/user/arrusted",
-        snapshotRoot: "/private/dev/source",
+        dependencyKey: "a".repeat(64),
         destinationRoot: "/private/dev/destination",
+        evePort: 2000,
+        fingerprint: "f".repeat(64),
+        snapshotRoot: "/private/dev/source",
+        sourceRoot: "/private/user/arrusted",
         sourceSha: "b".repeat(40),
         sourceTree: "c".repeat(40),
-        fingerprint: "f".repeat(64),
-        dependencyKey: "a".repeat(64),
-        evePort: 2000,
-      }),
+      })
     ).not.toHaveProperty("APP_BUILDER_SANDBOX_IMAGE");
   });
 });

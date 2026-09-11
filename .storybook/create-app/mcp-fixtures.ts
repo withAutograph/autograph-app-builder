@@ -1,71 +1,65 @@
 import type { EveSessionResult, PublicInputRequest } from "@/lib/mcp/contracts";
 
 export const choiceRequest: PublicInputRequest = {
-  requestId: "build-client",
-  kind: "question",
-  title: "Choose a build client",
+  allowFreeform: false,
   description: "Select where you want to continue building.",
+  kind: "question",
   options: [
     { id: "codex", label: "ChatGPT / Codex" },
     { id: "cursor", label: "Cursor" },
   ],
-  allowFreeform: false,
+  requestId: "build-client",
+  title: "Choose a build client",
 };
 
 export const semanticChoiceRequest: PublicInputRequest = {
   ...choiceRequest,
-  presentation: { section: "build-with", control: "choice" },
+  presentation: { control: "choice", section: "build-with" },
 };
 
 export const repositoryScopeRequest: PublicInputRequest = {
-  requestId: "github-installation-scope",
-  kind: "question",
-  title: "Which GitHub account should Autograph use?",
+  allowFreeform: false,
   description:
     "Choose the account that owns the repository you want Autograph to use.",
+  kind: "question",
   options: [
     { id: "123", label: "withAutograph (Organization)" },
     { id: "456", label: "jasonmorganson (User)" },
   ],
-  allowFreeform: false,
-  presentation: { section: "store-in", control: "choice" },
+  presentation: { control: "choice", section: "store-in" },
+  requestId: "github-installation-scope",
+  title: "Which GitHub account should Autograph use?",
 };
 
 export const freeformRequest: PublicInputRequest = {
-  requestId: "audience",
-  kind: "question",
-  title: "Who will use this app?",
-  description: "Describe the primary users.",
   allowFreeform: true,
+  description: "Describe the primary users.",
+  kind: "question",
+  requestId: "audience",
+  title: "Who will use this app?",
 };
 
 export const approvalRequest: PublicInputRequest = {
-  requestId: "approve-plan",
-  kind: "approval",
-  title: "Approve this plan",
-  description: "Confirm that Autograph can continue with the proposed plan.",
   allowFreeform: false,
-  presentation: { section: "connections", control: "approval" },
+  description: "Confirm that Autograph can continue with the proposed plan.",
+  kind: "approval",
+  presentation: { control: "approval", section: "connections" },
+  requestId: "approve-plan",
+  title: "Approve this plan",
 };
 
 export const authorizationRequest: PublicInputRequest = {
-  requestId: "connect-github",
-  kind: "authorization",
-  title: "Connect GitHub",
-  description: "Authorize repository access.",
   allowFreeform: false,
-  presentation: { section: "store-in", control: "provider" },
   authorization: {
-    url: "https://builder.example.test/github/installations?continuation=opaque",
-    instructions: "Choose the repositories Autograph may access.",
     displayName: "GitHub",
+    instructions: "Choose the repositories Autograph may access.",
     repositoryAccess: {
-      provider: "github",
       action: "update",
+      provider: "github",
       repository: {
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
         fullName: "withAutograph/app-builder-dogfood",
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
       },
       scopes: [
         {
@@ -75,17 +69,23 @@ export const authorizationRequest: PublicInputRequest = {
         },
       ],
     },
+    url: "https://builder.example.test/github/installations?continuation=opaque",
   },
+  description: "Authorize repository access.",
+  kind: "authorization",
+  presentation: { control: "provider", section: "store-in" },
+  requestId: "connect-github",
+  title: "Connect GitHub",
 };
 
 export function sessionResult(
-  inputRequests: PublicInputRequest[],
+  inputRequests: PublicInputRequest[]
 ): EveSessionResult {
   return {
-    sessionId: "session-story",
-    status: "input_required",
     cursor: 4,
     events: [],
     inputRequests,
+    sessionId: "session-story",
+    status: "input_required",
   };
 }

@@ -23,17 +23,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+
 import { UserAvatar } from "./user-avatar";
 import { UserView } from "./user-view";
 
-export type UserButtonProps = {
+export interface UserButtonProps {
   className?: string;
   align?: "center" | "end" | "start" | undefined;
   sideOffset?: number;
   size?: "default" | "icon";
   variant?:
-    "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
-};
+    | "default"
+    | "destructive"
+    | "ghost"
+    | "link"
+    | "outline"
+    | "secondary";
+}
 
 /**
  * Render the stock user dropdown with identity, settings, and authentication actions.
@@ -64,7 +70,7 @@ export function UserButton({
     (plugin) =>
       plugin.userMenuItems?.map((Item, index) => (
         <Item key={`${plugin.id}-${index.toString()}`} />
-      )) ?? [],
+      )) ?? []
   );
   return (
     <DropdownMenu>
@@ -74,9 +80,9 @@ export function UserButton({
           size === "icon"
             ? cn("rounded-full", className)
             : cn(
-                buttonVariants({ variant, size: "lg" }),
-                "py-2.5 h-auto font-normal",
-                className,
+                buttonVariants({ size: "lg", variant }),
+                "h-auto py-2.5 font-normal",
+                className
               )
         }
       >
@@ -102,7 +108,7 @@ export function UserButton({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
-        className="min-w-40 md:min-w-56 max-w-[48svw]"
+        className="max-w-[48svw] min-w-40 md:min-w-56"
         sideOffset={sideOffset}
         align={align}
       >
