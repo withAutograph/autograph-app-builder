@@ -71,7 +71,6 @@ import {
   parseActiveProvisioning,
   persistActiveProvisioning,
   persistBuilderDraft,
-  readBuilderDraftResume,
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
 import { BuilderNextSteps } from "./builder-next-steps";
@@ -84,12 +83,12 @@ import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
-import { SearchCombobox, type ComboOption } from "./builder-combobox";
+import { SearchCombobox, type ComboOption } from "./search-combobox";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-export { SearchCombobox, type ComboOption } from "./builder-combobox";
+export { SearchCombobox, type ComboOption } from "./search-combobox";
 import type {
   BuilderDraft,
   BuilderForm,
@@ -1358,8 +1357,11 @@ export function Builder({
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
-        persistBuilderDraft(saved.draftId, snapshot, saved.revision);
-        return { mutationId, savedAt: saved.updatedAt };
+        return {
+          mutationId,
+          revision: saved.revision,
+          savedAt: saved.updatedAt,
+        };
       } finally {
         pendingActionExpectedRevision.current = undefined;
       }
@@ -1370,9 +1372,11 @@ export function Builder({
     outbox: draftOutbox,
     save: saveDraft,
     debounceMs: 500,
+    initialRevision: durableDraftRevision ?? 0,
   });
   const {
     discardPending: discardPendingDraft,
+    discardSupersededByRemoteRevision,
     restorePending,
     resumePending,
     schedule: scheduleAutosave,
@@ -1437,6 +1441,7 @@ export function Builder({
       record: BuilderDraftRecord;
     }) => {
       if (remote.revision <= draftRevision.current) return;
+      await discardSupersededByRemoteRevision(remote.revision);
       draftRevision.current = remote.revision;
       draftUpdatedAt.current = remote.updatedAt;
       activeDraftId.current = remote.draftId;
@@ -1455,12 +1460,11 @@ export function Builder({
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
       autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
-      await discardPendingDraft();
       setDraftSyncNotice("Updated from another device");
     },
     [
       builderForm,
-      discardPendingDraft,
+      discardSupersededByRemoteRevision,
       setConnectedConnections,
       setDeploymentProvider,
       setDraftSyncNotice,
@@ -2294,73 +2298,33 @@ export function AppBuilder({
   clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
 }) {
   const router = useRouter();
-  const [screen, setScreen] = useState<Screen>("builder");
-  const [submitted, setSubmitted] = useState<BuilderForm>();
-  const [provisionRequestId, setProvisionRequestId] = useState<string>();
-  const [handoffCreationRequestId, setHandoffCreationRequestId] =
-    useState<string>();
-  const [provisioning, setProvisioning] = useState<BuilderProvisionResponse>();
-  const [handoff, setHandoff] = useState<BuilderHandoffReference>();
-  const [handoffAttempt, setHandoffAttempt] =
-    useState<HandoffAttempt>("attempted");
-  const [handoffClipboardState, setHandoffClipboardState] =
-    useState<ClipboardState>("idle");
-  const [openedHandoffWindow, setOpenedHandoffWindow] =
-    useState<Window | null>();
   const [savedBrief, setSavedBrief] = useState("");
-  const [activeBuilderDraftId, setActiveBuilderDraftId] = useState<string>();
+  const [handoffError, setHandoffError] = useState("");
+  const activeDraftId = useRef<string | undefined>(undefined);
+  const completedHandoff = useRef<string | undefined>(undefined);
+  const [continuation, dispatchContinuation, continuationPending] =
+    useActionState(continueBuilderHandoff, undefined);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
-      const active = parseActiveProvisioning(
-        sessionStorage.getItem(activeProvisioningStorageKey),
-      );
-      if (active) {
-        setSubmitted(active.form);
-        setProvisionRequestId(active.requestId);
-        setHandoffCreationRequestId(active.handoffCreationRequestId);
-        if (active.phase === "ready" && active.provisioning && active.handoff) {
-          setProvisioning(active.provisioning);
-          setHandoff(active.handoff);
-          setScreen("ready");
-          router.replace(`/handoff/${active.handoff.handoffId}`);
-          if (active.provisioning.requestDigest !== "0".repeat(64))
-            void fetch(
-              `/api/builder/provision?requestId=${encodeURIComponent(active.requestId)}`,
-              { cache: "no-store" },
-            )
-              .then(async (response) =>
-                response.ok
-                  ? ((await response.json()) as BuilderProvisionResponse)
-                  : undefined,
-              )
-              .then((response) => {
-                if (!response) return;
-                setProvisioning(response);
-                persistActiveProvisioning({
-                  ...active,
-                  provisioning: response,
-                });
-              })
-              .catch(() => undefined);
-        } else {
-          setScreen("handoff");
-        }
-      }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [router]);
-  const localResume = useSyncExternalStore(
-    subscribeToClientSnapshot,
-    () =>
-      providerResumeKey ? readBuilderDraftResume(providerResumeKey) : undefined,
-    () => undefined,
-  );
-  const resumedDraft =
-    localResume?.acknowledgedRevision !== undefined &&
-    localResume.acknowledgedRevision >= (durableDraftRevision ?? 0)
-      ? localResume.draft
-      : (initialDurableDraft ?? localResume?.draft);
+  }, []);
+  useEffect(() => {
+    if (!continuation || continuationPending) return;
+    if (continuation.status === "error") {
+      setHandoffError("We couldn’t prepare your handoff. Your saved draft is still available.");
+      return;
+    }
+    if (completedHandoff.current === continuation.handoff.handoffId) return;
+    completedHandoff.current = continuation.handoff.handoffId;
+    if (activeDraftId.current)
+      void clearBuilderDraftAction?.(activeDraftId.current);
+    router.replace(`/handoff/${continuation.handoff.handoffId}`);
+  }, [clearBuilderDraftAction, continuation, continuationPending, router]);
+  // The server draft is authoritative after provider return. Browser storage
+  // remains a write-only, short-lived redirect bridge and is never restored.
+  const resumedDraft = initialDurableDraft;
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
     : savedBrief || "new";
@@ -2377,7 +2341,14 @@ export function AppBuilder({
   return (
     <div className={styles.appShell}>
       <Header />
-      {screen === "builder" ? (
+      {continuationPending ? (
+        <main className={styles.flowPage} id="main-content">
+          <section className={styles.readyCard} aria-busy="true">
+            <h1>Preparing your handoff</h1>
+            <p>Your saved app is being prepared.</p>
+          </section>
+        </main>
+      ) : (
         <Builder
           key={builderKey}
           initialBrief={savedBrief}
@@ -2394,89 +2365,21 @@ export function AppBuilder({
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form, draftId) => {
-            setActiveBuilderDraftId(draftId);
-            const requestId = crypto.randomUUID();
-            const creationRequestId = crypto.randomUUID();
-            persistActiveProvisioning({
-              version: 1,
-              requestId,
-              handoffCreationRequestId: creationRequestId,
-              form,
-              phase: "handoff",
-            });
-            setSubmitted(form);
-            setProvisionRequestId(requestId);
-            setHandoffCreationRequestId(creationRequestId);
-            setProvisioning(undefined);
-            setHandoff(undefined);
-            setHandoffClipboardState("idle");
-            let openedWindow: Window | null = null;
-            try {
-              openedWindow = window.open("about:blank", "_blank");
-            } catch {}
-            setOpenedHandoffWindow(openedWindow);
-            setScreen("handoff");
+            setHandoffError("");
+            activeDraftId.current = draftId ?? durableDraftId;
+            startTransition(() =>
+              dispatchContinuation({
+                version: 1,
+                requestId: crypto.randomUUID(),
+                creationRequestId: crypto.randomUUID(),
+                provisioningEnabled,
+                form,
+              }),
+            );
           }}
         />
-      ) : null}
-      {screen === "handoff" &&
-      submitted &&
-      provisionRequestId &&
-      handoffCreationRequestId ? (
-        <Handoff
-          form={submitted}
-          requestId={provisionRequestId}
-          handoffCreationRequestId={handoffCreationRequestId}
-          openedWindow={openedHandoffWindow}
-          provisioningEnabled={provisioningEnabled}
-          onReady={(result) => {
-            if (activeBuilderDraftId) {
-              clearBuilderDraft(activeBuilderDraftId);
-              void clearBuilderDraftAction?.(activeBuilderDraftId);
-            }
-            persistActiveProvisioning({
-              version: 1,
-              requestId: provisionRequestId,
-              handoffCreationRequestId,
-              form: submitted,
-              phase: "ready",
-              provisioning: result.provisioning,
-              handoff: result.handoff,
-            });
-            setProvisioning(result.provisioning);
-            setHandoff(result.handoff);
-            setHandoffAttempt(result.handoffAttempt);
-            setHandoffClipboardState(result.clipboardState);
-            setScreen("ready");
-            router.push(`/handoff/${result.handoff.handoffId}`);
-          }}
-        />
-      ) : null}
-      {screen === "ready" &&
-      submitted &&
-      provisionRequestId &&
-      provisioning &&
-      handoff ? (
-        <Ready
-          form={submitted}
-          requestId={provisionRequestId}
-          initialHandoff={handoff}
-          initialProvisioning={provisioning}
-          provisioningEnabled={provisioningEnabled}
-          initialAttempt={handoffAttempt}
-          initialClipboardState={handoffClipboardState}
-          onReset={() => {
-            clearActiveProvisioning();
-            setSubmitted(undefined);
-            setProvisionRequestId(undefined);
-            setHandoffCreationRequestId(undefined);
-            setProvisioning(undefined);
-            setHandoff(undefined);
-            setOpenedHandoffWindow(undefined);
-            setScreen("builder");
-          }}
-        />
-      ) : null}
+      )}
+      {handoffError ? <p role="alert">{handoffError}</p> : null}
     </div>
   );
 }

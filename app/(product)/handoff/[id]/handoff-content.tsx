@@ -6,6 +6,7 @@ import { getBuilderHandoffPageData } from "../../../../lib/handoff/deployment";
 import { Header } from "../../../ui/builder-shell";
 import { CreateAnotherAppLink } from "../../../ui/create-another-app-link";
 import { HandoffControls } from "../../../ui/handoff-controls";
+import { HandoffProvisioningProgress } from "../../../ui/handoff-provisioning-progress";
 
 import styles from "../../../ui/app-builder.module.css";
 import handoffStyles from "../../../ui/handoff.module.css";
@@ -141,6 +142,15 @@ export async function HandoffContent({
             <summary>Prepared brief</summary>
             <p style={{ whiteSpace: "pre-wrap" }}>{intent.brief}</p>
           </details>
+          {intent.provisioning && data.provisioningRevision ? (
+            <HandoffProvisioningProgress
+              handoffId={data.handoffId}
+              initial={{
+                revision: data.provisioningRevision,
+                provisioning: intent.provisioning,
+              }}
+            />
+          ) : null}
           <HandoffControls key={data.handoffId} initial={controls} />
           <CreateAnotherAppLink />
         </section>

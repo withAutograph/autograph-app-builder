@@ -11,12 +11,14 @@ describe("builder draft outbox", () => {
 
     await outbox.write({
       version: 1,
+      baseRevision: 1,
       mutationId: "first",
       snapshot: { brief: "first" },
       createdAt: 1,
     });
     await outbox.write({
       version: 1,
+      baseRevision: 1,
       mutationId: "second",
       snapshot: { brief: "second" },
       createdAt: 2,

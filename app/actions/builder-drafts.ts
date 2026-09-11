@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { headers } from "next/headers";
 
 import {
@@ -10,9 +8,7 @@ import {
   readAuthenticatedBuilderDraft,
 } from "@/lib/builder-drafts/deployment";
 import {
-  builderDraftRecordSchema,
   saveActiveBuilderDraftInputSchema,
-  type BuilderDraftRecord,
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
 
@@ -58,33 +54,7 @@ export async function loadBuilderDraft(draftId: string) {
   });
 }
 
-/**
- * Temporary compatibility shim for the pre-autosave client. New code must use
- * `saveActiveBuilderDraft` so every mutation carries its revision and UUID.
- */
-export async function saveBuilderDraft(
-  draftId: string,
-  recordInput: BuilderDraftRecord,
-) {
-  const value = await context();
-  const record = builderDraftRecordSchema.parse(recordInput);
-  const current = await value.drafts.read(value.authority, draftId);
-  return saveActiveBuilderDraft({
-    version: 1,
-    draftId,
-    expectedRevision: current?.revision ?? 0,
-    clientMutationId: randomUUID(),
-    record,
-  });
-}
-
 export async function clearBuilderDraft(draftId: string) {
   const value = await context();
   return value.drafts.archive(value.authority, draftId);
-}
-
-/** One active draft means this legacy list contains zero or one item. */
-export async function listLatestBuilderDrafts() {
-  const draft = await loadActiveBuilderDraft();
-  return draft ? [draft] : [];
 }

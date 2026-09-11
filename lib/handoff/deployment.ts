@@ -98,6 +98,8 @@ export type BuilderHandoffPageData = {
   destination: "codex" | "cursor";
   cursorInstallReady: boolean;
   mcpUrl: string;
+  /** Current journal revision when this handoff has provider work. */
+  provisioningRevision?: number;
 };
 
 export function createBuilderHandoffRouteHandler(input: {
@@ -360,19 +362,30 @@ export async function getBuilderHandoffPageData(input: {
     authority,
     handoffId: input.handoffId,
   });
+  const currentProvisioning = record.intent.provisioningRequestId
+    ? await createPostgresBuilderProvisionJournalStore(context.database).read({
+        authority,
+        requestId: record.intent.provisioningRequestId,
+      })
+    : undefined;
   const { isCursorClientReady } = await import("../auth/cursor-client");
   return {
     version: 1,
     handoffId: record.handoffId,
     expiresAt: record.expiresAt.toISOString(),
     status,
-    intent: record.intent,
+    intent: currentProvisioning
+      ? { ...record.intent, provisioning: currentProvisioning.record.response }
+      : record.intent,
     destination: record.intent.destination ?? "codex",
     cursorInstallReady: await isCursorClientReady(
       context.database,
       context.preview.resource,
     ),
     mcpUrl: context.preview.resource,
+    ...(currentProvisioning
+      ? { provisioningRevision: currentProvisioning.revision }
+      : {}),
   };
 }
 

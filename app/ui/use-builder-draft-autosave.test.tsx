@@ -66,7 +66,11 @@ describe("useBuilderDraftAutosave", () => {
     };
     const save = vi.fn(async ({ mutationId, snapshot }) => {
       if (snapshot.brief === "older") await firstSave;
-      return { mutationId, savedAt: "2030-01-01T00:00:00.000Z" };
+      return {
+        mutationId,
+        revision: snapshot.brief === "older" ? 1 : 2,
+        savedAt: "2030-01-01T00:00:00.000Z",
+      };
     });
     const value = await render({ outbox, save });
 
@@ -90,5 +94,82 @@ describe("useBuilderDraftAutosave", () => {
       expect.objectContaining({ snapshot: { brief: "newer" } }),
     );
     expect(outbox.clearIfMutationId).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears only the exact acknowledged outbox snapshot", async () => {
+    let entry:
+      | import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot>
+      | undefined;
+    const outbox: BuilderDraftOutbox<Snapshot> = {
+      read: vi.fn(async () => entry),
+      write: vi.fn(async (next) => {
+        entry = next;
+      }),
+      clear: vi.fn(),
+      clearIfMutationId: vi.fn(async (mutationId) => {
+        if (entry?.mutationId !== mutationId) return false;
+        entry = undefined;
+        return true;
+      }),
+      clearIfAcknowledged: vi.fn(async (acknowledgement) => {
+        if (entry?.mutationId !== acknowledgement.mutationId) return false;
+        entry = undefined;
+        return true;
+      }),
+    };
+    let releaseFirst: (() => void) | undefined;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const save = vi.fn(async ({ mutationId, snapshot }) => {
+      if (snapshot.brief === "first") await first;
+      return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
+    });
+    const value = await render({ outbox, save });
+
+    await act(async () => {
+      value.schedule({ brief: "first" });
+      const flushing = value.flush();
+      value.schedule({ brief: "second" });
+      releaseFirst?.();
+      await flushing;
+    });
+
+    expect(outbox.clearIfAcknowledged).toHaveBeenCalledTimes(2);
+    expect(entry).toBeUndefined();
+  });
+
+  it("discards queued recovery work superseded by a remote revision", async () => {
+    let entry:
+      | import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot>
+      | undefined;
+    const outbox: BuilderDraftOutbox<Snapshot> = {
+      read: vi.fn(async () => entry),
+      write: vi.fn(async (next) => {
+        entry = next;
+      }),
+      clear: vi.fn(),
+      clearIfMutationId: vi.fn(async (mutationId) => {
+        if (entry?.mutationId !== mutationId) return false;
+        entry = undefined;
+        return true;
+      }),
+    };
+    const value = await render({
+      outbox,
+      save: vi.fn(),
+    });
+
+    await act(async () => {
+      value.schedule({ brief: "local" });
+    });
+    await act(async () => {
+      await expect(value.discardSupersededByRemoteRevision(1)).resolves.toBe(
+        true,
+      );
+    });
+
+    expect(outbox.clearIfMutationId).toHaveBeenCalledTimes(1);
+    expect(entry).toBeUndefined();
   });
 });

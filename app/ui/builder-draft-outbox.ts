@@ -6,6 +6,8 @@
 
 export type BuilderDraftOutboxEntry<T> = {
   version: 1;
+  /** The authoritative revision on which this local edit was based. */
+  baseRevision: number;
   mutationId: string;
   snapshot: T;
   createdAt: number;
@@ -15,6 +17,11 @@ export type BuilderDraftOutbox<T> = {
   read(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
   write(entry: BuilderDraftOutboxEntry<T>): Promise<void>;
   clearIfMutationId(mutationId: string): Promise<boolean>;
+  /** Clears only the snapshot represented by this server acknowledgement. */
+  clearIfAcknowledged?(acknowledgement: {
+    mutationId: string;
+    revision: number;
+  }): Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
   clear(): Promise<void>;
 };
@@ -162,6 +169,30 @@ export function createBuilderDraftOutbox<T>(
             const entry = memoryFallback.get(options.key) as
               BuilderDraftOutboxEntry<T> | undefined;
             if (entry?.mutationId !== mutationId) return false;
+            memoryFallback.delete(options.key);
+            return true;
+          },
+        ),
+      ),
+    clearIfAcknowledged: (acknowledgement) =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            const store = transaction.objectStore(storeName);
+            const entry = (await requestResult(store.get(options.key))) as
+              | BuilderDraftOutboxEntry<T>
+              | undefined;
+            const cleared = entry?.mutationId === acknowledgement.mutationId;
+            if (cleared) store.delete(options.key);
+            await transactionResult(transaction);
+            return cleared;
+          },
+          () => {
+            const entry = memoryFallback.get(options.key) as
+              | BuilderDraftOutboxEntry<T>
+              | undefined;
+            if (entry?.mutationId !== acknowledgement.mutationId) return false;
             memoryFallback.delete(options.key);
             return true;
           },
