@@ -2,4 +2,4 @@
 #MISE description="Format repository sources with Oxfmt"
 set -eu
 
-exec "$(mise which pnpm)" exec oxfmt . "$@"
+exec .config/mise/scripts/trusted-node-launcher "$(mise which pnpm)" exec oxfmt . "$@"
