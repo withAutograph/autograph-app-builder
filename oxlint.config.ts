@@ -15,7 +15,6 @@ export default defineConfig({
     "eslint/func-style": "off",
     "eslint/complexity": "off",
     "eslint/prefer-named-capture-group": "off",
-    "eslint/preserve-caught-error": "off",
     "eslint/require-await": "off",
     "eslint/require-unicode-regexp": "off",
     "eslint/sort-keys": "off",
