@@ -57,9 +57,7 @@ const legacyReceipt = {
 
 function sandboxFixture() {
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
-    path === "repository/assets/payload.bin"
-      ? Buffer.from([0, 255, 17, 128])
-      : null,
+    path === "repository/assets/payload.bin" ? Buffer.from([0, 255, 17, 128]) : null,
   );
   return {
     readBinaryFile,
@@ -121,10 +119,7 @@ describe("fresh bootstrap source workspace", () => {
       receipt: canonicalReceipt,
       expectedWorkspace: workspace,
     });
-    expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(
-      sandbox,
-      workspace,
-    );
+    expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
   });
 
   it("reads repository-relative source paths as binary data", async () => {

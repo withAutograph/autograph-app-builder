@@ -22,11 +22,6 @@ const namespace = previewEmulationNamespace({
   project: args[5],
   branch: args[7],
 });
-const deleted = await resetPostgresPreviewEmulateState(
-  readPrivateDatabaseUrl(0),
-  namespace,
-);
+const deleted = await resetPostgresPreviewEmulateState(readPrivateDatabaseUrl(0), namespace);
 
-process.stdout.write(
-  `${JSON.stringify({ namespace, deleted, reseedOnNextRequest: true })}\n`,
-);
+process.stdout.write(`${JSON.stringify({ namespace, deleted, reseedOnNextRequest: true })}\n`);

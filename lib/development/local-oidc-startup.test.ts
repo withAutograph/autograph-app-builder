@@ -1,10 +1,4 @@
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,15 +40,11 @@ function token(expiresAt = NOW + 3600): string {
 }
 
 function fixture(input: { expiresAt?: number; environmentMode?: number } = {}) {
-  const repositoryRoot = realpathSync(
-    mkdtempSync(join(tmpdir(), "local-oidc-startup-")),
-  );
+  const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "local-oidc-startup-")));
   mkdirSync(join(repositoryRoot, ".vercel"), { mode: 0o700 });
-  writeFileSync(
-    join(repositoryRoot, ".vercel/project.json"),
-    `${JSON.stringify(PROJECT)}\n`,
-    { mode: 0o600 },
-  );
+  writeFileSync(join(repositoryRoot, ".vercel/project.json"), `${JSON.stringify(PROJECT)}\n`, {
+    mode: 0o600,
+  });
   writeFileSync(
     join(repositoryRoot, ".env.local"),
     `VERCEL_OIDC_TOKEN=${token(input.expiresAt)}\n`,
@@ -105,11 +95,9 @@ describe("local Development OIDC startup", () => {
         expect(invocation.environment).not.toHaveProperty("VERCEL_TOKEN");
         expect(invocation.environment).not.toHaveProperty("AI_GATEWAY_API_KEY");
         if (invocation.operation === "development-env-pull") {
-          writeFileSync(
-            join(repositoryRoot, ".env.local"),
-            `VERCEL_OIDC_TOKEN=${token()}\n`,
-            { mode: 0o644 },
-          );
+          writeFileSync(join(repositoryRoot, ".env.local"), `VERCEL_OIDC_TOKEN=${token()}\n`, {
+            mode: 0o644,
+          });
           chmodSync(join(repositoryRoot, ".env.local"), 0o644);
         } else {
           chmodSync(join(repositoryRoot, ".env.local"), 0o600);
@@ -121,13 +109,7 @@ describe("local Development OIDC startup", () => {
     expect(invocations).toMatchObject([
       {
         executable: "/mise/vercel",
-        args: [
-          "env",
-          "pull",
-          ".env.local",
-          "--environment=development",
-          "--yes",
-        ],
+        args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
         operation: "development-env-pull",
       },
       {
@@ -140,11 +122,9 @@ describe("local Development OIDC startup", () => {
 
   it("does not refresh malformed or unsafe installed OIDC", () => {
     const repositoryRoot = fixture();
-    writeFileSync(
-      join(repositoryRoot, ".env.local"),
-      "VERCEL_OIDC_TOKEN=not-a-jwt\n",
-      { mode: 0o600 },
-    );
+    writeFileSync(join(repositoryRoot, ".env.local"), "VERCEL_OIDC_TOKEN=not-a-jwt\n", {
+      mode: 0o600,
+    });
     const runCommand = () => {
       throw new Error("command must not run");
     };

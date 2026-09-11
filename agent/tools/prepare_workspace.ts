@@ -67,9 +67,7 @@ export default defineTool({
       current.phase !== "empty" &&
       current.githubSource?.digest !== source.githubSource?.digest
     )
-      throw new Error(
-        "This app build already owns a different GitHub source binding.",
-      );
+      throw new Error("This app build already owns a different GitHub source binding.");
     if (
       !development &&
       currentWorkspace !== undefined &&
@@ -82,9 +80,7 @@ export default defineTool({
         path,
         sandbox,
         ctx.callId,
-        source.receipt.sourceKind === "existing-repository"
-          ? "planning"
-          : "full",
+        source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
       );
     } else if (githubWorkspace !== undefined) {
       workspace = githubWorkspace;
@@ -100,9 +96,7 @@ export default defineTool({
         sandbox,
         ctx.callId,
         false,
-        source.receipt.sourceKind === "existing-repository"
-          ? "planning"
-          : "full",
+        source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
       );
     }
     updateExactWorkflow({
@@ -116,9 +110,7 @@ export default defineTool({
               preparedByCallId: ctx.callId,
               workspace,
               sourceReceipt: currentReceipt,
-              ...(source.githubSource === undefined
-                ? {}
-                : { githubSource: source.githubSource }),
+              ...(source.githubSource === undefined ? {} : { githubSource: source.githubSource }),
               artifacts: [],
             }
           : latest,

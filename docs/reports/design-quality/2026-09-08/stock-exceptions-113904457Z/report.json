@@ -112,14 +112,7 @@
       "--tracking-label"
     ],
     "undefinedTokens": [],
-    "generatedLiterals": [
-      "1440px",
-      "280px",
-      "360px",
-      "620px",
-      "720px",
-      "760px"
-    ],
+    "generatedLiterals": ["1440px", "280px", "360px", "620px", "720px", "760px"],
     "matchingLiterals": ["280px", "360px"],
     "unknownLiterals": ["1440px", "620px", "720px", "760px"]
   },
@@ -242,15 +235,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -266,9 +255,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -362,9 +349,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -2205,11 +2190,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -2384,11 +2365,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -2563,11 +2540,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -3129,10 +3102,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -3786,10 +3756,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5526,10 +5493,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5703,10 +5667,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5880,10 +5841,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6057,10 +6015,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6234,10 +6189,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6621,11 +6573,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -6733,11 +6681,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -6764,11 +6708,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6808,11 +6748,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6947,11 +6883,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6991,11 +6923,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7130,11 +7058,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7174,11 +7098,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7528,11 +7448,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7707,11 +7623,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7846,11 +7758,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7890,11 +7798,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8069,11 +7973,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8208,11 +8108,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8252,11 +8148,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8602,11 +8494,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -8714,11 +8602,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -8745,11 +8629,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8789,11 +8669,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8928,11 +8804,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8972,11 +8844,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9111,11 +8979,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9155,11 +9019,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9509,11 +9369,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9688,11 +9544,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9827,11 +9679,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9871,11 +9719,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10050,11 +9894,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10189,11 +10029,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10233,11 +10069,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10583,11 +10415,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -10695,11 +10523,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -10726,11 +10550,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10770,11 +10590,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10909,11 +10725,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10953,11 +10765,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11092,11 +10900,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11136,11 +10940,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11490,11 +11290,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11669,11 +11465,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11808,11 +11600,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11852,11 +11640,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12031,11 +11815,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12170,11 +11950,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12214,11 +11990,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12564,11 +12336,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -12676,11 +12444,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -12707,11 +12471,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12751,11 +12511,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12890,11 +12646,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12934,11 +12686,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13073,11 +12821,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13117,11 +12861,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13471,11 +13211,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13650,11 +13386,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13789,11 +13521,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13833,11 +13561,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14012,11 +13736,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14151,11 +13871,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14195,11 +13911,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14545,11 +14257,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -14684,11 +14392,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14728,11 +14432,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14867,11 +14567,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14911,11 +14607,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15050,11 +14742,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15094,11 +14782,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15448,11 +15132,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15627,11 +15307,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15766,11 +15442,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15810,11 +15482,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15989,11 +15657,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -16128,11 +15792,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -16172,11 +15832,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -17706,10 +17362,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -17883,10 +17536,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -18408,10 +18058,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -18585,10 +18232,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -18762,10 +18406,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -21826,15 +21467,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -21850,9 +21487,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -21932,9 +21567,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -22077,15 +21710,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -22101,9 +21730,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -22346,15 +21973,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -22370,9 +21993,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -22466,9 +22087,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -24309,11 +23928,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -24488,11 +24103,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -24667,11 +24278,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -25233,10 +24840,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -25890,10 +25494,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -27630,10 +27231,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -27807,10 +27405,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -27984,10 +27579,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -28161,10 +27753,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -28338,10 +27927,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -28725,11 +28311,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -28837,11 +28419,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -28868,11 +28446,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -28912,11 +28486,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29051,11 +28621,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29095,11 +28661,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29234,11 +28796,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29278,11 +28836,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29632,11 +29186,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29811,11 +29361,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29950,11 +29496,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29994,11 +29536,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -30173,11 +29711,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -30312,11 +29846,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -30356,11 +29886,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -30706,11 +30232,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -30818,11 +30340,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -30849,11 +30367,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -30893,11 +30407,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31032,11 +30542,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31076,11 +30582,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31215,11 +30717,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31259,11 +30757,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31613,11 +31107,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31792,11 +31282,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31931,11 +31417,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31975,11 +31457,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32154,11 +31632,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32293,11 +31767,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32337,11 +31807,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32687,11 +32153,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -32799,11 +32261,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -32830,11 +32288,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32874,11 +32328,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33013,11 +32463,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33057,11 +32503,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33196,11 +32638,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33240,11 +32678,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33594,11 +33028,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33773,11 +33203,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33912,11 +33338,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -33956,11 +33378,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34135,11 +33553,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34274,11 +33688,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34318,11 +33728,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34668,11 +34074,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -34780,11 +34182,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -34811,11 +34209,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34855,11 +34249,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -34994,11 +34384,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35038,11 +34424,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35177,11 +34559,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35221,11 +34599,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35575,11 +34949,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35754,11 +35124,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35893,11 +35259,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -35937,11 +35299,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36116,11 +35474,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36255,11 +35609,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36299,11 +35649,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36649,11 +35995,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -36788,11 +36130,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36832,11 +36170,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36971,11 +36305,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37015,11 +36345,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37154,11 +36480,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37198,11 +36520,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37552,11 +36870,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37731,11 +37045,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37870,11 +37180,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37914,11 +37220,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -38093,11 +37395,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -38232,11 +37530,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -38276,11 +37570,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -39810,10 +39100,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -39987,10 +39274,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -40512,10 +39796,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -40689,10 +39970,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -40866,10 +40144,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -43940,15 +43215,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -43964,9 +43235,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -44046,9 +43315,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -44201,15 +43468,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -44225,9 +43488,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -44470,15 +43731,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -44494,9 +43751,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -44590,9 +43845,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -46433,11 +45686,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -46612,11 +45861,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -46791,11 +46036,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -47357,10 +46598,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -48014,10 +47252,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -49754,10 +48989,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -49931,10 +49163,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -50108,10 +49337,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -50285,10 +49511,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -50462,10 +49685,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -50849,11 +50069,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -50961,11 +50177,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -50992,11 +50204,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51036,11 +50244,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51175,11 +50379,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51219,11 +50419,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51358,11 +50554,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51402,11 +50594,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51756,11 +50944,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -51935,11 +51119,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52074,11 +51254,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52118,11 +51294,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52297,11 +51469,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52436,11 +51604,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52480,11 +51644,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -52830,11 +51990,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -52942,11 +52098,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -52973,11 +52125,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53017,11 +52165,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53156,11 +52300,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53200,11 +52340,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53339,11 +52475,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53383,11 +52515,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53737,11 +52865,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -53916,11 +53040,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54055,11 +53175,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54099,11 +53215,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54278,11 +53390,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54417,11 +53525,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54461,11 +53565,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54811,11 +53911,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -54923,11 +54019,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -54954,11 +54046,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -54998,11 +54086,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55137,11 +54221,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55181,11 +54261,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55320,11 +54396,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55364,11 +54436,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55718,11 +54786,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -55897,11 +54961,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56036,11 +55096,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56080,11 +55136,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56259,11 +55311,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56398,11 +55446,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56442,11 +55486,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56792,11 +55832,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -56904,11 +55940,7 @@
             "category": "border",
             "computed": "0px",
             "classification": "unassessed",
-            "declarations": [
-              "0px",
-              "calc(1px * var(--tw-divide-y-reverse))",
-              "1px"
-            ],
+            "declarations": ["0px", "calc(1px * var(--tw-divide-y-reverse))", "1px"],
             "origin": "matched-rule"
           },
           {
@@ -56935,11 +55967,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -56979,11 +56007,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57118,11 +56142,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57162,11 +56182,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57301,11 +56317,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57345,11 +56357,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57699,11 +56707,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -57878,11 +56882,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58017,11 +57017,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58061,11 +57057,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58240,11 +57232,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58379,11 +57367,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58423,11 +57407,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58773,11 +57753,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "matched-rule"
           },
           {
@@ -58912,11 +57888,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -58956,11 +57928,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59095,11 +58063,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59139,11 +58103,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59278,11 +58238,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59322,11 +58278,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59676,11 +58628,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59855,11 +58803,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -59994,11 +58938,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -60038,11 +58978,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -60217,11 +59153,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -60356,11 +59288,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -60400,11 +59328,7 @@
             "category": "typography",
             "computed": "600",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--font-weight-normal)",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["inherit", "var(--font-weight-normal)", "var(--font-weight-semibold)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -61934,10 +60858,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -62111,10 +61032,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -62636,10 +61554,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -62813,10 +61728,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -62990,10 +61902,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -66064,15 +64973,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -66088,9 +64993,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -66170,9 +65073,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -66325,15 +65226,11 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(1)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(2)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -66349,9 +65246,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"
-                  ],
+                  "target": [".bg-\\[var\\(--color-bg-subtle\\)\\] > span:nth-child(5)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {

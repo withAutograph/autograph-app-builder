@@ -16,11 +16,7 @@ import {
   collectIntrinsicClassSignatures,
 } from "./design-quality/class-evidence";
 import { collectCssRuleEvidence } from "./design-quality/css-evidence";
-import {
-  appendReviewQuestions,
-  listDesignCases,
-  readDesignCase,
-} from "./design-quality/cases";
+import { appendReviewQuestions, listDesignCases, readDesignCase } from "./design-quality/cases";
 import { execFileSync } from "node:child_process";
 
 const { values } = parseArgs({
@@ -64,27 +60,15 @@ async function sources(
 async function main() {
   if (values["list-cases"]) {
     for (const designCase of await listDesignCases())
-      console.log(
-        `${designCase.id}\t${designCase.status}\t${designCase.title}`,
-      );
+      console.log(`${designCase.id}\t${designCase.status}\t${designCase.title}`);
     return;
   }
   if (values.case && values["brief-file"])
     throw new Error("Use either --case or --brief-file, not both");
-  if (
-    !values["preview-url"] ||
-    !values["arrusted-root"] ||
-    (!values["brief-file"] && !values.case)
-  )
-    throw new Error(
-      "Required: --preview-url, --arrusted-root, and --brief-file or --case",
-    );
+  if (!values["preview-url"] || !values["arrusted-root"] || (!values["brief-file"] && !values.case))
+    throw new Error("Required: --preview-url, --arrusted-root, and --brief-file or --case");
   const url = new URL(values["preview-url"]);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password
-  )
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("Use a normal HTTP(S) preview URL without credentials");
   if (values.scenario && !values["fixture-interactions"])
     throw new Error(
@@ -92,30 +76,20 @@ async function main() {
     );
   const output = resolve(
     values["output-dir"] ??
-      join(
-        ".artifacts/design-quality",
-        new Date().toISOString().replace(/[:.]/g, "-"),
-      ),
+      join(".artifacts/design-quality", new Date().toISOString().replace(/[:.]/g, "-")),
   );
   await mkdir(output, { recursive: true, mode: 0o700 });
-  const selectedCase = values.case
-    ? await readDesignCase(values.case)
-    : undefined;
+  const selectedCase = values.case ? await readDesignCase(values.case) : undefined;
   const brief = selectedCase
     ? appendReviewQuestions(selectedCase.brief, selectedCase.reviewQuestions)
     : await readFile(values["brief-file"]!, "utf8");
   const limitations: string[] = [];
   const referenceRoot = resolve(values["arrusted-root"]);
   const tokenCss = await readFile(
-    join(
-      resolve(values["arrusted-root"]),
-      "packages/design-systems/core/tokens/theme.css",
-    ),
+    join(resolve(values["arrusted-root"]), "packages/design-systems/core/tokens/theme.css"),
     "utf8",
   ).catch(() => {
-    limitations.push(
-      "Reference theme could not be read; token evidence is incomplete.",
-    );
+    limitations.push("Reference theme could not be read; token evidence is incomplete.");
     return "";
   });
   const reference = await readReference(referenceRoot);
@@ -127,9 +101,9 @@ async function main() {
       })
     : [];
   // A read-only candidate inventory, not proof of rendered component identity.
-  const sharedFiles = await sources(
-    join(referenceRoot, "packages", "design-systems"),
-  ).catch(() => undefined);
+  const sharedFiles = await sources(join(referenceRoot, "packages", "design-systems")).catch(
+    () => undefined,
+  );
   const generatedCssRules = collectCssRuleEvidence(sourceFiles);
   const sharedCssRules = sharedFiles ? collectCssRuleEvidence(sharedFiles) : [];
   const source = values["source-dir"]
@@ -150,18 +124,12 @@ async function main() {
   // fixture convenience and never run unless interactions were explicitly enabled.
   const scenarioPath =
     values.scenario ??
-    (selectedCase && values["fixture-interactions"]
-      ? selectedCase.scenariosPath
-      : undefined);
+    (selectedCase && values["fixture-interactions"] ? selectedCase.scenariosPath : undefined);
   const scenarios = scenarioPath
     ? scenariosSchema.parse(
         JSON.parse(
           await readFile(scenarioPath, "utf8").catch((error) => {
-            if (
-              !values.scenario &&
-              (error as NodeJS.ErrnoException).code === "ENOENT"
-            )
-              return "[]";
+            if (!values.scenario && (error as NodeJS.ErrnoException).code === "ENOENT") return "[]";
             throw error;
           }),
         ),
@@ -178,26 +146,17 @@ async function main() {
     scenarios,
     generatedSourcePaths: sourceFiles.map((f) => f.path),
     generatedClassSignatures: collectIntrinsicClassSignatures(sourceFiles),
-    sharedClassSignatures: sharedFiles
-      ? collectIntrinsicClassSignatures(sharedFiles)
-      : undefined,
+    sharedClassSignatures: sharedFiles ? collectIntrinsicClassSignatures(sharedFiles) : undefined,
     generatedClassTokens: collectClassTokenEvidence(sourceFiles),
-    sharedClassTokens: sharedFiles
-      ? collectClassTokenEvidence(sharedFiles)
-      : undefined,
+    sharedClassTokens: sharedFiles ? collectClassTokenEvidence(sharedFiles) : undefined,
     generatedCssRules,
     sharedCssRules,
-    generatedCssSourceFiles: sourceFiles.filter((file) =>
-      /\.css$/i.test(file.path),
-    ),
-    sharedCssSourceFiles: sharedFiles?.filter((file) =>
-      /\.css$/i.test(file.path),
-    ),
+    generatedCssSourceFiles: sourceFiles.filter((file) => /\.css$/i.test(file.path)),
+    sharedCssSourceFiles: sharedFiles?.filter((file) => /\.css$/i.test(file.path)),
     additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));
-  for (const capture of captures)
-    limitations.push(...(capture.styles?.limitations ?? []));
+  for (const capture of captures) limitations.push(...(capture.styles?.limitations ?? []));
   const adherence = scoreAdherence(
     [
       ...("observations" in source ? source.observations : []),
@@ -208,11 +167,10 @@ async function main() {
   );
   let referenceCommit: string | null = null;
   try {
-    referenceCommit = execFileSync(
-      "git",
-      ["-C", referenceRoot, "rev-parse", "HEAD"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
+    referenceCommit = execFileSync("git", ["-C", referenceRoot, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     /* Diagnostic only. */
   }
@@ -248,11 +206,9 @@ async function main() {
     captures,
   };
   // Save useful results before any model call; a failed judge never discards them.
-  await writeFile(
-    join(output, "measurements.json"),
-    JSON.stringify(measured, null, 2),
-    { mode: 0o600 },
-  );
+  await writeFile(join(output, "measurements.json"), JSON.stringify(measured, null, 2), {
+    mode: 0o600,
+  });
   console.log("Browser measurements captured. Preparing advisory review…");
   const judge = values["measurements-only"]
     ? { status: "not-run", reason: "Measurements-only requested" }
@@ -282,11 +238,7 @@ async function main() {
         })),
       });
   const report = { ...measured, judge };
-  await writeFile(
-    join(output, "report.json"),
-    JSON.stringify(report, null, 2),
-    { mode: 0o600 },
-  );
+  await writeFile(join(output, "report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
   await writeFile(join(output, "index.html"), renderReport(report), {
     mode: 0o600,
   });

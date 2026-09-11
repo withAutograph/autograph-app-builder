@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  builderHandoffRecordSchema,
-  type BuilderHandoffRecord,
-} from "./contracts";
+import { builderHandoffRecordSchema, type BuilderHandoffRecord } from "./contracts";
 import { BuilderHandoffUnavailableError } from "./service";
 import {
   findAuthenticatedPendingBuilderHandoff,
@@ -91,10 +88,7 @@ describe("owner-only handoff browser data", () => {
     mocks.read
       .mockReset()
       .mockImplementation(
-        async (input: {
-          authority: BuilderHandoffRecord["authority"];
-          handoffId: string;
-        }) =>
+        async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
           JSON.stringify(input.authority) === JSON.stringify(authority) &&
           input.handoffId === handoffId
             ? prepared
@@ -119,10 +113,7 @@ describe("owner-only handoff browser data", () => {
       headers: pageInput.headers,
     });
     expect(mocks.read).toHaveBeenCalledWith({ authority, handoffId });
-    expect(mocks.cursorReady).toHaveBeenCalledWith(
-      mocks.database,
-      authority.audience,
-    );
+    expect(mocks.cursorReady).toHaveBeenCalledWith(mocks.database, authority.audience);
     expect(JSON.stringify(data)).not.toMatch(
       /private-password|private-session-cookie|ownerUserId|workspaceId|requestDigest|sessionId/u,
     );
@@ -214,9 +205,7 @@ describe("owner-only handoff browser data", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const data = await response.json();
     expect(data.status).toBe("continued");
-    expect(JSON.stringify(data)).not.toMatch(
-      /sessionId|private-engine-id|redeemedAt/u,
-    );
+    expect(JSON.stringify(data)).not.toMatch(/sessionId|private-engine-id|redeemedAt/u);
   });
 
   it("reports Cursor destination separately from registration readiness", async () => {

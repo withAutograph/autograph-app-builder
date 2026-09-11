@@ -3,8 +3,7 @@ import { defineEval } from "eve/evals";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
-  description:
-    "Fresh-template source binding and preparation are automatic internal work.",
+  description: "Fresh-template source binding and preparation are automatic internal work.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare fresh template at ${repository}`);

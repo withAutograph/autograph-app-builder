@@ -34,10 +34,7 @@ async function readAuditLog(path: string) {
   }
 }
 
-async function runInstall(
-  script: string,
-  failure: "none" | "checksum" | "release-verifier",
-) {
+async function runInstall(script: string, failure: "none" | "checksum" | "release-verifier") {
   const root = await mkdtemp(join(tmpdir(), "autograph-install-docs-"));
   const bin = join(root, "bin");
   const auditLog = join(root, "audit.log");
@@ -86,12 +83,8 @@ describe("public plugin installation documentation", () => {
     }
 
     const auditLog = await runInstall(script, "none");
-    expect(auditLog).toContain(
-      "tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz",
-    );
-    expect(auditLog).toMatch(
-      /codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u,
-    );
+    expect(auditLog).toContain("tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz");
+    expect(auditLog).toMatch(/codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u);
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
 
@@ -99,9 +92,7 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("README.md");
     const script = firstShellBlock(documentation, "## Install");
 
-    expect(script).toContain(
-      "codex plugin marketplace add withAutograph/marketplace",
-    );
+    expect(script).toContain("codex plugin marketplace add withAutograph/marketplace");
     expect(script).toContain("codex plugin add app-builder@autograph");
     expect(script).not.toContain("gh release download");
     expect(script).not.toContain("tar -xzf");
@@ -110,20 +101,12 @@ describe("public plugin installation documentation", () => {
   it("keeps exact pre-release assets and availability explicit", async () => {
     const documentation = await readDocumentation("docs/installing.md");
 
-    expect(documentation).toContain(
-      "Once the pre-release `v0.2.12` GitHub release is published",
-    );
-    expect(documentation).toMatch(
-      /These\s+commands fail closed until `v0\.2\.12` exists/u,
-    );
+    expect(documentation).toContain("Once the pre-release `v0.2.12` GitHub release is published");
+    expect(documentation).toMatch(/These\s+commands fail closed until `v0\.2\.12` exists/u);
     expect(documentation).toContain("app-builder-0.2.12.tar.gz");
-    expect(documentation).toContain(
-      "app-builder-codex-marketplace-0.2.12.tar.gz",
-    );
+    expect(documentation).toContain("app-builder-codex-marketplace-0.2.12.tar.gz");
     expect(documentation).toContain("Exact-main CI waits for Vercel Git");
-    expect(documentation).toMatch(
-      /The protected\s+`release:publish` step creates the prerelease/u,
-    );
+    expect(documentation).toMatch(/The protected\s+`release:publish` step creates the prerelease/u);
     expect(documentation).toMatch(
       /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u,
     );

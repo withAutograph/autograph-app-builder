@@ -16,9 +16,7 @@ export function generateStaticParams() {
     .map((document) => ({ slug: document.slug }));
 }
 
-export async function generateMetadata({
-  params,
-}: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const document = getDocument(slug);
   if (!document || document.slug === "overview") return {};

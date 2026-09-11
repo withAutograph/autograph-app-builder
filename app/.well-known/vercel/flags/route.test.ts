@@ -2,10 +2,7 @@ import { createAccessProof } from "flags";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-import {
-  builderConnectionsFlag,
-  selfServiceSignupFlag,
-} from "../../../../lib/feature-flags";
+import { builderConnectionsFlag, selfServiceSignupFlag } from "../../../../lib/feature-flags";
 
 const getProviderData = vi.hoisted(() => vi.fn());
 
@@ -26,9 +23,7 @@ describe("Vercel Flags discovery route", () => {
   });
 
   it("rejects unauthenticated discovery requests", async () => {
-    const response = await GET(
-      new Request("https://agent.example.com/.well-known/vercel/flags"),
-    );
+    const response = await GET(new Request("https://agent.example.com/.well-known/vercel/flags"));
 
     expect(response.status).toBe(401);
     expect(getProviderData).not.toHaveBeenCalled();

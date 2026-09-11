@@ -17,9 +17,7 @@ type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
 interface PreviewOAuthDeploymentRuntime {
   auth: PreviewOAuthServer;
   origin: string;
-  organizationAuthority: ReturnType<
-    typeof createPostgresPreviewOrganizationAuthority
-  >;
+  organizationAuthority: ReturnType<typeof createPostgresPreviewOrganizationAuthority>;
 }
 
 let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
@@ -29,9 +27,7 @@ export function selfServiceSignupAuthority(
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
   emulated = false,
 ) {
-  return environment === "local" || emulated
-    ? async () => true
-    : managedAuthority;
+  return environment === "local" || emulated ? async () => true : managedAuthority;
 }
 
 function getPreviewOAuthDeploymentRuntime(
@@ -43,10 +39,7 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (cause) {
     const invalidFields =
-      cause &&
-      typeof cause === "object" &&
-      "issues" in cause &&
-      Array.isArray(cause.issues)
+      cause && typeof cause === "object" && "issues" in cause && Array.isArray(cause.issues)
         ? cause.issues
             .map((issue) =>
               issue && typeof issue === "object" && "path" in issue
@@ -97,8 +90,7 @@ function getPreviewOAuthDeploymentRuntime(
           BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
         },
         organizationAuthorityReady:
-          environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY ===
-          "verified-v1",
+          environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY === "verified-v1",
       },
     });
   } catch (cause) {
@@ -134,33 +126,31 @@ export function getPreviewOAuthDeploymentSession(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
 }) {
-  return getPreviewOAuthDeploymentRuntime(
-    input.environment,
-  ).auth.api.getSession({ headers: input.headers });
+  return getPreviewOAuthDeploymentRuntime(input.environment).auth.api.getSession({
+    headers: input.headers,
+  });
 }
 
 interface PreviewSessionOrganizationAuth {
   api: {
-    getSession: (input: {
-    headers: Headers;
-}) => Promise<{
-    session: {
+    getSession: (input: { headers: Headers }) => Promise<{
+      session: {
         activeOrganizationId?: string | null;
-    };
-    user: {
+      };
+      user: {
         id: string;
         name: string;
         email: string;
-    };
-} | null>;
+      };
+    } | null>;
     setActiveOrganization: (input: {
-    headers: Headers;
-    body: {
+      headers: Headers;
+      body: {
         organizationId: string;
-    };
-}) => Promise<{
-    id: string;
-} | null>;
+      };
+    }) => Promise<{
+      id: string;
+    } | null>;
   };
 }
 
@@ -215,9 +205,7 @@ export function createPreviewOAuthRequestHandler(input: {
 }) {
   return async (request: Request): Promise<Response> => {
     try {
-      const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(
-        input.environment,
-      );
+      const auth = (input.getAuth ?? getPreviewOAuthDeploymentAuth)(input.environment);
       const response = await auth.handler(request);
       if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
         let hasRedirect = false;

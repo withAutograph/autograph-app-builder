@@ -1,10 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 
-import {
-  ChoiceCard,
-  SectionShell,
-  type CreateAppSectionId,
-} from "./choice-card";
+import { ChoiceCard, SectionShell, type CreateAppSectionId } from "./choice-card";
 
 export type ProviderChoice<Provider extends string> = {
   available: boolean;
@@ -44,12 +40,7 @@ export function ProviderChoiceSection<Provider extends string>({
   unavailableClassName?: string;
 }) {
   return (
-    <SectionShell
-      className={className}
-      section={section}
-      title={title}
-      description={description}
-    >
+    <SectionShell className={className} section={section} title={title} description={description}>
       <div className={gridClassName} role="group" aria-label={label}>
         {options.map((option) => {
           const Icon = option.icon;

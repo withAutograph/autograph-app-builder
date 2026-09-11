@@ -39,11 +39,7 @@ async function RedirectAuthenticatedVisitor({
   const query = await searchParams;
   const origin = getPreviewOAuthDeploymentOrigin(process.env);
   const search = serializeAuthPageSearchParams(query);
-  const signInRedirectTo = resolvePasskeyRedirectTo(
-    DEFAULT_AUTH_REDIRECT_TO,
-    search,
-    origin,
-  );
+  const signInRedirectTo = resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, origin);
 
   redirect(signInRedirectTo);
 }

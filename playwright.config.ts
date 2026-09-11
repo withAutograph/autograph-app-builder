@@ -25,9 +25,7 @@ export default defineConfig({
   // terminal condition if the browser runner stops making progress.
   globalTimeout: process.env.CI ? 12 * 60_000 : undefined,
   globalSetup: "./e2e/support/global-setup.ts",
-  reporter: process.env.CI
-    ? [["github"], ["line"], ["html", { open: "never" }]]
-    : "list",
+  reporter: process.env.CI ? [["github"], ["line"], ["html", { open: "never" }]] : "list",
   use: {
     ...devices["Desktop Chrome"],
     baseURL: appOrigin,

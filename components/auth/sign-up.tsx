@@ -6,12 +6,7 @@ import {
   isPasswordCompromisedError,
   parseAdditionalFieldValue,
 } from "@better-auth-ui/core";
-import {
-  AuthPrompts,
-  useAuth,
-  useFetchOptions,
-  useSignUpEmail,
-} from "@better-auth-ui/react";
+import { AuthPrompts, useAuth, useFetchOptions, useSignUpEmail } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import { type SyntheticEvent, useState, useSyncExternalStore } from "react";
@@ -101,40 +96,34 @@ export function SignUp({
   const currentSearch = currentLocation ? new URL(currentLocation).search : "";
   const currentOrigin = currentLocation ? new URL(currentLocation).origin : "";
 
-  const { mutate: signUpEmail, isPending: signUpEmailPending } = useSignUpEmail(
-    authClient,
-    {
-      onError: (error) => {
-        // The haveIBeenPwned plugin rejects on the password itself,
-        // so it belongs against the field rather than in a toast.
-        if (isPasswordCompromisedError(error)) {
-          setFieldErrors((prev) => ({
-            ...prev,
-            password: localization.auth.passwordCompromised,
-          }));
-        }
+  const { mutate: signUpEmail, isPending: signUpEmailPending } = useSignUpEmail(authClient, {
+    onError: (error) => {
+      // The haveIBeenPwned plugin rejects on the password itself,
+      // so it belongs against the field rather than in a toast.
+      if (isPasswordCompromisedError(error)) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          password: localization.auth.passwordCompromised,
+        }));
+      }
 
-        setPassword("");
-        setConfirmPassword("");
-        resetFetchOptions();
-      },
-      onSuccess: (_data, { email }) => {
-        if (emailAndPassword?.requireEmailVerification) {
-          sessionStorage.setItem("better-auth-ui.verify-email", email);
-          navigate({
-            to: getAuthLinkURL(
-              `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
-              redirectTo,
-            ),
-          });
-        } else if (onSignUpSuccess) {
-          onSignUpSuccess();
-        } else {
-          navigate({ to: redirectTo });
-        }
-      },
+      setPassword("");
+      setConfirmPassword("");
+      resetFetchOptions();
     },
-  );
+    onSuccess: (_data, { email }) => {
+      if (emailAndPassword?.requireEmailVerification) {
+        sessionStorage.setItem("better-auth-ui.verify-email", email);
+        navigate({
+          to: getAuthLinkURL(`${basePaths.auth}/${viewPaths.auth.verifyEmail}`, redirectTo),
+        });
+      } else if (onSignUpSuccess) {
+        onSignUpSuccess();
+      } else {
+        navigate({ to: redirectTo });
+      }
+    },
+  });
 
   const signInMutating = useIsMutating({
     mutationKey: authMutationKeys.signIn.all,
@@ -145,8 +134,7 @@ export function SignUp({
   const isPending = signInMutating + signUpMutating > 0;
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
-    useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<{
     name?: string;
@@ -174,10 +162,7 @@ export function SignUp({
 
     for (const field of additionalFields ?? []) {
       if (!field.signUp || field.readOnly) continue;
-      const value = parseAdditionalFieldValue(
-        field,
-        formData.get(field.name) as string | null,
-      );
+      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
         try {
@@ -202,8 +187,7 @@ export function SignUp({
     });
   };
 
-  const showSeparator =
-    emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
+  const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
   const alternateRedirectTo =
     signInRedirectTo ??
     (currentSearch
@@ -215,19 +199,14 @@ export function SignUp({
       <Card className={cn("w-full", className)}>
         <AuthPrompts view="signUp" />
         <CardHeader>
-          <CardTitle className="text-xl font-semibold">
-            {localization.auth.signUp}
-          </CardTitle>
+          <CardTitle className="text-xl font-semibold">{localization.auth.signUp}</CardTitle>
         </CardHeader>
 
         <CardContent>
           <div className="flex flex-col gap-3">
             {plugins.flatMap((plugin) =>
               (plugin.authButtons ?? []).map((AuthButton, index) => (
-                <AuthButton
-                  key={`${plugin.id}-${index.toString()}`}
-                  view="signUp"
-                />
+                <AuthButton key={`${plugin.id}-${index.toString()}`} view="signUp" />
               )),
             )}
             {socialPosition === "top" && (
@@ -249,9 +228,7 @@ export function SignUp({
                 <FieldGroup>
                   {emailAndPassword.name !== false && (
                     <Field data-invalid={!!fieldErrors.name}>
-                      <FieldLabel htmlFor="name">
-                        {localization.auth.name}
-                      </FieldLabel>
+                      <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
 
                       <Input
                         id="name"
@@ -283,9 +260,7 @@ export function SignUp({
                   )}
 
                   <Field data-invalid={!!fieldErrors.email}>
-                    <FieldLabel htmlFor="email">
-                      {localization.auth.email}
-                    </FieldLabel>
+                    <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
 
                     <Input
                       id="email"
@@ -333,9 +308,7 @@ export function SignUp({
                   )}
 
                   <Field data-invalid={!!fieldErrors.password}>
-                    <FieldLabel htmlFor="password">
-                      {localization.auth.password}
-                    </FieldLabel>
+                    <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
 
                     <InputGroup>
                       <InputGroupInput
@@ -364,14 +337,8 @@ export function SignUp({
                           const msg = el.validity.valueMissing
                             ? localization.auth.fieldRequired
                             : el.validity.tooShort
-                              ? localization.auth.tooShort.replace(
-                                  "{{min}}",
-                                  String(min),
-                                )
-                              : localization.auth.tooLong.replace(
-                                  "{{max}}",
-                                  String(max),
-                                );
+                              ? localization.auth.tooShort.replace("{{min}}", String(min))
+                              : localization.auth.tooLong.replace("{{max}}", String(max));
 
                           setFieldErrors((prev) => ({
                             ...prev,
@@ -429,9 +396,7 @@ export function SignUp({
                               confirmPassword: undefined,
                             }));
                           }}
-                          placeholder={
-                            localization.auth.confirmPasswordPlaceholder
-                          }
+                          placeholder={localization.auth.confirmPasswordPlaceholder}
                           required
                           minLength={emailAndPassword?.minPasswordLength}
                           maxLength={emailAndPassword?.maxPasswordLength}
@@ -444,14 +409,8 @@ export function SignUp({
                             const msg = el.validity.valueMissing
                               ? localization.auth.fieldRequired
                               : el.validity.tooShort
-                                ? localization.auth.tooShort.replace(
-                                    "{{min}}",
-                                    String(min),
-                                  )
-                                : localization.auth.tooLong.replace(
-                                    "{{max}}",
-                                    String(max),
-                                  );
+                                ? localization.auth.tooShort.replace("{{min}}", String(min))
+                                : localization.auth.tooLong.replace("{{max}}", String(max));
 
                             setFieldErrors((prev) => ({
                               ...prev,
@@ -474,9 +433,7 @@ export function SignUp({
                                 ? localization.auth.hidePassword
                                 : localization.auth.showPassword
                             }
-                            onClick={() =>
-                              setIsConfirmPasswordVisible((visible) => !visible)
-                            }
+                            onClick={() => setIsConfirmPasswordVisible((visible) => !visible)}
                           >
                             {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
                           </InputGroupButton>
@@ -532,10 +489,7 @@ export function SignUp({
       <FieldDescription className="absolute top-full left-0 mt-3 w-full text-center">
         {localization.auth.alreadyHaveAnAccount}{" "}
         <Link
-          href={getAuthLinkURL(
-            `${basePaths.auth}/${viewPaths.auth.signIn}`,
-            alternateRedirectTo,
-          )}
+          href={getAuthLinkURL(`${basePaths.auth}/${viewPaths.auth.signIn}`, alternateRedirectTo)}
           className="underline underline-offset-4"
         >
           {localization.auth.signIn}

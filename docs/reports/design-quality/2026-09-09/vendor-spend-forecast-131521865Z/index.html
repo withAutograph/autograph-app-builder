@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T13:15:21.865Z ·
@@ -74,61 +73,44 @@
     <section>
       <h2>Vendor spend forecast review</h2>
       <p>
-        Synthetic forecast-review case grounded in implemented Vendor
-        transaction and derived-fact substrate; the planning ontology and
-        forecast KPI contract are planned extensions.
+        Synthetic forecast-review case grounded in implemented Vendor transaction and derived-fact
+        substrate; the planning ontology and forecast KPI contract are planned extensions.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
+          <li>arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented</li>
+          <li>ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> — implemented</li>
           <li>
-            arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented
-          </li>
-          <li>
-            ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> —
-            implemented
+            arrusted:
+            <code>docs/plans/2026-07-16-vendor-planning-ontology.md</code> — planned
           </li>
           <li>
             arrusted:
-            <code>docs/plans/2026-07-16-vendor-planning-ontology.md</code> —
-            planned
-          </li>
-          <li>
-            arrusted:
-            <code
-              >docs/plans/2026-07-23-vendor-analytics-kpi-definitions.md</code
-            >
+            <code>docs/plans/2026-07-23-vendor-analytics-kpi-definitions.md</code>
             — planned
           </li>
         </ul>
         <h3>Review questions</h3>
         <ul>
           <li>
-            Can finance compare actual spend, expected charges, and forecast
-            assumptions without conflating them?
+            Can finance compare actual spend, expected charges, and forecast assumptions without
+            conflating them?
           </li>
           <li>
-            Does the design clearly identify which vendor commitments or
-            renewals need action?
+            Does the design clearly identify which vendor commitments or renewals need action?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
-          <li>
-            A reviewer can explain a forecast variance and identify the
-            assumption behind it.
-          </li>
-          <li>
-            A reviewer can prioritize a vendor follow-up or return the forecast
-            for revision.
-          </li>
+          <li>A reviewer can explain a forecast variance and identify the assumption behind it.</li>
+          <li>A reviewer can prioritize a vendor follow-up or return the forecast for revision.</li>
         </ul>
       </details>
     </section>
     <h2>Arrusted adherence: 99/100 · partial</h2>
     <p>
-      Evidence coverage: 5.04%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 5.04%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -169,42 +151,35 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
     </ul>
     <details open>
       <summary>Generated-code changes (1)</summary>
       <article id="finding-158">
         <strong>raw-literal · nonconforming</strong>
-        <p>
-          CSS declaration uses raw literal 1px; matching a token value is not
-          token provenance.
-        </p>
+        <p>CSS declaration uses raw literal 1px; matching a token value is not token provenance.</p>
         <small>static evidence · <a href="#source-158">src/app.css:6</a></small>
         <details id="source-158">
           <summary>Source location: src/app.css:6</summary>
@@ -225,8 +200,8 @@
       <article id="finding-2">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
         <small>static evidence · <a href="#source-2">src/App.tsx:11</a></small>
         <details id="source-2">
@@ -241,8 +216,8 @@
       <article id="finding-60">
         <strong>prop · unassessed</strong>
         <p>
-          Disclosure.defaultOpen is dynamic or spread-derived; its public
-          variant cannot be verified statically.
+          Disclosure.defaultOpen is dynamic or spread-derived; its public variant cannot be verified
+          statically.
         </p>
         <small>static evidence · <a href="#source-60">src/App.tsx:21</a></small>
         <details id="source-60">
@@ -257,8 +232,8 @@
       <article id="finding-89">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
         <small>static evidence · <a href="#source-89">src/App.tsx:22</a></small>
         <details id="source-89">
@@ -273,12 +248,9 @@
       <article id="finding-102">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence · <a href="#source-102">src/App.tsx:11</a></small
-        >
+        <small>static evidence · <a href="#source-102">src/App.tsx:11</a></small>
         <details id="source-102">
           <summary>Source location: src/App.tsx:11</summary>
           <pre>
@@ -291,12 +263,9 @@
       <article id="finding-166">
         <strong>token-reference · unassessed</strong>
         <p>
-          CSS declaration references --space-1, whose semantic token status
-          cannot be established.
+          CSS declaration references --space-1, whose semantic token status cannot be established.
         </p>
-        <small
-          >static evidence · <a href="#source-166">src/app.css:14</a></small
-        >
+        <small>static evidence · <a href="#source-166">src/app.css:14</a></small>
         <details id="source-166">
           <summary>Source location: src/app.css:14</summary>
           <pre>
@@ -310,8 +279,7 @@
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-192">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-192">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-192">
@@ -323,8 +291,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-193">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-193">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-193">
@@ -336,8 +303,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-194">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-194">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-194">
@@ -349,8 +315,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-195">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-195">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-195">
@@ -362,8 +327,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-weight: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-196">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-196">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-196">
@@ -375,8 +339,7 @@
         <strong>unknown · unassessed</strong>
         <p>line-height: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-197">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-197">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-197">
@@ -388,8 +351,7 @@
         <strong>unknown · unassessed</strong>
         <p>letter-spacing: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-198">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-198">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-198">
@@ -437,8 +399,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-left-radius: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-201">/vendor-spend-forecast:266</a> ·
+          >browser evidence · <a href="#source-201">/vendor-spend-forecast:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-201">
@@ -450,8 +411,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-width: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-202">/vendor-spend-forecast:184</a> ·
+          >browser evidence · <a href="#source-202">/vendor-spend-forecast:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-202">
@@ -463,8 +423,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-203">/vendor-spend-forecast:184</a> ·
+          >browser evidence · <a href="#source-203">/vendor-spend-forecast:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-203">
@@ -476,8 +435,7 @@
         <strong>unknown · unassessed</strong>
         <p>box-shadow: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-204">/vendor-spend-forecast:1502</a> ·
+          >browser evidence · <a href="#source-204">/vendor-spend-forecast:1502</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-204">
@@ -489,8 +447,7 @@
         <strong>semantic-token-reference · unassessed</strong>
         <p>color: semantic-token-reference</p>
         <small
-          >browser evidence ·
-          <a href="#source-205">/vendor-spend-forecast:1928</a> ·
+          >browser evidence · <a href="#source-205">/vendor-spend-forecast:1928</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-205">
@@ -501,16 +458,13 @@
       <article id="finding-206">
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-207">
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-207">/vendor-spend-forecast:190</a> ·
+          >browser evidence · <a href="#source-207">/vendor-spend-forecast:190</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-207">
@@ -521,23 +475,18 @@
       <article id="finding-208">
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-209">
         <strong>unknown · unassessed</strong>
         <p>font-weight: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-210">
         <strong>matching-literal · unassessed</strong>
         <p>line-height: matching-literal</p>
         <small
-          >browser evidence ·
-          <a href="#source-210">/vendor-spend-forecast:190</a> ·
+          >browser evidence · <a href="#source-210">/vendor-spend-forecast:190</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-210">
@@ -548,37 +497,28 @@
       <article id="finding-211">
         <strong>unknown · unassessed</strong>
         <p>letter-spacing: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-212">
         <strong>unknown · unassessed</strong>
         <p>column-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-213">
         <strong>unknown · unassessed</strong>
         <p>row-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-214">
         <strong>unknown · unassessed</strong>
         <p>border-top-left-radius: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-215">
         <strong>matching-literal · unassessed</strong>
         <p>border-top-color: matching-literal</p>
         <small
-          >browser evidence ·
-          <a href="#source-215">/vendor-spend-forecast:184</a> ·
+          >browser evidence · <a href="#source-215">/vendor-spend-forecast:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-215">
@@ -589,30 +529,25 @@
       <article id="finding-216">
         <strong>unknown · unassessed</strong>
         <p>box-shadow: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 80/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -627,22 +562,20 @@
           <th>hierarchy</th>
           <td>4/4</td>
           <td>
-            The page establishes an excellent review sequence: vendor and period
-            context lead into four clearly labeled measures, the forecast bridge
-            explains their relationship, and the visually prominent right panel
-            elevates the +$12,000 variance and renewal watch item. Warning
-            treatment and the primary completion action make the priority
-            immediately scannable.
+            The page establishes an excellent review sequence: vendor and period context lead into
+            four clearly labeled measures, the forecast bridge explains their relationship, and the
+            visually prominent right panel elevates the +$12,000 variance and renewal watch item.
+            Warning treatment and the primary completion action make the priority immediately
+            scannable.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Cards, dividers, and columns align consistently, with a sensible
-            capped content width at 1440px and 1920px. Density is appropriate
-            for a single-vendor review, though the persistent two-column
-            arrangement becomes compressed at 1024px and causes additional
+            Cards, dividers, and columns align consistently, with a sensible capped content width at
+            1440px and 1920px. Density is appropriate for a single-vendor review, though the
+            persistent two-column arrangement becomes compressed at 1024px and causes additional
             wrapping in the watch item.
           </td>
         </tr>
@@ -650,11 +583,10 @@
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Large monetary values, concise descriptions, and consistent heading
-            weights provide strong numerical readability. Several uppercase
-            metadata labels and status texts are only 11–12px, and the supplied
-            accessibility evidence repeatedly flags marginal or insufficient
-            contrast for these secondary and warning texts, reducing effortless
+            Large monetary values, concise descriptions, and consistent heading weights provide
+            strong numerical readability. Several uppercase metadata labels and status texts are
+            only 11–12px, and the supplied accessibility evidence repeatedly flags marginal or
+            insufficient contrast for these secondary and warning texts, reducing effortless
             reading.
           </td>
         </tr>
@@ -662,27 +594,24 @@
           <th>responsive</th>
           <td>3/4</td>
           <td>
-            The composition remains functional at all supplied desktop widths
-            from 1024px to 1920px, with no horizontal overflow and controls
-            remaining usable. At 1024px the 324px variance column forces the
-            watch-item label and status pill to wrap, while the completed state
-            increases document height from 918px to 1020px; this is usable but
-            not fully optimized for constrained desktop panels.
+            The composition remains functional at all supplied desktop widths from 1024px to 1920px,
+            with no horizontal overflow and controls remaining usable. At 1024px the 324px variance
+            column forces the watch-item label and status pill to wrap, while the completed state
+            increases document height from 918px to 1020px; this is usable but not fully optimized
+            for constrained desktop panels.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            Actual prior-quarter spend, actual current QTD, expected charges,
-            committed spend, and the 8% forecast assumption are explicitly
-            labeled and not presented as equivalent facts. The design also
-            identifies the renewal date and concrete checks involving the
-            uplift, commitment scope, and $24,000 exposure. However, the
-            underlying plan amount is absent, so the +$12,000 variance cannot be
-            independently reconstructed, and “Mark review complete” acknowledges
-            the review without capturing whether the identified renewal issues
-            were resolved.
+            Actual prior-quarter spend, actual current QTD, expected charges, committed spend, and
+            the 8% forecast assumption are explicitly labeled and not presented as equivalent facts.
+            The design also identifies the renewal date and concrete checks involving the uplift,
+            commitment scope, and $24,000 exposure. However, the underlying plan amount is absent,
+            so the +$12,000 variance cannot be independently reconstructed, and “Mark review
+            complete” acknowledges the review without capturing whether the identified renewal
+            issues were resolved.
           </td>
         </tr>
       </tbody>
@@ -690,110 +619,99 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        Actuals, expected charges, commitments, and assumptions are placed in
-        separate, plainly labeled regions with useful explanatory subtitles such
-        as “Forecast total, not an actual.”
+        Actuals, expected charges, commitments, and assumptions are placed in separate, plainly
+        labeled regions with useful explanatory subtitles such as “Forecast total, not an actual.”
       </li>
       <li>
-        The forecast bridge makes the most important relationship explicit:
-        $96,000 expected charges minus $72,000 committed equals $24,000
-        uncommitted exposure.
+        The forecast bridge makes the most important relationship explicit: $96,000 expected charges
+        minus $72,000 committed equals $24,000 uncommitted exposure.
       </li>
       <li>
-        The variance panel converts the numbers into a specific renewal task:
-        validate the 8% uplift, confirm what the commitment covers, and
-        reconcile the remaining $24,000.
+        The variance panel converts the numbers into a specific renewal task: validate the 8%
+        uplift, confirm what the commitment covers, and reconcile the remaining $24,000.
       </li>
       <li>
-        Vendor identity, ownership, review period, renewal date, and review
-        status are visible without opening another view.
+        Vendor identity, ownership, review period, renewal date, and review status are visible
+        without opening another view.
       </li>
       <li>
-        The simulated completion state is clearly disclosed and reversible, and
-        it explicitly states that no forecast, commitment, or provider record
-        changed.
+        The simulated completion state is clearly disclosed and reversible, and it explicitly states
+        that no forecast, commitment, or provider record changed.
       </li>
       <li>
-        The constrained 1024px view preserves all substantive information and
-        usable controls without horizontal overflow.
+        The constrained 1024px view preserves all substantive information and usable controls
+        without horizontal overflow.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>high · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The panel emphasizes a +$12,000 variance to plan, but it never displays
-        the plan value used to calculate that variance. Finance can see expected
-        charges of $96,000 elsewhere, yet cannot independently verify the
-        variance calculation.
+        The panel emphasizes a +$12,000 variance to plan, but it never displays the plan value used
+        to calculate that variance. Finance can see expected charges of $96,000 elsewhere, yet
+        cannot independently verify the variance calculation.
       </p>
       <p>
-        <strong>Improve:</strong> Add a compact calculation in this panel or the
-        forecast bridge, such as “Expected $96,000 − Plan $84,000 = +$12,000,”
-        while keeping the existing variance as the primary outcome.
+        <strong>Improve:</strong> Add a compact calculation in this panel or the forecast bridge,
+        such as “Expected $96,000 − Plan $84,000 = +$12,000,” while keeping the existing variance as
+        the primary outcome.
       </p>
       <small>Screenshot region: x 910, y 254, width 399, height 214</small>
     </article>
     <article id="design-1">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The assumption is visually distinct, but “Annual renewal at 8% uplift”
-        lacks its base amount, covered term or scope, and resulting contribution
-        to the $96,000 forecast. This limits auditability of the expected-charge
-        figure.
+        The assumption is visually distinct, but “Annual renewal at 8% uplift” lacks its base
+        amount, covered term or scope, and resulting contribution to the $96,000 forecast. This
+        limits auditability of the expected-charge figure.
       </p>
       <p>
-        <strong>Improve:</strong> Expand the disclosure with structured
-        assumption details such as source amount, uplift calculation, effective
-        period, included services, and owner or confirmation status.
+        <strong>Improve:</strong> Expand the disclosure with structured assumption details such as
+        source amount, uplift calculation, effective period, included services, and owner or
+        confirmation status.
       </p>
       <small>Screenshot region: x 130, y 726, width 756, height 121</small>
     </article>
     <article id="design-2">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        “Mark review complete” records acknowledgement even though the adjacent
-        watch item still says “Needs review.” The simulation disclaimer prevents
-        a false claim of backend change, but the completion wording does not
-        distinguish reviewed-with-open-issues from resolved.
+        “Mark review complete” records acknowledgement even though the adjacent watch item still
+        says “Needs review.” The simulation disclaimer prevents a false claim of backend change, but
+        the completion wording does not distinguish reviewed-with-open-issues from resolved.
       </p>
       <p>
-        <strong>Improve:</strong> Before completion, provide a supported review
-        disposition such as “Reviewed—follow-up required” versus “Reviewed—no
-        follow-up,” or rename the action to “Acknowledge review” and retain the
-        open renewal status.
+        <strong>Improve:</strong> Before completion, provide a supported review disposition such as
+        “Reviewed—follow-up required” versus “Reviewed—no follow-up,” or rename the action to
+        “Acknowledge review” and retain the open renewal status.
       </p>
       <small>Screenshot region: x 927, y 647, width 366, height 101</small>
     </article>
     <article id="design-3">
       <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
       <p>
-        At the 1024px desktop window, the narrow right column makes “Renewal
-        watch item” and the warning pill wrap, increasing visual density and
-        separating the action panel from the wider evidence area.
+        At the 1024px desktop window, the narrow right column makes “Renewal watch item” and the
+        warning pill wrap, increasing visual density and separating the action panel from the wider
+        evidence area.
       </p>
       <p>
-        <strong>Improve:</strong> At constrained desktop panel widths, place the
-        variance panel below the KPI and bridge content or allow it to span the
-        available width, while keeping the review action adjacent to the
-        variance summary.
+        <strong>Improve:</strong> At constrained desktop panel widths, place the variance panel
+        below the KPI and bridge content or allow it to span the available width, while keeping the
+        review action adjacent to the variance summary.
       </p>
       <small>Screenshot region: x 668, y 274, width 324, height 547</small>
     </article>
     <article id="design-4">
       <h4>medium · <a href="#desktop-window-0">desktop-window-0</a></h4>
       <p>
-        The watch-item eyebrow and warning status use small text, and the
-        supplied audit reports insufficient contrast for both warning and
-        secondary metadata treatments. The content remains understandable, but
-        these important action cues are less readable than the surrounding body
-        copy.
+        The watch-item eyebrow and warning status use small text, and the supplied audit reports
+        insufficient contrast for both warning and secondary metadata treatments. The content
+        remains understandable, but these important action cues are less readable than the
+        surrounding body copy.
       </p>
       <p>
-        <strong>Improve:</strong> Use the supported medium Tag size for the
-        status and promote “Renewal watch item” to a regular heading treatment
-        rather than relying on micro uppercase text; preserve the existing
-        Arrusted palette.
+        <strong>Improve:</strong> Use the supported medium Tag size for the status and promote
+        “Renewal watch item” to a regular heading treatment rather than relying on micro uppercase
+        text; preserve the existing Arrusted palette.
       </p>
       <small>Screenshot region: x 685, y 515, width 290, height 164</small>
     </article>
@@ -1317,10 +1235,7 @@
     <section id="desktop-1">
       <h2>desktop-1 — record a simulated review</h2>
       <div class="capture">
-        <img
-          src="desktop-1.png"
-          alt="desktop-1 record a simulated review screenshot"
-        />
+        <img src="desktop-1.png" alt="desktop-1 record a simulated review screenshot" />
       </div>
       <a href="desktop-1.png">Original, unmodified screenshot</a>
       <details>
@@ -1450,10 +1365,7 @@
     <section id="desktop-2">
       <h2>desktop-2 — reset a simulated review</h2>
       <div class="capture">
-        <img
-          src="desktop-2.png"
-          alt="desktop-2 reset a simulated review screenshot"
-        />
+        <img src="desktop-2.png" alt="desktop-2 reset a simulated review screenshot" />
       </div>
       <a href="desktop-2.png">Original, unmodified screenshot</a>
       <details>
@@ -1805,10 +1717,7 @@
     <section id="desktop-wide-1">
       <h2>desktop-wide-1 — record a simulated review</h2>
       <div class="capture">
-        <img
-          src="desktop-wide-1.png"
-          alt="desktop-wide-1 record a simulated review screenshot"
-        />
+        <img src="desktop-wide-1.png" alt="desktop-wide-1 record a simulated review screenshot" />
       </div>
       <a href="desktop-wide-1.png">Original, unmodified screenshot</a>
       <details>
@@ -1938,10 +1847,7 @@
     <section id="desktop-wide-2">
       <h2>desktop-wide-2 — reset a simulated review</h2>
       <div class="capture">
-        <img
-          src="desktop-wide-2.png"
-          alt="desktop-wide-2 reset a simulated review screenshot"
-        />
+        <img src="desktop-wide-2.png" alt="desktop-wide-2 reset a simulated review screenshot" />
       </div>
       <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
       <details>
@@ -2061,10 +1967,7 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        /><a
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" /><a
           class="region"
           href="#design-3"
           title="At the 1024px desktop window, the narrow right column makes “Renewal watch item” and the warning pill wrap, increasing visual density and separating the action panel from the wider evidence area."

@@ -42,11 +42,9 @@ describe("existing-app sequencing", () => {
       phase: "reviewed",
       receipt,
     } satisfies SourceWorkflowState;
-    expect(existingRepositoryAcquisitionReceipt(state, receipt.digest)).toEqual(
-      receipt,
+    expect(existingRepositoryAcquisitionReceipt(state, receipt.digest)).toEqual(receipt);
+    expect(() => existingRepositoryAcquisitionReceipt(state, "0".repeat(64))).toThrow(
+      "does not match",
     );
-    expect(() =>
-      existingRepositoryAcquisitionReceipt(state, "0".repeat(64)),
-    ).toThrow("does not match");
   });
 });

@@ -19,67 +19,50 @@ export const HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS = 900_000;
 
 export const hostedToolchainArtifacts = {
   aarch64: {
-    miseUrl:
-      "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-arm64",
-    miseSha256:
-      "071e2d16905360fa04762422a2a889692bb3a4d30f27650de50bc1ac0564840b",
-    bunUrl:
-      "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
-    bunSha256:
-      "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
+    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-arm64",
+    miseSha256: "071e2d16905360fa04762422a2a889692bb3a4d30f27650de50bc1ac0564840b",
+    bunUrl: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
+    bunSha256: "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
     bunDirectory: "bun-linux-aarch64",
-    nodeUrl:
-      "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.gz",
-    nodeSha256:
-      "6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508",
+    nodeUrl: "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.gz",
+    nodeSha256: "6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508",
     nodeDirectory: "node-v24.18.0-linux-arm64",
     rust: {
       cargoUrl:
         "https://static.rust-lang.org/dist/2026-07-16/cargo-1.97.1-aarch64-unknown-linux-gnu.tar.xz",
-      cargoSha256:
-        "8f70bcaccea5ba4db187c3fd4d64e24592b4e16af513497201f5909d61691dbe",
+      cargoSha256: "8f70bcaccea5ba4db187c3fd4d64e24592b4e16af513497201f5909d61691dbe",
       cargoDirectory: "cargo-1.97.1-aarch64-unknown-linux-gnu",
       rustcUrl:
         "https://static.rust-lang.org/dist/2026-07-16/rustc-1.97.1-aarch64-unknown-linux-gnu.tar.xz",
-      rustcSha256:
-        "b344b81f0cd4c2246c7da8b197fe7a339d7dd02bb15cb69b2524115d9c75224c",
+      rustcSha256: "b344b81f0cd4c2246c7da8b197fe7a339d7dd02bb15cb69b2524115d9c75224c",
       rustcDirectory: "rustc-1.97.1-aarch64-unknown-linux-gnu",
       stdUrl:
         "https://static.rust-lang.org/dist/2026-07-16/rust-std-1.97.1-aarch64-unknown-linux-gnu.tar.xz",
-      stdSha256:
-        "46aed8e63186350004d8ec6afca798811e6530b514352e5a8a26f3dc4939b3be",
+      stdSha256: "46aed8e63186350004d8ec6afca798811e6530b514352e5a8a26f3dc4939b3be",
       stdDirectory: "rust-std-1.97.1-aarch64-unknown-linux-gnu",
     },
   },
   x86_64: {
-    miseUrl:
-      "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-x64",
-    miseSha256:
-      "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
-    bunUrl:
-      "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip",
-    bunSha256:
-      "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
+    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-x64",
+    miseSha256: "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
+    bunUrl: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip",
+    bunSha256: "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
     bunDirectory: "bun-linux-x64",
     nodeUrl: "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.gz",
-    nodeSha256:
-      "783130984963db7ba9cbd01089eaf2c2efb055c7c1693c943174b967b3050cb8",
+    nodeSha256: "783130984963db7ba9cbd01089eaf2c2efb055c7c1693c943174b967b3050cb8",
     nodeDirectory: "node-v24.18.0-linux-x64",
     rust: {
       cargoUrl:
         "https://static.rust-lang.org/dist/2026-07-16/cargo-1.97.1-x86_64-unknown-linux-gnu.tar.xz",
-      cargoSha256:
-        "e1be5f5ff7f7f80ca506fb65770b759edbdc6d303781ed71c5de8ec8a8394779",
+      cargoSha256: "e1be5f5ff7f7f80ca506fb65770b759edbdc6d303781ed71c5de8ec8a8394779",
       cargoDirectory: "cargo-1.97.1-x86_64-unknown-linux-gnu",
       rustcUrl:
         "https://static.rust-lang.org/dist/2026-07-16/rustc-1.97.1-x86_64-unknown-linux-gnu.tar.xz",
-      rustcSha256:
-        "9819d0a32d56bd339585319c80260e332779f5541fd66838ab7e016d6c814819",
+      rustcSha256: "9819d0a32d56bd339585319c80260e332779f5541fd66838ab7e016d6c814819",
       rustcDirectory: "rustc-1.97.1-x86_64-unknown-linux-gnu",
       stdUrl:
         "https://static.rust-lang.org/dist/2026-07-16/rust-std-1.97.1-x86_64-unknown-linux-gnu.tar.xz",
-      stdSha256:
-        "1c1e704ae80126b7de34f72ea2825f7fd01736dec20732faed47374b95282fba",
+      stdSha256: "1c1e704ae80126b7de34f72ea2825f7fd01736dec20732faed47374b95282fba",
       stdDirectory: "rust-std-1.97.1-x86_64-unknown-linux-gnu",
     },
   },
@@ -95,9 +78,7 @@ export const HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS = [
 export const HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT =
   "/workspace/.app-builder/hosted-dependency-cache";
 
-const artifactCase = (
-  architecture: keyof typeof hostedToolchainArtifacts,
-): string => {
+const artifactCase = (architecture: keyof typeof hostedToolchainArtifacts): string => {
   const artifact = hostedToolchainArtifacts[architecture];
   return `${architecture})
     mise_url='${artifact.miseUrl}'

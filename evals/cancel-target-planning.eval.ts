@@ -10,9 +10,7 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
@@ -26,9 +24,7 @@ export default defineEval({
       satisfies(
         (reply) =>
           typeof reply === "string" &&
-          !/canonical proposal|digest-bound|target identity|target mutation/iu.test(
-            reply,
-          ),
+          !/canonical proposal|digest-bound|target identity|target mutation/iu.test(reply),
         "automatic planning stays product-facing",
       ),
     );

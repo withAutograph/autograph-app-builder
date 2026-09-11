@@ -35,9 +35,7 @@ describe("deployment Browser preview route", () => {
       },
       serviceForRequest,
     });
-    const request = new Request(
-      `https://builder.example.test/preview/session-one/${digest}`,
-    );
+    const request = new Request(`https://builder.example.test/preview/session-one/${digest}`);
     const response = await handler(request, {
       sessionId: "session-one",
       digest,
@@ -69,9 +67,7 @@ describe("deployment Browser preview route", () => {
 
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.toBe("");
-    expect(response.headers.get("cache-control")).toBe(
-      "private, no-store, max-age=0",
-    );
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });

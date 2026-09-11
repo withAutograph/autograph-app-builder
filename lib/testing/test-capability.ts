@@ -16,9 +16,7 @@ export type InjectedTestCapability = Readonly<{
   capabilities: readonly TestCapability[];
 }>;
 
-const exactCapabilities = (
-  value: unknown,
-): value is readonly TestCapability[] =>
+const exactCapabilities = (value: unknown): value is readonly TestCapability[] =>
   Array.isArray(value) &&
   value.length > 0 &&
   new Set(value).size === value.length &&
@@ -29,13 +27,8 @@ export function testCapabilityEnabled(
   environment: Readonly<Record<string, string | undefined>>,
   injected: unknown,
 ): boolean {
-  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1")
-    return false;
-  if (
-    environment.APP_BUILDER_REAL_SANDBOX === "1" &&
-    capability !== "mock-model"
-  )
-    return false;
+  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1") return false;
+  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== "mock-model") return false;
   if (typeof injected !== "object" || injected === null) return false;
   const candidate = injected as Partial<InjectedTestCapability>;
   return (
@@ -55,9 +48,7 @@ export function hasTestCapability(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
-  const accessor = (process as unknown as Record<symbol, unknown>)[
-    registryAccessor
-  ];
+  const accessor = (process as unknown as Record<symbol, unknown>)[registryAccessor];
   return testCapabilityEnabled(
     capability,
     environment,

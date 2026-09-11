@@ -475,10 +475,7 @@ export function TaskRow({ task: taskRef }: { task: ViewRef<"Task"> }) {
   const task = useView(TaskRowView, taskRef);
   const fate = useFateClient();
   const [, startTransition] = useTransition();
-  const [result, completeTask, pending] = useActionState(
-    fate.actions.task.complete,
-    null,
-  );
+  const [result, completeTask, pending] = useActionState(fate.actions.task.complete, null);
 
   return (
     <button
@@ -522,11 +519,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   return <ProjectBoard project={project} />;
 }
 
-function ProjectBoard({
-  project: projectRef,
-}: {
-  project: ViewRef<"Project">;
-}) {
+function ProjectBoard({ project: projectRef }: { project: ViewRef<"Project"> }) {
   const project = useView(ProjectBoardView, projectRef);
 
   return (

@@ -1,7 +1,4 @@
-import type {
-  AppBuilderWorkflowState,
-  AppCreationProposal,
-} from "./workflow-state";
+import type { AppBuilderWorkflowState, AppCreationProposal } from "./workflow-state";
 import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";
 
@@ -13,22 +10,10 @@ import {
   type ObservedDependencyCache,
 } from "../repository/dependency-cache";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import {
-  targetExecutionBinding,
-  targetProposalSchema,
-} from "../repository/target-planning";
-import {
-  configuredToolchainImage,
-  requiredToolVersions,
-} from "../sandbox/toolchain";
-import {
-  isHostedVercelSandboxBackend,
-  sandboxBackendPlan,
-} from "../sandbox/backend";
-import {
-  assertExactDependencyPreparationReceipt,
-  sha256,
-} from "./workflow-state";
+import { targetExecutionBinding, targetProposalSchema } from "../repository/target-planning";
+import { configuredToolchainImage, requiredToolVersions } from "../sandbox/toolchain";
+import { isHostedVercelSandboxBackend, sandboxBackendPlan } from "../sandbox/backend";
+import { assertExactDependencyPreparationReceipt, sha256 } from "./workflow-state";
 
 export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
@@ -61,25 +46,17 @@ export function plannedProposalForExecution(
       "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
     );
   if (state.proposal.digest !== expectedProposalDigest)
-    throw new Error(
-      "The canonical proposal changed before execution readiness.",
-    );
+    throw new Error("The canonical proposal changed before execution readiness.");
   return state.proposal;
 }
 
-export function assertProposalExecutionBindings(
-  state: ProposalWorkflowState,
-): void {
+export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
   if (!target.success)
-    throw new Error(
-      "The planned proposal no longer matches its durable execution bindings.",
-    );
+    throw new Error("The planned proposal no longer matches its durable execution bindings.");
   if (target.data.blockers.length !== 0)
-    throw new Error(
-      "The planned proposal still contains blockers and cannot be applied.",
-    );
+    throw new Error("The planned proposal still contains blockers and cannot be applied.");
   const expected = {
     sourceSha: state.workspace.sourceSha,
     sourceTree: state.workspace.sourceTree,
@@ -111,9 +88,7 @@ export function assertProposalExecutionBindings(
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
   )
-    throw new Error(
-      "The planned proposal no longer matches its durable execution bindings.",
-    );
+    throw new Error("The planned proposal no longer matches its durable execution bindings.");
 }
 
 export function targetExecutionBlockers(input: {
@@ -122,12 +97,9 @@ export function targetExecutionBlockers(input: {
   capabilityBlockers?: readonly string[];
 }): string[] {
   const blockers: string[] = [...(input.capabilityBlockers ?? [])];
-  if (!input.imageConfigured)
-    blockers.push("No immutable sandbox image is configured.");
+  if (!input.imageConfigured) blockers.push("No immutable sandbox image is configured.");
   if (!input.toolchainReady)
-    blockers.push(
-      "The sandbox execution environment or a required command is unavailable.",
-    );
+    blockers.push("The sandbox execution environment or a required command is unavailable.");
   return blockers;
 }
 
@@ -146,9 +118,7 @@ export function resolveTargetExecutionEnvironment(input: {
   });
   const cacheInspectable =
     backend.blockers.length === 0 &&
-    (input.fixture ||
-      localImage !== undefined ||
-      isHostedVercelSandboxBackend(backend.kind));
+    (input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind));
   const execution =
     cacheInspectable && input.cache !== undefined
       ? targetExecutionBinding(input.cache, input.environment)
@@ -167,18 +137,13 @@ export async function inspectTargetExecutionReadiness(input: {
   environment?: Readonly<Record<string, string | undefined>>;
 }) {
   const environment = input.environment ?? process.env;
-  const proposal = plannedProposalForExecution(
-    input.state,
-    input.expectedProposalDigest,
-  );
+  const proposal = plannedProposalForExecution(input.state, input.expectedProposalDigest);
   assertProposalExecutionBindings(input.state);
   await inspectSourceBoundSandboxWorkspace({
     sandbox: input.sandbox,
     receipt: input.state.sourceReceipt,
     expectedWorkspace: input.state.workspace,
-    ...(input.state.githubSource === undefined
-      ? {}
-      : { githubSource: input.state.githubSource }),
+    ...(input.state.githubSource === undefined ? {} : { githubSource: input.state.githubSource }),
   });
   const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture
@@ -195,17 +160,14 @@ export async function inspectTargetExecutionReadiness(input: {
           const location = await input.sandbox.run({
             command: `command -v ${command}`,
           });
-          if (location.exitCode !== 0)
-            return { command, available: false as const, version: "" };
+          if (location.exitCode !== 0) return { command, available: false as const, version: "" };
           const version = await input.sandbox.run({
             command: `${command} --version`,
           });
           return {
             command,
             available: true as const,
-            version:
-              (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
-              "",
+            version: (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ?? "",
           };
         }),
       );
@@ -218,10 +180,7 @@ export async function inspectTargetExecutionReadiness(input: {
         input.sandbox,
         environment,
         input.state.workspace,
-        shouldPreferLiveTemplateDependencies(
-          input.state.sourceReceipt.version,
-          environment,
-        ),
+        shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
       ).catch(() => undefined)
     : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
@@ -230,11 +189,9 @@ export async function inspectTargetExecutionReadiness(input: {
     cache,
   });
   const image = resolvedExecutionEnvironment.imageDigest;
-  const {backend} = resolvedExecutionEnvironment;
+  const { backend } = resolvedExecutionEnvironment;
   const required = (
-    Object.keys(requiredToolVersions) as Array<
-      keyof typeof requiredToolVersions
-    >
+    Object.keys(requiredToolVersions) as Array<keyof typeof requiredToolVersions>
   ).map((command) => {
     const observedTool = tools.find((tool) => tool.command === command);
     return {
@@ -254,9 +211,7 @@ export async function inspectTargetExecutionReadiness(input: {
     capabilityBlockers: backend.blockers,
   });
   const dependencyTarget =
-    cache === undefined
-      ? undefined
-      : dependencyTargetForWorkspace(cache, input.state.workspace);
+    cache === undefined ? undefined : dependencyTargetForWorkspace(cache, input.state.workspace);
   const readiness = {
     sourceSha: input.state.workspace.sourceSha,
     sourceTree: input.state.workspace.sourceTree,
@@ -270,8 +225,7 @@ export async function inspectTargetExecutionReadiness(input: {
     identityDigest: input.state.identityReceipt.digest,
     proposalDigest: proposal.digest,
     imageDigest: image ?? "unconfigured",
-    dependencyCacheDigest:
-      cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
+    dependencyCacheDigest: cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
     targetSha: dependencyTarget?.sha ?? "unverified",
     targetTree: dependencyTarget?.tree ?? "unverified",
     required,

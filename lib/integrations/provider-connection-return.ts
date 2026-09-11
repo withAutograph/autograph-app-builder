@@ -7,8 +7,7 @@ export const providerConnectionReturnToSchema = z.union([
     .string()
     .refine(
       (value) =>
-        value.startsWith("/handoff/") &&
-        z.string().uuid().safeParse(value.slice(9)).success,
+        value.startsWith("/handoff/") && z.string().uuid().safeParse(value.slice(9)).success,
     )
     .transform((value) => value as `/handoff/${string}`),
 ]);
@@ -30,15 +29,11 @@ export function parseProviderConnectionReturn(input: {
   const resumeKey = first(input.resumeKey);
   return {
     returnTo: providerConnectionReturnToSchema.parse(returnTo ?? "/"),
-    ...(resumeKey === undefined
-      ? {}
-      : { resumeKey: resumeKeySchema.parse(resumeKey) }),
+    ...(resumeKey === undefined ? {} : { resumeKey: resumeKeySchema.parse(resumeKey) }),
   };
 }
 
-export function providerConnectionReturnFromFormData(
-  formData: FormData,
-): ProviderConnectionReturn {
+export function providerConnectionReturnFromFormData(formData: FormData): ProviderConnectionReturn {
   return parseProviderConnectionReturn({
     returnTo: formData.get("returnTo")?.toString(),
     resumeKey: formData.get("resumeKey")?.toString(),
@@ -70,8 +65,7 @@ export function providerConnectionRedirect(input: {
   url.searchParams.set(input.provider, input.status);
   if (input.status === "failed" && input.reason)
     url.searchParams.set(`${input.provider}Reason`, input.reason);
-  if (input.returnState?.resumeKey)
-    url.searchParams.set("resume", input.returnState.resumeKey);
+  if (input.returnState?.resumeKey) url.searchParams.set("resume", input.returnState.resumeKey);
   return url.toString();
 }
 

@@ -26,9 +26,7 @@ export default defineEval({
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    await t.send(
-      `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await t.send(`Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
     await t.send("Prepare offline target dependencies.");

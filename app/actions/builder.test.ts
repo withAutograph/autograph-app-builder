@@ -8,59 +8,55 @@ vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://app.test" })),
 }));
 vi.mock("@/lib/provisioning/deployment", () => ({
-  getBuilderProvisioningDeploymentHandler: vi.fn(
-    () => async (request: Request) => {
-      const input = (await request.json()) as { operation: string };
-      calls.push(
-        `${new URL(request.url).searchParams.get("mode") ?? "run"}:${input.operation}`
-      );
-      const github = {
-        status: "succeeded",
-        installationId: "101",
-        repositoryId: "202",
-        owner: "autograph",
-        name: "server-action-app",
-        fullName: "autograph/server-action-app",
-        url: "https://github.com/autograph/server-action-app",
-        scope: { type: "user", id: "77", login: "autograph" },
-        visibility: "private",
-        defaultBranch: "main",
-        headSha: "a".repeat(40),
-        headTree: "b".repeat(40),
-        starter: {
-          sourceSha: "c".repeat(40),
-          sourceTree: "b".repeat(40),
-          archiveSha256: "d".repeat(64),
-          archiveBytes: 1,
-          manifestSha256: "e".repeat(64),
-        },
-      };
-      const vercel = {
-        status: "succeeded",
-        installationId: "vercel-team",
-        projectId: "prj_303",
-        name: "server-action-app",
-        dashboardUrl: "https://vercel.com/autograph/server-action-app",
-        scope: { type: "team", id: "team_1", slug: "autograph" },
-        framework: "nextjs",
-        rootDirectory: "apps/server-action-app",
-        linkedGitHubRepository: "autograph/server-action-app",
-      };
-      return Response.json({
-        version: 1,
-        requestId: "123e4567-e89b-42d3-a456-426614174000",
-        requestDigest: "f".repeat(64),
-        appId: "server-action-app",
-        status: "settled",
-        github,
-        vercel:
-          input.operation === "vercel"
-            ? vercel
-            : { status: "skipped", code: "not_selected", retryable: false },
-        updatedAt: "2026-09-10T00:00:00.000Z",
-      });
-    }
-  ),
+  getBuilderProvisioningDeploymentHandler: vi.fn(() => async (request: Request) => {
+    const input = (await request.json()) as { operation: string };
+    calls.push(`${new URL(request.url).searchParams.get("mode") ?? "run"}:${input.operation}`);
+    const github = {
+      status: "succeeded",
+      installationId: "101",
+      repositoryId: "202",
+      owner: "autograph",
+      name: "server-action-app",
+      fullName: "autograph/server-action-app",
+      url: "https://github.com/autograph/server-action-app",
+      scope: { type: "user", id: "77", login: "autograph" },
+      visibility: "private",
+      defaultBranch: "main",
+      headSha: "a".repeat(40),
+      headTree: "b".repeat(40),
+      starter: {
+        sourceSha: "c".repeat(40),
+        sourceTree: "b".repeat(40),
+        archiveSha256: "d".repeat(64),
+        archiveBytes: 1,
+        manifestSha256: "e".repeat(64),
+      },
+    };
+    const vercel = {
+      status: "succeeded",
+      installationId: "vercel-team",
+      projectId: "prj_303",
+      name: "server-action-app",
+      dashboardUrl: "https://vercel.com/autograph/server-action-app",
+      scope: { type: "team", id: "team_1", slug: "autograph" },
+      framework: "nextjs",
+      rootDirectory: "apps/server-action-app",
+      linkedGitHubRepository: "autograph/server-action-app",
+    };
+    return Response.json({
+      version: 1,
+      requestId: "123e4567-e89b-42d3-a456-426614174000",
+      requestDigest: "f".repeat(64),
+      appId: "server-action-app",
+      status: "settled",
+      github,
+      vercel:
+        input.operation === "vercel"
+          ? vercel
+          : { status: "skipped", code: "not_selected", retryable: false },
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    });
+  }),
 }));
 vi.mock("@/lib/handoff/deployment", () => ({
   getBuilderHandoffDeploymentHandler: vi.fn(() => async () => {

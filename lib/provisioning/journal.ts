@@ -60,12 +60,8 @@ export const builderProvisionJournalRecordSchema = z
   })
   .strict();
 
-export type BuilderProvisionJournalRecord = z.infer<
-  typeof builderProvisionJournalRecordSchema
->;
-export type BuilderProvisionAuthority = z.infer<
-  typeof hostedTenantAuthoritySchema
->;
+export type BuilderProvisionJournalRecord = z.infer<typeof builderProvisionJournalRecordSchema>;
+export type BuilderProvisionAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export type BuilderProvisionJournalRow = {
   authority: BuilderProvisionAuthority;
@@ -83,18 +79,18 @@ export interface BuilderProvisionJournalStore {
     authority: BuilderProvisionAuthority;
     request: BuilderProvisionRequest;
     now: Date;
-}) => Promise<BuilderProvisionJournalRow>;
+  }) => Promise<BuilderProvisionJournalRow>;
   read: (input: {
     authority: BuilderProvisionAuthority;
     requestId: string;
-}) => Promise<BuilderProvisionJournalRow | undefined>;
+  }) => Promise<BuilderProvisionJournalRow | undefined>;
   compareAndSet: (input: {
     authority: BuilderProvisionAuthority;
     requestId: string;
     expectedRevision: number;
     record: BuilderProvisionJournalRecord;
     now: Date;
-}) => Promise<BuilderProvisionJournalRow | undefined>;
+  }) => Promise<BuilderProvisionJournalRow | undefined>;
 }
 
 export function initialBuilderProvisionJournalRecord(
@@ -124,9 +120,7 @@ export async function updateBuilderProvisionJournal(input: {
   authority: BuilderProvisionAuthority;
   requestId: string;
   now?: () => number;
-  update: (
-    current: BuilderProvisionJournalRecord,
-  ) => BuilderProvisionJournalRecord;
+  update: (current: BuilderProvisionJournalRecord) => BuilderProvisionJournalRecord;
 }): Promise<BuilderProvisionJournalRow> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const current = await input.store.read({
@@ -140,9 +134,7 @@ export async function updateBuilderProvisionJournal(input: {
     const updatedAt = new Date(input.now?.() ?? Date.now());
     next.response.updatedAt = updatedAt.toISOString();
     next.response.status =
-      operationSettled(next, "github") && operationSettled(next, "vercel")
-        ? "settled"
-        : "pending";
+      operationSettled(next, "github") && operationSettled(next, "vercel") ? "settled" : "pending";
     const saved = await input.store.compareAndSet({
       authority: input.authority,
       requestId: input.requestId,
@@ -155,10 +147,7 @@ export async function updateBuilderProvisionJournal(input: {
   throw new Error("provision-journal-contention");
 }
 
-function operationSettled(
-  record: BuilderProvisionJournalRecord,
-  operation: "github" | "vercel",
-) {
+function operationSettled(record: BuilderProvisionJournalRecord, operation: "github" | "vercel") {
   const selected =
     operation === "github"
       ? record.request.providers.githubInstallationId !== undefined

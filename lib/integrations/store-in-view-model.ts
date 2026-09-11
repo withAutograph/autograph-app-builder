@@ -48,9 +48,7 @@ export const githubRepositoryAccessSchema = z
   })
   .strict();
 
-export type GitHubRepositoryAccess = z.infer<
-  typeof githubRepositoryAccessSchema
->;
+export type GitHubRepositoryAccess = z.infer<typeof githubRepositoryAccessSchema>;
 
 type StoreInScopeView = {
   id: string;
@@ -75,9 +73,7 @@ export function githubStoreInViewModel(input: {
 }): GitHubStoreInViewModel {
   const scopes = [...(input.scopes ?? [])];
   const actionLabel =
-    input.action === "connect"
-      ? ("Connect GitHub" as const)
-      : ("Update GitHub access" as const);
+    input.action === "connect" ? ("Connect GitHub" as const) : ("Update GitHub access" as const);
   const desiredRepository = input.desiredRepository?.trim() || undefined;
   const scopeSummary =
     scopes.length === 0
@@ -109,9 +105,7 @@ export function githubRepositoryAccessViewModel(
 ): GitHubStoreInViewModel {
   return githubStoreInViewModel({
     action: access.action,
-    ...(access.repository === undefined
-      ? {}
-      : { desiredRepository: access.repository.fullName }),
+    ...(access.repository === undefined ? {} : { desiredRepository: access.repository.fullName }),
     scopes: access.scopes.map((scope) => ({
       id: scope.installationId,
       label: scope.accountLogin,

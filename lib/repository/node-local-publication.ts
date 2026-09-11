@@ -62,14 +62,9 @@ export type LocalPublicationFaultHooks = {
   beforeGitApply?: () => void | Promise<void>;
   afterGitApply?: () => void | Promise<void>;
   dispatchGitApply?: () => void | Promise<void>;
-  beforeUncertainClassification?: (
-    path: string,
-    index: number,
-  ) => void | Promise<void>;
+  beforeUncertainClassification?: (path: string, index: number) => void | Promise<void>;
   afterPendingJournal?: () => void | Promise<void>;
-  beforeTerminalJournalWrite?: (
-    status: "succeeded" | "failed",
-  ) => void | Promise<void>;
+  beforeTerminalJournalWrite?: (status: "succeeded" | "failed") => void | Promise<void>;
   preservePendingOnFailure?: boolean;
 };
 
@@ -152,22 +147,15 @@ async function buildExactGitPatch(input: {
   const chunks: Buffer[] = [];
   try {
     for (const path of input.executionPaths) {
-      const change = input.changes.find(
-        (candidate) => candidate.path === path,
-      )!;
+      const change = input.changes.find((candidate) => candidate.path === path)!;
       const item = await mkdtemp(resolve(scratch, "item-"));
-      await Promise.all([
-        mkdir(resolve(item, "old")),
-        mkdir(resolve(item, "new")),
-      ]);
+      await Promise.all([mkdir(resolve(item, "old")), mkdir(resolve(item, "new"))]);
       const before = input.preimages.get(path)!;
       await materializePatchFile(
         item,
         "old",
         path,
-        before.kind === "regular" &&
-          before.bytes !== undefined &&
-          before.mode !== undefined
+        before.kind === "regular" && before.bytes !== undefined && before.mode !== undefined
           ? { bytes: before.bytes, mode: before.mode }
           : undefined,
       );
@@ -182,22 +170,11 @@ async function buildExactGitPatch(input: {
       );
       const result = spawnSync(
         "git",
-        [
-          "diff",
-          "--no-index",
-          "--binary",
-          "--no-prefix",
-          "--no-renames",
-          "--",
-          "old",
-          "new",
-        ],
+        ["diff", "--no-index", "--binary", "--no-prefix", "--no-renames", "--", "old", "new"],
         { cwd: item, env: fixedGitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
       );
       if (result.status !== 1)
-        throw new Error(
-          `Could not build the exact publication patch for ${path}.`,
-        );
+        throw new Error(`Could not build the exact publication patch for ${path}.`);
       chunks.push(result.stdout);
     }
     return Buffer.concat(chunks);
@@ -215,18 +192,14 @@ function git(path: string, args: readonly string[]): string {
 
 function within(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
-  return (
-    path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-  );
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 function fieldAfter(record: string, spaceCount: number): string {
   let offset = 0;
   for (let count = 0; count < spaceCount; count += 1) {
     offset = record.indexOf(" ", offset);
-    if (offset < 0)
-      throw new Error("Git returned malformed porcelain-v2 status.");
+    if (offset < 0) throw new Error("Git returned malformed porcelain-v2 status.");
     offset += 1;
   }
   return record.slice(offset);
@@ -246,10 +219,8 @@ function statusMetadata(record: string): {
   indexObjectId?: string;
 } {
   const fields = record.split(" ");
-    const [, , , , indexMode, , , indexObjectId] = fields;
-  return indexMode !== undefined && indexObjectId !== undefined
-    ? { indexMode, indexObjectId }
-    : {};
+  const [, , , , indexMode, , , indexObjectId] = fields;
+  return indexMode !== undefined && indexObjectId !== undefined ? { indexMode, indexObjectId } : {};
 }
 
 /** Parse `git status --porcelain=v2 -z`; rename records consume two NUL fields. */
@@ -258,8 +229,7 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
   const result: ParsedGitStatus[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
-    if (record === "" || record.startsWith("# ") || record.startsWith("! "))
-      continue;
+    if (record === "" || record.startsWith("# ") || record.startsWith("! ")) continue;
     if (record.startsWith("? ")) {
       result.push({
         path: record.slice(2),
@@ -306,22 +276,15 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
     }
     throw new Error("Git returned an unsupported porcelain-v2 status record.");
   }
-  return result.toSorted((left, right) =>
-    compareOverlayPaths(left.path, right.path),
-  );
+  return result.toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
 
-async function fileState(
-  path: string,
-  includeBytes = true,
-): Promise<FileState> {
+async function fileState(path: string, includeBytes = true): Promise<FileState> {
   try {
     const stat = await lstat(path);
     if (stat.isSymbolicLink()) return { kind: "symlink" };
-    if (stat.isDirectory())
-      return { kind: "directory", mode: (stat.mode & 0o777).toString(8) };
-    if (!stat.isFile())
-      return { kind: "special", mode: (stat.mode & 0o777).toString(8) };
+    if (stat.isDirectory()) return { kind: "directory", mode: (stat.mode & 0o777).toString(8) };
+    if (!stat.isFile()) return { kind: "special", mode: (stat.mode & 0o777).toString(8) };
     if (stat.size > LOCAL_PUBLICATION_MAX_FILE_BYTES)
       throw new Error(`File exceeds the local-publication size limit: ${path}`);
     const bytes = includeBytes ? await readFile(path) : undefined;
@@ -331,16 +294,12 @@ async function fileState(
       ...(bytes === undefined ? {} : { bytes, digest: contentDigest(bytes) }),
     };
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { kind: "absent" };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
     throw error;
   }
 }
 
-async function dirtyEntry(
-  root: string,
-  parsed: ParsedGitStatus,
-): Promise<DirtyPathSnapshot> {
+async function dirtyEntry(root: string, parsed: ParsedGitStatus): Promise<DirtyPathSnapshot> {
   if (
     !safeSourcePath(parsed.path) ||
     (parsed.originalPath !== undefined && !safeSourcePath(parsed.originalPath))
@@ -371,18 +330,12 @@ export async function inspectLocalPublicationDestination(input: {
     );
   const canonicalPath = await resolveAllowedRepository(input.destinationPath);
   if (canonicalPath !== input.sourceReceipt.sourcePath)
-    throw new Error(
-      "The selected destination is not the exact original source checkout.",
-    );
+    throw new Error("The selected destination is not the exact original source checkout.");
   const [headSha, headTree] = [
     git(canonicalPath, ["rev-parse", "HEAD"]).trim(),
     git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim(),
   ];
-  const headReference = git(canonicalPath, [
-    "rev-parse",
-    "--symbolic-full-name",
-    "HEAD",
-  ]).trim();
+  const headReference = git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim();
   const gitDirectoryPath = await realpath(
     git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim(),
   );
@@ -396,16 +349,9 @@ export async function inspectLocalPublicationDestination(input: {
   if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory())
     throw new Error("The repository root or Git directory is not a directory.");
   const parsed = parseGitStatusV2(
-    git(canonicalPath, [
-      "status",
-      "--porcelain=v2",
-      "-z",
-      "--untracked-files=all",
-    ]),
+    git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
   );
-  const dirty = await Promise.all(
-    parsed.map((entry) => dirtyEntry(canonicalPath, entry)),
-  );
+  const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
   const indexPaths = [
     ...new Set(
       parsed
@@ -427,9 +373,7 @@ export async function inspectLocalPublicationDestination(input: {
   });
   const totalBytes = dirty.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
   if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES)
-    throw new Error(
-      "The unrelated dirty snapshot exceeds the local-publication size limit.",
-    );
+    throw new Error("The unrelated dirty snapshot exceeds the local-publication size limit.");
   const dirtyDigest = stableDigest(dirty);
   const stable = {
     canonicalPath,
@@ -474,9 +418,7 @@ function assertFileMatches(
 ): boolean {
   return expected === undefined
     ? state.kind === "absent"
-    : state.kind === "regular" &&
-        state.mode === expected.mode &&
-        state.digest === expected.digest;
+    : state.kind === "regular" && state.mode === expected.mode && state.digest === expected.digest;
 }
 
 async function safeTarget(
@@ -485,11 +427,9 @@ async function safeTarget(
   createParents: boolean,
   createdDirs: string[],
 ): Promise<string> {
-  if (!safeSourcePath(relativePath))
-    throw new Error("The approved path is unsafe.");
+  if (!safeSourcePath(relativePath)) throw new Error("The approved path is unsafe.");
   const target = resolve(root, relativePath);
-  if (!within(root, target))
-    throw new Error("The approved path escapes the destination.");
+  if (!within(root, target)) throw new Error("The approved path escapes the destination.");
   const segments = relativePath.split("/").slice(0, -1);
   let cursor = root;
   for (const segment of segments) {
@@ -501,17 +441,11 @@ async function safeTarget(
     } else if (state.kind === "absent") {
       continue;
     } else if (state.kind !== "directory") {
-      throw new Error(
-        "The approved path traverses a symlink or non-directory entry.",
-      );
+      throw new Error("The approved path traverses a symlink or non-directory entry.");
     }
   }
   const leaf = await fileState(target, false);
-  if (
-    leaf.kind === "symlink" ||
-    leaf.kind === "directory" ||
-    leaf.kind === "special"
-  )
+  if (leaf.kind === "symlink" || leaf.kind === "directory" || leaf.kind === "special")
     throw new Error("The approved path names a symlink or non-regular entry.");
   return target;
 }
@@ -543,42 +477,23 @@ async function atomicWrite(
     throw error;
   }
   await handle.close();
-  if (
-    expectedPreimage !== undefined &&
-    !sameFileState(await fileState(path), expectedPreimage)
-  ) {
+  if (expectedPreimage !== undefined && !sameFileState(await fileState(path), expectedPreimage)) {
     await unlink(temporary).catch(() => undefined);
-    throw new Error(
-      "The file changed while its atomic replacement was prepared.",
-    );
+    throw new Error("The file changed while its atomic replacement was prepared.");
   }
   await rename(temporary, path);
   await syncDirectory(dirname(path));
 }
 
 function sameFileState(left: FileState, right: FileState): boolean {
-  return (
-    left.kind === right.kind &&
-    left.mode === right.mode &&
-    left.digest === right.digest
-  );
+  return left.kind === right.kind && left.mode === right.mode && left.digest === right.digest;
 }
 
 async function gitOwnedPath(root: string, name: string): Promise<string> {
-  return resolve(
-    git(root, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-path",
-      name,
-    ]).trim(),
-  );
+  return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
 }
 
-async function writeJournal(
-  path: string,
-  journal: LocalPublicationJournal,
-): Promise<void> {
+async function writeJournal(path: string, journal: LocalPublicationJournal): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await atomicWrite(path, Buffer.from(`${JSON.stringify(journal)}\n`), "644");
 }
@@ -589,11 +504,7 @@ async function createInitialJournal(
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const candidate = `${path}.pending-${randomUUID()}`;
-  await atomicWrite(
-    candidate,
-    Buffer.from(`${JSON.stringify(journal)}\n`),
-    "644",
-  );
+  await atomicWrite(candidate, Buffer.from(`${JSON.stringify(journal)}\n`), "644");
   try {
     // A hard link is an atomic no-overwrite compare-and-swap on this filesystem.
     await link(candidate, path);
@@ -609,9 +520,7 @@ export async function readLocalPublicationJournal(
   const root = await resolveAllowedRepository(destinationPath);
   const path = await gitOwnedPath(root, "app-builder/local-publication.json");
   try {
-    const journal = JSON.parse(
-      await readFile(path, "utf8"),
-    ) as LocalPublicationJournal;
+    const journal = JSON.parse(await readFile(path, "utf8")) as LocalPublicationJournal;
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {
@@ -626,21 +535,14 @@ function assertJournal(journal: LocalPublicationJournal): void {
   if (
     journal === null ||
     typeof journal !== "object" ||
-    (journal.status !== "pending" &&
-      journal.status !== "succeeded" &&
-      journal.status !== "failed")
+    (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
   )
-    throw new Error(
-      "The durable local-publication journal has an unsupported state.",
-    );
+    throw new Error("The durable local-publication journal has an unsupported state.");
   assertCanonicalLocalPublicationJournal(journal);
 }
 
 async function acquireLock(root: string): Promise<() => Promise<void>> {
-  const lockPath = await gitOwnedPath(
-    root,
-    "app-builder/local-publication.lock",
-  );
+  const lockPath = await gitOwnedPath(root, "app-builder/local-publication.lock");
   await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
   try {
     await mkdir(lockPath, { mode: 0o700 });
@@ -652,9 +554,7 @@ async function acquireLock(root: string): Promise<() => Promise<void>> {
   };
 }
 
-function pathEvidence(
-  proposal: LocalPublicationProposal,
-): readonly PublicationPathEvidence[] {
+function pathEvidence(proposal: LocalPublicationProposal): readonly PublicationPathEvidence[] {
   return proposal.changes.map((change) => ({
     path: change.path,
     operation: change.kind,
@@ -675,9 +575,7 @@ async function verifyPreconditions(input: {
     input.proposal.reviewDigest !== input.review.digest ||
     input.proposal.changeSetDigest !== input.review.changeSetDigest
   )
-    throw new Error(
-      "The source, review, or approved proposal changed before publication.",
-    );
+    throw new Error("The source, review, or approved proposal changed before publication.");
   const snapshot = await inspectLocalPublicationDestination({
     destinationPath: input.proposal.destinationPath,
     sourceReceipt: input.sourceReceipt,
@@ -690,12 +588,7 @@ async function verifyPreconditions(input: {
   if (!exactProposalMatch(current, input.proposal))
     throw new Error("The destination preconditions changed after approval.");
   for (const change of input.proposal.changes) {
-    const target = await safeTarget(
-      snapshot.canonicalPath,
-      change.path,
-      false,
-      [],
-    );
+    const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
     if (!assertFileMatches(await fileState(target), change.before))
       throw new Error(`The approved preimage changed for ${change.path}.`);
   }
@@ -716,23 +609,17 @@ export async function verifyPublishedChangeSet(input: {
     input.receipt.changeSetDigest !== input.review.changeSetDigest ||
     input.receipt.destinationPath !== input.sourceReceipt.sourcePath
   )
-    throw new Error(
-      "The successful publication no longer matches the exact workflow or review.",
-    );
+    throw new Error("The successful publication no longer matches the exact workflow or review.");
   const root = await resolveAllowedRepository(input.receipt.destinationPath);
   if (
     git(root, ["rev-parse", "HEAD"]).trim() !== input.receipt.baseSha ||
     git(root, ["rev-parse", "HEAD^{tree}"]).trim() !== input.receipt.sourceTree
   )
-    throw new Error(
-      "The destination Git identity changed after local publication.",
-    );
+    throw new Error("The destination Git identity changed after local publication.");
   for (const change of input.receipt.changes) {
     const target = await safeTarget(root, change.path, false, []);
     if (!assertFileMatches(await fileState(target), change.after))
-      throw new Error(
-        `The local-publication postimage changed for ${change.path}.`,
-      );
+      throw new Error(`The local-publication postimage changed for ${change.path}.`);
   }
   if (
     input.receipt.postconditionDigest !==
@@ -757,13 +644,8 @@ export async function verifyPublishedChangeSet(input: {
       "The destination status or unrelated-work projection changed after publication.",
     );
   const durable = await readLocalPublicationJournal(root);
-  if (
-    durable?.status !== "succeeded" ||
-    durable.digest !== input.receipt.digest
-  )
-    throw new Error(
-      "The durable local-publication journal does not match the success receipt.",
-    );
+  if (durable?.status !== "succeeded" || durable.digest !== input.receipt.digest)
+    throw new Error("The durable local-publication journal does not match the success receipt.");
 }
 
 export async function publishReviewedChangeSet(input: {
@@ -792,9 +674,7 @@ export async function publishReviewedChangeSet(input: {
   const evidence = pathEvidence(input.proposal);
   try {
     release = await acquireLock(input.proposal.destinationPath);
-    const existing = await readLocalPublicationJournal(
-      input.proposal.destinationPath,
-    );
+    const existing = await readLocalPublicationJournal(input.proposal.destinationPath);
     if (existing !== undefined)
       throw new Error(
         `A durable local-publication ${existing.status} receipt already exists; automatic retry is disabled.`,
@@ -806,27 +686,16 @@ export async function publishReviewedChangeSet(input: {
       if (change.after === undefined) continue;
       const bytes = await input.readOverlayFile(change.path);
       if (bytes === null || contentDigest(bytes) !== change.after.digest)
-        throw new Error(
-          `The immutable apply overlay is stale for ${change.path}.`,
-        );
+        throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
       if (bytes.byteLength > LOCAL_PUBLICATION_MAX_FILE_BYTES)
-        throw new Error(
-          `The approved postimage exceeds the per-file limit for ${change.path}.`,
-        );
+        throw new Error(`The approved postimage exceeds the per-file limit for ${change.path}.`);
       totalBytes += bytes.byteLength;
       if (totalBytes > LOCAL_PUBLICATION_MAX_CHANGE_BYTES)
-        throw new Error(
-          "The reviewed change set exceeds the aggregate size limit.",
-        );
+        throw new Error("The reviewed change set exceeds the aggregate size limit.");
       overlay.set(change.path, bytes);
     }
     for (const change of input.proposal.changes) {
-      const target = await safeTarget(
-        snapshot.canonicalPath,
-        change.path,
-        false,
-        [],
-      );
+      const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
       const before = await fileState(target);
       if (!assertFileMatches(before, change.before))
         throw new Error(`The approved preimage changed for ${change.path}.`);
@@ -860,15 +729,9 @@ export async function publishReviewedChangeSet(input: {
     await createInitialJournal(journalPath, pending);
     pendingWritten = true;
     await input.hooks?.afterPendingJournal?.();
-    for (
-      let index = 0;
-      index < input.proposal.executionPaths.length;
-      index += 1
-    ) {
+    for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
-      const change = input.proposal.changes.find(
-        (candidate) => candidate.path === path,
-      )!;
+      const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
       await input.hooks?.beforeMutation?.(change.path, index);
     }
     await input.hooks?.beforeGitApply?.();
@@ -877,18 +740,13 @@ export async function publishReviewedChangeSet(input: {
       immediate.rootIdentity.device !== input.proposal.rootIdentity.device ||
       immediate.rootIdentity.inode !== input.proposal.rootIdentity.inode ||
       immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath ||
-      immediate.gitDirectoryIdentity.device !==
-        input.proposal.gitDirectoryIdentity.device ||
-      immediate.gitDirectoryIdentity.inode !==
-        input.proposal.gitDirectoryIdentity.inode
+      immediate.gitDirectoryIdentity.device !== input.proposal.gitDirectoryIdentity.device ||
+      immediate.gitDirectoryIdentity.inode !== input.proposal.gitDirectoryIdentity.inode
     )
-      throw new Error(
-        "Repository filesystem identity changed before Git apply.",
-      );
+      throw new Error("Repository filesystem identity changed before Git apply.");
     fixedGitApply(snapshot.canonicalPath, patch, { check: true });
     mutationDispatched = true;
-    if (input.hooks?.dispatchGitApply !== undefined)
-      await input.hooks.dispatchGitApply();
+    if (input.hooks?.dispatchGitApply !== undefined) await input.hooks.dispatchGitApply();
     else fixedGitApply(snapshot.canonicalPath, patch);
     mutationCallReturned = true;
     appliedPaths = [...input.proposal.executionPaths];
@@ -896,25 +754,14 @@ export async function publishReviewedChangeSet(input: {
     pending = { ...pending, digest: receiptDigest(pending) };
     await writeJournal(journalPath, pending);
     await input.hooks?.afterGitApply?.();
-    for (
-      let index = 0;
-      index < input.proposal.executionPaths.length;
-      index += 1
-    ) {
+    for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
       await input.hooks?.afterMutation?.(path, index);
     }
     for (const change of input.proposal.changes) {
-      const target = await safeTarget(
-        snapshot.canonicalPath,
-        change.path,
-        false,
-        [],
-      );
+      const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
       if (!assertFileMatches(await fileState(target), change.after))
-        throw new Error(
-          `The published postimage failed verification: ${change.path}.`,
-        );
+        throw new Error(`The published postimage failed verification: ${change.path}.`);
     }
     const after = await inspectLocalPublicationDestination({
       destinationPath: snapshot.canonicalPath,
@@ -927,9 +774,7 @@ export async function publishReviewedChangeSet(input: {
       after.indexFileDigest !== input.proposal.indexFileDigest ||
       after.remoteDigest !== input.proposal.remoteDigest
     )
-      throw new Error(
-        "Unrelated state or Git metadata changed during publication.",
-      );
+      throw new Error("Unrelated state or Git metadata changed during publication.");
     const successUnsigned = {
       ...proposalFields,
       proposalDigest,
@@ -956,38 +801,22 @@ export async function publishReviewedChangeSet(input: {
     await writeJournal(journalPath, receipt);
     return { ok: true, receipt };
   } catch (error: unknown) {
-    if (pendingWritten && input.hooks?.preservePendingOnFailure === true)
-      throw error;
-    failureMessage =
-      error instanceof Error
-        ? error.message
-        : "Unknown local-publication failure.";
+    if (pendingWritten && input.hooks?.preservePendingOnFailure === true) throw error;
+    failureMessage = error instanceof Error ? error.message : "Unknown local-publication failure.";
     const rolledBackPaths: string[] = [];
     const conflictedPaths: string[] = [];
     const uncertainPaths: string[] = [];
     if (pendingWritten && patch !== undefined && mutationDispatched) {
       const observedPost: string[] = [];
-      for (
-        let index = 0;
-        index < input.proposal.executionPaths.length;
-        index += 1
-      ) {
+      for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
         const path = input.proposal.executionPaths[index];
-        const change = input.proposal.changes.find(
-          (candidate) => candidate.path === path,
-        )!;
+        const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
         try {
           await input.hooks?.beforeRollback?.(path, index);
           await input.hooks?.beforeUncertainClassification?.(path, index);
-          const target = await safeTarget(
-            input.proposal.destinationPath,
-            path,
-            false,
-            [],
-          );
+          const target = await safeTarget(input.proposal.destinationPath, path, false, []);
           const observed = await fileState(target);
-          if (assertFileMatches(observed, change.after))
-            observedPost.push(path);
+          if (assertFileMatches(observed, change.after)) observedPost.push(path);
           else if (!assertFileMatches(observed, change.before))
             if (!mutationCallReturned) uncertainPaths.push(path);
         } catch {
@@ -995,9 +824,7 @@ export async function publishReviewedChangeSet(input: {
         }
       }
       if (!mutationCallReturned) appliedPaths = [...observedPost];
-      conflictedPaths.push(
-        ...appliedPaths.filter((path) => !observedPost.includes(path)),
-      );
+      conflictedPaths.push(...appliedPaths.filter((path) => !observedPost.includes(path)));
       if (observedPost.length > 0) {
         try {
           const rollbackPatch = await buildExactGitPatch({
@@ -1019,18 +846,10 @@ export async function publishReviewedChangeSet(input: {
         }
       }
       for (const path of observedPost) {
-        const change = input.proposal.changes.find(
-          (candidate) => candidate.path === path,
-        )!;
+        const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
         try {
-          const target = await safeTarget(
-            input.proposal.destinationPath,
-            path,
-            false,
-            [],
-          );
-          if (assertFileMatches(await fileState(target), change.before))
-            rolledBackPaths.push(path);
+          const target = await safeTarget(input.proposal.destinationPath, path, false, []);
+          if (assertFileMatches(await fileState(target), change.before)) rolledBackPaths.push(path);
           else if (!conflictedPaths.includes(path)) conflictedPaths.push(path);
         } catch {
           if (!conflictedPaths.includes(path)) conflictedPaths.push(path);
@@ -1040,16 +859,13 @@ export async function publishReviewedChangeSet(input: {
         input.proposal.executionPaths.map((path, index) => [path, index]),
       );
       rolledBackPaths.sort(
-        (left, right) =>
-          executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
       );
       conflictedPaths.sort(
-        (left, right) =>
-          executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
       );
       uncertainPaths.sort(
-        (left, right) =>
-          executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
       );
     }
     let afterStatusDigest = "unavailable";
@@ -1115,8 +931,7 @@ export function assertNoApprovedOverlap(
       proposal.approvedPaths.some(
         (path) =>
           pathsOverlap(path, entry.path) ||
-          (entry.originalPath !== undefined &&
-            pathsOverlap(path, entry.originalPath)),
+          (entry.originalPath !== undefined && pathsOverlap(path, entry.originalPath)),
       ),
     )
   )

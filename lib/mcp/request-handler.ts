@@ -5,19 +5,10 @@ import {
   HostedAuthorizationError,
   type HostedPrincipal,
 } from "../eve/hosted-auth";
-import {
-  createHostedEveSessionService,
-  type HostedEveTransport,
-} from "../eve/hosted-service";
-import {
-  createEveSessionService,
-  type EveSessionService,
-} from "../eve/service";
+import { createHostedEveSessionService, type HostedEveTransport } from "../eve/hosted-service";
+import { createEveSessionService, type EveSessionService } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
-import {
-  attachPrototypePreviewUrl,
-  prototypePreviewRequestUrl,
-} from "./browser-preview";
+import { attachPrototypePreviewUrl, prototypePreviewRequestUrl } from "./browser-preview";
 import {
   eveCancelInputSchema,
   eveGetInputSchema,
@@ -70,10 +61,7 @@ const autographToolScopes = [
 ] as const;
 
 export interface HostedWorkspaceMembership {
-  isMember: (input: {
-    principal: HostedPrincipal;
-    workspaceId: string;
-}) => Promise<boolean>;
+  isMember: (input: { principal: HostedPrincipal; workspaceId: string }) => Promise<boolean>;
 }
 
 type HostedHandoffAuthority = Pick<
@@ -82,46 +70,51 @@ type HostedHandoffAuthority = Pick<
 >;
 
 export interface HostedBuilderHandoffRuntime {
-  resolve: (input: {
-    authority: HostedHandoffAuthority;
-    handoffId: string;
-}) => Promise<{
-    status: "redeemed";
-    sessionId: string;
-} | {
-    status: "unredeemed";
-    prompt: string;
-    deterministicClientRequestId: string;
-    record: {
-        requestDigest: string;
-        intent: {
+  resolve: (input: { authority: HostedHandoffAuthority; handoffId: string }) => Promise<
+    | {
+        status: "redeemed";
+        sessionId: string;
+      }
+    | {
+        status: "unredeemed";
+        prompt: string;
+        deterministicClientRequestId: string;
+        record: {
+          requestDigest: string;
+          intent: {
             repository: {
-                requestedName: string;
-                resolvedFullName?: string;
+              requestedName: string;
+              resolvedFullName?: string;
             };
+          };
         };
-    };
-}>;
+      }
+  >;
   bindSession: (input: {
     authority: HostedHandoffAuthority;
     handoffId: string;
     requestDigest: string;
     sessionId: string;
-}) => Promise<unknown>;
+  }) => Promise<unknown>;
   recheckRepositoryAccess: (input: {
     principal: HostedPrincipal;
     repository: string;
     sourceHandoffId?: string;
-}) => Promise<{
-    status: "ready";
-} | {
-    status: "authorization-required";
-    action: "connect" | "update";
-} | {
-    status: "scope-selection-required";
-} | {
-    status: "provider-unavailable";
-}>;
+  }) => Promise<
+    | {
+        status: "ready";
+      }
+    | {
+        status: "authorization-required";
+        action: "connect" | "update";
+      }
+    | {
+        status: "scope-selection-required";
+      }
+    | {
+        status: "provider-unavailable";
+      }
+  >;
 }
 
 export interface HostedMcpRuntime {
@@ -131,9 +124,7 @@ export interface HostedMcpRuntime {
   store: HostedEveStore;
   transport: HostedEveTransport;
   handoffs?: HostedBuilderHandoffRuntime;
-  beforeRead?: Parameters<
-    typeof createHostedEveSessionService
-  >[0]["beforeRead"];
+  beforeRead?: Parameters<typeof createHostedEveSessionService>[0]["beforeRead"];
   now?: () => number;
 }
 
@@ -164,16 +155,14 @@ export function withHostedBuilderHandoffs(input: {
               cursor: 0,
               limit: 100,
             });
-      const resolvedRepository =
-        resolved.record.intent.repository.resolvedFullName;
+      const resolvedRepository = resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
         const access = await input.handoffs.recheckRepositoryAccess({
           sourceHandoffId: request.handoffId,
           principal: input.principal,
           repository: resolvedRepository,
         });
-        if (access.status === "provider-unavailable")
-          throw new McpProviderUnavailableError();
+        if (access.status === "provider-unavailable") throw new McpProviderUnavailableError();
       }
       const result = await input.service.start({
         prompt: resolved.prompt,
@@ -195,10 +184,7 @@ export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string; advertiseOauth?: boolean } = {},
 ) {
-  const toolAuthMeta = (
-    _operation: string,
-    meta: Record<string, unknown> = {},
-  ) =>
+  const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) =>
     options.advertiseOauth
       ? {
           _meta: {
@@ -293,10 +279,7 @@ export function createAutographMcpHandler(
                   cursor: input.cursor,
                   limit: input.limit,
                 });
-          return toolResult(
-            present(result),
-            "Autograph App Builder returned the latest progress.",
-          );
+          return toolResult(present(result), "Autograph App Builder returned the latest progress.");
         } catch (error) {
           return safeToolError(error, input.sessionId ?? "");
         }
@@ -453,10 +436,7 @@ async function isToolCallRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
     return (
-      typeof body === "object" &&
-      body !== null &&
-      "method" in body &&
-      body.method === "tools/call"
+      typeof body === "object" && body !== null && "method" in body && body.method === "tools/call"
     );
   } catch {
     return false;
@@ -485,8 +465,7 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
       "name" in body.params &&
       typeof body.params.name === "string"
     ) {
-      if (hostedToolNames.has(body.params.name))
-        return [...autographToolScopes];
+      if (hostedToolNames.has(body.params.name)) return [...autographToolScopes];
     }
   } catch {
     // Malformed requests remain subject to the session scope and MCP parsing.
@@ -504,9 +483,7 @@ async function hostedServiceForRequest(
   const requiredScopes = await requiredScopesForRequest(request);
   let token: string;
   try {
-    token = parseStrictBearerAuthorization(
-      request.headers.get("authorization"),
-    );
+    token = parseStrictBearerAuthorization(request.headers.get("authorization"));
   } catch {
     return unauthorizedResponse(auth, requiredScopes);
   }
@@ -530,10 +507,7 @@ async function hostedServiceForRequest(
       requiredScopes,
     });
   } catch (error) {
-    if (
-      error instanceof HostedAuthorizationError &&
-      error.code === "insufficient_scope"
-    ) {
+    if (error instanceof HostedAuthorizationError && error.code === "insufficient_scope") {
       return forbiddenResponse(auth, requiredScopes);
     }
     return unauthorizedResponse(auth, requiredScopes);
@@ -558,9 +532,7 @@ async function hostedServiceForRequest(
     principal,
     store: runtime.store,
     transport: runtime.transport,
-    ...(runtime.beforeRead === undefined
-      ? {}
-      : { beforeRead: runtime.beforeRead }),
+    ...(runtime.beforeRead === undefined ? {} : { beforeRead: runtime.beforeRead }),
     now: runtime.now,
   });
   return runtime.handoffs === undefined
@@ -590,10 +562,7 @@ export function createMcpRequestHandler(
           advertiseOauth: true,
         })(request);
       }
-      const selected = await hostedServiceForRequest(
-        request,
-        input.hostedRuntime,
-      );
+      const selected = await hostedServiceForRequest(request, input.hostedRuntime);
       if (selected instanceof Response) {
         const challenge = selected.headers.get("www-authenticate");
         if (
@@ -601,10 +570,10 @@ export function createMcpRequestHandler(
           (selected.status === 401 || selected.status === 403) &&
           (await isToolCallRequest(request))
         ) {
-          return createAutographMcpHandler(
-            authenticationRequiredService(challenge),
-            { requestUrl: request.url, advertiseOauth: true },
-          )(request);
+          return createAutographMcpHandler(authenticationRequiredService(challenge), {
+            requestUrl: request.url,
+            advertiseOauth: true,
+          })(request);
         }
         return selected;
       }

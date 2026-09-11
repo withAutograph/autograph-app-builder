@@ -17,8 +17,7 @@ function validEmulatorRedirect(input: {
   state: string;
 }) {
   const location = input.response.headers.get("location");
-  if (!location || input.response.status < 300 || input.response.status >= 400)
-    return undefined;
+  if (!location || input.response.status < 300 || input.response.status >= 400) return undefined;
   const destination = new URL(location);
   if (
     destination.origin !== input.origin ||
@@ -31,10 +30,7 @@ function validEmulatorRedirect(input: {
   return destination;
 }
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ provider: string }> },
-) {
+export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
   const { provider } = await context.params;
   let emulation;
   try {
@@ -43,11 +39,7 @@ export async function POST(
     return new Response("Not found", { status: 404 });
   }
   const origin = emulation?.canonicalOrigin;
-  if (
-    !emulation ||
-    !allowed.has(provider) ||
-    request.headers.get("origin") !== origin
-  )
+  if (!emulation || !allowed.has(provider) || request.headers.get("origin") !== origin)
     return new Response("Not found", { status: 404 });
   const form = await request.formData();
   const state = form.get("state");
@@ -67,8 +59,7 @@ export async function POST(
       {
         state,
         configurationId:
-          process.env.EMULATE_VERCEL_CONFIGURATION_ID ??
-          EMULATED_VERCEL_CONFIGURATION_ID,
+          process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
         teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
         origin,
         expiresAt: Date.now() + 600_000,
@@ -98,8 +89,7 @@ export async function POST(
       path: "/local-connections/vercel/oauth-callback",
       state: relay,
     });
-    if (!destination)
-      return new Response("Invalid emulated Vercel approval", { status: 400 });
+    if (!destination) return new Response("Invalid emulated Vercel approval", { status: 400 });
     return NextResponse.redirect(destination, { status: 303 });
   }
 
@@ -140,16 +130,14 @@ export async function POST(
       path: "/github/installations/callback",
       state,
     });
-    if (!destination)
-      return new Response("Invalid emulated GitHub approval", { status: 400 });
+    if (!destination) return new Response("Invalid emulated GitHub approval", { status: 400 });
     return NextResponse.redirect(destination, { status: 303 });
   }
 
   {
     callback.searchParams.set(
       "installation_id",
-      process.env.EMULATE_GITHUB_INSTALLATION_ID ??
-        String(EMULATED_GITHUB_INSTALLATION_ID),
+      process.env.EMULATE_GITHUB_INSTALLATION_ID ?? String(EMULATED_GITHUB_INSTALLATION_ID),
     );
     callback.searchParams.set("setup_action", "install");
   }

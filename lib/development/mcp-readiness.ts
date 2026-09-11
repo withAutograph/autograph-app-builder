@@ -27,9 +27,7 @@ async function mcpRequest(input: {
   signal?: AbortSignal;
 }) {
   const requestTimeout = AbortSignal.timeout(5_000);
-  const signal = input.signal
-    ? AbortSignal.any([input.signal, requestTimeout])
-    : requestTimeout;
+  const signal = input.signal ? AbortSignal.any([input.signal, requestTimeout]) : requestTimeout;
   const response = await input.fetcher(input.endpoint, {
     method: "POST",
     headers: {
@@ -40,8 +38,7 @@ async function mcpRequest(input: {
     body: JSON.stringify(input.body),
     signal,
   });
-  if (!response.ok)
-    throw new Error(`Development MCP returned HTTP ${response.status}.`);
+  if (!response.ok) throw new Error(`Development MCP returned HTTP ${response.status}.`);
   const text = await response.text();
   const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
   return { body: text ? jsonRpcBody(text) : undefined, sessionId };
@@ -72,10 +69,7 @@ export async function developmentMcpToolNames(input: {
     },
   });
   if (initialized.body?.error)
-    throw new Error(
-      initialized.body.error.message ??
-        "Development MCP initialization failed.",
-    );
+    throw new Error(initialized.body.error.message ?? "Development MCP initialization failed.");
   await mcpRequest({
     endpoint: input.endpoint,
     fetcher,
@@ -91,9 +85,7 @@ export async function developmentMcpToolNames(input: {
     body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
   });
   if (listed.body?.error)
-    throw new Error(
-      listed.body.error.message ?? "Development MCP tools/list failed.",
-    );
+    throw new Error(listed.body.error.message ?? "Development MCP tools/list failed.");
   return (listed.body?.result?.tools ?? []).map((tool) => tool.name ?? "");
 }
 

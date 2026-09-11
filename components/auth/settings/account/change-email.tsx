@@ -44,19 +44,13 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     const formData = new FormData(e.currentTarget);
     changeEmail({
       newEmail: formData.get("email") as string,
-      callbackURL: getViewURL(
-        baseURL,
-        basePaths.settings,
-        viewPaths.settings.account,
-      ),
+      callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
     });
   }
 
   return (
     <div>
-      <h2 className="text-sm font-semibold mb-3">
-        {localization.settings.changeEmail}
-      </h2>
+      <h2 className="text-sm font-semibold mb-3">{localization.settings.changeEmail}</h2>
 
       <form onSubmit={handleSubmit}>
         <Card className={cn(className)}>

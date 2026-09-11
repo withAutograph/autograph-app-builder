@@ -8,19 +8,14 @@ import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const preload = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-preload.mjs"),
-).href;
+const preload = pathToFileURL(resolve(import.meta.dirname, "test-capability-preload.mjs")).href;
 const workerFixture = pathToFileURL(
   resolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
 );
 const timeoutWorkerFixture = pathToFileURL(
   resolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
 );
-const registryPath = resolve(
-  repositoryRoot,
-  "lib/testing/test-capability-registry.cjs",
-);
+const registryPath = resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs");
 const capabilityExpression = `createRequire(import.meta.url)(${JSON.stringify(registryPath)}).current(process)`;
 const inspectionSource = `
   const { createRequire } = await import("node:module");
@@ -28,21 +23,13 @@ const inspectionSource = `
   process.stdout.write(JSON.stringify({ capability, nodeOptions: process.env.NODE_OPTIONS ?? null }));
 `;
 
-const fullCapabilities = [
-  "mock-model",
-  "simulated-target",
-  "simulated-publication",
-];
+const fullCapabilities = ["mock-model", "simulated-target", "simulated-publication"];
 function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
-  const result = spawnSync(
-    process.execPath,
-    ["--input-type=module", "--eval", inspectionSource],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      env: environment,
-    },
-  );
+  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", inspectionSource], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: environment,
+  });
   expect(result.status, result.stderr).toBe(0);
   return JSON.parse(result.stdout) as {
     capability: unknown;
@@ -52,15 +39,12 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
 
 describe("test capability preload", () => {
   it("uses the actual trusted wrapper lineage for this Vitest worker", async () => {
-    const accessor = (
-      process as unknown as Record<symbol, (() => unknown) | undefined>
-    )[
-      Symbol.for(
-        "withAutograph.autograph-app-builder.test-capability-registry.v2",
-      )
+    const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
+      Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];
     const capability = accessor?.() as
-      { id: string; version: number; capabilities: string[] } | undefined;
+      | { id: string; version: number; capabilities: string[] }
+      | undefined;
     expect(capability).toMatchObject({
       version: 1,
       capabilities: fullCapabilities,
@@ -143,13 +127,9 @@ describe("test capability preload", () => {
       expect(hostileResult.eveDev).toBeNull();
     }
     const activeHandles = () =>
-      (
-        process as unknown as { _getActiveHandles: () => readonly unknown[]; }
-      )._getActiveHandles();
+      (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
     const isMessagePort = (handle: unknown) =>
-      typeof handle === "object" &&
-      handle !== null &&
-      handle.constructor.name === "MessagePort";
+      typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
     const timeoutExit = await new Promise<number>((resolveExit, reject) => {
@@ -245,12 +225,8 @@ describe("test capability preload", () => {
       );
       let stdout = "";
       let stderr = "";
-      child.stdout
-        ?.setEncoding("utf8")
-        .on("data", (chunk) => (stdout += chunk));
-      child.stderr
-        ?.setEncoding("utf8")
-        .on("data", (chunk) => (stderr += chunk));
+      child.stdout?.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));
+      child.stderr?.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
       const status = await new Promise<number | null>((resolveExit, reject) => {
         child.once("error", reject);
         child.once("exit", resolveExit);
@@ -258,11 +234,9 @@ describe("test capability preload", () => {
       await authorizationClosed;
       expect(status, stderr).toBe(0);
       expect(stdout).toBe("false");
-      expect(
-        authorizationErrors.every((code) =>
-          ["ECONNRESET", "EPIPE"].includes(code),
-        ),
-      ).toBe(true);
+      expect(authorizationErrors.every((code) => ["ECONNRESET", "EPIPE"].includes(code))).toBe(
+        true,
+      );
     }
   }, 15_000);
 

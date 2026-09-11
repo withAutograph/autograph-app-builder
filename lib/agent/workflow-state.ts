@@ -4,14 +4,8 @@ import { defineState } from "eve/context";
 
 import type { UiPreviewInput } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
-import type {
-  TargetIdentity,
-  TargetProposal,
-} from "@/lib/repository/target-planning";
-import type {
-  TargetApplyFailureReceipt,
-  TargetApplyReceipt,
-} from "@/lib/repository/target-apply";
+import type { TargetIdentity, TargetProposal } from "@/lib/repository/target-planning";
+import type { TargetApplyFailureReceipt, TargetApplyReceipt } from "@/lib/repository/target-apply";
 import type {
   TargetValidationAttemptReceipt,
   TargetValidationFailureReceipt,
@@ -42,8 +36,7 @@ import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
-export const APP_BUILDER_WORKFLOW_STATE_KEY =
-  "autograph-app-builder.workflow.v17" as const;
+export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
 
 export type AcceptedAppSpec = {
   appId: string;
@@ -374,7 +367,7 @@ export function assertCurrentGitHubDraftProposal(input: {
   sourceReceiptDigest: string;
   githubSource: ImmutableGitHubSourceReceipt;
 }): DraftPullRequestProposal {
-  const {binding} = input;
+  const { binding } = input;
   const proposal = binding?.proposal;
   if (
     binding === undefined ||
@@ -396,11 +389,7 @@ export function assertCurrentGitHubDraftProposal(input: {
 }
 
 export function assertPublicationJournalStatus(
-  phase:
-    | "reviewed"
-    | "publication_pending"
-    | "publication_failed"
-    | "published_local",
+  phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local",
   status: "pending" | "failed" | "succeeded" | undefined,
 ): void {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {

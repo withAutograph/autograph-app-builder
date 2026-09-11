@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  implementationFilesSchema,
-  withImplementationFiles,
-} from "./apply-implementation-files";
+import { implementationFilesSchema, withImplementationFiles } from "./apply-implementation-files";
 
 describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
@@ -36,9 +33,7 @@ describe("approval-bound implementation files", () => {
       content: "export default null",
     });
     expect(
-      implementationFilesSchema.safeParse([
-        { path: "../outside.ts", content: "nope" },
-      ]).success,
+      implementationFilesSchema.safeParse([{ path: "../outside.ts", content: "nope" }]).success,
     ).toBe(false);
   });
 });

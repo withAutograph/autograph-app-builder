@@ -15,16 +15,11 @@ describe("development process supervision", () => {
   it("turns SIGTERM into orderly child shutdown and the conventional exit code", async () => {
     const signals = new EventEmitter();
     const shutdown = createDevelopmentShutdown(signals);
-    const child = spawn(
-      process.execPath,
-      ["-e", "setInterval(() => {}, 1000)"],
-      { stdio: "ignore" },
-    );
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
     const exited = developmentChildExit(child);
-    const stopping = waitForDevelopmentShutdown(
-      shutdown.signal,
-      shutdown.exitCode,
-    );
+    const stopping = waitForDevelopmentShutdown(shutdown.signal, shutdown.exitCode);
 
     signals.emit("SIGTERM");
     expect(await stopping).toEqual({ kind: "stop", code: 143 });
@@ -36,10 +31,7 @@ describe("development process supervision", () => {
   it("uses the conventional SIGINT exit code", async () => {
     const signals = new EventEmitter();
     const shutdown = createDevelopmentShutdown(signals);
-    const stopping = waitForDevelopmentShutdown(
-      shutdown.signal,
-      shutdown.exitCode,
-    );
+    const stopping = waitForDevelopmentShutdown(shutdown.signal, shutdown.exitCode);
     signals.emit("SIGINT");
     expect(await stopping).toEqual({ kind: "stop", code: 130 });
     shutdown.dispose();
@@ -78,13 +70,11 @@ describe("development process supervision", () => {
       directSignals.push(signal);
       return true;
     }) as ChildProcess["kill"];
-    const kill = vi
-      .spyOn(process, "kill")
-      .mockImplementation((_pid, signal) => {
-        groupSignals.push(signal);
-        if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
-        return true;
-      });
+    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
+      groupSignals.push(signal);
+      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+      return true;
+    });
 
     try {
       await stopDevelopmentChild(child, {

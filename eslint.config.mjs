@@ -35,8 +35,7 @@ const eslintConfig = defineConfig([
           patterns: [
             {
               group: ["@/.storybook/**", "**/.storybook/**"],
-              message:
-                "Production modules must not depend on Storybook infrastructure.",
+              message: "Production modules must not depend on Storybook infrastructure.",
             },
           ],
         },

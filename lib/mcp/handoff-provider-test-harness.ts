@@ -79,10 +79,7 @@ export function preparedJournal(
 }
 
 /** Reconstruct the trusted engine envelope from the verified MCP transport input. */
-export function sessionEnvelope(
-  principal: HostedPrincipal,
-  sourceHandoffId: string,
-) {
+export function sessionEnvelope(principal: HostedPrincipal, sourceHandoffId: string) {
   const current = {
     attributes: {
       "mcp:audience": principal.audience,
@@ -106,32 +103,25 @@ export function preparedProviderFixture(input: {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const privateKeyPem = privateKey
-    .export({ type: "pkcs8", format: "pem" })
-    .toString();
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   let credentialRevision = 1;
   let vercelStatus = 200;
-  const githubToken = () =>
-    `ghs_mock_server_installation_token_${credentialRevision}`;
+  const githubToken = () => `ghs_mock_server_installation_token_${credentialRevision}`;
   const vercelToken = () => `mock_server_vercel_token_${credentialRevision}`;
   const githubHttp = vi.fn<typeof fetch>(async (request, init) => {
     const url = new URL(String(request));
     expect(url.origin).toBe("https://api.github.com");
     const headers = new Headers(init?.headers);
     if (url.pathname.startsWith("/app/installations/")) {
-      expect(url.pathname).toMatch(
-        /^\/app\/installations\/10(?:\/access_tokens)?$/u,
-      );
+      expect(url.pathname).toMatch(/^\/app\/installations\/10(?:\/access_tokens)?$/u);
       // App JWT is minted server-side; it must not be the user's MCP bearer.
       expect(headers.get("authorization")).toMatch(/^bearer ey/iu);
       if (url.pathname.endsWith("/access_tokens")) {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body));
-        expect(
-          Object.values(body.permissions).every(
-            (permission) => permission === "read",
-          ),
-        ).toBe(true);
+        expect(Object.values(body.permissions).every((permission) => permission === "read")).toBe(
+          true,
+        );
         return Response.json(
           {
             token: githubToken(),
@@ -151,11 +141,7 @@ export function preparedProviderFixture(input: {
     expect(headers.get("authorization")).toBe(`token ${githubToken()}`);
     if (url.pathname === "/installation/repositories")
       return Response.json({ repositories: [{ id: 100 }] });
-    if (
-      ["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(
-        url.pathname,
-      )
-    )
+    if (["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(url.pathname))
       return Response.json({
         id: 100,
         owner: { login: "acme" },
@@ -178,9 +164,7 @@ export function preparedProviderFixture(input: {
       "https://api.vercel.com/v9/projects/prj_prepared?teamId=team_prepared",
     );
     expect(init?.method).toBe("GET");
-    expect(new Headers(init?.headers).get("authorization")).toBe(
-      `Bearer ${vercelToken()}`,
-    );
+    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${vercelToken()}`);
     return vercelStatus === 200
       ? Response.json({
           id: "prj_prepared",
@@ -191,10 +175,7 @@ export function preparedProviderFixture(input: {
       : new Response(null, { status: vercelStatus });
   });
   const credentialRead = vi.fn(
-    async (value: {
-      authority: HostedSessionTenantAuthority;
-      installationId: string;
-    }) => {
+    async (value: { authority: HostedSessionTenantAuthority; installationId: string }) => {
       expect(value).toEqual({
         authority: input.authority,
         installationId: "icfg_prepared",
@@ -243,10 +224,7 @@ export function preparedProviderFixture(input: {
           },
           list: async (owner) => {
             expect(owner).toEqual(input.authority);
-            return [
-              selectedInstallation,
-              { ...selectedInstallation, installationId: "20" },
-            ];
+            return [selectedInstallation, { ...selectedInstallation, installationId: "20" }];
           },
           bind: vi.fn(),
         },

@@ -97,11 +97,7 @@ describe("Vercel project provisioning", () => {
       });
       expect(candidates[0]).toBe("apps-vendor-portal");
       expect(absent).toEqual(["apps-vendor-portal"]);
-      expect(
-        request.mock.calls.every(
-          ([url]) => !String(url).includes("deployments"),
-        ),
-      ).toBe(true);
+      expect(request.mock.calls.every(([url]) => !String(url).includes("deployments"))).toBe(true);
     },
   );
 
@@ -136,10 +132,7 @@ describe("Vercel project provisioning", () => {
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
         bodies.push(JSON.parse(String(init.body)));
-        return Response.json(
-          { error: { code: "repo_not_found" } },
-          { status: 400 },
-        );
+        return Response.json({ error: { code: "repo_not_found" } }, { status: 400 });
       }
       return Response.json({}, { status: 404 });
     });
@@ -177,8 +170,7 @@ describe("Vercel project provisioning", () => {
         created = true;
         return Response.json({ id: "prj_2" }, { status: 201 });
       }
-      if (path.endsWith("/apps-vendor-portal"))
-        return Response.json({ id: "unrelated" });
+      if (path.endsWith("/apps-vendor-portal")) return Response.json({ id: "unrelated" });
       return created
         ? Response.json({
             id: "prj_2",
@@ -211,10 +203,7 @@ describe("Vercel project provisioning", () => {
       name: "apps-vendor-portal-a1b2c3",
     });
     expect(result).not.toHaveProperty("linkedGitHubRepository");
-    expect(candidates.slice(0, 2)).toEqual([
-      "apps-vendor-portal",
-      "apps-vendor-portal-a1b2c3",
-    ]);
+    expect(candidates.slice(0, 2)).toEqual(["apps-vendor-portal", "apps-vendor-portal-a1b2c3"]);
     expect(absent).toEqual(["apps-vendor-portal-a1b2c3"]);
   });
 });

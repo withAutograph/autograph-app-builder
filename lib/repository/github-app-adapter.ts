@@ -136,27 +136,24 @@ export interface GitHubAppInstallationProvider {
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
-}) => Promise<unknown>;
-  inspectRepository: (input: {
-    repositoryId: string;
-    ref: string;
-}) => Promise<unknown>;
-  inspectDestination: (input: {
-    owner: string;
-    name: string;
-}) => Promise<unknown>;
+  }) => Promise<unknown>;
+  inspectRepository: (input: { repositoryId: string; ref: string }) => Promise<unknown>;
+  inspectDestination: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectFreshRepositoryOutcome: (proposal: FreshRepositoryProposal) => Promise<unknown>;
-  createPrivateFreshHistoryRepository: (proposal: FreshRepositoryProposal, content: GitHubFreshRepositoryContent) => Promise<unknown>;
+  createPrivateFreshHistoryRepository: (
+    proposal: FreshRepositoryProposal,
+    content: GitHubFreshRepositoryContent,
+  ) => Promise<unknown>;
   inspectDraftPublication: (proposal: DraftPullRequestProposal) => Promise<unknown>;
-  publishDraftPullRequest: (proposal: DraftPullRequestProposal, content: GitHubDraftPullRequestContent) => Promise<unknown>;
+  publishDraftPullRequest: (
+    proposal: DraftPullRequestProposal,
+    content: GitHubDraftPullRequestContent,
+  ) => Promise<unknown>;
 }
 
-const hash = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-async function sanitizedProviderCall(
-  operation: () => Promise<unknown>,
-): Promise<unknown> {
+async function sanitizedProviderCall(operation: () => Promise<unknown>): Promise<unknown> {
   try {
     return await operation();
   } catch {
@@ -176,10 +173,7 @@ function repositoryObservation(
   snapshotInput: unknown,
   installationIdentityDigest: string,
 ): GitHubRepositoryObservation {
-  const snapshot = parseProviderResponse(
-    repositorySnapshotSchema,
-    snapshotInput,
-  );
+  const snapshot = parseProviderResponse(repositorySnapshotSchema, snapshotInput);
   return createRepositoryObservation({
     repositoryId: snapshot.repositoryId,
     owner: snapshot.owner,
@@ -191,9 +185,7 @@ function repositoryObservation(
     installationIdentityDigest,
     releaseGate: {
       name: REPOSITORY_RELEASE_GATE,
-      configured: snapshot.repositoryVariableNames.includes(
-        REPOSITORY_RELEASE_GATE,
-      ),
+      configured: snapshot.repositoryVariableNames.includes(REPOSITORY_RELEASE_GATE),
     },
   });
 }
@@ -216,12 +208,8 @@ export function createGitHubAppPublicationAdapter(
         }),
       ),
     );
-    if (
-      JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)
-    ) {
-      throw new Error(
-        "GitHub installation permissions do not match the operation.",
-      );
+    if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)) {
+      throw new Error("GitHub installation permissions do not match the operation.");
     }
     return createGitHubInstallationIdentity({
       operation,
@@ -239,24 +227,17 @@ export function createGitHubAppPublicationAdapter(
     snapshotOperation: () => Promise<unknown>,
   ) {
     const identity = await inspectInstallation(operation);
-    return repositoryObservation(
-      await sanitizedProviderCall(snapshotOperation),
-      identity.digest,
-    );
+    return repositoryObservation(await sanitizedProviderCall(snapshotOperation), identity.digest);
   }
 
   return {
     inspectInstallation,
     async inspectRepository(input) {
       const { operation, repositoryId, ref } = input;
-      return observationFor(operation, () =>
-        provider.inspectRepository({ repositoryId, ref }),
-      );
+      return observationFor(operation, () => provider.inspectRepository({ repositoryId, ref }));
     },
     async inspectDestination(input) {
-      const raw = await sanitizedProviderCall(() =>
-        provider.inspectDestination(input),
-      );
+      const raw = await sanitizedProviderCall(() => provider.inspectDestination(input));
       if (raw === "absent") return "absent";
       const identity = await inspectInstallation("create-fresh-repository");
       return repositoryObservation(raw, identity.digest);
@@ -294,9 +275,7 @@ export function createGitHubAppPublicationAdapter(
     async inspectDraftPublication(proposal) {
       const snapshot = parseProviderResponse(
         draftReadBackSchema,
-        await sanitizedProviderCall(() =>
-          provider.inspectDraftPublication(proposal),
-        ),
+        await sanitizedProviderCall(() => provider.inspectDraftPublication(proposal)),
       );
       const identity = await inspectInstallation("publish-draft-pull-request");
       const unsigned = {
@@ -315,9 +294,7 @@ export function createGitHubAppPublicationAdapter(
     async publishDraftPullRequest(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
-        await sanitizedProviderCall(() =>
-          provider.publishDraftPullRequest(proposal, content),
-        ),
+        await sanitizedProviderCall(() => provider.publishDraftPullRequest(proposal, content)),
       ) as GitHubMutationAcknowledgement;
     },
   };
@@ -343,12 +320,8 @@ export function createGitHubAppSourceResolutionAdapter(
         }),
       ),
     );
-    if (
-      JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)
-    )
-      throw new Error(
-        "GitHub installation permissions do not match the operation.",
-      );
+    if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected))
+      throw new Error("GitHub installation permissions do not match the operation.");
     return createGitHubInstallationIdentity({
       operation,
       installationId: snapshot.installationId,
@@ -365,9 +338,7 @@ export function createGitHubAppSourceResolutionAdapter(
     async inspectRepository({ operation, repositoryId, ref }) {
       const identity = await inspectInstallation(operation);
       return repositoryObservation(
-        await sanitizedProviderCall(() =>
-          provider.inspectRepository({ repositoryId, ref }),
-        ),
+        await sanitizedProviderCall(() => provider.inspectRepository({ repositoryId, ref })),
         identity.digest,
       );
     },

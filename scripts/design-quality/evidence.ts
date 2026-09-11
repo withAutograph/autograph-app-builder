@@ -31,9 +31,7 @@ export function scoreAdherence(
   const unique = [...new Map(observations.map((o) => [o.id, o])).values()];
   const scores = Object.fromEntries(
     dimensions.map((dimension) => {
-      const rows = unique.filter(
-        (o) => o.dimension === dimension && o.provenance !== "shared",
-      );
+      const rows = unique.filter((o) => o.dimension === dimension && o.provenance !== "shared");
       const conforming = rows.filter(
         (o) => o.verdict === "conforming" && o.provenance === "generated",
       ).length;
@@ -85,13 +83,9 @@ export function scoreAdherence(
         ? "partial"
         : "complete",
     score: available.length
-      ? Math.round(
-          available.reduce((n, d) => n + d.percent!, 0) / available.length,
-        )
+      ? Math.round(available.reduce((n, d) => n + d.percent!, 0) / available.length)
       : null,
-    coveragePercent: total
-      ? Math.round((10_000 * assessed) / total) / 100
-      : null,
+    coveragePercent: total ? Math.round((10_000 * assessed) / total) / 100 : null,
     dimensions: scores,
     observations: unique,
     limitations,

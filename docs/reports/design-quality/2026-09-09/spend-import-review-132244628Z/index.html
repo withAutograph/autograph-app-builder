@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T13:22:44.628Z ·
@@ -74,56 +73,41 @@
     <section>
       <h2>Spend import review</h2>
       <p>
-        Synthetic review scenario grounded in implemented Vendor
-        transaction-import and derived-fact substrate; the proposed
-        reconciliation decision contract is a planned extension.
+        Synthetic review scenario grounded in implemented Vendor transaction-import and derived-fact
+        substrate; the proposed reconciliation decision contract is a planned extension.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
-          <li>
-            arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented
-          </li>
-          <li>
-            ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> —
-            implemented
-          </li>
+          <li>arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented</li>
+          <li>ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> — implemented</li>
           <li>
             arrusted:
-            <code
-              >docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md</code
-            >
+            <code>docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md</code>
             — planned
           </li>
         </ul>
         <h3>Review questions</h3>
         <ul>
+          <li>Can a reviewer verify field mappings and preview the changes before saving?</li>
           <li>
-            Can a reviewer verify field mappings and preview the changes before
-            saving?
-          </li>
-          <li>
-            Can a reviewer see uncertain matches, source provenance, and the
-            bounded correction without overwriting source evidence?
+            Can a reviewer see uncertain matches, source provenance, and the bounded correction
+            without overwriting source evidence?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
+          <li>A user can save an import after checking its mappings and change preview.</li>
           <li>
-            A user can save an import after checking its mappings and change
-            preview.
-          </li>
-          <li>
-            The save outcome separates imported transactions from uncertain
-            matches that remain in review.
+            The save outcome separates imported transactions from uncertain matches that remain in
+            review.
           </li>
         </ul>
       </details>
     </section>
     <h2>Arrusted adherence: 96/100 · partial</h2>
     <p>
-      Evidence coverage: 2.76%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 2.76%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -164,36 +148,32 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
       <li>
-        No generated CSS source files were supplied; compiled stylesheet source
-        maps cannot establish generated declaration provenance.
+        No generated CSS source files were supplied; compiled stylesheet source maps cannot
+        establish generated declaration provenance.
       </li>
     </ul>
     <details open>
@@ -201,13 +181,10 @@
       <article id="finding-7">
         <strong>prop · nonconforming</strong>
         <p>
-          TypeScript prop error: Type &#39;&quot;info&quot;&#39; is not
-          assignable to type &#39;TagTone | undefined&#39;.
+          TypeScript prop error: Type &#39;&quot;info&quot;&#39; is not assignable to type
+          &#39;TagTone | undefined&#39;.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-7">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-7">src/SpendImportReview.tsx:44</a></small>
         <details id="source-7">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -219,14 +196,8 @@
       </article>
       <article id="finding-8">
         <strong>prop · nonconforming</strong>
-        <p>
-          The static JSX expression is not assignable to the selected Arrusted
-          prop type.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-8">src/SpendImportReview.tsx:44</a></small
-        >
+        <p>The static JSX expression is not assignable to the selected Arrusted prop type.</p>
+        <small>static evidence · <a href="#source-8">src/SpendImportReview.tsx:44</a></small>
         <details id="source-8">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -239,18 +210,14 @@
       <article id="finding-21">
         <strong>prop · nonconforming</strong>
         <p>
-          TypeScript prop error: Type &#39;{ id: string; title: string;
-          subtitle: string; state: string; statusLabel: string; }[]&#39; is not
-          assignable to type &#39;StepRailStepSpec[]&#39;. Type &#39;{ id:
-          string; title: string; subtitle: string; state: string; statusLabel:
-          string; }&#39; is not assignable to type &#39;StepRailStepSpec&#39;.
-          Types of property &#39;state&#39; are incompatible. Type
+          TypeScript prop error: Type &#39;{ id: string; title: string; subtitle: string; state:
+          string; statusLabel: string; }[]&#39; is not assignable to type
+          &#39;StepRailStepSpec[]&#39;. Type &#39;{ id: string; title: string; subtitle: string;
+          state: string; statusLabel: string; }&#39; is not assignable to type
+          &#39;StepRailStepSpec&#39;. Types of property &#39;state&#39; are incompatible. Type
           &#39;string&#39; is not assignable to type &#39;StepRailState&#39;.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-21">src/SpendImportReview.tsx:31</a></small
-        >
+        <small>static evidence · <a href="#source-21">src/SpendImportReview.tsx:31</a></small>
         <details id="source-21">
           <summary>Source location: src/SpendImportReview.tsx:31</summary>
           <pre>
@@ -262,14 +229,8 @@
       </article>
       <article id="finding-33">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public variant prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-33">src/SpendImportReview.tsx:36</a></small
-        >
+        <p>Button has no public variant prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-33">src/SpendImportReview.tsx:36</a></small>
         <details id="source-33">
           <summary>Source location: src/SpendImportReview.tsx:36</summary>
           <pre>
@@ -281,14 +242,8 @@
       </article>
       <article id="finding-43">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public variant prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-43">src/SpendImportReview.tsx:41</a></small
-        >
+        <p>Button has no public variant prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-43">src/SpendImportReview.tsx:41</a></small>
         <details id="source-43">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -300,14 +255,8 @@
       </article>
       <article id="finding-45">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public variant prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-45">src/SpendImportReview.tsx:41</a></small
-        >
+        <p>Button has no public variant prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-45">src/SpendImportReview.tsx:41</a></small>
         <details id="source-45">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -319,14 +268,8 @@
       </article>
       <article id="finding-48">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public variant prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-48">src/SpendImportReview.tsx:41</a></small
-        >
+        <p>Button has no public variant prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-48">src/SpendImportReview.tsx:41</a></small>
         <details id="source-48">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -346,13 +289,10 @@
       <article id="finding-0">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-0">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-0">src/SpendImportReview.tsx:44</a></small>
         <details id="source-0">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -365,13 +305,10 @@
       <article id="finding-1">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-1">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-1">src/SpendImportReview.tsx:44</a></small>
         <details id="source-1">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -384,13 +321,10 @@
       <article id="finding-10">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-10">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-10">src/SpendImportReview.tsx:44</a></small>
         <details id="source-10">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -403,13 +337,10 @@
       <article id="finding-12">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-12">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-12">src/SpendImportReview.tsx:44</a></small>
         <details id="source-12">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -422,13 +353,10 @@
       <article id="finding-13">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-13">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-13">src/SpendImportReview.tsx:44</a></small>
         <details id="source-13">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -441,13 +369,10 @@
       <article id="finding-32">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-32">src/SpendImportReview.tsx:35</a></small
-        >
+        <small>static evidence · <a href="#source-32">src/SpendImportReview.tsx:35</a></small>
         <details id="source-32">
           <summary>Source location: src/SpendImportReview.tsx:35</summary>
           <pre>
@@ -460,13 +385,10 @@
       <article id="finding-34">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-34">src/SpendImportReview.tsx:36</a></small
-        >
+        <small>static evidence · <a href="#source-34">src/SpendImportReview.tsx:36</a></small>
         <details id="source-34">
           <summary>Source location: src/SpendImportReview.tsx:36</summary>
           <pre>
@@ -479,13 +401,10 @@
       <article id="finding-44">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-44">src/SpendImportReview.tsx:41</a></small
-        >
+        <small>static evidence · <a href="#source-44">src/SpendImportReview.tsx:41</a></small>
         <details id="source-44">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -498,13 +417,10 @@
       <article id="finding-46">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-46">src/SpendImportReview.tsx:41</a></small
-        >
+        <small>static evidence · <a href="#source-46">src/SpendImportReview.tsx:41</a></small>
         <details id="source-46">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -517,13 +433,10 @@
       <article id="finding-49">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-49">src/SpendImportReview.tsx:41</a></small
-        >
+        <small>static evidence · <a href="#source-49">src/SpendImportReview.tsx:41</a></small>
         <details id="source-49">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -536,13 +449,10 @@
       <article id="finding-51">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-51">src/SpendImportReview.tsx:43</a></small
-        >
+        <small>static evidence · <a href="#source-51">src/SpendImportReview.tsx:43</a></small>
         <details id="source-51">
           <summary>Source location: src/SpendImportReview.tsx:43</summary>
           <pre>
@@ -555,13 +465,10 @@
       <article id="finding-53">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-53">src/SpendImportReview.tsx:43</a></small
-        >
+        <small>static evidence · <a href="#source-53">src/SpendImportReview.tsx:43</a></small>
         <details id="source-53">
           <summary>Source location: src/SpendImportReview.tsx:43</summary>
           <pre>
@@ -574,13 +481,10 @@
       <article id="finding-55">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-55">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-55">src/SpendImportReview.tsx:44</a></small>
         <details id="source-55">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -593,13 +497,10 @@
       <article id="finding-60">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-60">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-60">src/SpendImportReview.tsx:44</a></small>
         <details id="source-60">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -612,13 +513,10 @@
       <article id="finding-61">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-61">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-61">src/SpendImportReview.tsx:44</a></small>
         <details id="source-61">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -631,13 +529,10 @@
       <article id="finding-62">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-62">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-62">src/SpendImportReview.tsx:44</a></small>
         <details id="source-62">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -650,13 +545,10 @@
       <article id="finding-68">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-68">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-68">src/SpendImportReview.tsx:44</a></small>
         <details id="source-68">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -669,13 +561,10 @@
       <article id="finding-69">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-69">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-69">src/SpendImportReview.tsx:44</a></small>
         <details id="source-69">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -688,13 +577,10 @@
       <article id="finding-70">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-70">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-70">src/SpendImportReview.tsx:44</a></small>
         <details id="source-70">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -707,13 +593,10 @@
       <article id="finding-73">
         <strong>prop · unassessed</strong>
         <p>
-          A generated-source TypeScript diagnostic affects this expression; prop
-          assignability is unassessed.
+          A generated-source TypeScript diagnostic affects this expression; prop assignability is
+          unassessed.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-73">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-73">src/SpendImportReview.tsx:44</a></small>
         <details id="source-73">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -726,13 +609,9 @@
       <article id="finding-74">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-74">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-74">src/SpendImportReview.tsx:44</a></small>
         <details id="source-74">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -745,13 +624,9 @@
       <article id="finding-75">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-75">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-75">src/SpendImportReview.tsx:44</a></small>
         <details id="source-75">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -764,13 +639,9 @@
       <article id="finding-76">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-76">src/SpendImportReview.tsx:44</a></small
-        >
+        <small>static evidence · <a href="#source-76">src/SpendImportReview.tsx:44</a></small>
         <details id="source-76">
           <summary>Source location: src/SpendImportReview.tsx:44</summary>
           <pre>
@@ -783,13 +654,9 @@
       <article id="finding-77">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-77">src/SpendImportReview.tsx:33</a></small
-        >
+        <small>static evidence · <a href="#source-77">src/SpendImportReview.tsx:33</a></small>
         <details id="source-77">
           <summary>Source location: src/SpendImportReview.tsx:33</summary>
           <pre>
@@ -802,13 +669,9 @@
       <article id="finding-78">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-78">src/SpendImportReview.tsx:38</a></small
-        >
+        <small>static evidence · <a href="#source-78">src/SpendImportReview.tsx:38</a></small>
         <details id="source-78">
           <summary>Source location: src/SpendImportReview.tsx:38</summary>
           <pre>
@@ -821,13 +684,9 @@
       <article id="finding-79">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-79">src/SpendImportReview.tsx:41</a></small
-        >
+        <small>static evidence · <a href="#source-79">src/SpendImportReview.tsx:41</a></small>
         <details id="source-79">
           <summary>Source location: src/SpendImportReview.tsx:41</summary>
           <pre>
@@ -840,13 +699,9 @@
       <article id="finding-80">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-80">src/SpendImportReview.tsx:43</a></small
-        >
+        <small>static evidence · <a href="#source-80">src/SpendImportReview.tsx:43</a></small>
         <details id="source-80">
           <summary>Source location: src/SpendImportReview.tsx:43</summary>
           <pre>
@@ -860,8 +715,7 @@
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-139">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-139">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-139">
@@ -873,8 +727,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-140">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-140">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-140">
@@ -886,8 +739,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-141">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-141">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-141">
@@ -897,16 +749,14 @@
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
@@ -917,9 +767,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-0"
-            >src/SpendImportReview.tsx:43:89</a
-          ></small
+          <a href="#implementation-source-0">src/SpendImportReview.tsx:43:89</a></small
         >
         <details id="implementation-source-0">
           <summary>Source location</summary>
@@ -934,9 +782,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-1"
-            >src/SpendImportReview.tsx:44:222</a
-          ></small
+          <a href="#implementation-source-1">src/SpendImportReview.tsx:44:222</a></small
         >
         <details id="implementation-source-1">
           <summary>Source location</summary>
@@ -951,9 +797,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-2"
-            >src/SpendImportReview.tsx:44:763</a
-          ></small
+          <a href="#implementation-source-2">src/SpendImportReview.tsx:44:763</a></small
         >
         <details id="implementation-source-2">
           <summary>Source location</summary>
@@ -968,9 +812,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-3"
-            >src/SpendImportReview.tsx:44:809</a
-          ></small
+          <a href="#implementation-source-3">src/SpendImportReview.tsx:44:809</a></small
         >
         <details id="implementation-source-3">
           <summary>Source location</summary>
@@ -985,9 +827,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-4"
-            >src/SpendImportReview.tsx:44:1363</a
-          ></small
+          <a href="#implementation-source-4">src/SpendImportReview.tsx:44:1363</a></small
         >
         <details id="implementation-source-4">
           <summary>Source location</summary>
@@ -1002,9 +842,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-5"
-            >src/SpendImportReview.tsx:44:1433</a
-          ></small
+          <a href="#implementation-source-5">src/SpendImportReview.tsx:44:1433</a></small
         >
         <details id="implementation-source-5">
           <summary>Source location</summary>
@@ -1019,9 +857,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-6"
-            >src/SpendImportReview.tsx:44:1454</a
-          ></small
+          <a href="#implementation-source-6">src/SpendImportReview.tsx:44:1454</a></small
         >
         <details id="implementation-source-6">
           <summary>Source location</summary>
@@ -1036,9 +872,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-7"
-            >src/SpendImportReview.tsx:44:1539</a
-          ></small
+          <a href="#implementation-source-7">src/SpendImportReview.tsx:44:1539</a></small
         >
         <details id="implementation-source-7">
           <summary>Source location</summary>
@@ -1053,9 +887,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-8"
-            >src/SpendImportReview.tsx:44:1619</a
-          ></small
+          <a href="#implementation-source-8">src/SpendImportReview.tsx:44:1619</a></small
         >
         <details id="implementation-source-8">
           <summary>Source location</summary>
@@ -1070,9 +902,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-9"
-            >src/SpendImportReview.tsx:44:1724</a
-          ></small
+          <a href="#implementation-source-9">src/SpendImportReview.tsx:44:1724</a></small
         >
         <details id="implementation-source-9">
           <summary>Source location</summary>
@@ -1087,9 +917,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-10"
-            >src/SpendImportReview.tsx:44:2059</a
-          ></small
+          <a href="#implementation-source-10">src/SpendImportReview.tsx:44:2059</a></small
         >
         <details id="implementation-source-10">
           <summary>Source location</summary>
@@ -1104,9 +932,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-11"
-            >src/SpendImportReview.tsx:44:2133</a
-          ></small
+          <a href="#implementation-source-11">src/SpendImportReview.tsx:44:2133</a></small
         >
         <details id="implementation-source-11">
           <summary>Source location</summary>
@@ -1121,9 +947,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-12"
-            >src/SpendImportReview.tsx:44:2357</a
-          ></small
+          <a href="#implementation-source-12">src/SpendImportReview.tsx:44:2357</a></small
         >
         <details id="implementation-source-12">
           <summary>Source location</summary>
@@ -1138,9 +962,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-13"
-            >src/SpendImportReview.tsx:44:2418</a
-          ></small
+          <a href="#implementation-source-13">src/SpendImportReview.tsx:44:2418</a></small
         >
         <details id="implementation-source-13">
           <summary>Source location</summary>
@@ -1155,9 +977,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-14"
-            >src/SpendImportReview.tsx:44:2943</a
-          ></small
+          <a href="#implementation-source-14">src/SpendImportReview.tsx:44:2943</a></small
         >
         <details id="implementation-source-14">
           <summary>Source location</summary>
@@ -1172,9 +992,7 @@
         <p>&#39;selected&#39; is possibly &#39;undefined&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-15"
-            >src/SpendImportReview.tsx:44:3017</a
-          ></small
+          <a href="#implementation-source-15">src/SpendImportReview.tsx:44:3017</a></small
         >
         <details id="implementation-source-15">
           <summary>Source location</summary>
@@ -1188,8 +1006,7 @@
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 75/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -1204,56 +1021,51 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The three-step rail, page title, current-state treatments, preview
-            counts, and exception-detail sections establish clear priorities.
-            The source evidence, exception reason, and bounded next action are
-            especially easy to scan, though narrow-window summary pills wrap
-            awkwardly and some small status labels lose emphasis.
+            The three-step rail, page title, current-state treatments, preview counts, and
+            exception-detail sections establish clear priorities. The source evidence, exception
+            reason, and bounded next action are especially easy to scan, though narrow-window
+            summary pills wrap awkwardly and some small status labels lose emphasis.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Mapping rows align source samples directly with destination fields,
-            the preview table is compact, and the wide exception view keeps the
-            queue beside the selected record. Spacing is consistent, but the
-            1024px preview clips the import-result column and the review action
-            area sits far down a long document.
+            Mapping rows align source samples directly with destination fields, the preview table is
+            compact, and the wide exception view keeps the queue beside the selected record. Spacing
+            is consistent, but the 1024px preview clips the import-result column and the review
+            action area sits far down a long document.
           </td>
         </tr>
         <tr>
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Titles, section headings, field labels, and values use a consistent,
-            readable hierarchy. Secondary metadata and several 10–12px status or
-            caption labels are comparatively faint and small; automated evidence
-            also flags recurring advisory contrast concerns for these labels.
+            Titles, section headings, field labels, and values use a consistent, readable hierarchy.
+            Secondary metadata and several 10–12px status or caption labels are comparatively faint
+            and small; automated evidence also flags recurring advisory contrast concerns for these
+            labels.
           </td>
         </tr>
         <tr>
           <th>responsive</th>
           <td>3/4</td>
           <td>
-            The composition works at 1024, 1440, and 1920px: mapping controls
-            contract, the wide list-detail review becomes a focused detail view
-            with a Back control, and primary actions remain usable. The 1024px
-            preview relies on horizontal scrolling and visibly truncates the
-            rightmost result content, preventing an excellent score.
+            The composition works at 1024, 1440, and 1920px: mapping controls contract, the wide
+            list-detail review becomes a focused detail view with a Back control, and primary
+            actions remain usable. The 1024px preview relies on horizontal scrolling and visibly
+            truncates the rightmost result content, preventing an excellent score.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            Reviewers can verify mappings, inspect representative changes before
-            saving, see the 38-ready/4-review split, and receive an explicit
-            saved outcome. Exception detail keeps immutable raw values,
-            provenance, the ambiguity explanation, two bounded vendor choices,
-            and a defer option together. However, Apply appears available
-            without a visible selection, and the tested chosen-match path
-            produced no visible confirmation.
+            Reviewers can verify mappings, inspect representative changes before saving, see the
+            38-ready/4-review split, and receive an explicit saved outcome. Exception detail keeps
+            immutable raw values, provenance, the ambiguity explanation, two bounded vendor choices,
+            and a defer option together. However, Apply appears available without a visible
+            selection, and the tested chosen-match path produced no visible confirmation.
           </td>
         </tr>
       </tbody>
@@ -1261,113 +1073,102 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        The workflow directly answers the brief with mapping, preview, save
-        outcome, and exception-review stages.
+        The workflow directly answers the brief with mapping, preview, save outcome, and
+        exception-review stages.
       </li>
       <li>
-        Sample source values remain beside each mapping, making field
-        verification concrete rather than abstract.
+        Sample source values remain beside each mapping, making field verification concrete rather
+        than abstract.
       </li>
       <li>
-        The preview clearly distinguishes 38 ready rows from 4 rows needing
-        review and offers a route back to mapping before saving.
+        The preview clearly distinguishes 38 ready rows from 4 rows needing review and offers a
+        route back to mapping before saving.
       </li>
       <li>
-        The saved state explicitly states that 38 rows were imported and 4
-        remain in human review rather than implying full reconciliation.
+        The saved state explicitly states that 38 rows were imported and 4 remain in human review
+        rather than implying full reconciliation.
       </li>
       <li>
-        Exception detail clearly labels the original source row as preserved
-        evidence and shows batch, source, raw vendor, amount, date, and source
-        reference.
+        Exception detail clearly labels the original source row as preserved evidence and shows
+        batch, source, raw vendor, amount, date, and source reference.
       </li>
       <li>
-        The ambiguity is explicit: two candidate identities are described with
-        differentiating evidence, while Leave unresolved provides a bounded
-        alternative.
+        The ambiguity is explicit: two candidate identities are described with differentiating
+        evidence, while Leave unresolved provides a bounded alternative.
       </li>
       <li>
-        Wide and constrained desktop layouts adapt thoughtfully; the constrained
-        review preserves a focused detail experience with a clear route back to
-        exception rows.
+        Wide and constrained desktop layouts adapt thoughtfully; the constrained review preserves a
+        focused detail experience with a clear route back to exception rows.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>medium · <a href="#desktop-window-1">desktop-window-1</a></h4>
       <p>
-        At the 1024px desktop window, the preview table’s rightmost Import
-        result column is visibly cut off and requires horizontal scrolling. This
-        hides the most decision-relevant result for several rows during pre-save
-        review.
+        At the 1024px desktop window, the preview table’s rightmost Import result column is visibly
+        cut off and requires horizontal scrolling. This hides the most decision-relevant result for
+        several rows during pre-save review.
       </p>
       <p>
-        <strong>Improve:</strong> Use the compact table density and rebalance
-        column widths, or move lower-priority source metadata into a secondary
-        line so Import result remains visible. If horizontal scrolling is
-        retained, provide a clear, keyboard-accessible scroll affordance.
+        <strong>Improve:</strong> Use the compact table density and rebalance column widths, or move
+        lower-priority source metadata into a secondary line so Import result remains visible. If
+        horizontal scrolling is retained, provide a clear, keyboard-accessible scroll affordance.
       </p>
       <small>Screenshot region: x 349, y 221, width 630, height 240</small>
     </article>
     <article id="design-1">
       <h4>low · <a href="#desktop-window-1">desktop-window-1</a></h4>
       <p>
-        The 38 ready and 4 need review summaries wrap into tall, nearly circular
-        pills at this width, making the counts less immediately scannable than
-        in the wider captures.
+        The 38 ready and 4 need review summaries wrap into tall, nearly circular pills at this
+        width, making the counts less immediately scannable than in the wider captures.
       </p>
       <p>
-        <strong>Improve:</strong> Place the status summary in a wrapping row
-        beneath the preview heading or allocate it a wider column, preserving
-        the existing supported pill variants and palette.
+        <strong>Improve:</strong> Place the status summary in a wrapping row beneath the preview
+        heading or allocate it a wider column, preserving the existing supported pill variants and
+        palette.
       </p>
       <small>Screenshot region: x 820, y 141, width 159, height 54</small>
     </article>
     <article id="design-2">
       <h4>high · <a href="#desktop-3">desktop-3</a></h4>
       <p>
-        Neither vendor option has a visible selected state, yet Apply simulated
-        decision appears available. The supplied interaction for recording a
-        chosen match also failed to produce the expected confirmation, leaving
-        the reviewer uncertain whether a correction was recorded.
+        Neither vendor option has a visible selected state, yet Apply simulated decision appears
+        available. The supplied interaction for recording a chosen match also failed to produce the
+        expected confirmation, leaving the reviewer uncertain whether a correction was recorded.
       </p>
       <p>
-        <strong>Improve:</strong> Keep Apply disabled until one candidate is
-        visibly selected. After applying, show persistent inline confirmation,
-        update the selected row’s status and remaining count, and retain the
-        original source section unchanged.
+        <strong>Improve:</strong> Keep Apply disabled until one candidate is visibly selected. After
+        applying, show persistent inline confirmation, update the selected row’s status and
+        remaining count, and retain the original source section unchanged.
       </p>
       <small>Screenshot region: x 808, y 751, width 584, height 256</small>
     </article>
     <article id="design-3">
       <h4>medium · <a href="#desktop-4">desktop-4</a></h4>
       <p>
-        After the row is marked Deferred and an inline follow-up message
-        appears, Leave unresolved and Apply simulated decision remain presented
-        with the same prominence. This makes it unclear whether the defer action
-        can be repeated or whether a new candidate choice is required to change
-        the decision.
+        After the row is marked Deferred and an inline follow-up message appears, Leave unresolved
+        and Apply simulated decision remain presented with the same prominence. This makes it
+        unclear whether the defer action can be repeated or whether a new candidate choice is
+        required to change the decision.
       </p>
       <p>
-        <strong>Improve:</strong> Treat Deferred as a recorded decision state:
-        disable or relabel the repeated defer action, and only enable Apply
-        after a candidate is selected to replace that decision.
+        <strong>Improve:</strong> Treat Deferred as a recorded decision state: disable or relabel
+        the repeated defer action, and only enable Apply after a candidate is selected to replace
+        that decision.
       </p>
       <small>Screenshot region: x 807, y 778, width 585, height 260</small>
     </article>
     <article id="design-4">
       <h4>low · <a href="#desktop-3">desktop-3</a></h4>
       <p>
-        Exception-row provenance is useful, but dates, references, and Needs
-        review badges are rendered in very small secondary text. The automated
-        evidence repeatedly flags these captions and badges as difficult to read
-        against their surfaces.
+        Exception-row provenance is useful, but dates, references, and Needs review badges are
+        rendered in very small secondary text. The automated evidence repeatedly flags these
+        captions and badges as difficult to read against their surfaces.
       </p>
       <p>
-        <strong>Improve:</strong> Use the supported medium Tag size or a
-        primary-emphasis label treatment for decision-critical status text, and
-        reduce reliance on tiny captions without changing the authoritative
-        palette.
+        <strong>Improve:</strong> Use the supported medium Tag size or a primary-emphasis label
+        treatment for decision-critical status text, and reduce reliance on tiny captions without
+        changing the authoritative palette.
       </p>
       <small>Screenshot region: x 329, y 206, width 438, height 284</small>
     </article>
@@ -2069,10 +1870,7 @@
     <section id="desktop-1">
       <h2>desktop-1 — inspect mapped import preview</h2>
       <div class="capture">
-        <img
-          src="desktop-1.png"
-          alt="desktop-1 inspect mapped import preview screenshot"
-        />
+        <img src="desktop-1.png" alt="desktop-1 inspect mapped import preview screenshot" />
       </div>
       <a href="desktop-1.png">Original, unmodified screenshot</a>
       <details>
@@ -2411,10 +2209,7 @@
     <section id="desktop-3">
       <h2>desktop-3 — record a chosen vendor match</h2>
       <div class="capture">
-        <img
-          src="desktop-3.png"
-          alt="desktop-3 record a chosen vendor match screenshot"
-        /><a
+        <img src="desktop-3.png" alt="desktop-3 record a chosen vendor match screenshot" /><a
           class="region"
           href="#design-2"
           title="Neither vendor option has a visible selected state, yet Apply simulated decision appears available. The supplied interaction for recording a chosen match also failed to produce the expected confirmation, leaving the reviewer uncertain whether a correction was recorded."
@@ -4337,10 +4132,7 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        />
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" />
       </div>
       <a href="desktop-window-0.png">Original, unmodified screenshot</a>
       <details>
@@ -4650,24 +4442,14 @@
           href="#design-0"
           title="At the 1024px desktop window, the preview table’s rightmost Import result column is visibly cut off and requires horizontal scrolling. This hides the most decision-relevant result for several rows during pre-save review."
           aria-label="At the 1024px desktop window, the preview table’s rightmost Import result column is visibly cut off and requires horizontal scrolling. This hides the most decision-relevant result for several rows during pre-save review."
-          style="
-            left: 34.08203125%;
-            top: 28.776041666666668%;
-            width: 61.5234375%;
-            height: 31.25%;
-          "
+          style="left: 34.08203125%; top: 28.776041666666668%; width: 61.5234375%; height: 31.25%"
         ></a
         ><a
           class="region"
           href="#design-1"
           title="The 38 ready and 4 need review summaries wrap into tall, nearly circular pills at this width, making the counts less immediately scannable than in the wider captures."
           aria-label="The 38 ready and 4 need review summaries wrap into tall, nearly circular pills at this width, making the counts less immediately scannable than in the wider captures."
-          style="
-            left: 80.078125%;
-            top: 18.359375%;
-            width: 15.52734375%;
-            height: 7.03125%;
-          "
+          style="left: 80.078125%; top: 18.359375%; width: 15.52734375%; height: 7.03125%"
         ></a>
       </div>
       <a href="desktop-window-1.png">Original, unmodified screenshot</a>

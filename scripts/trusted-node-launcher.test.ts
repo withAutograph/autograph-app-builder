@@ -16,10 +16,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const launcher = resolve(
-  repositoryRoot,
-  ".config/mise/scripts/trusted-node-launcher",
-);
+const launcher = resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
 const pinnedNode = process.execPath.includes("/mise/installs/")
   ? process.execPath
   : spawnSync("mise", ["which", "node"], {
@@ -27,10 +24,7 @@ const pinnedNode = process.execPath.includes("/mise/installs/")
       encoding: "utf8",
     }).stdout.trim();
 const [accountHome] = pinnedNode.split("/.local/share/mise/");
-const pinnedPnpm = resolve(
-  accountHome,
-  ".local/share/mise/installs/pnpm/11.7.0/pnpm",
-);
+const pinnedPnpm = resolve(accountHome, ".local/share/mise/installs/pnpm/11.7.0/pnpm");
 
 function taskFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -41,19 +35,14 @@ function taskFiles(directory: string): string[] {
 
 describe("trusted Node launcher", () => {
   it("rejects data-URL NODE_OPTIONS before the first Node process", () => {
-    const result = spawnSync(
-      launcher,
-      [pinnedNode, "-e", "process.stdout.write('node-ran')"],
-      {
-        cwd: repositoryRoot,
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          NODE_OPTIONS:
-            "--import=data:text/javascript,process.stdout.write('injected')",
-        },
+    const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('node-ran')"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NODE_OPTIONS: "--import=data:text/javascript,process.stdout.write('injected')",
       },
-    );
+    });
     expect(result.status).toBe(78);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("refusing ambient NODE_OPTIONS");
@@ -62,11 +51,11 @@ describe("trusted Node launcher", () => {
   it("accepts only a clean mise-pinned Node or pnpm executable", () => {
     const cleanEnvironment = { ...process.env };
     delete cleanEnvironment.NODE_OPTIONS;
-    const accepted = spawnSync(
-      launcher,
-      [pinnedNode, "-e", "process.stdout.write('ok')"],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
-    );
+    const accepted = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('ok')"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: cleanEnvironment,
+    });
     expect(accepted.status, accepted.stderr).toBe(0);
     expect(accepted.stdout).toBe("ok");
     const rejected = spawnSync(launcher, ["/bin/echo", "unsafe"], {
@@ -94,16 +83,12 @@ describe("trusted Node launcher", () => {
     const cleanEnvironment = { ...process.env };
     delete cleanEnvironment.NODE_OPTIONS;
     const input = "bounded-stdin-payload\n";
-    const result = spawnSync(
-      launcher,
-      [pinnedNode, "-e", "process.stdin.pipe(process.stdout)"],
-      {
-        cwd: repositoryRoot,
-        encoding: "utf8",
-        env: cleanEnvironment,
-        input,
-      },
-    );
+    const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdin.pipe(process.stdout)"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: cleanEnvironment,
+      input,
+    });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe(input);
   });
@@ -136,10 +121,7 @@ describe("trusted Node launcher", () => {
       join(scratch, "package.json"),
       `${JSON.stringify({ private: true, dependencies: { fixture: "file:./fixture" } })}\n`,
     );
-    writeFileSync(
-      join(scratch, "pnpm-workspace.yaml"),
-      "dangerouslyAllowAllBuilds: true\n",
-    );
+    writeFileSync(join(scratch, "pnpm-workspace.yaml"), "dangerouslyAllowAllBuilds: true\n");
     writeFileSync(
       join(fixture, "package.json"),
       `${JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { postinstall: "node postinstall.cjs" } })}\n`,
@@ -155,45 +137,27 @@ describe("trusted Node launcher", () => {
     delete cleanEnvironment.NODE_OPTIONS;
     const lock = spawnSync(
       launcher,
-      [
-        pinnedPnpm,
-        "install",
-        "--lockfile-only",
-        "--ignore-scripts",
-        "--store-dir",
-        store,
-      ],
+      [pinnedPnpm, "install", "--lockfile-only", "--ignore-scripts", "--store-dir", store],
       { cwd: scratch, encoding: "utf8", env: cleanEnvironment },
     );
     expect(lock.status, lock.stderr).toBe(0);
     const installed = spawnSync(
       launcher,
-      [
-        pinnedPnpm,
-        "install",
-        "--frozen-lockfile",
-        "--offline",
-        "--store-dir",
-        store,
-      ],
+      [pinnedPnpm, "install", "--frozen-lockfile", "--offline", "--store-dir", store],
       {
         cwd: scratch,
         encoding: "utf8",
         env: { ...cleanEnvironment, PATH: hostile },
       },
     );
-    expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(
-      0,
-    );
+    expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
     const observation = JSON.parse(readFileSync(receipt, "utf8")) as {
       executable: string;
       path: string;
     };
     expect(observation.executable).toBe(pinnedNode);
     expect(observation.path).not.toContain(hostile);
-    expect(
-      observation.path.endsWith(`${dirname(pinnedNode)}:/usr/bin:/bin`),
-    ).toBe(true);
+    expect(observation.path.endsWith(`${dirname(pinnedNode)}:/usr/bin:/bin`)).toBe(true);
   });
 
   it("does not trust a forged public symbol and matching environment", () => {
@@ -219,10 +183,7 @@ describe("trusted Node launcher", () => {
   });
 
   it("passes only the exact pinned GitHub CLI path through the closed image environment", () => {
-    const gh = resolve(
-      accountHome,
-      ".local/share/mise/installs/gh/2.98.0/bin/gh",
-    );
+    const gh = resolve(accountHome, ".local/share/mise/installs/gh/2.98.0/bin/gh");
     const cleanEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
       APP_BUILDER_IMAGE_GH_BIN: gh,
@@ -268,9 +229,7 @@ describe("trusted Node launcher", () => {
   });
 
   it("uses only an owner-only development runtime home when explicitly scoped", () => {
-    const runtimeHome = realpathSync(
-      mkdtempSync(join(tmpdir(), "app-builder-runtime-")),
-    );
+    const runtimeHome = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-runtime-")));
     chmodSync(runtimeHome, 0o700);
     const cleanEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
@@ -301,20 +260,13 @@ describe("trusted Node launcher", () => {
     delete cleanEnvironment.NODE_OPTIONS;
     const generic = spawnSync(
       launcher,
-      [
-        pinnedNode,
-        "-e",
-        "process.stdout.write(process.env.VERCEL_OIDC_TOKEN ?? 'absent')",
-      ],
+      [pinnedNode, "-e", "process.stdout.write(process.env.VERCEL_OIDC_TOKEN ?? 'absent')"],
       { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
     );
     expect(generic.status, generic.stderr).toBe(0);
     expect(generic.stdout).toBe("absent");
 
-    const localEveLauncher = resolve(
-      repositoryRoot,
-      ".config/mise/scripts/local-eve-launcher",
-    );
+    const localEveLauncher = resolve(repositoryRoot, ".config/mise/scripts/local-eve-launcher");
     const localEveSource = readFileSync(localEveLauncher, "utf8");
     const arbitrary = spawnSync(
       localEveLauncher,
@@ -338,25 +290,16 @@ describe("trusted Node launcher", () => {
     expect(localStart).toContain(
       'REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher',
     );
-    expect(localStart).toContain(
-      '"$launcher" "$node_bin" node_modules/next/dist/bin/next dev',
-    );
+    expect(localStart).toContain('"$launcher" "$node_bin" node_modules/next/dist/bin/next dev');
     expect(readFileSync(launcher, "utf8")).not.toContain("VERCEL_OIDC_TOKEN");
-    for (const path of taskFiles(
-      resolve(repositoryRoot, ".config/mise/tasks"),
-    )) {
+    for (const path of taskFiles(resolve(repositoryRoot, ".config/mise/tasks"))) {
       if (path.endsWith("/local/start")) continue;
-      expect(readFileSync(path, "utf8"), path).not.toContain(
-        "local-eve-launcher",
-      );
+      expect(readFileSync(path, "utf8"), path).not.toContain("local-eve-launcher");
     }
   });
 
   it("requires one explicit canonical source root before starting local services", () => {
-    const localStart = resolve(
-      repositoryRoot,
-      ".config/mise/tasks/local/start",
-    );
+    const localStart = resolve(repositoryRoot, ".config/mise/tasks/local/start");
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
       REPOSITORY_LOCAL_ROOTS: "ambient-must-not-authorize",
@@ -371,11 +314,11 @@ describe("trusted Node launcher", () => {
     expect(missing.stdout).not.toContain("ambient-must-not-authorize");
     expect(missing.stderr).not.toContain("ambient-must-not-authorize");
 
-    const relative = spawnSync(
-      localStart,
-      ["/tmp/state", "/tmp/output", "relative/source"],
-      { cwd: repositoryRoot, encoding: "utf8", env: environment },
-    );
+    const relative = spawnSync(localStart, ["/tmp/state", "/tmp/output", "relative/source"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: environment,
+    });
     expect(relative.status).toBe(78);
     expect(relative.stderr).toContain("absolute regular directory");
     expect(relative.stdout).not.toContain("ambient-must-not-authorize");
@@ -415,9 +358,7 @@ describe("trusted Node launcher", () => {
   });
 
   it("routes Node tasks through the launcher except the project-OIDC design judge", () => {
-    for (const path of taskFiles(
-      resolve(repositoryRoot, ".config/mise/tasks"),
-    )) {
+    for (const path of taskFiles(resolve(repositoryRoot, ".config/mise/tasks"))) {
       const source = readFileSync(path, "utf8");
       expect(source, path).toMatch(/^#!\/bin\/sh\n/u);
       if (path === resolve(repositoryRoot, ".config/mise/tasks/eval/design")) {

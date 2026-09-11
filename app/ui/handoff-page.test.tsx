@@ -33,14 +33,10 @@ describe("authenticated handoff page", () => {
     expect(server.redirect).toHaveBeenCalledWith(
       `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,
     );
-    expect(server.load.mock.calls[0]?.[0].headers.get("cookie")).toBe(
-      "web-session",
-    );
+    expect(server.load.mock.calls[0]?.[0].headers.get("cookie")).toBe("web-session");
   });
   it("does not expose server errors or owner information for an unavailable handoff", async () => {
-    server.load.mockRejectedValue(
-      new Error("private-owner@example.com database error"),
-    );
+    server.load.mockRejectedValue(new Error("private-owner@example.com database error"));
     const html = renderToStaticMarkup(await HandoffContent({ params }));
     expect(html).toContain("Handoff unavailable");
     expect(html).not.toContain("private-owner");

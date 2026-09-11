@@ -26,13 +26,11 @@ export const publicAuthorizationUrlSchema = z
     if (
       url.username ||
       url.password ||
-      (url.protocol !== "https:" &&
-        !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
+      (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
     )
       context.addIssue({
         code: "custom",
-        message:
-          "Authorization requires credential-free HTTPS or loopback URL.",
+        message: "Authorization requires credential-free HTTPS or loopback URL.",
       });
   });
 
@@ -60,9 +58,7 @@ export const publicInputRequestSchema = z
     kind: z.enum(["approval", "question", "authorization"]),
     title: z.string().min(1),
     description: z.string().optional(),
-    options: z
-      .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
-      .optional(),
+    options: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) })).optional(),
     allowFreeform: z.boolean(),
     presentation: inputPresentationSchema.optional(),
     authorization: publicAuthorizationChallengeSchema.optional(),
@@ -128,31 +124,25 @@ export const publicPrototypePreviewUrlSchema = z
       url.hash ||
       (url.protocol !== "https:" &&
         !(url.protocol === "http:" && isLoopbackHostname(url.hostname))) ||
-      !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(
-        url.pathname,
-      )
+      !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(url.pathname)
     ) {
       context.addIssue({
         code: "custom",
-        message:
-          "Prototype previews require an exact hosted HTTPS or loopback URL.",
+        message: "Prototype previews require an exact hosted HTTPS or loopback URL.",
       });
     }
   });
 
 export const publicPrototypeSchema = z
   .object({
-    path: z
-      .string()
-      .regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+    path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
     mediaType: z.literal("text/html"),
     content: z
       .string()
       .min(1)
       .max(8 * 1024 * 1024)
       .refine(
-        (content) =>
-          new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
+        (content) => new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
         "Prototype HTML must be at most 8 MiB.",
       ),
     digest: sha256DigestSchema,
@@ -188,9 +178,7 @@ export const publicImplementationPlanSchema = z
   })
   .strict();
 
-export type PublicImplementationPlan = z.infer<
-  typeof publicImplementationPlanSchema
->;
+export type PublicImplementationPlan = z.infer<typeof publicImplementationPlanSchema>;
 
 export const eveSessionResultSchema = z
   .object({
@@ -202,10 +190,7 @@ export const eveSessionResultSchema = z
     prototype: publicPrototypeSchema.optional(),
     uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
-    error: z
-      .object({ code: z.string(), message: z.string() })
-      .strict()
-      .optional(),
+    error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
   })
   .strict();
 
@@ -254,10 +239,7 @@ export const eveSessionListResultSchema = z
 export type EveSessionListResult = z.infer<typeof eveSessionListResultSchema>;
 export type PublicSessionSummary = z.infer<typeof publicSessionSummarySchema>;
 
-export const eveGetResultSchema = z.union([
-  eveSessionResultSchema,
-  eveSessionListResultSchema,
-]);
+export const eveGetResultSchema = z.union([eveSessionResultSchema, eveSessionListResultSchema]);
 
 export const eveStartInputSchema = z
   .object({
@@ -268,15 +250,10 @@ export const eveStartInputSchema = z
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
-    if (
-      [prompt, handoffId, resumeSessionId].filter(
-        (value) => value !== undefined,
-      ).length !== 1
-    )
+    if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1)
       context.addIssue({
         code: "custom",
-        message:
-          "Provide exactly one of prompt, handoffId, or resumeSessionId.",
+        message: "Provide exactly one of prompt, handoffId, or resumeSessionId.",
       });
   });
 export const eveGetInputSchema = z

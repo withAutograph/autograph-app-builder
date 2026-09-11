@@ -14,19 +14,14 @@ import {
   type ObservedDependencyCache,
 } from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
-import {
-  isHostedVercelSandboxBackend,
-  sandboxBackendPlan,
-} from "../sandbox/backend";
+import { isHostedVercelSandboxBackend, sandboxBackendPlan } from "../sandbox/backend";
 import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 import type { SourceReceipt } from "./source-receipt";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-const repositoryPath = z
-  .string()
-  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
+const repositoryPath = z.string().regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
 
 export class ExistingApplicationChangesRequiredError extends Error {
   constructor() {
@@ -98,9 +93,7 @@ export const targetCreationProposalSchema =
 
 const iterationChangeSchema = z.strictObject({
   path: repositoryPath,
-  before: z
-    .strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest })
-    .optional(),
+  before: z.strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest }).optional(),
   after: z.strictObject({
     mode: z.string().regex(/^[0-7]{3,4}$/u),
     digest,
@@ -118,10 +111,7 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       }),
     })
     .superRefine((proposal, context) => {
-      if (
-        sha256(JSON.stringify(proposal.iteration.changes)) !==
-        proposal.iteration.digest
-      )
+      if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest)
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["iteration", "digest"],
@@ -154,28 +144,21 @@ export class ExistingAppChangePreimageError extends Error {
   readonly rejectedPaths: readonly string[];
   readonly exactAppOwnedPaths: readonly string[];
 
-  constructor(input: {
-    rejectedPaths: readonly string[];
-    exactAppOwnedPaths: readonly string[];
-  }) {
+  constructor(input: { rejectedPaths: readonly string[]; exactAppOwnedPaths: readonly string[] }) {
     const repair = {
       code: "existing_app_change_preimage_missing",
       rejectedPaths: [...input.rejectedPaths],
       exactAppOwnedPaths: [...input.exactAppOwnedPaths],
       next: "Inspect only the listed exact paths, draft replacements from their returned contents, and retry target planning without resolving or preparing the source again.",
     } as const;
-    super(
-      `Existing-app changes require exact source preimages. ${JSON.stringify(repair)}`,
-    );
+    super(`Existing-app changes require exact source preimages. ${JSON.stringify(repair)}`);
     this.name = "ExistingAppChangePreimageError";
     this.rejectedPaths = repair.rejectedPaths;
     this.exactAppOwnedPaths = repair.exactAppOwnedPaths;
   }
 }
 
-export function targetContractDigest(
-  contract: TargetProposal["contract"],
-): string {
+export function targetContractDigest(contract: TargetProposal["contract"]): string {
   return sha256(JSON.stringify(contract));
 }
 
@@ -203,19 +186,14 @@ export type TargetCommandExecutor = (input: {
   appSpecDigest: string;
 }) => Promise<TargetCommandResult>;
 
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function planningMarker(marker: string, phase: "start" | "finish") {
   if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
     console.info(`[app-builder planning] ${marker} ${phase}`);
 }
 
-function parseOutput<T>(
-  result: TargetCommandResult,
-  schema: z.ZodType<T>,
-  label: string,
-): T {
+function parseOutput<T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T {
   const stdout = result.stdout
     .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .replace(/\r/gu, "")
@@ -233,8 +211,7 @@ function parseOutput<T>(
     throw new Error(`${label} returned invalid JSON.`);
   }
   const validated = schema.safeParse(parsed);
-  if (!validated.success)
-    throw new Error(`${label} returned an invalid shape.`);
+  if (!validated.success) throw new Error(`${label} returned an invalid shape.`);
   return validated.data;
 }
 
@@ -245,8 +222,7 @@ export function targetExecutionBinding(
   if (hasTestCapability("simulated-target", environment))
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-      dependencyCacheDigest:
-        cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
+      dependencyCacheDigest: cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
   const imageDigest = configuredToolchainImage(environment);
@@ -268,10 +244,7 @@ export function targetExecutionBinding(
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
       } as const;
-    if (
-      isHostedVercelSandboxBackend(backend.kind) &&
-      backend.blockers.length === 0
-    )
+    if (isHostedVercelSandboxBackend(backend.kind) && backend.blockers.length === 0)
       return {
         imageDigest: hostedExecutionArtifactDigest(),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
@@ -350,15 +323,8 @@ export async function materializePlanningOverlay(input: {
   return result;
 }
 
-export function sandboxTargetCommandExecutor(
-  sandbox: SandboxSession,
-): TargetCommandExecutor {
-  return async ({
-    command,
-    appId: requestedAppId,
-    planningRoot,
-    contractPath,
-  }) => {
+export function sandboxTargetCommandExecutor(sandbox: SandboxSession): TargetCommandExecutor {
+  return async ({ command, appId: requestedAppId, planningRoot, contractPath }) => {
     const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
     const request =
       command === "identity"
@@ -381,8 +347,7 @@ export function sandboxTargetCommandExecutor(
 
     await sandbox.setNetworkPolicy("allow-all");
     const setup = await sandbox.run({
-      command:
-        "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
+      command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,
       abortSignal: AbortSignal.timeout(300_000),
     });
@@ -506,15 +471,12 @@ export async function executeTargetIdentityAndPlanning(input: {
               command: `stat -c %a /workspace/repository/${requested.path}`,
             });
       const mode =
-        observedMode?.exitCode === 0 &&
-        /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
+        observedMode?.exitCode === 0 && /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
           ? observedMode.stdout.trim()
           : "644";
       changes.push({
         path: requested.path,
-        ...(before === null
-          ? {}
-          : { before: { mode, digest: sha256(before) } }),
+        ...(before === null ? {} : { before: { mode, digest: sha256(before) } }),
         after: {
           mode,
           digest: sha256(requested.content),
@@ -522,8 +484,7 @@ export async function executeTargetIdentityAndPlanning(input: {
         },
       });
     }
-    if (changes.length === 0)
-      throw new Error("At least one existing-app change is required.");
+    if (changes.length === 0) throw new Error("At least one existing-app change is required.");
     const contract = {
       version: 1 as const,
       appId: input.appId,
@@ -534,9 +495,7 @@ export async function executeTargetIdentityAndPlanning(input: {
     };
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
-    const proposal = targetIterationProposalSchemaForTopology(
-      "microfrontends.json",
-    ).parse({
+    const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
       operation: "iterate-existing-app",
       contract,
       futurePath: identity.contractPath,
@@ -575,9 +534,7 @@ export async function executeTargetIdentityAndPlanning(input: {
       appSpecDigest: input.appSpecDigest,
       ...overlay,
     }),
-    targetProposalSchemaForTopology(
-      "microfrontends.json",
-    ) as unknown as z.ZodType<TargetProposal>,
+    targetProposalSchemaForTopology("microfrontends.json") as unknown as z.ZodType<TargetProposal>,
     "Target planning command",
   );
   if (

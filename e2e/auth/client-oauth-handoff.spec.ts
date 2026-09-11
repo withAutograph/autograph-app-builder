@@ -5,11 +5,7 @@ import { createLocalJWKSet, jwtVerify } from "jose";
 import { expect, test, type Page } from "playwright/test";
 import postgres from "postgres";
 
-import {
-  cursorClientId,
-  cursorRedirectUri,
-  setupCursorClient,
-} from "../../lib/auth/cursor-client";
+import { cursorClientId, cursorRedirectUri, setupCursorClient } from "../../lib/auth/cursor-client";
 import { previewOAuthScopes } from "../../lib/auth/preview-oauth-contract";
 import * as schema from "../../lib/db/schema";
 import {
@@ -48,10 +44,7 @@ type Tokens = {
   scope: string;
 };
 
-async function exchange(
-  page: Page,
-  form: Record<string, string>,
-): Promise<Tokens> {
+async function exchange(page: Page, form: Record<string, string>): Promise<Tokens> {
   // Catch transport/JSON failures so Playwright cannot render token request
   // parameters or raw provider errors in a failed assertion/report.
   try {
@@ -71,18 +64,11 @@ async function exchange(
       throw new Error();
     return value as Tokens;
   } catch {
-    throw new Error(
-      "Client OAuth token exchange failed; sensitive details omitted.",
-    );
+    throw new Error("Client OAuth token exchange failed; sensitive details omitted.");
   }
 }
 
-async function verifyOwner(
-  page: Page,
-  tokens: Tokens,
-  ownerUserId: string,
-  workspaceId: string,
-) {
+async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, workspaceId: string) {
   let stage = "JWKS readback";
   try {
     const response = await page.request.get(`${issuer}/jwks`);
@@ -145,9 +131,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   } finally {
     await sql.end();
   }
-  await page
-    .locator("#app-brief")
-    .fill("Build an authenticate-once acceptance app.");
+  await page.locator("#app-brief").fill("Build an authenticate-once acceptance app.");
   await page.getByLabel("App Name").fill("OAuth Continuity");
   await page.getByRole("radio", { name: "Cursor", exact: true }).check();
   await page.getByRole("button", { name: "Create App", exact: true }).click();
@@ -157,9 +141,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   const handoffPath = new URL(page.url()).pathname;
   const handoffId = handoffPath.split("/").at(-1)!;
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
-  await expect(
-    page.getByRole("link", { name: "Add Autograph to Cursor" }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add Autograph to Cursor" })).toBeVisible();
 
   const providerAuthorizationRequests: string[] = [];
   let consentSubmissions = 0;
@@ -172,12 +154,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
       request.method() === "GET" &&
       request.resourceType() === "image";
     if (
-      ([githubEmulatorOrigin, vercelEmulatorOrigin].includes(url.origin) &&
-        !avatarRead) ||
+      ([githubEmulatorOrigin, vercelEmulatorOrigin].includes(url.origin) && !avatarRead) ||
       /^\/(?:local-oauth|local-connections)\//u.test(url.pathname) ||
-      /\/api\/auth\/(?:sign-in|oauth2\/authorize-provider|oauth2\/link)/u.test(
-        url.pathname,
-      )
+      /\/api\/auth\/(?:sign-in|oauth2\/authorize-provider|oauth2\/link)/u.test(url.pathname)
     )
       providerAuthorizationRequests.push(
         `${request.method()} ${url.pathname} ${request.resourceType()} prefetch=${request.headers()["next-router-prefetch"] ?? "none"}`,
@@ -237,13 +216,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
     }
     if (first) {
       // Read pathname/signature presence as booleans, avoiding sensitive URLs in reports.
-      await expect
-        .poll(() => new URL(page.url()).pathname)
-        .toBe("/auth/consent");
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/auth/consent");
       expect(new URL(page.url()).searchParams.has("sig")).toBe(true);
-      await expect(
-        page.getByText("dev@autograph.local", { exact: true }),
-      ).toBeVisible();
+      await expect(page.getByText("dev@autograph.local", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Allow", exact: true }).click();
     }
     await expect.poll(() => Boolean(callback), { timeout: 30_000 }).toBe(true);
@@ -262,10 +237,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
     try {
       // Receiving the request precedes the browser committing the callback
       // document. Wait for that navigation before leaving it.
-      await page.waitForURL(
-        (target) => target.origin + target.pathname === cursorRedirectUri,
-        { waitUntil: "load" },
-      );
+      await page.waitForURL((target) => target.origin + target.pathname === cursorRedirectUri, {
+        waitUntil: "load",
+      });
       await page.goto(`${appOrigin}${handoffPath}`);
     } catch {
       throw new Error("OAuth callback navigation failed; URL omitted.");
@@ -300,9 +274,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   const handoff = await page.request.get(`/api/builder/handoffs/${handoffId}`);
   expect(handoff.ok()).toBe(true);
   expect((await handoff.json()).status).toBe("prepared");
-  await expect(
-    page.getByText("Continued in your app", { exact: false }),
-  ).toHaveCount(0);
+  await expect(page.getByText("Continued in your app", { exact: false })).toHaveCount(0);
 
   // dev-emulated configures browser OAuth but not MCP_OAUTH_* or the hosted
   // forwarder/workload identity. Do not fake /mcp redemption or engine proof.

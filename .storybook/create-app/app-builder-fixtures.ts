@@ -115,18 +115,14 @@ export const storyProvisioning = {
   updatedAt: "2026-08-30T12:00:00.000Z",
 } satisfies BuilderProvisionResponse;
 
-export const storyTeamOptions = storyIntegrations.vercel.scopes.map(
-  (scope) => ({
-    value: scope.installationId,
-    label: scope.displayName,
-    detail: scope.plan,
-  }),
-);
+export const storyTeamOptions = storyIntegrations.vercel.scopes.map((scope) => ({
+  value: scope.installationId,
+  label: scope.displayName,
+  detail: scope.plan,
+}));
 
-export const storyGitScopeOptions = storyIntegrations.github.scopes.map(
-  (scope) => ({
-    value: scope.installationId,
-    label: scope.accountLogin,
-    detail: scope.accountType,
-  }),
-);
+export const storyGitScopeOptions = storyIntegrations.github.scopes.map((scope) => ({
+  value: scope.installationId,
+  label: scope.accountLogin,
+  detail: scope.accountType,
+}));

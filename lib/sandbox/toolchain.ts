@@ -40,16 +40,10 @@ export function configuredToolchainImage(
   return image;
 }
 
-export function toolVersionMatches(
-  tool: RequiredTool,
-  version: string,
-): boolean {
+export function toolVersionMatches(tool: RequiredTool, version: string): boolean {
   return requiredToolVersions[tool].test(version);
 }
 
-export function sandboxRevalidationKey(
-  image: string | undefined,
-  backend = "local",
-): string {
+export function sandboxRevalidationKey(image: string | undefined, backend = "local"): string {
   return `autograph-app-builder-toolchain-v2:${backend}:${image ?? "unconfigured"}`;
 }

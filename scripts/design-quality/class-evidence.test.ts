@@ -24,14 +24,9 @@ describe("intrinsic class evidence", () => {
       "tokenized",
     ]);
     expect(generatedSignatureSelector(candidate, ".generated-card")).toBe(true);
-    expect(generatedSignatureSelector(candidate, ".generated-card:hover")).toBe(
-      false,
-    );
+    expect(generatedSignatureSelector(candidate, ".generated-card:hover")).toBe(false);
     expect(
-      uniqueIntrinsicSignature(generated, "div", [
-        "generated-card",
-        "tokenized",
-      ]),
+      uniqueIntrinsicSignature(generated, "div", ["generated-card", "tokenized"]),
     ).toBeUndefined();
   });
 
@@ -49,10 +44,8 @@ describe("intrinsic class evidence", () => {
 
   it("keeps source-only and shared-collision signatures unknown", () => {
     expect(
-      signatureAttribution(generated, undefined, "section", [
-        "generated-card",
-        "tokenized",
-      ]).provenance,
+      signatureAttribution(generated, undefined, "section", ["generated-card", "tokenized"])
+        .provenance,
     ).toBe("unknown");
     const shared = collectIntrinsicClassSignatures([
       {
@@ -64,10 +57,8 @@ describe("intrinsic class evidence", () => {
     // The generated candidate is deliberately unrendered in this adversarial
     // case; an identical shared DOM signature must not gain generated credit.
     expect(
-      signatureAttribution(generated, shared, "section", [
-        "generated-card",
-        "tokenized",
-      ]).provenance,
+      signatureAttribution(generated, shared, "section", ["generated-card", "tokenized"])
+        .provenance,
     ).toBe("unknown");
   });
 
@@ -84,9 +75,7 @@ describe("intrinsic class evidence", () => {
     expect(escapedTailwindClassToken(selector)).toBe(
       "data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]",
     );
-    expect(escapedTailwindClassToken('.token[data-label="a]b"][data-x]')).toBe(
-      "token",
-    );
+    expect(escapedTailwindClassToken('.token[data-label="a]b"][data-x]')).toBe("token");
     for (const invalid of [
       ".token[data-x] .other",
       ".token[data-x]:hover",
@@ -98,12 +87,9 @@ describe("intrinsic class evidence", () => {
       provenance: "shared",
       source: { path: "packages/design-systems/RecordList.tsx" },
     });
-    expect(
-      classTokenAttribution([], [...shared, { ...shared[0]! }], selector)
-        .provenance,
-    ).toBe("unknown");
-    expect(classTokenAttribution([], shared, ".item:hover").provenance).toBe(
+    expect(classTokenAttribution([], [...shared, { ...shared[0]! }], selector).provenance).toBe(
       "unknown",
     );
+    expect(classTokenAttribution([], shared, ".item:hover").provenance).toBe("unknown");
   });
 });

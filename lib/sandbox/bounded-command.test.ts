@@ -130,10 +130,7 @@ describe("bounded sandbox command", () => {
       void options;
       return fixture.process;
     });
-    await runBoundedSandboxCommand(
-      { spawn },
-      { command: "true", env: { SAFE_INPUT: "exact" } },
-    );
+    await runBoundedSandboxCommand({ spawn }, { command: "true", env: { SAFE_INPUT: "exact" } });
     expect((spawn.mock.calls[0]?.[0] as { env?: unknown }).env).toEqual({
       SAFE_INPUT: "exact",
     });

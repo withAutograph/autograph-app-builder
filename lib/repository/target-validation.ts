@@ -6,14 +6,8 @@ import {
   supportedValidationCommands,
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
-import {
-  ARRUSTED_APP_VALIDATION_SHA256,
-  type ExecutionDependencyLayout,
-} from "./dependency-cache";
-import {
-  type ApplyCommandResult,
-  type TargetApplyReceipt,
-} from "./target-apply";
+import { ARRUSTED_APP_VALIDATION_SHA256, type ExecutionDependencyLayout } from "./dependency-cache";
+import { type ApplyCommandResult, type TargetApplyReceipt } from "./target-apply";
 
 export type TargetValidationCommand =
   | `mise run app:check-build ${string}`
@@ -118,8 +112,7 @@ export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
-const sha256 = (value: string) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const compilerDiagnosticPatterns = [
   /^(.*?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)$/u,
@@ -138,11 +131,7 @@ function safeDiagnosticPath(value: string): string | undefined {
     path.length === 0 ||
     path.length > 500 ||
     path.startsWith("/") ||
-    path
-      .split("/")
-      .some(
-        (segment) => segment === "" || segment === "." || segment === "..",
-      ) ||
+    path.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
     !/^[A-Za-z0-9._@/-]+$/u.test(path)
   )
     return undefined;
@@ -160,9 +149,7 @@ function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
   return "Compiler error at this location; inspect the reported code and file.";
 }
 
-export function compilerDiagnostics(
-  output: string,
-): TargetValidationDiagnostic[] {
+export function compilerDiagnostics(output: string): TargetValidationDiagnostic[] {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
   let pendingCompiler: { code: `TS${number}` } | undefined;
@@ -176,11 +163,7 @@ export function compilerDiagnostics(
     const path = safeDiagnosticPath(pathValue);
     const line = Number(lineValue);
     const column = Number(columnValue);
-    if (
-      path === undefined ||
-      !Number.isSafeInteger(line) ||
-      !Number.isSafeInteger(column)
-    )
+    if (path === undefined || !Number.isSafeInteger(line) || !Number.isSafeInteger(column))
       return false;
     const diagnostic = {
       code,
@@ -217,12 +200,7 @@ export function compilerDiagnostics(
     }
     const vitestLocation = vitestLocationPattern.exec(sourceLine);
     if (vitestLocation !== null && pendingVitestMessage) {
-      const recorded = append(
-        "VITEST",
-        vitestLocation[1],
-        vitestLocation[2],
-        vitestLocation[3],
-      );
+      const recorded = append("VITEST", vitestLocation[1], vitestLocation[2], vitestLocation[3]);
       if (recorded) pendingVitestMessage = false;
       continue;
     }
@@ -237,9 +215,7 @@ export function compilerDiagnostics(
   return diagnostics;
 }
 
-export function validationBinding(
-  apply: TargetApplyReceipt,
-): TargetValidationBinding {
+export function validationBinding(apply: TargetApplyReceipt): TargetValidationBinding {
   return {
     appId: apply.targetReceipt.appId,
     testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
@@ -285,9 +261,7 @@ export function createTargetValidationAttempt(
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
 
-function attemptBinding(
-  attempt: TargetValidationAttemptReceipt,
-): TargetValidationBinding {
+function attemptBinding(attempt: TargetValidationAttemptReceipt): TargetValidationBinding {
   return {
     appId: attempt.appId,
     testShards: attempt.testShards,
@@ -346,8 +320,7 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
 
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ appId, command }) =>
-    appId === "validation-failure" &&
-    command.startsWith("mise run app:check-build ")
+    appId === "validation-failure" && command.startsWith("mise run app:check-build ")
       ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }
       : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
 }
@@ -369,9 +342,7 @@ function failureReceipt(
     reason,
     recoveryRequired: true as const,
     ...(commandFailure === undefined ? {} : { commandFailure }),
-    ...(diagnostics === undefined || diagnostics.length === 0
-      ? {}
-      : { diagnostics }),
+    ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
@@ -425,9 +396,7 @@ export async function executeProposalBoundValidation(input: {
           {
             name: planned.name,
             exitCode: result.exitCode,
-            ...(/(?:script not found|missing script)/iu.test(
-              `${result.stderr}\n${result.stdout}`,
-            )
+            ...(/(?:script not found|missing script)/iu.test(`${result.stderr}\n${result.stdout}`)
               ? {
                   hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
                 }

@@ -11,9 +11,7 @@ import {
 
 const sessionId = "session-1";
 
-function record(
-  input: Partial<Parameters<typeof recordPrototypeArtifactRevision>[0]> = {},
-) {
+function record(input: Partial<Parameters<typeof recordPrototypeArtifactRevision>[0]> = {}) {
   return recordPrototypeArtifactRevision({
     artifacts: [],
     path: "prototype/expense-review/app-spec.md",
@@ -27,17 +25,16 @@ function record(
 
 describe("prototype artifact receipts", () => {
   it("allows only the three exact files below one kebab-case app id", () => {
-    expect(
-      parsePrototypeArtifactPath("prototype/expense-review/app-spec.md"),
-    ).toEqual({ appId: "expense-review", fileName: "app-spec.md" });
-    expect(
-      expectedPrototypeArtifactMediaType(
-        "prototype/expense-review/decisions.md",
-      ),
-    ).toBe("text/markdown");
-    expect(
-      expectedPrototypeArtifactMediaType("prototype/expense-review/index.html"),
-    ).toBe("text/html");
+    expect(parsePrototypeArtifactPath("prototype/expense-review/app-spec.md")).toEqual({
+      appId: "expense-review",
+      fileName: "app-spec.md",
+    });
+    expect(expectedPrototypeArtifactMediaType("prototype/expense-review/decisions.md")).toBe(
+      "text/markdown",
+    );
+    expect(expectedPrototypeArtifactMediaType("prototype/expense-review/index.html")).toBe(
+      "text/html",
+    );
     for (const path of [
       "prototype/Expense-review/app-spec.md",
       "prototype/expense-review/other.md",
@@ -99,9 +96,7 @@ describe("prototype artifact receipts", () => {
     expect(changedBytes.artifact.digest).not.toBe(first.artifact.digest);
     expect(changedBytes.artifact.revision).not.toBe(first.artifact.revision);
     expect(changedPath.artifact.digest).toBe(changedBytes.artifact.digest);
-    expect(changedPath.artifact.revision).not.toBe(
-      changedBytes.artifact.revision,
-    );
+    expect(changedPath.artifact.revision).not.toBe(changedBytes.artifact.revision);
   });
 
   it("rejects media-type drift and a second app id in one session", () => {
@@ -189,12 +184,8 @@ describe("prototype artifact receipts", () => {
     }
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
-      instruction: expect.stringContaining(
-        "replace the complete Markdown artifact",
-      ),
-      issues: expect.arrayContaining([
-        expect.objectContaining({ code: "missing_heading" }),
-      ]),
+      instruction: expect.stringContaining("replace the complete Markdown artifact"),
+      issues: expect.arrayContaining([expect.objectContaining({ code: "missing_heading" })]),
     });
   });
 });

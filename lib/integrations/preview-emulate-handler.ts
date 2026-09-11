@@ -74,9 +74,9 @@ export function createPreviewEmulateHandler(input: {
       while (stableTurns < 3) {
         const revision = persistenceRevision;
         await pendingPersistence;
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve);
-    });
+        await new Promise<void>((resolve) => {
+          setImmediate(resolve);
+        });
         stableTurns = revision === persistenceRevision ? stableTurns + 1 : 0;
       }
       return response;
@@ -104,11 +104,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
   const emulation = readPreviewProviderEmulation(process.env);
   const url = new URL(request.url);
   const prefix = "/api/emulate/";
-  if (
-    !emulation ||
-    url.origin !== emulation.canonicalOrigin ||
-    !url.pathname.startsWith(prefix)
-  )
+  if (!emulation || url.origin !== emulation.canonicalOrigin || !url.pathname.startsWith(prefix))
     return new Response("Not found", { status: 404 });
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
   const method = request.method as keyof Handler;
@@ -119,10 +115,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
 }
 
 export function previewEmulateRoute(method: keyof Handler) {
-  return async (
-    request: Request,
-    context: { params: Promise<{ path: string[] }> },
-  ) => {
+  return async (request: Request, context: { params: Promise<{ path: string[] }> }) => {
     try {
       const selected = handler(process.env);
       if (!selected) return new Response("Not found", { status: 404 });

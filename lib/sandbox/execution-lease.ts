@@ -49,9 +49,7 @@ export const sandboxExecutionLeaseSchema = z
     ) {
       context.addIssue({ code: "custom", message: "Invalid lease interval." });
     }
-    const released =
-      lease.releasedAtEpochMs !== undefined &&
-      lease.releaseReason !== undefined;
+    const released = lease.releasedAtEpochMs !== undefined && lease.releaseReason !== undefined;
     if ((lease.state === "released") !== released) {
       context.addIssue({
         code: "custom",
@@ -61,9 +59,7 @@ export const sandboxExecutionLeaseSchema = z
   });
 
 export type SandboxExecutionLease = z.infer<typeof sandboxExecutionLeaseSchema>;
-export type SandboxLeaseReleaseReason = NonNullable<
-  SandboxExecutionLease["releaseReason"]
->;
+export type SandboxLeaseReleaseReason = NonNullable<SandboxExecutionLease["releaseReason"]>;
 
 export type AcquireSandboxLeaseResult =
   | { disposition: "acquired" | "existing"; lease: SandboxExecutionLease }
@@ -79,7 +75,7 @@ export interface SandboxExecutionLeaseStore {
     providerSandboxId: string;
     policy: SandboxExecutionPolicy;
     nowEpochMs: number;
-}) => Promise<AcquireSandboxLeaseResult>;
+  }) => Promise<AcquireSandboxLeaseResult>;
   assertCurrent: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
@@ -87,20 +83,20 @@ export interface SandboxExecutionLeaseStore {
     epoch: number;
     policyDigest: string;
     nowEpochMs: number;
-}) => Promise<SandboxExecutionLease>;
+  }) => Promise<SandboxExecutionLease>;
   heartbeat: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     epoch: number;
     nowEpochMs: number;
-}) => Promise<SandboxExecutionLease>;
+  }) => Promise<SandboxExecutionLease>;
   release: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     epoch: number;
     reason: SandboxLeaseReleaseReason;
     nowEpochMs: number;
-}) => Promise<SandboxExecutionLease>;
+  }) => Promise<SandboxExecutionLease>;
   releaseCurrent: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
@@ -108,28 +104,23 @@ export interface SandboxExecutionLeaseStore {
     policyDigest: string;
     reason: SandboxLeaseReleaseReason;
     nowEpochMs: number;
-}) => Promise<SandboxExecutionLease | null>;
+  }) => Promise<SandboxExecutionLease | null>;
   claimExpired: (input: {
     nowEpochMs: number;
     limit: number;
-}) => Promise<readonly SandboxExecutionLease[]>;
+  }) => Promise<readonly SandboxExecutionLease[]>;
   settleRecovery: (input: {
     lease: SandboxExecutionLease;
     providerOutcome: "stopped" | "stop-failed";
     nowEpochMs: number;
-}) => Promise<SandboxExecutionLease | null>;
+  }) => Promise<SandboxExecutionLease | null>;
 }
 
-export function sandboxLeaseKey(
-  principal: HostedPrincipal,
-  adapterSessionId: string,
-): string {
+export function sandboxLeaseKey(principal: HostedPrincipal, adapterSessionId: string): string {
   return JSON.stringify([tenantKeyFor(principal), adapterSessionId]);
 }
 
-export function sandboxLeaseReceiptDigest(
-  lease: SandboxExecutionLease,
-): string {
+export function sandboxLeaseReceiptDigest(lease: SandboxExecutionLease): string {
   return `sha256:${createHash("sha256")
     .update(JSON.stringify(sandboxExecutionLeaseSchema.parse(lease)))
     .digest("hex")}`;
@@ -142,29 +133,20 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["acquire"]>[0],
   ): Promise<AcquireSandboxLeaseResult> {
     const principal = hostedPrincipalSchema.parse(input.principal);
-    const adapterSessionId = hostedIdentifierSchema.parse(
-      input.adapterSessionId,
-    );
-    const providerSandboxId = hostedIdentifierSchema.parse(
-      input.providerSandboxId,
-    );
+    const adapterSessionId = hostedIdentifierSchema.parse(input.adapterSessionId);
+    const providerSandboxId = hostedIdentifierSchema.parse(input.providerSandboxId);
     const policyDigest = sandboxExecutionPolicyDigest(input.policy);
     const key = sandboxLeaseKey(principal, adapterSessionId);
     const existing = this.leases.get(key);
     if (existing?.state === "orphaned") {
       return { disposition: "rejected", reason: "recovery-in-progress" };
     }
-    if (
-      existing?.state === "active" &&
-      existing.expiresAtEpochMs > input.nowEpochMs
-    ) {
+    if (existing?.state === "active" && existing.expiresAtEpochMs > input.nowEpochMs) {
       if (
         existing.providerSandboxId !== providerSandboxId ||
         existing.policyDigest !== policyDigest
       ) {
-        throw new Error(
-          "An active sandbox lease is bound to different inputs.",
-        );
+        throw new Error("An active sandbox lease is bound to different inputs.");
       }
       return { disposition: "existing", lease: structuredClone(existing) };
     }
@@ -187,9 +169,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   async assertCurrent(
     input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
   ): Promise<SandboxExecutionLease> {
-    const lease = this.leases.get(
-      sandboxLeaseKey(input.principal, input.adapterSessionId),
-    );
+    const lease = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
     if (
       lease === undefined ||
       lease.state !== "active" ||
@@ -243,9 +223,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   async releaseCurrent(
     input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
   ): Promise<SandboxExecutionLease | null> {
-    const current = this.leases.get(
-      sandboxLeaseKey(input.principal, input.adapterSessionId),
-    );
+    const current = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
     if (current === undefined) return null;
     if (
       current.providerSandboxId !== input.providerSandboxId ||
@@ -287,10 +265,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   async settleRecovery(
     input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0],
   ): Promise<SandboxExecutionLease | null> {
-    const key = sandboxLeaseKey(
-      input.lease.principal,
-      input.lease.adapterSessionId,
-    );
+    const key = sandboxLeaseKey(input.lease.principal, input.lease.adapterSessionId);
     const current = this.leases.get(key);
     if (
       current === undefined ||

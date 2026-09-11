@@ -35,9 +35,7 @@ describe("Vercel integration security", () => {
     const secret = "client-secret";
     const signature = createHmac("sha1", secret).update(body).digest("hex");
     expect(verifyVercelWebhook({ body, signature, secret })).toBe(true);
-    expect(verifyVercelWebhook({ body: `${body} `, signature, secret })).toBe(
-      false,
-    );
+    expect(verifyVercelWebhook({ body: `${body} `, signature, secret })).toBe(false);
   });
 
   it.each(["/", "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32"] as const)(
@@ -108,17 +106,12 @@ describe("Vercel integration security", () => {
       });
       const redirect = await authorization.begin(authority);
       const state = new URL(redirect).searchParams.get("state");
-      const callback = new URL(
-        "https://builder.example/vercel/installations/callback",
-      );
+      const callback = new URL("https://builder.example/vercel/installations/callback");
       callback.searchParams.set("code", "one-time-code");
       callback.searchParams.set("state", state!);
       callback.searchParams.set("configurationId", "icfg_1");
       callback.searchParams.set("teamId", "team_1");
-      const result = await authorization.complete(
-        callback.toString(),
-        authority,
-      );
+      const result = await authorization.complete(callback.toString(), authority);
       expect(result.binding).toMatchObject({
         installationId: "icfg_1",
         slug: "autograph",
@@ -126,9 +119,7 @@ describe("Vercel integration security", () => {
       expect(result.returnState).toEqual(recoveredReturnState);
       expect(binds).toHaveLength(1);
       expect(JSON.stringify(binds)).toContain("provider-token-sentinel");
-      await expect(
-        authorization.complete(callback.toString(), authority),
-      ).rejects.toMatchObject({
+      await expect(authorization.complete(callback.toString(), authority)).rejects.toMatchObject({
         message: "state-invalid",
         returnState: recoveredReturnState,
       });

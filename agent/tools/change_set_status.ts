@@ -25,10 +25,7 @@ export async function exactNormalizedChangeSet(input: {
         input.state.applyReceipt.applyRoot,
         input.state.appSpec.appId,
       )
-    : await inspectApplyOverlay(
-        input.sandbox,
-        input.state.applyReceipt.applyRoot,
-      );
+    : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
   const changes = overlayChanges(
     {
       files: input.state.applyReceipt.preTree,
@@ -42,9 +39,7 @@ export async function exactNormalizedChangeSet(input: {
       postTree: observed.files,
       postTreeDigest: observed.treeDigest,
       changes,
-      changedContentDigest: createHash("sha256")
-        .update(JSON.stringify(changes))
-        .digest("hex"),
+      changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
     },
     input.state.validationReceipt,
     input.state.proposal.contractDigest,
@@ -60,9 +55,7 @@ export default defineTool({
     void _input;
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
-      throw new Error(
-        "Run the repository validation before reviewing its changes.",
-      );
+      throw new Error("Run the repository validation before reviewing its changes.");
     const changeSet = await exactNormalizedChangeSet({
       state,
       sandbox: await ctx.getSandbox(),

@@ -10,9 +10,7 @@ export function buildAppHandoffPrompt(
   destination: HandoffDestination = "codex",
 ) {
   if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-      handoffId,
-    )
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(handoffId)
   )
     throw new Error("handoff-id-invalid");
   const setup =
@@ -38,13 +36,8 @@ Continue the prepared app by calling autograph_start with {"handoffId":"${handof
 Use the same Autograph account as the web form. Reuse its saved GitHub and Vercel connections and selected resources through Autograph. Do not request provider tokens or separate provider logins. If access needs attention, use Autograph's recovery flow. If autograph_start remains unavailable after the destination-specific recovery above, explain the specific blocker and stop. This handoff does not approve building, publishing, or deploying; retain the normal approval flow.`;
 }
 
-export function buildAppHandoffUrl(
-  destination: HandoffDestination,
-  handoffId: string,
-) {
-  const prompt = encodeURIComponent(
-    buildAppHandoffPrompt(handoffId, destination),
-  );
+export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: string) {
+  const prompt = encodeURIComponent(buildAppHandoffPrompt(handoffId, destination));
   return destination === "codex"
     ? `codex://new?prompt=${prompt}`
     : `cursor://anysphere.cursor-deeplink/prompt?text=${prompt}`;
@@ -55,10 +48,7 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
   const url = new URL(mcpUrl);
   if (
     (url.protocol !== "https:" &&
-      !(
-        url.protocol === "http:" &&
-        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-      )) ||
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
     url.pathname !== "/mcp" ||
     url.username ||
     url.password ||
@@ -71,9 +61,7 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
   });
   const encoded = btoa(
-    Array.from(new TextEncoder().encode(config), (byte) =>
-      String.fromCharCode(byte),
-    ).join(""),
+    Array.from(new TextEncoder().encode(config), (byte) => String.fromCharCode(byte)).join(""),
   );
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
 }

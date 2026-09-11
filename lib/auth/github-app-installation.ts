@@ -1,9 +1,4 @@
-import {
-  createHash,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
@@ -15,10 +10,7 @@ import {
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";
-import {
-  createGitHubOAuthApp,
-  createGitHubTokenOctokit,
-} from "../github/octokit";
+import { createGitHubOAuthApp, createGitHubTokenOctokit } from "../github/octokit";
 
 const GITHUB_ORIGIN = "https://github.com";
 const STATE_LIFETIME_MS = 10 * 60 * 1_000;
@@ -42,8 +34,7 @@ export type GitHubOAuthErrorCategory =
   | "bad_verification_code"
   | "unverified_user_email";
 
-export type GitHubOAuthCallbackError =
-  "access_denied" | "temporarily_unavailable" | "server_error";
+export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
 type GitHubCallbackDiagnostic = {
   queryKeys: string[];
@@ -67,15 +58,12 @@ type GitHubStateValidationDiagnostic = {
     | "state-authority-digest"
     | "state-time";
   stateDigest?: string;
-  callbackParseReason?:
-    "duplicate-key" | "state-format" | "callback-shape" | "code-format";
+  callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
 };
 
 class GitHubCallbackParseError extends Error {
   constructor(
-    readonly reason: NonNullable<
-      GitHubStateValidationDiagnostic["callbackParseReason"]
-    >,
+    readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>,
   ) {
     super("invalid-callback");
   }
@@ -100,15 +88,12 @@ export class GitHubInstallationAuthorizationError extends Error {
 }
 
 export function githubInstallationAuthorizationDiagnostic(error: unknown) {
-  if (!(error instanceof GitHubInstallationAuthorizationError))
-    return undefined;
+  if (!(error instanceof GitHubInstallationAuthorizationError)) return undefined;
   return {
     stage: error.stage,
     ...(error.category === undefined ? {} : { category: error.category }),
     ...(error.callback === undefined ? {} : { callback: error.callback }),
-    ...(error.stateValidation === undefined
-      ? {}
-      : { stateValidation: error.stateValidation }),
+    ...(error.stateValidation === undefined ? {} : { stateValidation: error.stateValidation }),
   };
 }
 
@@ -116,9 +101,7 @@ type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 const decimalSchema = z.string().regex(/^[1-9][0-9]*$/u);
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
-const githubLoginSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u);
+const githubLoginSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u);
 
 const configSchema = z
   .object({
@@ -180,10 +163,7 @@ export type GitHubAppInstallationConfig = z.infer<typeof configSchema>;
 export function readGitHubAppInstallationEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): GitHubAppInstallationConfig {
-  if (
-    environment.GITHUB_TOKEN !== undefined ||
-    environment.GITHUB_API_URL !== undefined
-  ) {
+  if (environment.GITHUB_TOKEN !== undefined || environment.GITHUB_API_URL !== undefined) {
     throw new Error("GitHub App installation configuration is invalid.");
   }
   const parsed = configSchema.safeParse({
@@ -195,8 +175,7 @@ export function readGitHubAppInstallationEnvironment(
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
   });
-  if (!parsed.success)
-    throw new Error("GitHub App installation configuration is invalid.");
+  if (!parsed.success) throw new Error("GitHub App installation configuration is invalid.");
   return parsed.data;
 }
 
@@ -208,13 +187,13 @@ export interface GitHubInstallationAuthorizationStateStore {
     createdAt: Date;
     expiresAt: Date;
     returnState: ProviderConnectionReturn;
-}) => Promise<void>;
+  }) => Promise<void>;
   consume: (input: {
     stateDigest: string;
     authority: HostedTenantAuthority;
     authorityDigest: string;
     now: Date;
-}) => Promise<boolean>;
+  }) => Promise<boolean>;
 }
 
 export interface GitHubInstallationMembershipAuthority {
@@ -232,8 +211,7 @@ function githubOAuthErrorCategory(value: unknown) {
     : undefined;
 }
 
-const sha256 = (value: string) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const canonicalAuthority = (authority: HostedTenantAuthority) =>
   JSON.stringify({
@@ -243,34 +221,20 @@ const canonicalAuthority = (authority: HostedTenantAuthority) =>
     ownerUserId: authority.ownerUserId,
   });
 
-const authorityDigest = (authority: HostedTenantAuthority) =>
-  sha256(canonicalAuthority(authority));
+const authorityDigest = (authority: HostedTenantAuthority) => sha256(canonicalAuthority(authority));
 
 function property(value: unknown, key: string): unknown {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !(key in value)
-  )
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value))
     throw new Error("invalid-response");
   return (value as Record<string, unknown>)[key];
 }
 
 function decimalProperty(value: unknown, key: string): string {
   const candidate = property(value, key);
-  if (
-    typeof candidate === "number" &&
-    Number.isSafeInteger(candidate) &&
-    candidate > 0
-  ) {
+  if (typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0) {
     return String(candidate);
   }
-  if (
-    typeof candidate === "string" &&
-    decimalSchema.safeParse(candidate).success
-  )
-    return candidate;
+  if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) return candidate;
   throw new Error("invalid-response");
 }
 
@@ -282,8 +246,7 @@ function stringProperty(value: unknown, key: string): string {
 
 function nullableStringProperty(value: unknown, key: string): string | null {
   const candidate = property(value, key);
-  if (candidate !== null && typeof candidate !== "string")
-    throw new Error("invalid-response");
+  if (candidate !== null && typeof candidate !== "string") throw new Error("invalid-response");
   return candidate;
 }
 
@@ -304,12 +267,8 @@ function signedState(input: {
       nonce: input.nonce,
       authorityDigest: binding,
       phase: input.phase,
-      ...(input.installationId === undefined
-        ? {}
-        : { installationId: input.installationId }),
-      ...(input.setupAction === undefined
-        ? {}
-        : { setupAction: input.setupAction }),
+      ...(input.installationId === undefined ? {} : { installationId: input.installationId }),
+      ...(input.setupAction === undefined ? {} : { setupAction: input.setupAction }),
       returnTo: input.returnState.returnTo,
       ...(input.returnState.resumeKey === undefined
         ? {}
@@ -428,29 +387,17 @@ function verifyState(input: {
     setupAction: parsed.setupAction,
     returnState: {
       returnTo: parsed.returnTo,
-      ...(parsed.resumeKey === undefined
-        ? {}
-        : { resumeKey: parsed.resumeKey }),
+      ...(parsed.resumeKey === undefined ? {} : { resumeKey: parsed.resumeKey }),
     },
   };
 }
 
 function callbackInput(url: string) {
   const query = new URL(url).searchParams;
-  const singular = [
-    "code",
-    "error",
-    "installation_id",
-    "setup_action",
-    "state",
-  ];
+  const singular = ["code", "error", "installation_id", "setup_action", "state"];
   if (singular.some((key) => query.getAll(key).length > 1))
     throw new GitHubCallbackParseError("duplicate-key");
-  const stateResult = z
-    .string()
-    .min(1)
-    .max(2_048)
-    .safeParse(query.get("state"));
+  const stateResult = z.string().min(1).max(2_048).safeParse(query.get("state"));
   if (!stateResult.success) throw new GitHubCallbackParseError("state-format");
   const state = stateResult.data;
   const code = query.get("code");
@@ -465,11 +412,7 @@ function callbackInput(url: string) {
       throw new GitHubCallbackParseError("callback-shape");
     return {
       kind: "oauth-error" as const,
-      error: [
-        "access_denied",
-        "temporarily_unavailable",
-        "server_error",
-      ].includes(oauthError)
+      error: ["access_denied", "temporarily_unavailable", "server_error"].includes(oauthError)
         ? (oauthError as GitHubOAuthCallbackError)
         : undefined,
       state,
@@ -481,8 +424,7 @@ function callbackInput(url: string) {
       query.getAll("state").length !== 1 ||
       query.has("installation_id") !== query.has("setup_action") ||
       (query.has("installation_id") &&
-        (query.getAll("installation_id").length !== 1 ||
-          query.getAll("setup_action").length !== 1))
+        (query.getAll("installation_id").length !== 1 || query.getAll("setup_action").length !== 1))
     ) {
       throw new GitHubCallbackParseError("callback-shape");
     }
@@ -493,9 +435,7 @@ function callbackInput(url: string) {
       ...(query.has("installation_id")
         ? {
             installationId: decimalSchema.parse(query.get("installation_id")),
-            setupAction: z
-              .enum(["install", "update"])
-              .parse(query.get("setup_action")),
+            setupAction: z.enum(["install", "update"]).parse(query.get("setup_action")),
           }
         : {}),
       state,
@@ -530,16 +470,10 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
   const state = query.get("state");
   const code = query.get("code");
   const error = query.get("error");
-  const unknownKeys = [
-    ...new Set([...query.keys()].filter((key) => !known.has(key))),
-  ];
+  const unknownKeys = [...new Set([...query.keys()].filter((key) => !known.has(key)))];
   return {
-    queryKeys: [
-      ...new Set([...query.keys()].filter((key) => known.has(key))),
-    ].sort(),
-    keyCounts: Object.fromEntries(
-      [...known].map((key) => [key, query.getAll(key).length]),
-    ),
+    queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].sort(),
+    keyCounts: Object.fromEntries([...known].map((key) => [key, query.getAll(key).length])),
     unknownKeyCount: unknownKeys.length,
     ...(unknownKeys.length === 0
       ? {}
@@ -550,9 +484,7 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
     ...(code === null ? {} : { codeLength: code.length }),
     statePresent: state !== null,
     ...(state === null ? {} : { stateLength: state.length }),
-    ...(["access_denied", "temporarily_unavailable", "server_error"].includes(
-      error ?? "",
-    )
+    ...(["access_denied", "temporarily_unavailable", "server_error"].includes(error ?? "")
       ? { error: error as GitHubOAuthCallbackError }
       : {}),
   };
@@ -571,11 +503,7 @@ function oauthErrorCategoryFromException(error: unknown) {
 function normalizedUserTokens(authentication: unknown, now: number) {
   try {
     const accessToken = stringProperty(authentication, "token");
-    if (
-      accessToken.length < 20 ||
-      accessToken.length > 512 ||
-      /[\0\r\n]/u.test(accessToken)
-    )
+    if (accessToken.length < 20 || accessToken.length > 512 || /[\0\r\n]/u.test(accessToken))
       throw new Error("invalid-token");
     const expiresAt =
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
@@ -586,14 +514,11 @@ function normalizedUserTokens(authentication: unknown, now: number) {
         ? String(propertyOrUndefined(authentication, "refreshToken"))
         : undefined;
     const refreshTokenExpiresAt =
-      typeof propertyOrUndefined(authentication, "refreshTokenExpiresAt") ===
-      "string"
+      typeof propertyOrUndefined(authentication, "refreshTokenExpiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "refreshTokenExpiresAt"))
         : undefined;
     const expiring =
-      expiresAt !== undefined ||
-      refreshToken !== undefined ||
-      refreshTokenExpiresAt !== undefined;
+      expiresAt !== undefined || refreshToken !== undefined || refreshTokenExpiresAt !== undefined;
     if (
       expiring &&
       (expiresAt === undefined ||
@@ -624,8 +549,7 @@ function normalizedUserTokens(authentication: unknown, now: number) {
 }
 
 function propertyOrUndefined(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   return key in value ? (value as Record<string, unknown>)[key] : undefined;
 }
 
@@ -641,12 +565,8 @@ function installationIdentity(value: unknown) {
     suspendedAt: nullableStringProperty(value, "suspended_at"),
     accountId: decimalProperty(account, "id"),
     accountLogin: githubLoginSchema.parse(stringProperty(account, "login")),
-    accountType: z
-      .enum(["Organization", "User"])
-      .parse(stringProperty(account, "type")),
-    targetType: z
-      .enum(["Organization", "User"])
-      .parse(stringProperty(value, "target_type")),
+    accountType: z.enum(["Organization", "User"]).parse(stringProperty(account, "type")),
+    targetType: z.enum(["Organization", "User"]).parse(stringProperty(value, "target_type")),
   };
 }
 
@@ -668,10 +588,10 @@ async function accessibleInstallation(input: {
 }) {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
   for (let page = 1; page <= 10; page += 1) {
-    const { data: body } = await input.octokit.request(
-      "GET /user/installations",
-      { per_page: 100, page },
-    );
+    const { data: body } = await input.octokit.request("GET /user/installations", {
+      per_page: 100,
+      page,
+    });
     const totalCount = property(body, "total_count");
     const installations = property(body, "installations");
     if (
@@ -739,10 +659,7 @@ export function createGitHubAppInstallationAuthorization(input: {
     : request;
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
-  const callbackUrl = new URL(
-    "/github/installations/callback",
-    config.issuer,
-  ).toString();
+  const callbackUrl = new URL("/github/installations/callback", config.issuer).toString();
 
   async function persistInstallationBinding(
     authority: HostedTenantAuthority,
@@ -867,14 +784,10 @@ export function createGitHubAppInstallationAuthorization(input: {
         try {
           activeMember = await input.membership.isActiveMember(authority);
         } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
-          );
+          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
         if (!activeMember)
-          throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
-          );
+          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         let consumed: boolean;
         try {
           consumed = await input.stateStore.consume({
@@ -884,9 +797,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             now: new Date(current),
           });
         } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
-          );
+          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
         if (!consumed)
           throw new GitHubInstallationAuthorizationError(
@@ -950,26 +861,17 @@ export function createGitHubAppInstallationAuthorization(input: {
           const authorizeUrl = input.emulation
             ? emulatedGitHubUrl(authorization.url)
             : new URL(authorization.url);
-          authorizeUrl.searchParams.set(
-            "code_challenge",
-            codeChallenge(verifier),
-          );
+          authorizeUrl.searchParams.set("code_challenge", codeChallenge(verifier));
           authorizeUrl.searchParams.set("code_challenge_method", "S256");
           const approvalUrl = input.emulation
-            ? new URL(
-                "/local-connections/github",
-                input.emulation.canonicalOrigin,
-              )
+            ? new URL("/local-connections/github", input.emulation.canonicalOrigin)
             : authorizeUrl;
           if (input.emulation) {
             for (const [key, value] of authorizeUrl.searchParams)
               approvalUrl.searchParams.append(key, value);
             approvalUrl.searchParams.set("phase", "authorize");
             if (state.returnState.resumeKey)
-              approvalUrl.searchParams.set(
-                "resume",
-                state.returnState.resumeKey,
-              );
+              approvalUrl.searchParams.set("resume", state.returnState.resumeKey);
           }
           return {
             version: 1 as const,
@@ -1030,30 +932,22 @@ export function createGitHubAppInstallationAuthorization(input: {
         try {
           const { data: user } = await userOctokit.request("GET /user");
           providerUserId = decimalProperty(user, "id");
-          providerLogin = githubLoginSchema.parse(
-            stringProperty(user, "login"),
-          );
+          providerLogin = githubLoginSchema.parse(stringProperty(user, "login"));
         } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "github-user-verification",
-          );
+          throw new GitHubInstallationAuthorizationError("github-user-verification");
         }
         let installation: ReturnType<typeof installationIdentity>;
         try {
           installation = input.emulation
             ? await (async () => {
-                const [owner, repo] =
-                  input.emulation!.githubRepository.split("/");
+                const [owner, repo] = input.emulation!.githubRepository.split("/");
                 if (!owner || !repo) throw new Error("invalid-emulation");
                 const { data } = await userOctokit.request(
                   "GET /repos/{owner}/{repo}/installation",
                   { owner, repo },
                 );
                 const value = installationIdentity(data);
-                if (
-                  value.installationId !== state.installationId ||
-                  value.appId !== config.appId
-                )
+                if (value.installationId !== state.installationId || value.appId !== config.appId)
                   throw new Error("installation-mismatch");
                 return value;
               })()
@@ -1064,23 +958,16 @@ export function createGitHubAppInstallationAuthorization(input: {
                 requestedInstallationId: state.installationId,
               });
           if (installation.suspendedAt !== null) throw new Error();
-          if (
-            installation.accountType === "User" &&
-            installation.accountId !== providerUserId
-          )
+          if (installation.accountType === "User" && installation.accountId !== providerUserId)
             throw new Error();
         } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "installation-identity-validation",
-          );
+          throw new GitHubInstallationAuthorizationError("installation-identity-validation");
         }
         try {
           if (!(await input.membership.isActiveMember(authority)))
             throw new Error("membership-inactive");
         } catch {
-          throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
-          );
+          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
 
         const appliedAt = new Date(now());
@@ -1093,11 +980,7 @@ export function createGitHubAppInstallationAuthorization(input: {
             now: appliedAt,
           });
         }
-        const binding = await persistInstallationBinding(
-          authority,
-          installation,
-          appliedAt,
-        );
+        const binding = await persistInstallationBinding(authority, installation, appliedAt);
         return {
           version: 1 as const,
           action: "github-app.installation.complete" as const,
@@ -1112,9 +995,7 @@ export function createGitHubAppInstallationAuthorization(input: {
               accountType: binding.accountType,
             }),
           ),
-          providerUserDigest: sha256(
-            JSON.stringify({ id: providerUserId, login: providerLogin }),
-          ),
+          providerUserDigest: sha256(JSON.stringify({ id: providerUserId, login: providerLogin })),
           accountType: binding.accountType,
           repositorySelection: installation.repositorySelection,
           setupAction: state.setupAction,

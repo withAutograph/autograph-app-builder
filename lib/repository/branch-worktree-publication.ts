@@ -2,11 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { DestinationSnapshot } from "./local-publication";
-import {
-  assertExactReviewedChangeSet,
-  pathsOverlap,
-  stableDigest,
-} from "./local-publication";
+import { assertExactReviewedChangeSet, pathsOverlap, stableDigest } from "./local-publication";
 import type { SourceReceipt } from "./source-receipt";
 import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template";
 
@@ -121,9 +117,7 @@ export function createBranchWorktreePublicationProposal(input: {
   assertExactReviewedChangeSet(input.review);
   const { sourceReceipt, source, review } = input;
   if (sourceReceipt.sourceKind !== "existing-repository")
-    throw new Error(
-      "Branch-worktree publication accepts only an existing-repository source.",
-    );
+    throw new Error("Branch-worktree publication accepts only an existing-repository source.");
   assertRepositoryReleasePolicyAtGitSnapshot({
     sourcePath: sourceReceipt.sourcePath,
     sourceSha: sourceReceipt.sourceSha,
@@ -138,21 +132,16 @@ export function createBranchWorktreePublicationProposal(input: {
     review.sourceTree !== sourceReceipt.sourceTree ||
     review.repositoryContractDigest !== sourceReceipt.contractDigest
   )
-    throw new Error(
-      "The source checkout is not the exact reviewed existing repository.",
-    );
+    throw new Error("The source checkout is not the exact reviewed existing repository.");
   const overlap = source.dirty.find((entry) =>
     review.approvedPaths.some(
       (path) =>
         pathsOverlap(path, entry.path) ||
-        (entry.originalPath !== undefined &&
-          pathsOverlap(path, entry.originalPath)),
+        (entry.originalPath !== undefined && pathsOverlap(path, entry.originalPath)),
     ),
   );
   if (overlap !== undefined)
-    throw new Error(
-      `The source has dirty overlap with approved path ${overlap.path}.`,
-    );
+    throw new Error(`The source has dirty overlap with approved path ${overlap.path}.`);
   const publicationIdentityDigest = branchPublicationIdentity({
     sourceReceiptDigest: sourceReceipt.digest,
     reviewDigest: review.digest,
@@ -189,9 +178,7 @@ export function assertExactBranchWorktreeProposal(
   proposal: BranchWorktreePublicationProposal,
 ): void {
   if (proposal.version !== BRANCH_WORKTREE_PUBLICATION_VERSION)
-    throw new Error(
-      "A canonical V2 branch-worktree publication proposal is required.",
-    );
+    throw new Error("A canonical V2 branch-worktree publication proposal is required.");
   if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
     throw new Error("The branch-worktree publication digest is malformed.");
   const identity = branchPublicationIdentity({
@@ -214,7 +201,7 @@ export function proposalFromBranchJournal(
   journal: BranchWorktreePublicationJournal,
 ): BranchWorktreePublicationProposal {
   const proposalOnly = { ...journal } as Record<string, unknown>;
-  const {proposalDigest} = journal;
+  const { proposalDigest } = journal;
   for (const key of [
     "proposalDigest",
     "status",
@@ -264,7 +251,6 @@ export function exactBranchWorktreeProposalMatch(
 ): boolean {
   return (
     left.digest === right.digest &&
-    JSON.stringify(canonicalProposal(left)) ===
-      JSON.stringify(canonicalProposal(right))
+    JSON.stringify(canonicalProposal(left)) === JSON.stringify(canonicalProposal(right))
   );
 }

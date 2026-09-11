@@ -16,10 +16,7 @@ const [, , origin] = process.argv;
 if (!origin) throw new Error("Expected the local application origin.");
 const appOrigin = new URL(origin);
 const ciLoopback = process.env.CI === "true" && appOrigin.protocol === "http:";
-if (
-  appOrigin.hostname !== "localhost" ||
-  (appOrigin.protocol !== "https:" && !ciLoopback)
-) {
+if (appOrigin.hostname !== "localhost" || (appOrigin.protocol !== "https:" && !ciLoopback)) {
   throw new Error("The local application origin must be https://localhost.");
 }
 

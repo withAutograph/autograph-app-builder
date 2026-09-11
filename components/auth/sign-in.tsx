@@ -5,12 +5,7 @@ import {
   isPasskeyAutoFillEnabled,
   withPasskeyAutoFill,
 } from "@better-auth-ui/core/plugins/passkey";
-import {
-  AuthPrompts,
-  useAuth,
-  useFetchOptions,
-  useSignInEmail,
-} from "@better-auth-ui/react";
+import { AuthPrompts, useAuth, useFetchOptions, useSignInEmail } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import { type SyntheticEvent, useState, useSyncExternalStore } from "react";
@@ -86,24 +81,21 @@ export function SignIn({
   const currentSearch = currentLocation ? new URL(currentLocation).search : "";
   const currentOrigin = currentLocation ? new URL(currentLocation).origin : "";
 
-  const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(
-    authClient,
-    {
-      onError: (error, { email }) => {
-        setPassword("");
+  const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(authClient, {
+    onError: (error, { email }) => {
+      setPassword("");
 
-        if (error.error?.code === "EMAIL_NOT_VERIFIED") {
-          sessionStorage.setItem("better-auth-ui.verify-email", email);
-          navigate({
-            to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
-          });
-        }
+      if (error.error?.code === "EMAIL_NOT_VERIFIED") {
+        sessionStorage.setItem("better-auth-ui.verify-email", email);
+        navigate({
+          to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
+        });
+      }
 
-        resetFetchOptions();
-      },
-      onSuccess: (data) => continueSignIn(data),
+      resetFetchOptions();
     },
-  );
+    onSuccess: (data) => continueSignIn(data),
+  });
 
   const signInMutating = useIsMutating({
     mutationKey: authMutationKeys.signIn.all,
@@ -137,8 +129,7 @@ export function SignIn({
     });
   };
 
-  const showSeparator =
-    emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
+  const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
   const alternateRedirectTo =
     signUpRedirectTo ??
     (currentSearch
@@ -150,19 +141,14 @@ export function SignIn({
       <Card className={cn("w-full", className)}>
         <AuthPrompts view="signIn" />
         <CardHeader>
-          <CardTitle className="text-xl font-semibold">
-            {localization.auth.signIn}
-          </CardTitle>
+          <CardTitle className="text-xl font-semibold">{localization.auth.signIn}</CardTitle>
         </CardHeader>
 
         <CardContent>
           <div className="flex flex-col gap-3">
             {plugins.flatMap((plugin) =>
               (plugin.authButtons ?? []).map((AuthButton, index) => (
-                <AuthButton
-                  key={`${plugin.id}-${index.toString()}`}
-                  view="signIn"
-                />
+                <AuthButton key={`${plugin.id}-${index.toString()}`} view="signIn" />
               )),
             )}
             {socialPosition === "top" && (
@@ -183,18 +169,13 @@ export function SignIn({
               <form onSubmit={handleSubmit}>
                 <FieldGroup>
                   <Field data-invalid={!!fieldErrors.email}>
-                    <FieldLabel htmlFor="email">
-                      {localization.auth.email}
-                    </FieldLabel>
+                    <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
 
                     <Input
                       id="email"
                       name="email"
                       type="email"
-                      autoComplete={withPasskeyAutoFill(
-                        "email",
-                        passkeyAutoFill,
-                      )}
+                      autoComplete={withPasskeyAutoFill("email", passkeyAutoFill)}
                       placeholder={localization.auth.emailPlaceholder}
                       required
                       disabled={isPending}
@@ -223,19 +204,14 @@ export function SignIn({
                   </Field>
 
                   <Field data-invalid={!!fieldErrors.password}>
-                    <FieldLabel htmlFor="password">
-                      {localization.auth.password}
-                    </FieldLabel>
+                    <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
 
                     <InputGroup>
                       <InputGroupInput
                         id="password"
                         name="password"
                         type={isPasswordVisible ? "text" : "password"}
-                        autoComplete={withPasskeyAutoFill(
-                          "current-password",
-                          passkeyAutoFill,
-                        )}
+                        autoComplete={withPasskeyAutoFill("current-password", passkeyAutoFill)}
                         value={password}
                         onChange={(e) => {
                           setPassword(e.target.value);
@@ -258,14 +234,8 @@ export function SignIn({
                           const msg = el.validity.valueMissing
                             ? localization.auth.fieldRequired
                             : el.validity.tooShort
-                              ? localization.auth.tooShort.replace(
-                                  "{{min}}",
-                                  String(min),
-                                )
-                              : localization.auth.tooLong.replace(
-                                  "{{max}}",
-                                  String(max),
-                                );
+                              ? localization.auth.tooShort.replace("{{min}}", String(min))
+                              : localization.auth.tooLong.replace("{{max}}", String(max));
 
                           setFieldErrors((prev) => ({
                             ...prev,
@@ -303,11 +273,7 @@ export function SignIn({
                   {emailAndPassword.rememberMe && (
                     <Field className="my-1">
                       <div className="flex items-center gap-3">
-                        <Checkbox
-                          id="rememberMe"
-                          name="rememberMe"
-                          disabled={isPending}
-                        />
+                        <Checkbox id="rememberMe" name="rememberMe" disabled={isPending} />
 
                         <FieldLabel
                           htmlFor="rememberMe"
@@ -367,10 +333,7 @@ export function SignIn({
       <FieldDescription className="absolute top-full left-0 mt-3 w-full text-center">
         {localization.auth.needToCreateAnAccount}{" "}
         <Link
-          href={getAuthLinkURL(
-            `${basePaths.auth}/${viewPaths.auth.signUp}`,
-            alternateRedirectTo,
-          )}
+          href={getAuthLinkURL(`${basePaths.auth}/${viewPaths.auth.signUp}`, alternateRedirectTo)}
           className="underline underline-offset-4"
         >
           {localization.auth.signUp}

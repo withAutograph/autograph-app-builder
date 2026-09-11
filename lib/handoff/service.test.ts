@@ -29,8 +29,7 @@ function memoryStore(): BuilderHandoffStore {
     handoffId: string;
   }) => {
     const record = byId.get(input.handoffId);
-    return record &&
-      JSON.stringify(record.authority) === JSON.stringify(input.authority)
+    return record && JSON.stringify(record.authority) === JSON.stringify(input.authority)
       ? record
       : undefined;
   };
@@ -48,25 +47,17 @@ function memoryStore(): BuilderHandoffStore {
     },
     async renewExpired(input) {
       const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest)
-        return undefined;
+      if (!record || record.requestDigest !== input.requestDigest) return undefined;
       if (record.sessionId !== undefined || record.expiresAt > input.now)
         return { disposition: "existing", record };
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
-      byRequest.set(
-        JSON.stringify([record.authority, record.creationRequestId]),
-        updated,
-      );
+      byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
       return { disposition: "renewed", record: updated };
     },
     async bindSession(input) {
       const record = readOwned(input);
-      if (
-        !record ||
-        record.requestDigest !== input.requestDigest ||
-        input.now >= record.expiresAt
-      )
+      if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
         return undefined;
       if (record.sessionId !== undefined) return record;
       const updated = {
@@ -75,10 +66,7 @@ function memoryStore(): BuilderHandoffStore {
         sessionId: input.sessionId,
       };
       byId.set(record.handoffId, updated);
-      byRequest.set(
-        JSON.stringify([record.authority, record.creationRequestId]),
-        updated,
-      );
+      byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
       return updated;
     },
   };
@@ -141,16 +129,14 @@ describe("opaque App Builder handoffs", () => {
     time = created.expiresAt;
     expect(await service.read(lookup)).toMatchObject({ intent });
     expect(await service.status(lookup)).toMatchObject({ status: "expired" });
-    await expect(service.resolve(lookup)).rejects.toBeInstanceOf(
-      BuilderHandoffUnavailableError,
-    );
+    await expect(service.resolve(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
     for (const foreign of [
       { ...authority, ownerUserId: "user-two" },
       { ...authority, workspaceId: "workspace-two" },
     ]) {
-      await expect(
-        service.read({ ...lookup, authority: foreign }),
-      ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+      await expect(service.read({ ...lookup, authority: foreign })).rejects.toBeInstanceOf(
+        BuilderHandoffUnavailableError,
+      );
       await expect(
         service.renew({
           ...lookup,
@@ -195,9 +181,7 @@ describe("opaque App Builder handoffs", () => {
       }),
     ]);
     expect(new Set(renewed.map((value) => value.handoffId)).size).toBe(1);
-    expect(
-      renewed.filter((value) => value.disposition === "renewed"),
-    ).toHaveLength(1);
+    expect(renewed.filter((value) => value.disposition === "renewed")).toHaveLength(1);
     expect(renewed[0].handoffId).toBe(original.handoffId);
     const extended = await service.read({
       authority,
@@ -208,21 +192,15 @@ describe("opaque App Builder handoffs", () => {
       expiresAt: renewed[0].expiresAt,
     });
     expect(extended.intent).toEqual(prepared);
-    expect(extended.expiresAt.getTime()).toBe(
-      original.expiresAt.getTime() + 60_000,
-    );
-    expect(
-      await createBuilderHandoffService(options).renew(request),
-    ).toMatchObject({
+    expect(extended.expiresAt.getTime()).toBe(original.expiresAt.getTime() + 60_000);
+    expect(await createBuilderHandoffService(options).renew(request)).toMatchObject({
       handoffId: original.handoffId,
       disposition: "existing",
     });
     time = extended.expiresAt;
     const next = await service.renew(request);
     expect(next.handoffId).toBe(original.handoffId);
-    expect(next.expiresAt.getTime()).toBe(
-      extended.expiresAt.getTime() + 60_000,
-    );
+    expect(next.expiresAt.getTime()).toBe(extended.expiresAt.getTime() + 60_000);
     expect(await service.read(request)).toEqual({
       ...originalRecord,
       expiresAt: next.expiresAt,
@@ -259,16 +237,12 @@ describe("opaque App Builder handoffs", () => {
     await expect(service.bindSession(binding)).rejects.toBeInstanceOf(
       BuilderHandoffUnavailableError,
     );
-    await expect(service.resolve(lookup)).rejects.toBeInstanceOf(
-      BuilderHandoffUnavailableError,
-    );
+    await expect(service.resolve(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
     await service.renew({ ...lookup, creationRequestId: randomUUID() });
     const restarted = createBuilderHandoffService(options);
     const after = await restarted.resolve(lookup);
     if (after.status !== "unredeemed") throw new Error("unexpected state");
-    expect(after.deterministicClientRequestId).toBe(
-      before.deterministicClientRequestId,
-    );
+    expect(after.deterministicClientRequestId).toBe(before.deterministicClientRequestId);
     expect(after.prompt).toBe(before.prompt);
     expect(after.record.handoffId).toBe(before.record.handoffId);
     expect(start(after.deterministicClientRequestId)).toBe(sessionId);
@@ -280,9 +254,7 @@ describe("opaque App Builder handoffs", () => {
     });
     const continued = await restarted.read(lookup);
     time = continued.expiresAt;
-    expect(
-      await restarted.renew({ ...lookup, creationRequestId: randomUUID() }),
-    ).toMatchObject({
+    expect(await restarted.renew({ ...lookup, creationRequestId: randomUUID() })).toMatchObject({
       handoffId: created.handoffId,
       expiresAt: continued.expiresAt,
       disposition: "existing",
@@ -313,9 +285,7 @@ describe("opaque App Builder handoffs", () => {
       handoffId: original.handoffId,
     });
     time = original.expiresAt;
-    await expect(service.renew(request)).rejects.toBeInstanceOf(
-      BuilderHandoffUnavailableError,
-    );
+    await expect(service.renew(request)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
     expect((await service.read(request)).expiresAt).toEqual(original.expiresAt);
   });
 
@@ -376,9 +346,7 @@ describe("opaque App Builder handoffs", () => {
             };
       vi.spyOn(store, "read").mockResolvedValue(forged);
       for (const read of [service.read, service.status, service.resolve])
-        await expect(read(lookup)).rejects.toBeInstanceOf(
-          BuilderHandoffUnavailableError,
-        );
+        await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),
       ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
@@ -405,9 +373,7 @@ describe("opaque App Builder handoffs", () => {
       disposition: "existing",
       record: forged,
     });
-    await expect(service.create(creation)).rejects.toBeInstanceOf(
-      BuilderHandoffUnavailableError,
-    );
+    await expect(service.create(creation)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
     time = record.expiresAt;
     vi.spyOn(store, "renewExpired").mockResolvedValue({
       disposition: "renewed",
@@ -495,9 +461,7 @@ describe("opaque App Builder handoffs", () => {
       expect(resolved.prompt.split("\n", 1)[0]).toBe(
         `Create ${intent.appName} with Autograph App Builder.`,
       );
-      expect(resolved.prompt).toContain(
-        "Call prepared_app_context before any provider work",
-      );
+      expect(resolved.prompt).toContain("Call prepared_app_context before any provider work");
     }
   });
 
@@ -557,9 +521,7 @@ describe("opaque App Builder handoffs", () => {
     });
     expect(resolved.status).toBe("unredeemed");
     if (resolved.status !== "unredeemed") throw new Error("unexpected state");
-    expect(resolved.prompt).not.toMatch(
-      /installation(?: id)?|repository id|head sha|head tree/iu,
-    );
+    expect(resolved.prompt).not.toMatch(/installation(?: id)?|repository id|head sha|head tree/iu);
 
     await service.bindSession({
       authority,
@@ -567,9 +529,10 @@ describe("opaque App Builder handoffs", () => {
       requestDigest: resolved.record.requestDigest,
       sessionId: "session-one",
     });
-    expect(
-      await service.resolve({ authority, handoffId: created.handoffId }),
-    ).toMatchObject({ status: "redeemed", sessionId: "session-one" });
+    expect(await service.resolve({ authority, handoffId: created.handoffId })).toMatchObject({
+      status: "redeemed",
+      sessionId: "session-one",
+    });
   });
 
   it("keeps expired and cross-tenant handoffs indistinguishable", async () => {

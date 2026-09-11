@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
-import {
-  developmentMcpToolNames,
-  waitForDevelopmentMcp,
-} from "./mcp-readiness";
+import { developmentMcpToolNames, waitForDevelopmentMcp } from "./mcp-readiness";
 
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
@@ -23,13 +20,8 @@ describe("development MCP readiness", () => {
       };
       methods.push(request.method);
       if (request.method === "initialize")
-        return response(
-          { jsonrpc: "2.0", id: request.id, result: {} },
-          200,
-          "dev-1",
-        );
-      if (request.method === "notifications/initialized")
-        return response(undefined, 202);
+        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-1");
+      if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
         jsonrpc: "2.0",
         id: request.id,
@@ -42,11 +34,7 @@ describe("development MCP readiness", () => {
         fetcher,
       }),
     ).resolves.toEqual([...TOOL_NAMES]);
-    expect(methods).toEqual([
-      "initialize",
-      "notifications/initialized",
-      "tools/list",
-    ]);
+    expect(methods).toEqual(["initialize", "notifications/initialized", "tools/list"]);
   });
 
   it("retries an endpoint that is still starting, then proves exactly five tools", async () => {
@@ -59,13 +47,8 @@ describe("development MCP readiness", () => {
       if (request.method === "initialize" && attempt++ === 0)
         return response({ error: "starting" }, 503);
       if (request.method === "initialize")
-        return response(
-          { jsonrpc: "2.0", id: request.id, result: {} },
-          200,
-          "dev-2",
-        );
-      if (request.method === "notifications/initialized")
-        return response(undefined, 202);
+        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-2");
+      if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
         jsonrpc: "2.0",
         id: request.id,
@@ -89,13 +72,8 @@ describe("development MCP readiness", () => {
         method: string;
       };
       if (request.method === "initialize")
-        return response(
-          { jsonrpc: "2.0", id: request.id, result: {} },
-          200,
-          "dev-3",
-        );
-      if (request.method === "notifications/initialized")
-        return response(undefined, 202);
+        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-3");
+      if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
         jsonrpc: "2.0",
         id: request.id,

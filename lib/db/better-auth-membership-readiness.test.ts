@@ -92,12 +92,8 @@ describe("Better Auth membership migration readiness", () => {
     expect(migration).toContain('CREATE TABLE "organization"');
     expect(migration).toContain('CREATE TABLE "member"');
     expect(migration).toContain('CREATE TABLE "invitation"');
-    expect(migration).toContain(
-      'ON "organization" ("issuer", "audience", "workspace_id")',
-    );
-    expect(migration).toContain(
-      "active hosted workspace membership has no Better Auth user",
-    );
+    expect(migration).toContain('ON "organization" ("issuer", "audience", "workspace_id")');
+    expect(migration).toContain("active hosted workspace membership has no Better Auth user");
     expect(migration).toContain("'owner'");
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/iu);
     expect(task).toContain("unset DATABASE_URL");

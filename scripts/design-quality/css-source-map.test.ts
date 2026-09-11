@@ -31,25 +31,15 @@ describe("CSS source-map provenance", () => {
   });
 
   it("does not inherit a preceding mapping across an explicit unmapped span", () => {
-    expect(
-      originalCssSource({ ...map, mappings: "AAAA,K" }, 0, 5),
-    ).toBeUndefined();
+    expect(originalCssSource({ ...map, mappings: "AAAA,K" }, 0, 5)).toBeUndefined();
   });
 
   it("fails closed for malformed source fields", () => {
     expect(
-      originalCssSource(
-        { ...map, sources: [null] } as unknown as typeof map,
-        0,
-        0,
-      ),
+      originalCssSource({ ...map, sources: [null] } as unknown as typeof map, 0, 0),
     ).toBeUndefined();
     expect(
-      originalCssSource(
-        { ...map, sourceRoot: {} } as unknown as typeof map,
-        0,
-        0,
-      ),
+      originalCssSource({ ...map, sourceRoot: {} } as unknown as typeof map, 0, 0),
     ).toBeUndefined();
   });
 });

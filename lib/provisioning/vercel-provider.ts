@@ -25,9 +25,7 @@ const projectSchema = z
 
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  return [...randomBytes(6)]
-    .map((value) => alphabet[value % alphabet.length])
-    .join("");
+  return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
 export async function provisionVercelProject(input: {
@@ -99,15 +97,10 @@ export async function provisionVercelProject(input: {
   }
 
   const baseName = `apps-${input.appId}`;
-  const linkedRepository =
-    input.github.status === "succeeded" ? input.github.fullName : undefined;
+  const linkedRepository = input.github.status === "succeeded" ? input.github.fullName : undefined;
   try {
     const candidates = [...input.persistedCandidates];
-    for (
-      let generated = 0;
-      candidates.length < 5 && generated < 20;
-      generated += 1
-    ) {
+    for (let generated = 0; candidates.length < 5 && generated < 20; generated += 1) {
       const candidate =
         candidates.length === 0
           ? baseName
@@ -124,8 +117,7 @@ export async function provisionVercelProject(input: {
       const before = await inspect(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
       if (before.status === 200 && !wasAbsent) continue;
-      if (before.status === 404 && !wasAbsent)
-        await input.persistAbsent(candidate);
+      if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
       if (before.status === 404) {
         const created = await vercel({
           method: "POST",
@@ -190,9 +182,7 @@ export async function provisionVercelProject(input: {
         },
         framework: "nextjs",
         rootDirectory: project.rootDirectory,
-        ...(linkedRepository
-          ? { linkedGitHubRepository: linkedRepository }
-          : {}),
+        ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
       };
     }
     return { status: "failed", code: "name_conflict", retryable: true };

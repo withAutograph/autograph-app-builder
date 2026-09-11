@@ -13,17 +13,10 @@ const implementationFilePathSchema = z
       });
       return;
     }
-    if (
-      value
-        .split("/")
-        .some(
-          (segment) => segment === "" || segment === "." || segment === "..",
-        )
-    )
+    if (value.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
       context.addIssue({
         code: "custom",
-        message:
-          "Implementation file paths must stay inside the repository checkout.",
+        message: "Implementation file paths must stay inside the repository checkout.",
       });
   });
 
@@ -47,9 +40,7 @@ export const implementationFilesSchema = z
     }
   });
 
-export type ImplementationFile = z.infer<
-  typeof implementationFilesSchema
->[number];
+export type ImplementationFile = z.infer<typeof implementationFilesSchema>[number];
 
 export function withImplementationFiles(
   executor: ApplyCommandExecutor,

@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T14:25:30.877Z ·
@@ -74,70 +73,51 @@
     <section>
       <h2>Spend import review</h2>
       <p>
-        Synthetic review scenario grounded in implemented Vendor
-        transaction-import and derived-fact substrate; the proposed
-        reconciliation decision contract is a planned extension.
+        Synthetic review scenario grounded in implemented Vendor transaction-import and derived-fact
+        substrate; the proposed reconciliation decision contract is a planned extension.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
           <li>
             arrusted:
-            <code
-              >apps/vendor/frontend/src/review/ReviewQueueServerPage.tsx</code
-            >
+            <code>apps/vendor/frontend/src/review/ReviewQueueServerPage.tsx</code>
             — implemented
           </li>
           <li>
             ag2:
-            <code
-              >frontend/src/pages/settings/integrations/pages/import/ImportWizard.tsx</code
-            >
+            <code>frontend/src/pages/settings/integrations/pages/import/ImportWizard.tsx</code>
             — implemented
           </li>
-          <li>
-            arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented
-          </li>
-          <li>
-            ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> —
-            implemented
-          </li>
+          <li>arrusted: <code>apps/vendor/schema/vendor.cue</code> — implemented</li>
+          <li>ag2: <code>backend/src/services/vendor/derivedFacts.ts</code> — implemented</li>
           <li>
             arrusted:
-            <code
-              >docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md</code
-            >
+            <code>docs/plans/2026-07-23-vendor-spend-reconciliation-review-contract.md</code>
             — planned
           </li>
         </ul>
         <h3>Review questions</h3>
         <ul>
+          <li>Can a reviewer verify field mappings and preview the changes before saving?</li>
           <li>
-            Can a reviewer verify field mappings and preview the changes before
-            saving?
-          </li>
-          <li>
-            Can a reviewer see uncertain matches, source provenance, and the
-            bounded correction without overwriting source evidence?
+            Can a reviewer see uncertain matches, source provenance, and the bounded correction
+            without overwriting source evidence?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
+          <li>A user can save an import after checking its mappings and change preview.</li>
           <li>
-            A user can save an import after checking its mappings and change
-            preview.
-          </li>
-          <li>
-            The save outcome separates imported transactions from uncertain
-            matches that remain in review.
+            The save outcome separates imported transactions from uncertain matches that remain in
+            review.
           </li>
         </ul>
       </details>
     </section>
     <h2>Arrusted adherence: 88/100 · partial</h2>
     <p>
-      Evidence coverage: 3.12%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 3.12%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -178,49 +158,40 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
       <li>
-        No generated CSS source files were supplied; compiled stylesheet source
-        maps cannot establish generated declaration provenance.
+        No generated CSS source files were supplied; compiled stylesheet source maps cannot
+        establish generated declaration provenance.
       </li>
     </ul>
     <details open>
       <summary>Generated-code changes (11)</summary>
       <article id="finding-9">
         <strong>prop · nonconforming</strong>
-        <p>
-          Select has no public id prop in the selected Arrusted type surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-9">src/SpendImportReview.tsx:70</a></small
-        >
+        <p>Select has no public id prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-9">src/SpendImportReview.tsx:70</a></small>
         <details id="source-9">
           <summary>Source location: src/SpendImportReview.tsx:70</summary>
           <pre>
@@ -232,14 +203,8 @@
       </article>
       <article id="finding-10">
         <strong>prop · nonconforming</strong>
-        <p>
-          Select has no public aria-label prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-10">src/SpendImportReview.tsx:71</a></small
-        >
+        <p>Select has no public aria-label prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-10">src/SpendImportReview.tsx:71</a></small>
         <details id="source-10">
           <summary>Source location: src/SpendImportReview.tsx:71</summary>
           <pre>
@@ -251,13 +216,8 @@
       </article>
       <article id="finding-11">
         <strong>prop · nonconforming</strong>
-        <p>
-          Select has no public value prop in the selected Arrusted type surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-11">src/SpendImportReview.tsx:72</a></small
-        >
+        <p>Select has no public value prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-11">src/SpendImportReview.tsx:72</a></small>
         <details id="source-11">
           <summary>Source location: src/SpendImportReview.tsx:72</summary>
           <pre>
@@ -269,14 +229,8 @@
       </article>
       <article id="finding-15">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-15">src/SpendImportReview.tsx:86</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-15">src/SpendImportReview.tsx:86</a></small>
         <details id="source-15">
           <summary>Source location: src/SpendImportReview.tsx:86</summary>
           <pre>
@@ -288,14 +242,8 @@
       </article>
       <article id="finding-28">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-28">src/SpendImportReview.tsx:144</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-28">src/SpendImportReview.tsx:144</a></small>
         <details id="source-28">
           <summary>Source location: src/SpendImportReview.tsx:144</summary>
           <pre>
@@ -307,14 +255,8 @@
       </article>
       <article id="finding-30">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public disabled prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-30">src/SpendImportReview.tsx:152</a></small
-        >
+        <p>Button has no public disabled prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-30">src/SpendImportReview.tsx:152</a></small>
         <details id="source-30">
           <summary>Source location: src/SpendImportReview.tsx:152</summary>
           <pre>
@@ -326,14 +268,8 @@
       </article>
       <article id="finding-31">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-31">src/SpendImportReview.tsx:153</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-31">src/SpendImportReview.tsx:153</a></small>
         <details id="source-31">
           <summary>Source location: src/SpendImportReview.tsx:153</summary>
           <pre>
@@ -345,14 +281,8 @@
       </article>
       <article id="finding-44">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public disabled prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-44">src/SpendImportReview.tsx:190</a></small
-        >
+        <p>Button has no public disabled prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-44">src/SpendImportReview.tsx:190</a></small>
         <details id="source-44">
           <summary>Source location: src/SpendImportReview.tsx:190</summary>
           <pre>
@@ -364,14 +294,8 @@
       </article>
       <article id="finding-45">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-45">src/SpendImportReview.tsx:191</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-45">src/SpendImportReview.tsx:191</a></small>
         <details id="source-45">
           <summary>Source location: src/SpendImportReview.tsx:191</summary>
           <pre>
@@ -383,14 +307,8 @@
       </article>
       <article id="finding-47">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public disabled prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-47">src/SpendImportReview.tsx:197</a></small
-        >
+        <p>Button has no public disabled prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-47">src/SpendImportReview.tsx:197</a></small>
         <details id="source-47">
           <summary>Source location: src/SpendImportReview.tsx:197</summary>
           <pre>
@@ -402,14 +320,8 @@
       </article>
       <article id="finding-48">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-48">src/SpendImportReview.tsx:198</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-48">src/SpendImportReview.tsx:198</a></small>
         <details id="source-48">
           <summary>Source location: src/SpendImportReview.tsx:198</summary>
           <pre>
@@ -429,13 +341,10 @@
       <article id="finding-0">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-0">src/SpendImportReview.tsx:46</a></small
-        >
+        <small>static evidence · <a href="#source-0">src/SpendImportReview.tsx:46</a></small>
         <details id="source-0">
           <summary>Source location: src/SpendImportReview.tsx:46</summary>
           <pre>
@@ -448,13 +357,10 @@
       <article id="finding-1">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-1">src/SpendImportReview.tsx:47</a></small
-        >
+        <small>static evidence · <a href="#source-1">src/SpendImportReview.tsx:47</a></small>
         <details id="source-1">
           <summary>Source location: src/SpendImportReview.tsx:47</summary>
           <pre>
@@ -467,13 +373,10 @@
       <article id="finding-2">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-2">src/SpendImportReview.tsx:48</a></small
-        >
+        <small>static evidence · <a href="#source-2">src/SpendImportReview.tsx:48</a></small>
         <details id="source-2">
           <summary>Source location: src/SpendImportReview.tsx:48</summary>
           <pre>
@@ -486,13 +389,10 @@
       <article id="finding-4">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-4">src/SpendImportReview.tsx:51</a></small
-        >
+        <small>static evidence · <a href="#source-4">src/SpendImportReview.tsx:51</a></small>
         <details id="source-4">
           <summary>Source location: src/SpendImportReview.tsx:51</summary>
           <pre>
@@ -505,13 +405,10 @@
       <article id="finding-5">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-5">src/SpendImportReview.tsx:57</a></small
-        >
+        <small>static evidence · <a href="#source-5">src/SpendImportReview.tsx:57</a></small>
         <details id="source-5">
           <summary>Source location: src/SpendImportReview.tsx:57</summary>
           <pre>
@@ -524,13 +421,10 @@
       <article id="finding-7">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-7">src/SpendImportReview.tsx:66</a></small
-        >
+        <small>static evidence · <a href="#source-7">src/SpendImportReview.tsx:66</a></small>
         <details id="source-7">
           <summary>Source location: src/SpendImportReview.tsx:66</summary>
           <pre>
@@ -543,13 +437,10 @@
       <article id="finding-12">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-12">src/SpendImportReview.tsx:73</a></small
-        >
+        <small>static evidence · <a href="#source-12">src/SpendImportReview.tsx:73</a></small>
         <details id="source-12">
           <summary>Source location: src/SpendImportReview.tsx:73</summary>
           <pre>
@@ -562,13 +453,10 @@
       <article id="finding-13">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-13">src/SpendImportReview.tsx:74</a></small
-        >
+        <small>static evidence · <a href="#source-13">src/SpendImportReview.tsx:74</a></small>
         <details id="source-13">
           <summary>Source location: src/SpendImportReview.tsx:74</summary>
           <pre>
@@ -581,13 +469,10 @@
       <article id="finding-16">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-16">src/SpendImportReview.tsx:95</a></small
-        >
+        <small>static evidence · <a href="#source-16">src/SpendImportReview.tsx:95</a></small>
         <details id="source-16">
           <summary>Source location: src/SpendImportReview.tsx:95</summary>
           <pre>
@@ -600,13 +485,10 @@
       <article id="finding-18">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-18">src/SpendImportReview.tsx:103</a></small
-        >
+        <small>static evidence · <a href="#source-18">src/SpendImportReview.tsx:103</a></small>
         <details id="source-18">
           <summary>Source location: src/SpendImportReview.tsx:103</summary>
           <pre>
@@ -619,13 +501,10 @@
       <article id="finding-19">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-19">src/SpendImportReview.tsx:104</a></small
-        >
+        <small>static evidence · <a href="#source-19">src/SpendImportReview.tsx:104</a></small>
         <details id="source-19">
           <summary>Source location: src/SpendImportReview.tsx:104</summary>
           <pre>
@@ -638,13 +517,10 @@
       <article id="finding-21">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-21">src/SpendImportReview.tsx:106</a></small
-        >
+        <small>static evidence · <a href="#source-21">src/SpendImportReview.tsx:106</a></small>
         <details id="source-21">
           <summary>Source location: src/SpendImportReview.tsx:106</summary>
           <pre>
@@ -657,13 +533,10 @@
       <article id="finding-23">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-23">src/SpendImportReview.tsx:109</a></small
-        >
+        <small>static evidence · <a href="#source-23">src/SpendImportReview.tsx:109</a></small>
         <details id="source-23">
           <summary>Source location: src/SpendImportReview.tsx:109</summary>
           <pre>
@@ -676,13 +549,10 @@
       <article id="finding-25">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-25">src/SpendImportReview.tsx:119</a></small
-        >
+        <small>static evidence · <a href="#source-25">src/SpendImportReview.tsx:119</a></small>
         <details id="source-25">
           <summary>Source location: src/SpendImportReview.tsx:119</summary>
           <pre>
@@ -695,13 +565,10 @@
       <article id="finding-32">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-32">src/SpendImportReview.tsx:166</a></small
-        >
+        <small>static evidence · <a href="#source-32">src/SpendImportReview.tsx:166</a></small>
         <details id="source-32">
           <summary>Source location: src/SpendImportReview.tsx:166</summary>
           <pre>
@@ -714,13 +581,10 @@
       <article id="finding-33">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-33">src/SpendImportReview.tsx:167</a></small
-        >
+        <small>static evidence · <a href="#source-33">src/SpendImportReview.tsx:167</a></small>
         <details id="source-33">
           <summary>Source location: src/SpendImportReview.tsx:167</summary>
           <pre>
@@ -733,13 +597,10 @@
       <article id="finding-35">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-35">src/SpendImportReview.tsx:167</a></small
-        >
+        <small>static evidence · <a href="#source-35">src/SpendImportReview.tsx:167</a></small>
         <details id="source-35">
           <summary>Source location: src/SpendImportReview.tsx:167</summary>
           <pre>
@@ -752,13 +613,10 @@
       <article id="finding-38">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-38">src/SpendImportReview.tsx:178</a></small
-        >
+        <small>static evidence · <a href="#source-38">src/SpendImportReview.tsx:178</a></small>
         <details id="source-38">
           <summary>Source location: src/SpendImportReview.tsx:178</summary>
           <pre>
@@ -771,13 +629,10 @@
       <article id="finding-39">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-39">src/SpendImportReview.tsx:179</a></small
-        >
+        <small>static evidence · <a href="#source-39">src/SpendImportReview.tsx:179</a></small>
         <details id="source-39">
           <summary>Source location: src/SpendImportReview.tsx:179</summary>
           <pre>
@@ -790,13 +645,10 @@
       <article id="finding-40">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-40">src/SpendImportReview.tsx:180</a></small
-        >
+        <small>static evidence · <a href="#source-40">src/SpendImportReview.tsx:180</a></small>
         <details id="source-40">
           <summary>Source location: src/SpendImportReview.tsx:180</summary>
           <pre>
@@ -809,13 +661,10 @@
       <article id="finding-43">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-43">src/SpendImportReview.tsx:183</a></small
-        >
+        <small>static evidence · <a href="#source-43">src/SpendImportReview.tsx:183</a></small>
         <details id="source-43">
           <summary>Source location: src/SpendImportReview.tsx:183</summary>
           <pre>
@@ -828,13 +677,9 @@
       <article id="finding-52">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-52">src/SpendImportReview.tsx:94</a></small
-        >
+        <small>static evidence · <a href="#source-52">src/SpendImportReview.tsx:94</a></small>
         <details id="source-52">
           <summary>Source location: src/SpendImportReview.tsx:94</summary>
           <pre>
@@ -847,13 +692,9 @@
       <article id="finding-53">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-53">src/SpendImportReview.tsx:136</a></small
-        >
+        <small>static evidence · <a href="#source-53">src/SpendImportReview.tsx:136</a></small>
         <details id="source-53">
           <summary>Source location: src/SpendImportReview.tsx:136</summary>
           <pre>
@@ -866,13 +707,9 @@
       <article id="finding-54">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-54">src/SpendImportReview.tsx:164</a></small
-        >
+        <small>static evidence · <a href="#source-54">src/SpendImportReview.tsx:164</a></small>
         <details id="source-54">
           <summary>Source location: src/SpendImportReview.tsx:164</summary>
           <pre>
@@ -885,13 +722,9 @@
       <article id="finding-55">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-55">src/SpendImportReview.tsx:203</a></small
-        >
+        <small>static evidence · <a href="#source-55">src/SpendImportReview.tsx:203</a></small>
         <details id="source-55">
           <summary>Source location: src/SpendImportReview.tsx:203</summary>
           <pre>
@@ -905,8 +738,7 @@
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-94">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-94">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-94">
@@ -918,8 +750,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-95">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-95">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-95">
@@ -931,8 +762,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-96">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-96">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-96">
@@ -944,8 +774,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-97">/spend-import-review:266</a> ·
+          >browser evidence · <a href="#source-97">/spend-import-review:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-97">
@@ -957,8 +786,7 @@
         <strong>unknown · unassessed</strong>
         <p>padding-right: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-98">/spend-import-review:184</a> ·
+          >browser evidence · <a href="#source-98">/spend-import-review:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-98">
@@ -968,16 +796,14 @@
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
@@ -988,9 +814,7 @@
         <p>&#39;source&#39; is of type &#39;unknown&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-0"
-            >src/SpendImportReview.tsx:67:39</a
-          ></small
+          <a href="#implementation-source-0">src/SpendImportReview.tsx:67:39</a></small
         >
         <details id="implementation-source-0">
           <summary>Source location</summary>
@@ -1005,9 +829,7 @@
         <p>&#39;source&#39; is of type &#39;unknown&#39;.</p>
         <small
           >Generated source ·
-          <a href="#implementation-source-1"
-            >src/SpendImportReview.tsx:70:36</a
-          ></small
+          <a href="#implementation-source-1">src/SpendImportReview.tsx:70:36</a></small
         >
         <details id="implementation-source-1">
           <summary>Source location</summary>
@@ -1025,9 +847,7 @@
         </p>
         <small
           >Generated source ·
-          <a href="#implementation-source-2"
-            >src/SpendImportReview.tsx:105:19</a
-          ></small
+          <a href="#implementation-source-2">src/SpendImportReview.tsx:105:19</a></small
         >
         <details id="implementation-source-2">
           <summary>Source location</summary>
@@ -1045,9 +865,7 @@
         </p>
         <small
           >Generated source ·
-          <a href="#implementation-source-3"
-            >src/SpendImportReview.tsx:111:19</a
-          ></small
+          <a href="#implementation-source-3">src/SpendImportReview.tsx:111:19</a></small
         >
         <details id="implementation-source-3">
           <summary>Source location</summary>
@@ -1061,8 +879,7 @@
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 65/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -1077,56 +894,50 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The page title, batch context, field-mapping panel, preview panel,
-            and exception card establish a clear task sequence, while
-            ready/review badges make status scannable. Hierarchy weakens after a
-            decision because “Needs review” and “Simulated decision recorded”
-            remain visible together.
+            The page title, batch context, field-mapping panel, preview panel, and exception card
+            establish a clear task sequence, while ready/review badges make status scannable.
+            Hierarchy weakens after a decision because “Needs review” and “Simulated decision
+            recorded” remain visible together.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Cards, form controls, headings, and actions use consistent alignment
-            and spacing at 1440px and 1920px. The initial view is somewhat
-            left-heavy, and at 1024px the two-column composition leaves the
-            preview table narrow enough to require horizontal scrolling.
+            Cards, form controls, headings, and actions use consistent alignment and spacing at
+            1440px and 1920px. The initial view is somewhat left-heavy, and at 1024px the two-column
+            composition leaves the preview table narrow enough to require horizontal scrolling.
           </td>
         </tr>
         <tr>
           <th>typography</th>
           <td>3/4</td>
           <td>
-            The large page heading, medium-weight section titles, labels, and
-            tabular values are visually consistent and generally readable.
-            Several 12px captions, table headers, and status labels are
-            comparatively faint or compact, as reflected in the reported
-            contrast advisories.
+            The large page heading, medium-weight section titles, labels, and tabular values are
+            visually consistent and generally readable. Several 12px captions, table headers, and
+            status labels are comparatively faint or compact, as reflected in the reported contrast
+            advisories.
           </td>
         </tr>
         <tr>
           <th>responsive</th>
           <td>2/4</td>
           <td>
-            The centered composition and form controls remain usable across the
-            provided 1024px, 1440px, and 1920px desktop windows. At 1024px,
-            however, the preview remains beside the mapping form, producing a
-            572px-wide horizontally scrolling table whose Result column is
-            initially offscreen; the completed state also extends to a 1096px
-            document height.
+            The centered composition and form controls remain usable across the provided 1024px,
+            1440px, and 1920px desktop windows. At 1024px, however, the preview remains beside the
+            mapping form, producing a 572px-wide horizontally scrolling table whose Result column is
+            initially offscreen; the completed state also extends to a 1096px document height.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>2/4</td>
           <td>
-            Mapping labels, representative rows, ready/review counts, the import
-            outcome, and bounded vendor choices are understandable. Two
-            brief-critical gaps remain: the only initial action is labeled as a
-            preview but the next supplied state is already saved, and the
-            exception card does not repeat the immutable source row details
-            alongside the correction choices.
+            Mapping labels, representative rows, ready/review counts, the import outcome, and
+            bounded vendor choices are understandable. Two brief-critical gaps remain: the only
+            initial action is labeled as a preview but the next supplied state is already saved, and
+            the exception card does not repeat the immutable source row details alongside the
+            correction choices.
           </td>
         </tr>
       </tbody>
@@ -1134,96 +945,84 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        Field mappings are presented as a concise, clearly labeled set of
-        source-to-spend selections.
+        Field mappings are presented as a concise, clearly labeled set of source-to-spend
+        selections.
       </li>
       <li>
-        The preview includes representative transaction rows, source references,
-        results, and aggregate ready/review counts.
+        The preview includes representative transaction rows, source references, results, and
+        aggregate ready/review counts.
       </li>
       <li>
-        The save outcome explicitly states that 39 rows were included and 3
-        remain in human review.
+        The save outcome explicitly states that 39 rows were included and 3 remain in human review.
       </li>
       <li>
-        Vendor correction is bounded to candidate selection, leaving the item
-        unresolved, or applying the selected decision.
+        Vendor correction is bounded to candidate selection, leaving the item unresolved, or
+        applying the selected decision.
       </li>
       <li>
-        The interface explicitly states that original source evidence remains
-        unchanged and uses consistent cards and status badges across desktop
-        widths.
+        The interface explicitly states that original source evidence remains unchanged and uses
+        consistent cards and status badges across desktop widths.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>high · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        “Preview imported changes” is the only visible progression action, yet
-        the next supplied state says the import has already been saved. The
-        presented sequence therefore does not visibly let the reviewer inspect a
-        populated preview and then make a separate save decision.
+        “Preview imported changes” is the only visible progression action, yet the next supplied
+        state says the import has already been saved. The presented sequence therefore does not
+        visibly let the reviewer inspect a populated preview and then make a separate save decision.
       </p>
       <p>
-        <strong>Improve:</strong> Keep this action limited to generating the
-        preview. Once rows are shown, place a distinct “Save import” action in
-        the preview panel, with an appropriate supported disabled state until a
-        valid preview exists.
+        <strong>Improve:</strong> Keep this action limited to generating the preview. Once rows are
+        shown, place a distinct “Save import” action in the preview panel, with an appropriate
+        supported disabled state until a valid preview exists.
       </p>
-      <small
-        >Screenshot region: x 97, y 630.5, width 422.71875, height 40</small
-      >
+      <small>Screenshot region: x 97, y 630.5, width 422.71875, height 40</small>
     </article>
     <article id="design-1">
       <h4>high · <a href="#desktop-1">desktop-1</a></h4>
       <p>
-        The uncertain-match card provides candidate vendors and bounded actions,
-        but the source transaction is represented only by the vendor name in its
-        heading. Amount, date, row identifier, and source reference remain in
-        the table above rather than being available together with the decision.
+        The uncertain-match card provides candidate vendors and bounded actions, but the source
+        transaction is represented only by the vendor name in its heading. Amount, date, row
+        identifier, and source reference remain in the table above rather than being available
+        together with the decision.
       </p>
       <p>
-        <strong>Improve:</strong> Add a compact, read-only “Original source row”
-        summary inside the exception card showing row ID, source vendor text,
-        amount, date, and source reference above the candidate choices. Visually
-        distinguish this evidence from the editable decision without altering
-        it.
+        <strong>Improve:</strong> Add a compact, read-only “Original source row” summary inside the
+        exception card showing row ID, source vendor text, amount, date, and source reference above
+        the candidate choices. Visually distinguish this evidence from the editable decision without
+        altering it.
       </p>
       <small>Screenshot region: x 561, y 615, width 799, height 393</small>
     </article>
     <article id="design-2">
       <h4>medium · <a href="#desktop-wide-1">desktop-wide-1</a></h4>
       <p>
-        The card simultaneously shows a “Needs review” badge and “Simulated
-        decision recorded.” Although the aggregate count changes to three
-        remaining, the current item’s final status is ambiguous.
+        The card simultaneously shows a “Needs review” badge and “Simulated decision recorded.”
+        Although the aggregate count changes to three remaining, the current item’s final status is
+        ambiguous.
       </p>
       <p>
-        <strong>Improve:</strong> After applying a decision, either mark the
-        displayed item as resolved/recorded with its choice shown read-only, or
-        advance to the next unresolved item. Provide a clear next-exception
-        action if the current record remains on screen.
+        <strong>Improve:</strong> After applying a decision, either mark the displayed item as
+        resolved/recorded with its choice shown read-only, or advance to the next unresolved item.
+        Provide a clear next-exception action if the current record remains on screen.
       </p>
       <small>Screenshot region: x 801, y 615, width 798, height 393</small>
     </article>
     <article id="design-3">
       <h4>medium · <a href="#desktop-window-1">desktop-window-1</a></h4>
       <p>
-        At the 1024px desktop window, the preview table horizontally overflows
-        and the Result column is initially outside the visible region. This
-        separates exception status from the source row during scanning.
+        At the 1024px desktop window, the preview table horizontally overflows and the Result column
+        is initially outside the visible region. This separates exception status from the source row
+        during scanning.
       </p>
       <p>
-        <strong>Improve:</strong> At this desktop width, stack mapping above
-        preview or use a more compact row composition that keeps row ID, vendor,
-        source reference, and result visible together. If horizontal scrolling
-        remains intentional, add an obvious scroll cue and preserve key status
-        information outside the scrolling edge.
+        <strong>Improve:</strong> At this desktop width, stack mapping above preview or use a more
+        compact row composition that keeps row ID, vendor, source reference, and result visible
+        together. If horizontal scrolling remains intentional, add an obvious scroll cue and
+        preserve key status information outside the scrolling edge.
       </p>
-      <small
-        >Screenshot region: x 411.171875, y 222, width 571.828125, height
-        240</small
-      >
+      <small>Screenshot region: x 411.171875, y 222, width 571.828125, height 240</small>
     </article>
     <details>
       <summary>Full scoring metadata and limitations</summary>
@@ -2488,10 +2287,7 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        />
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" />
       </div>
       <a href="desktop-window-0.png">Original, unmodified screenshot</a>
       <details>
@@ -2731,9 +2527,7 @@
       </details>
     </section>
     <section id="desktop-window-1">
-      <h2>
-        desktop-window-1 — map, save, and resolve a synthetic vendor match
-      </h2>
+      <h2>desktop-window-1 — map, save, and resolve a synthetic vendor match</h2>
       <div class="capture">
         <img
           src="desktop-window-1.png"

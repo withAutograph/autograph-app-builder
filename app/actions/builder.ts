@@ -47,9 +47,7 @@ const handoffContinuationInputSchema = z
   })
   .strict();
 
-export type BuilderHandoffContinuationInput = z.infer<
-  typeof handoffContinuationInputSchema
->;
+export type BuilderHandoffContinuationInput = z.infer<typeof handoffContinuationInputSchema>;
 
 export type BuilderHandoffContinuationState =
   | {
@@ -66,9 +64,7 @@ const handoffProvisioningContinuationInputSchema = z
   })
   .strict();
 
-export type HandoffProvisioningContinuationState =
-  | { status: "updated" }
-  | { status: "error" };
+export type HandoffProvisioningContinuationState = { status: "updated" } | { status: "error" };
 
 function requestUrl(path: string) {
   const preview = readPreviewOAuthRuntimeConfig(process.env);
@@ -78,7 +74,7 @@ function requestUrl(path: string) {
 async function sameOriginHeaders(contentType?: string) {
   const incoming = await headers();
   const forwarded = new Headers(incoming);
-  const {origin} = new URL(requestUrl("/"));
+  const { origin } = new URL(requestUrl("/"));
   forwarded.set("origin", origin);
   if (contentType) forwarded.set("content-type", contentType);
   return forwarded;
@@ -87,7 +83,8 @@ async function sameOriginHeaders(contentType?: string) {
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
     const payload = (await response.json().catch(() => undefined)) as
-      { error?: string } | undefined;
+      | { error?: string }
+      | undefined;
     throw new Error(payload?.error ?? fallback);
   }
   return (await response.json()) as T;
@@ -145,10 +142,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
       cache: "no-store",
     }),
   );
-  return readJson<BuilderProvisionResponse>(
-    response,
-    "provisioning_unavailable",
-  );
+  return readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
 }
 
 export async function createBuilderHandoff(input: {
@@ -177,10 +171,7 @@ export async function createBuilderHandoff(input: {
   }>(response, "handoff_unavailable");
 }
 
-function provisioningInput(
-  input: BuilderHandoffContinuationInput,
-  operation: "github" | "vercel",
-) {
+function provisioningInput(input: BuilderHandoffContinuationInput, operation: "github" | "vercel") {
   return builderProvisionRequestSchema.parse({
     version: 1,
     requestId: input.requestId,
@@ -289,9 +280,7 @@ export async function continueBuilderHandoff(
       ) {
         // Reserve once, before the handoff exists. The visible handoff route
         // subsequently owns lease-safe provider continuation.
-        provisioning = await reserveBuilderProvider(
-          provisioningInput(input, operation),
-        );
+        provisioning = await reserveBuilderProvider(provisioningInput(input, operation));
       }
     }
 
@@ -312,9 +301,7 @@ export async function continueHandoffProvisioning(
   _previous: HandoffProvisioningContinuationState | undefined,
   untrustedInput: { handoffId: string; retryProvider?: "github" | "vercel" },
 ): Promise<HandoffProvisioningContinuationState> {
-  const parsed = handoffProvisioningContinuationInputSchema.safeParse(
-    untrustedInput,
-  );
+  const parsed = handoffProvisioningContinuationInputSchema.safeParse(untrustedInput);
   if (!parsed.success) return { status: "error" };
   try {
     const data = await getBuilderHandoffPageData({
@@ -328,9 +315,7 @@ export async function continueHandoffProvisioning(
 
     const run = async (operation: "github" | "vercel") => {
       const selected =
-        operation === "github"
-          ? providers.githubInstallationId
-          : providers.vercelInstallationId;
+        operation === "github" ? providers.githubInstallationId : providers.vercelInstallationId;
       if (!selected) return;
       await provisionBuilderProvider({
         version: 1,

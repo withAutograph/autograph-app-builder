@@ -64,9 +64,7 @@ export interface EnsuredOrganization {
  * one exact issuer/resource-bound membership.
  */
 export interface PreviewOrganizationUserAuthority {
-  ensureOrganizationForVerifiedUser: (input: {
-    userId: string;
-}) => Promise<EnsuredOrganization>;
+  ensureOrganizationForVerifiedUser: (input: { userId: string }) => Promise<EnsuredOrganization>;
 }
 
 function identityUnavailable() {
@@ -81,16 +79,14 @@ function organizationError(cause: unknown) {
   if (!(cause instanceof OrganizationProvisioningError)) {
     return APIError.from("SERVICE_UNAVAILABLE", {
       code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
-      message:
-        "We couldn’t finish setting up your workspace. Try signing in again.",
+      message: "We couldn’t finish setting up your workspace. Try signing in again.",
     });
   }
   switch (cause.reason) {
     case "access-revoked":
       return APIError.from("FORBIDDEN", {
         code: "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED",
-        message:
-          "Your access to this Autograph workspace has been suspended or revoked.",
+        message: "Your access to this Autograph workspace has been suspended or revoked.",
       });
     case "signup-disabled":
       return APIError.from("FORBIDDEN", {
@@ -108,15 +104,12 @@ function organizationError(cause: unknown) {
     case "workspace-setup-failed":
       return APIError.from("SERVICE_UNAVAILABLE", {
         code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
-        message:
-          "We couldn’t finish setting up your workspace. Try signing in again.",
+        message: "We couldn’t finish setting up your workspace. Try signing in again.",
       });
   }
 }
 
-export function createPreviewUserManagementLifecycle(
-  authority: PreviewOrganizationUserAuthority,
-) {
+export function createPreviewUserManagementLifecycle(authority: PreviewOrganizationUserAuthority) {
   return {
     async beforeUserCreate(
       user: PreviewVerifiedUser & Record<string, unknown>,
@@ -154,10 +147,7 @@ export function createPreviewUserManagementLifecycle(
           JSON.stringify({
             level: "error",
             message: "preview_workspace_session_provisioning_failed",
-            reason:
-              cause instanceof OrganizationProvisioningError
-                ? cause.reason
-                : "unexpected",
+            reason: cause instanceof OrganizationProvisioningError ? cause.reason : "unexpected",
           }),
         );
         throw organizationError(cause);
@@ -166,9 +156,7 @@ export function createPreviewUserManagementLifecycle(
   };
 }
 
-export function previewUserManagementPlugins(
-  authority: PreviewOrganizationUserAuthority,
-) {
+export function previewUserManagementPlugins(authority: PreviewOrganizationUserAuthority) {
   const lifecycle = createPreviewUserManagementLifecycle(authority);
   return [
     organization({

@@ -47,7 +47,7 @@ export interface BuilderProvisioningDependencies {
   readVercelCredential: (input: {
     authority: BuilderProvisionAuthority;
     installationId: string;
-}) => Promise<VercelCredential | undefined>;
+  }) => Promise<VercelCredential | undefined>;
   deactivateVercelInstallation: (installationId: string, now: Date) => Promise<number>;
   fetch?: typeof fetch;
   now?: () => number;
@@ -78,8 +78,7 @@ export async function executeBuilderProvisioning(input: {
     request,
     now: new Date(now()),
   });
-  if (!sameIntent(request, reserved.record.request))
-    throw new Error("provision-request-id-reused");
+  if (!sameIntent(request, reserved.record.request)) throw new Error("provision-request-id-reused");
   const existing = reserved.record.response[request.operation];
   if (existing.status === "succeeded") return reserved.record.response;
 
@@ -124,13 +123,10 @@ export async function executeBuilderProvisioning(input: {
 
   let result: BuilderProvisionResponse[typeof request.operation];
   if (request.operation === "github") {
-    const bindings =
-      (await input.dependencies.githubInstallations.list?.(input.authority)) ??
-      [];
+    const bindings = (await input.dependencies.githubInstallations.list?.(input.authority)) ?? [];
     const installation = bindings.find(
       (binding) =>
-        binding.installationId === request.providers.githubInstallationId &&
-        binding.active,
+        binding.installationId === request.providers.githubInstallationId && binding.active,
     );
     if (!installation) {
       result = {
@@ -140,9 +136,7 @@ export async function executeBuilderProvisioning(input: {
       };
     } else {
       try {
-        const source = await (
-          input.dependencies.loadStarterSource ?? cloneStarterSource
-        )();
+        const source = await (input.dependencies.loadStarterSource ?? cloneStarterSource)();
         const current = await input.dependencies.journal.read({
           authority: input.authority,
           requestId: request.requestId,
@@ -158,8 +152,7 @@ export async function executeBuilderProvisioning(input: {
           private: request.repository.private,
           source,
           persistedCandidates: current.record.operations.github.candidates,
-          persistedAbsentCandidates:
-            current.record.operations.github.absentCandidates,
+          persistedAbsentCandidates: current.record.operations.github.absentCandidates,
           persistCandidate: (candidate) => persist("candidate", candidate),
           persistAbsent: (candidate) => persist("absent", candidate),
           fetch: input.dependencies.fetch,
@@ -200,16 +193,12 @@ export async function executeBuilderProvisioning(input: {
         github: current.record.response.github,
         githubSelected: request.providers.githubInstallationId !== undefined,
         persistedCandidates: current.record.operations.vercel.candidates,
-        persistedAbsentCandidates:
-          current.record.operations.vercel.absentCandidates,
+        persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
         persistCandidate: (candidate) => persist("candidate", candidate),
         persistAbsent: (candidate) => persist("absent", candidate),
         fetch: input.dependencies.fetch,
       });
-      if (
-        result.status === "failed" &&
-        result.code === "credential_unavailable"
-      ) {
+      if (result.status === "failed" && result.code === "credential_unavailable") {
         await input.dependencies.deactivateVercelInstallation(
           credential.binding.installationId,
           new Date(now()),

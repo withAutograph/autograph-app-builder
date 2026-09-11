@@ -14,10 +14,7 @@ import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
 import { createBuilderHandoffService } from "../handoff/service";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
-import {
-  createMcpRequestHandler,
-  type HostedBuilderHandoffRuntime,
-} from "./request-handler";
+import { createMcpRequestHandler, type HostedBuilderHandoffRuntime } from "./request-handler";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type ResumeRepositoryAccess = (input: {
@@ -30,18 +27,13 @@ type RecheckRepositoryAccess = (input: {
   repository: string;
 }) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
 
-function forwardedSessionAuth(
-  principal: HostedPrincipal,
-  sourceHandoffId?: string,
-) {
+function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: string) {
   const context = {
     attributes: {
       "mcp:audience": principal.audience,
       "mcp:scopes": principal.scopes,
       "mcp:workspace-id": principal.workspaceId,
-      ...(sourceHandoffId === undefined
-        ? {}
-        : { "autograph:source-handoff-id": sourceHandoffId }),
+      ...(sourceHandoffId === undefined ? {} : { "autograph:source-handoff-id": sourceHandoffId }),
     },
     authenticator: "mcp-oauth-jwks" as const,
     issuer: principal.issuer,
@@ -75,10 +67,7 @@ export function readHostedDeploymentConfig(
 }
 
 export function openHostedPostgresDatabase(databaseUrl: string): Database {
-  const client = postgres(
-    parseHostedDatabaseUrl(databaseUrl),
-    hostedRuntimePostgresOptions,
-  );
+  const client = postgres(parseHostedDatabaseUrl(databaseUrl), hostedRuntimePostgresOptions);
   return drizzle(client, { schema: databaseSchema });
 }
 
@@ -112,13 +101,9 @@ export function createDeploymentMcpRequestHandler(input: {
       if (hostedHandler === undefined) {
         const config = readHostedDeploymentConfig(input.environment);
         if (request.url !== config.auth.resourceUrl) {
-          throw new Error(
-            "The hosted request does not match the configured MCP resource.",
-          );
+          throw new Error("The hosted request does not match the configured MCP resource.");
         }
-        const database = (input.openDatabase ?? openHostedPostgresDatabase)(
-          config.databaseUrl,
-        );
+        const database = (input.openDatabase ?? openHostedPostgresDatabase)(config.databaseUrl);
         const runtime = composeHostedMcpRuntime({
           auth: config.auth,
           database,
@@ -136,17 +121,10 @@ export function createDeploymentMcpRequestHandler(input: {
             ...runtime,
             handoffs: {
               ...handoffService,
-              async recheckRepositoryAccess({
-                principal,
-                repository,
-                sourceHandoffId,
-              }) {
+              async recheckRepositoryAccess({ principal, repository, sourceHandoffId }) {
                 if (input.recheckRepositoryAccess !== undefined)
                   return input.recheckRepositoryAccess({
-                    sessionAuth: forwardedSessionAuth(
-                      principal,
-                      sourceHandoffId,
-                    ),
+                    sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                     repository,
                   });
                 const repositoryAccessRuntime =
@@ -162,9 +140,8 @@ export function createDeploymentMcpRequestHandler(input: {
               try {
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
-                  (
-                    await import("../agent/deployment-repository-access-runtime")
-                  ).resumeAuthorizedRepositoryAccessForSession;
+                  (await import("../agent/deployment-repository-access-runtime"))
+                    .resumeAuthorizedRepositoryAccessForSession;
                 await resumeRepositoryAccess({
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
@@ -183,9 +160,7 @@ export function createDeploymentMcpRequestHandler(input: {
         hostedResourceUrl = config.auth.resourceUrl;
       }
       if (request.url !== hostedResourceUrl) {
-        throw new Error(
-          "The hosted request does not match the configured MCP resource.",
-        );
+        throw new Error("The hosted request does not match the configured MCP resource.");
       }
       return hostedHandler(request);
     } catch {

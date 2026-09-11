@@ -3,11 +3,7 @@ import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import type { GithubProfile } from "@better-auth/core/social-providers";
-import {
-  genericOAuth,
-  jwt,
-  type GenericOAuthConfig,
-} from "better-auth/plugins";
+import { genericOAuth, jwt, type GenericOAuthConfig } from "better-auth/plugins";
 import { decodeJwt } from "jose";
 import { z } from "zod";
 
@@ -101,10 +97,7 @@ type GitHubOAuthTokens = {
   accessToken?: string;
 };
 
-async function readBoundedJson(
-  response: Response,
-  limit: number,
-): Promise<unknown | null> {
+async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
   if (!response.ok) return null;
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > limit) return null;
@@ -220,12 +213,8 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   }
   return {
     accessToken: body.access_token,
-    tokenType:
-      typeof body.token_type === "string" ? body.token_type : undefined,
-    scopes:
-      typeof body.scope === "string"
-        ? body.scope.split(/\s+/u).filter(Boolean)
-        : undefined,
+    tokenType: typeof body.token_type === "string" ? body.token_type : undefined,
+    scopes: typeof body.scope === "string" ? body.scope.split(/\s+/u).filter(Boolean) : undefined,
     idToken: typeof body.id_token === "string" ? body.id_token : undefined,
     raw: body,
   };
@@ -249,10 +238,7 @@ export async function fetchVerifiedVercelUserInfo(
   } catch {
     return null;
   }
-  if (
-    typeof tokenClaims.sub !== "string" ||
-    typeof tokenClaims.email !== "string"
-  ) {
+  if (typeof tokenClaims.sub !== "string" || typeof tokenClaims.email !== "string") {
     return null;
   }
 
@@ -283,10 +269,7 @@ export async function fetchVerifiedVercelUserInfo(
   }
 
   const email = profile.email.trim().toLowerCase();
-  if (
-    profile.sub !== tokenClaims.sub ||
-    email !== tokenClaims.email.trim().toLowerCase()
-  ) {
+  if (profile.sub !== tokenClaims.sub || email !== tokenClaims.email.trim().toLowerCase()) {
     return null;
   }
 
@@ -296,10 +279,7 @@ export async function fetchVerifiedVercelUserInfo(
     email,
     emailVerified: true,
     image: profile.picture ?? undefined,
-    name:
-      profile.name ??
-      profile.preferred_username ??
-      email.slice(0, email.indexOf("@")),
+    name: profile.name ?? profile.preferred_username ?? email.slice(0, email.indexOf("@")),
   };
 }
 
@@ -410,8 +390,7 @@ const previewOAuthRuntimeConfigSchema = z
       issuer.hostname === "localhost";
     if (
       config.hostedAdapter !== "1" ||
-      (!localHttp &&
-        (issuer.protocol !== "https:" || resource.protocol !== "https:"))
+      (!localHttp && (issuer.protocol !== "https:" || resource.protocol !== "https:"))
     ) {
       context.addIssue({
         code: "custom",
@@ -435,9 +414,7 @@ const previewOAuthRuntimeConfigSchema = z
     }
   });
 
-export type PreviewOAuthRuntimeConfig = z.infer<
-  typeof previewOAuthRuntimeConfigSchema
->;
+export type PreviewOAuthRuntimeConfig = z.infer<typeof previewOAuthRuntimeConfigSchema>;
 
 /**
  * Codex can retry the public-client code exchange while its loopback callback
@@ -476,19 +453,14 @@ export function readPreviewOAuthRuntimeConfig(
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const localEmulation = readProviderEmulation(resolvedEnvironment);
   if (localEmulation) {
-    if (
-      localEmulation.mode === "local" &&
-      environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1"
-    ) {
+    if (localEmulation.mode === "local" && environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1") {
       throw new Error("Local authentication emulation is unavailable.");
     }
     if (localEmulation.mode === "preview") {
-      const deploymentEnvironment =
-        readHostedDeploymentEnvironment(resolvedEnvironment);
-      const passkeyOnboarding = readPasskeyOnboardingConfig(
-        resolvedEnvironment,
-        { previewCanonicalOrigin: localEmulation.canonicalOrigin },
-      );
+      const deploymentEnvironment = readHostedDeploymentEnvironment(resolvedEnvironment);
+      const passkeyOnboarding = readPasskeyOnboardingConfig(resolvedEnvironment, {
+        previewCanonicalOrigin: localEmulation.canonicalOrigin,
+      });
       return previewOAuthRuntimeConfigSchema.parse({
         hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
         environment: deploymentEnvironment,
@@ -533,8 +505,7 @@ export function readPreviewOAuthRuntimeConfig(
   }
   const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
   const localDevelopment =
-    passkeyOnboarding?.deploymentId === "local" &&
-    environment.VERCEL_ENV === undefined;
+    passkeyOnboarding?.deploymentId === "local" && environment.VERCEL_ENV === undefined;
   const deploymentEnvironment = localDevelopment
     ? "development"
     : readHostedDeploymentEnvironment(environment);
@@ -544,8 +515,7 @@ export function readPreviewOAuthRuntimeConfig(
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined);
   const resource =
-    environment.MCP_RESOURCE_URL ??
-    (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
+    environment.MCP_RESOURCE_URL ?? (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
   return previewOAuthRuntimeConfigSchema.parse({
     hostedAdapter: localDevelopment ? "0" : environment.EVE_HOSTED_ADAPTER,
     environment: deploymentEnvironment,
@@ -576,22 +546,12 @@ export function createPreviewOAuthServer(input: {
   const config = previewOAuthRuntimeConfigSchema.parse(input.config);
   const resourceOrigin = new URL(config.resource).origin;
   const localEmulation = readProviderEmulation(process.env);
-  const {
-    githubClientId,
-    githubClientSecret,
-    vercelClientId,
-    vercelClientSecret,
-  } = config;
+  const { githubClientId, githubClientSecret, vercelClientId, vercelClientSecret } = config;
   if (
     localEmulation &&
-    (!githubClientId ||
-      !githubClientSecret ||
-      !vercelClientId ||
-      !vercelClientSecret)
+    (!githubClientId || !githubClientSecret || !vercelClientId || !vercelClientSecret)
   ) {
-    throw new Error(
-      "Local provider emulation requires GitHub and Vercel OAuth credentials.",
-    );
+    throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
   }
   const localGithubClientId = githubClientId ?? "";
   const localGithubClientSecret = githubClientSecret ?? "";
@@ -686,19 +646,14 @@ export function createPreviewOAuthServer(input: {
               localEmulation,
             );
             if (!response.ok) return null;
-            const profile = vercelUserInfoSchema.safeParse(
-              await response.json(),
-            );
+            const profile = vercelUserInfoSchema.safeParse(await response.json());
             if (!profile.success || !profile.data.email_verified) return null;
             return {
               id: profile.data.sub,
               sub: profile.data.sub,
               email: profile.data.email,
               emailVerified: true,
-              name:
-                profile.data.name ??
-                profile.data.preferred_username ??
-                profile.data.email,
+              name: profile.data.name ?? profile.data.preferred_username ?? profile.data.email,
               image: profile.data.picture ?? undefined,
             };
           },
@@ -716,9 +671,7 @@ export function createPreviewOAuthServer(input: {
   );
   return betterAuth({
     appName:
-      config.environment === "preview"
-        ? "Autograph App Builder Preview"
-        : "Autograph App Builder",
+      config.environment === "preview" ? "Autograph App Builder Preview" : "Autograph App Builder",
     baseURL: resourceOrigin,
     basePath: "/api/auth",
     secret: config.secret,
@@ -758,8 +711,7 @@ export function createPreviewOAuthServer(input: {
         ) {
           return {
             error: "verified_provider_identity_required",
-            errorDescription:
-              "Use GitHub or Vercel with a verified email address.",
+            errorDescription: "Use GitHub or Vercel with a verified email address.",
           };
         }
       },
@@ -779,9 +731,7 @@ export function createPreviewOAuthServer(input: {
     rateLimit: authRateLimitForLocalEmulation(localEmulation !== undefined),
     advanced: {
       cookiePrefix:
-        config.environment === "preview"
-          ? "autograph_preview"
-          : "autograph_app_builder",
+        config.environment === "preview" ? "autograph_preview" : "autograph_app_builder",
       useSecureCookies: config.environment !== "development",
     },
     plugins: [
@@ -799,8 +749,7 @@ export function createPreviewOAuthServer(input: {
         // enrollment ceremonies from one loopback client. Keep the hosted
         // limit intact while preventing deterministic test traffic from
         // exhausting the plugin-specific bucket.
-        onboardingContextRateLimitMax:
-          localEmulation === undefined ? undefined : 600,
+        onboardingContextRateLimitMax: localEmulation === undefined ? undefined : 600,
       }),
       createPasskeyPlugin({ config: config.passkeyOnboarding }),
       ...(config.environment === "development"
@@ -827,8 +776,7 @@ export function createPreviewOAuthServer(input: {
             cimd(
               buildPreviewCimdOptions({
                 fetchClientMetadataResource:
-                  input.fetchClientMetadata ??
-                  fetchPreviewClientMetadataResource,
+                  input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
               }),
             ),
             ...(localEmulation
@@ -840,8 +788,7 @@ export function createPreviewOAuthServer(input: {
                         {
                           providerId: "vercel",
                           name: "Vercel",
-                          discoveryUrl:
-                            "https://vercel.com/.well-known/openid-configuration",
+                          discoveryUrl: "https://vercel.com/.well-known/openid-configuration",
                           requireIdTokenVerification: true,
                           clientId: config.vercelClientId,
                           clientSecret: config.vercelClientSecret,

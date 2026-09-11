@@ -107,10 +107,7 @@ export type LocalPublicationFailureReceipt = LocalPublicationTerminal & {
   digest: string;
 };
 
-export type LocalPublicationPendingReceipt = Omit<
-  LocalPublicationProposal,
-  "digest"
-> & {
+export type LocalPublicationPendingReceipt = Omit<LocalPublicationProposal, "digest"> & {
   proposalDigest: string;
   status: "pending";
   publishedByCallId: string;
@@ -130,11 +127,7 @@ export type LocalPublicationResult =
   | { ok: false; receipt: LocalPublicationFailureReceipt };
 
 export function pathsOverlap(left: string, right: string): boolean {
-  return (
-    left === right ||
-    left.startsWith(`${right}/`) ||
-    right.startsWith(`${left}/`)
-  );
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 }
 
 export function unrelatedProjectionDigest(
@@ -157,52 +150,34 @@ function validMode(mode: string): boolean {
   return (LOCAL_PUBLICATION_ALLOWED_MODES as readonly string[]).includes(mode);
 }
 
-function canonicalChanges(
-  review: ReviewedChangeSetReceipt,
-): readonly OverlayChange[] {
+function canonicalChanges(review: ReviewedChangeSetReceipt): readonly OverlayChange[] {
   const paths = new Set<string>();
   for (const change of review.changes) {
     if (!safeSourcePath(change.path) || paths.has(change.path))
-      throw new Error(
-        "The reviewed change set contains an unsafe or duplicate path.",
-      );
+      throw new Error("The reviewed change set contains an unsafe or duplicate path.");
     paths.add(change.path);
     for (const file of [change.before, change.after]) {
-      if (
-        file !== undefined &&
-        (!validMode(file.mode) || !/^[0-9a-f]{64}$/u.test(file.digest))
-      )
-        throw new Error(
-          "The reviewed change set contains an unsupported file mode or digest.",
-        );
+      if (file !== undefined && (!validMode(file.mode) || !/^[0-9a-f]{64}$/u.test(file.digest)))
+        throw new Error("The reviewed change set contains an unsupported file mode or digest.");
     }
     if (
-      (change.kind === "added" &&
-        (change.before !== undefined || change.after === undefined)) ||
-      (change.kind === "modified" &&
-        (change.before === undefined || change.after === undefined)) ||
-      (change.kind === "deleted" &&
-        (change.before === undefined || change.after !== undefined))
+      (change.kind === "added" && (change.before !== undefined || change.after === undefined)) ||
+      (change.kind === "modified" && (change.before === undefined || change.after === undefined)) ||
+      (change.kind === "deleted" && (change.before === undefined || change.after !== undefined))
     )
       throw new Error("The reviewed change set contains a malformed change.");
   }
-  if (review.changes.length === 0)
-    throw new Error("The reviewed change set is empty.");
+  if (review.changes.length === 0) throw new Error("The reviewed change set is empty.");
   const sorted = [...review.changes].toSorted((left, right) =>
     compareOverlayPaths(left.path, right.path),
   );
-  if (
-    JSON.stringify(sorted.map(({ path }) => path)) !==
-    JSON.stringify(review.approvedPaths)
-  )
+  if (JSON.stringify(sorted.map(({ path }) => path)) !== JSON.stringify(review.approvedPaths))
     throw new Error("The reviewed approved paths are not canonical.");
   return sorted;
 }
 
 /** Recomputes the normalized change-set digest and the outer review digest. */
-export function assertExactReviewedChangeSet(
-  review: ReviewedChangeSetReceipt,
-): void {
+export function assertExactReviewedChangeSet(review: ReviewedChangeSetReceipt): void {
   if (
     review.version !== 2 ||
     !safeSourcePath(review.appSpecPath) ||
@@ -247,9 +222,7 @@ export function assertExactReviewedChangeSet(
     reviewedByCallId: review.reviewedByCallId,
   };
   if (review.digest !== stableDigest(outerUnsigned))
-    throw new Error(
-      "The outer reviewed change-set receipt digest is malformed.",
-    );
+    throw new Error("The outer reviewed change-set receipt digest is malformed.");
 }
 
 export function createLocalPublicationProposal(input: {
@@ -260,9 +233,7 @@ export function createLocalPublicationProposal(input: {
   assertExactReviewedChangeSet(input.review);
   const { sourceReceipt: source, destination, review } = input;
   if (source.sourceKind !== "existing-repository")
-    throw new Error(
-      "Local publication accepts only the original existing-repository source.",
-    );
+    throw new Error("Local publication accepts only the original existing-repository source.");
   assertRepositoryReleasePolicyAtGitSnapshot({
     sourcePath: source.sourcePath,
     sourceSha: source.sourceSha,
@@ -277,21 +248,16 @@ export function createLocalPublicationProposal(input: {
     review.sourceTree !== source.sourceTree ||
     review.repositoryContractDigest !== source.contractDigest
   )
-    throw new Error(
-      "The destination is not the exact original reviewed source checkout.",
-    );
+    throw new Error("The destination is not the exact original reviewed source checkout.");
   const overlap = destination.dirty.find((entry) =>
     review.approvedPaths.some(
       (path) =>
         pathsOverlap(path, entry.path) ||
-        (entry.originalPath !== undefined &&
-          pathsOverlap(path, entry.originalPath)),
+        (entry.originalPath !== undefined && pathsOverlap(path, entry.originalPath)),
     ),
   );
   if (overlap !== undefined)
-    throw new Error(
-      `The destination has dirty overlap with approved path ${overlap.path}.`,
-    );
+    throw new Error(`The destination has dirty overlap with approved path ${overlap.path}.`);
   const unsigned = {
     version: LOCAL_PUBLICATION_VERSION,
     destinationPath: destination.canonicalPath,
@@ -312,10 +278,7 @@ export function createLocalPublicationProposal(input: {
     changes: review.changes,
     intendedOutcome: "apply-reviewed-change-set-locally" as const,
     preconditionStatusDigest: destination.statusDigest,
-    unrelatedProjectionDigest: unrelatedProjectionDigest(
-      destination,
-      review.approvedPaths,
-    ),
+    unrelatedProjectionDigest: unrelatedProjectionDigest(destination, review.approvedPaths),
   };
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
@@ -352,8 +315,7 @@ export function exactProposalMatch(
 ): boolean {
   return (
     left.digest === right.digest &&
-    JSON.stringify(canonicalProposal(left)) ===
-      JSON.stringify(canonicalProposal(right))
+    JSON.stringify(canonicalProposal(left)) === JSON.stringify(canonicalProposal(right))
   );
 }
 
@@ -382,9 +344,7 @@ function canonicalProposal(proposal: LocalPublicationProposal) {
   };
 }
 
-export function proposalFromJournal(
-  receipt: LocalPublicationJournal,
-): LocalPublicationProposal {
+export function proposalFromJournal(receipt: LocalPublicationJournal): LocalPublicationProposal {
   return {
     version: receipt.version,
     destinationPath: receipt.destinationPath,
@@ -410,18 +370,12 @@ export function proposalFromJournal(
   };
 }
 
-export function receiptDigest<T extends { digest?: string }>(
-  receipt: T,
-): string {
-  const unsigned = Object.fromEntries(
-    Object.entries(receipt).filter(([key]) => key !== "digest"),
-  );
+export function receiptDigest<T extends { digest?: string }>(receipt: T): string {
+  const unsigned = Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== "digest"));
   return stableDigest(unsigned);
 }
 
-function exactPathEvidence(
-  journal: LocalPublicationJournal,
-): readonly PublicationPathEvidence[] {
+function exactPathEvidence(journal: LocalPublicationJournal): readonly PublicationPathEvidence[] {
   return journal.changes.map((change) => ({
     path: change.path,
     operation: change.kind,
@@ -441,25 +395,18 @@ function isOrderedUniqueSubset(
   return (
     positions.every((position) => position >= 0) &&
     new Set(paths).size === paths.length &&
-    positions.every(
-      (position, index) => index === 0 || position > positions[index - 1]!,
-    )
+    positions.every((position, index) => index === 0 || position > positions[index - 1]!)
   );
 }
 
 /** Rejects digest-valid but semantically forged journal/terminal receipts. */
-export function assertCanonicalLocalPublicationJournal(
-  journal: LocalPublicationJournal,
-): void {
+export function assertCanonicalLocalPublicationJournal(journal: LocalPublicationJournal): void {
   assertExactProposal(proposalFromJournal(journal));
   if (receiptDigest(journal) !== journal.digest)
-    throw new Error(
-      "The durable local-publication journal digest is malformed.",
-    );
+    throw new Error("The durable local-publication journal digest is malformed.");
   if (
     !isOrderedUniqueSubset(journal.appliedPaths, journal.executionPaths) ||
-    JSON.stringify(journal.pathEvidence) !==
-      JSON.stringify(exactPathEvidence(journal))
+    JSON.stringify(journal.pathEvidence) !== JSON.stringify(exactPathEvidence(journal))
   )
     throw new Error("The durable local-publication intent is not canonical.");
 
@@ -467,13 +414,10 @@ export function assertCanonicalLocalPublicationJournal(
     if (
       !samePaths(journal.intentPaths, journal.executionPaths) ||
       !(
-        journal.appliedPaths.length === 0 ||
-        samePaths(journal.appliedPaths, journal.executionPaths)
+        journal.appliedPaths.length === 0 || samePaths(journal.appliedPaths, journal.executionPaths)
       )
     )
-      throw new Error(
-        "The pending local-publication evidence is not canonical.",
-      );
+      throw new Error("The pending local-publication evidence is not canonical.");
     return;
   }
 
@@ -493,9 +437,7 @@ export function assertCanonicalLocalPublicationJournal(
           })),
         )
     )
-      throw new Error(
-        "The successful local-publication receipt is not canonical.",
-      );
+      throw new Error("The successful local-publication receipt is not canonical.");
     return;
   }
 
@@ -534,21 +476,17 @@ export function assertCanonicalLocalPublicationJournal(
   if (!samePaths(journal.intentPaths, journal.executionPaths))
     throw new Error("The failed local-publication receipt is not canonical.");
   const uncertain = new Set(journal.uncertainPaths);
-  const expectedRecovery =
-    journal.conflictedPaths.length > 0 || journal.uncertainPaths.length > 0;
+  const expectedRecovery = journal.conflictedPaths.length > 0 || journal.uncertainPaths.length > 0;
   if (
     journal.rolledBackPaths.some((path) => !applied.has(path)) ||
     journal.conflictedPaths.some((path) => !applied.has(path)) ||
     journal.uncertainPaths.some((path) => applied.has(path)) ||
     [...uncertain].some(
-      (path) =>
-        journal.rolledBackPaths.includes(path) ||
-        journal.conflictedPaths.includes(path),
+      (path) => journal.rolledBackPaths.includes(path) || journal.conflictedPaths.includes(path),
     ) ||
     !canonicalPartition ||
     journal.recoveryRequired !== expectedRecovery ||
-    journal.reason !==
-      (expectedRecovery ? "rollback-conflict" : "mutation-failed")
+    journal.reason !== (expectedRecovery ? "rollback-conflict" : "mutation-failed")
   )
     throw new Error("The failed local-publication receipt is not canonical.");
 }
@@ -560,9 +498,7 @@ export function assertExactDurablePublicationSuccess(
 ): asserts durable is LocalPublicationSuccessReceipt {
   assertCanonicalLocalPublicationJournal(workflowReceipt);
   if (durable?.status !== "succeeded")
-    throw new Error(
-      "The published local workflow does not have its durable success journal.",
-    );
+    throw new Error("The published local workflow does not have its durable success journal.");
   assertCanonicalLocalPublicationJournal(durable);
   if (
     durable.digest !== workflowReceipt.digest ||
@@ -572,10 +508,7 @@ export function assertExactDurablePublicationSuccess(
     durable.reviewDigest !== workflowReceipt.reviewDigest ||
     durable.destinationPath !== workflowReceipt.destinationPath ||
     durable.postconditionDigest !== workflowReceipt.postconditionDigest ||
-    !exactProposalMatch(
-      proposalFromJournal(durable),
-      proposalFromJournal(workflowReceipt),
-    )
+    !exactProposalMatch(proposalFromJournal(durable), proposalFromJournal(workflowReceipt))
   )
     throw new Error(
       "The published local workflow does not exactly match its durable success journal.",

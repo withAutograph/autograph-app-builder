@@ -43,7 +43,7 @@ export default defineTool({
       getSandbox: () => ctx.getSandbox(),
     });
     const current: DependencyReadyState = prepared.state;
-    const {sandbox} = prepared;
+    const { sandbox } = prepared;
     const execution = targetExecutionBinding(undefined, process.env);
     if (
       current.phase === "planned" ||
@@ -68,9 +68,7 @@ export default defineTool({
       artifactRevision: current.appSpec.artifactRevision,
     };
     let identityReceipt: TargetIdentityReceipt | undefined =
-      current.phase === "identity_resolved"
-        ? current.identityReceipt
-        : undefined;
+      current.phase === "identity_resolved" ? current.identityReceipt : undefined;
     let workflowBeforeProposal = current;
     const result = await executeTargetIdentityAndPlanning({
       sandbox,
@@ -102,9 +100,7 @@ export default defineTool({
           preparedByCallId: current.preparedByCallId,
           workspace: current.workspace,
           sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined
-            ? {}
-            : { githubSource: current.githubSource }),
+          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
           artifacts: current.artifacts,
           appSpec: current.appSpec,
           dependencyReceipt: current.dependencyReceipt,
@@ -118,8 +114,7 @@ export default defineTool({
         workflowBeforeProposal = identityState;
       },
     });
-    if (identityReceipt === undefined)
-      throw new Error("Target identity receipt was not recorded.");
+    if (identityReceipt === undefined) throw new Error("Target identity receipt was not recorded.");
     const recordedIdentity = identityReceipt;
     const unsigned = {
       version: 1 as const,
@@ -139,9 +134,7 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         artifacts: current.artifacts,
         appSpec: current.appSpec,
         dependencyReceipt: current.dependencyReceipt,

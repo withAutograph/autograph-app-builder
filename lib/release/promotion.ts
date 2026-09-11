@@ -9,11 +9,7 @@ import { z } from "zod";
 
 import { IMAGE_PLATFORM, IMAGE_REPOSITORY } from "../image/lifecycle";
 import { portableReleaseReceiptSchema } from "../../scripts/portable-proof-artifact";
-import {
-  releaseEndpoint,
-  sha256,
-  TOOL_NAMES,
-} from "../../scripts/portable-release";
+import { releaseEndpoint, sha256, TOOL_NAMES } from "../../scripts/portable-release";
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObject = z.string().regex(/^[0-9a-f]{40}$/u);
@@ -24,24 +20,16 @@ const safePath = z
     (value) =>
       !isAbsolute(value) &&
       !value.includes("\\") &&
-      value
-        .split("/")
-        .every((part) => part !== "" && part !== "." && part !== ".."),
+      value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
     "Candidate paths must be safe relative paths.",
   );
-const exactImageReference = z
-  .string()
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*@sha256:[0-9a-f]{64}$/u);
+const exactImageReference = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*@sha256:[0-9a-f]{64}$/u);
 const imageTag = z
   .string()
-  .regex(
-    /^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:release-[0-9a-f]{16}$/u,
-  );
+  .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:release-[0-9a-f]{16}$/u);
 const localImageTag = z
   .string()
-  .regex(
-    /^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u,
-  );
+  .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u);
 
 const proofSchema = z
   .object({
@@ -61,17 +49,13 @@ const promotionReceiptUnsignedSchema = z
     format: z.literal("autograph-release-promotion-v1"),
     builder: z
       .object({
-        repository: z.literal(
-          "https://github.com/withAutograph/autograph-app-builder",
-        ),
+        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
         commit: gitObject,
         tree: gitObject,
         clean: z.literal(true),
       })
       .strict(),
-    arrusted: z
-      .object({ commit: gitObject, tree: gitObject, clean: z.literal(true) })
-      .strict(),
+    arrusted: z.object({ commit: gitObject, tree: gitObject, clean: z.literal(true) }).strict(),
     platform: z
       .object({
         image: z.literal(IMAGE_PLATFORM),
@@ -147,9 +131,7 @@ export const promotionReceiptSchema = promotionReceiptUnsignedSchema
   .strict();
 
 export type PromotionReceipt = z.infer<typeof promotionReceiptSchema>;
-export type PromotionReceiptUnsigned = z.infer<
-  typeof promotionReceiptUnsignedSchema
->;
+export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSchema>;
 
 export { sha256 };
 
@@ -159,22 +141,12 @@ async function sha256File(path: string) {
   return digest.digest("hex");
 }
 
-export function sealPromotionReceipt(
-  input: PromotionReceiptUnsigned,
-): PromotionReceipt {
+export function sealPromotionReceipt(input: PromotionReceiptUnsigned): PromotionReceipt {
   const unsigned = promotionReceiptUnsignedSchema.parse(input);
-  if (
-    unsigned.endpoint !==
-    `${releaseEndpoint(new URL(unsigned.endpoint).origin)}/mcp`
-  )
+  if (unsigned.endpoint !== `${releaseEndpoint(new URL(unsigned.endpoint).origin)}/mcp`)
     throw new Error("Release promotion requires the exact deployed /mcp URL.");
-  if (
-    unsigned.image.reference !==
-    `${IMAGE_REPOSITORY}@${unsigned.image.manifestDigest}`
-  )
-    throw new Error(
-      "Release image reference did not bind the candidate digest.",
-    );
+  if (unsigned.image.reference !== `${IMAGE_REPOSITORY}@${unsigned.image.manifestDigest}`)
+    throw new Error("Release image reference did not bind the candidate digest.");
   if (JSON.stringify(unsigned.tools) !== JSON.stringify(TOOL_NAMES))
     throw new Error("Release promotion must expose exactly five public tools.");
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
@@ -194,8 +166,7 @@ function git(root: string, ...args: string[]) {
 }
 
 export async function exactCleanGitSource(rootInput: string, label: string) {
-  if (!isAbsolute(rootInput))
-    throw new Error(`${label} root must be absolute.`);
+  if (!isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
   const requested = resolve(rootInput);
   const root = await realpath(requested);
   const info = await lstat(root);
@@ -230,8 +201,7 @@ async function tarEntry(path: string, requested: string) {
         entry.resume();
         return;
       }
-      if (result !== undefined)
-        throw new Error(`OCI archive repeated ${requested}.`);
+      if (result !== undefined) throw new Error(`OCI archive repeated ${requested}.`);
       const chunks: Buffer[] = [];
       pending.push(
         new Promise<void>((resolveEntry, rejectEntry) => {
@@ -246,8 +216,7 @@ async function tarEntry(path: string, requested: string) {
     },
   });
   await Promise.all(pending);
-  if (result === undefined)
-    throw new Error(`OCI archive omitted ${requested}.`);
+  if (result === undefined) throw new Error(`OCI archive omitted ${requested}.`);
   return result;
 }
 
@@ -312,15 +281,13 @@ export async function inspectOciCandidateArchive(path: string) {
 
 async function treeEntries(root: string, current = root): Promise<string[]> {
   const paths: string[] = [];
-  for (const entry of (await readdir(current, { withFileTypes: true })).sort(
-    (left, right) => left.name.localeCompare(right.name),
+  for (const entry of (await readdir(current, { withFileTypes: true })).sort((left, right) =>
+    left.name.localeCompare(right.name),
   )) {
     const path = join(current, entry.name);
     if (entry.isDirectory()) paths.push(...(await treeEntries(root, path)));
-    else if (entry.isFile() && !entry.isSymbolicLink())
-      paths.push(relative(root, path));
-    else
-      throw new Error("Release deployment output contains a non-file entry.");
+    else if (entry.isFile() && !entry.isSymbolicLink()) paths.push(relative(root, path));
+    else throw new Error("Release deployment output contains a non-file entry.");
   }
   return paths;
 }
@@ -334,9 +301,7 @@ export async function immutableTreeDigest(rootInput: string) {
     const bytes = await readFile(join(root, path));
     const info = await lstat(join(root, path));
     const mode = (info.mode & 0o777).toString(8).padStart(3, "0");
-    digest.update(
-      `${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`,
-    );
+    digest.update(`${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`);
     digest.update(bytes);
   }
   return digest.digest("hex");
@@ -344,10 +309,7 @@ export async function immutableTreeDigest(rootInput: string) {
 
 function within(root: string, path: string) {
   const child = relative(root, path);
-  return (
-    child === "" ||
-    (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child))
-  );
+  return child === "" || (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child));
 }
 
 async function exactFile(root: string, path: string, expected: string) {
@@ -361,16 +323,14 @@ async function exactFile(root: string, path: string, expected: string) {
       throw new Error(`Release candidate path contained a link: ${path}`);
     if (cursor === root) break;
     const parent = resolve(cursor, "..");
-    if (!within(root, parent))
-      throw new Error("Release candidate path escaped its root.");
+    if (!within(root, parent)) throw new Error("Release candidate path escaped its root.");
     cursor = parent;
   }
   const info = await lstat(absolute);
   if (!info.isFile() || info.isSymbolicLink())
     throw new Error(`Release candidate file was unsafe: ${path}`);
   const bytes = await readFile(absolute);
-  if (sha256(bytes) !== expected)
-    throw new Error(`Release candidate bytes drifted: ${path}`);
+  if (sha256(bytes) !== expected) throw new Error(`Release candidate bytes drifted: ${path}`);
   return bytes;
 }
 
@@ -396,9 +356,7 @@ export async function verifyPromotionCandidate(input: {
     receiptPath,
     sha256(await readFile(join(root, receiptPath))),
   );
-  const receipt = promotionReceiptSchema.parse(
-    JSON.parse(receiptBytes.toString("utf8")),
-  );
+  const receipt = promotionReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf8")));
   const { digest, ...unsigned } = receipt;
   if (sealPromotionReceipt(unsigned).digest !== digest)
     throw new Error("Release promotion receipt digest drifted.");
@@ -419,17 +377,11 @@ export async function verifyPromotionCandidate(input: {
     throw new Error("Portable package binding did not match promotion.");
   await Promise.all([
     exactFile(root, receipt.package.archive, receipt.package.archiveSha256),
-    exactFile(
-      root,
-      receipt.package.marketplaceArchive,
-      receipt.package.marketplaceArchiveSha256,
-    ),
+    exactFile(root, receipt.package.marketplaceArchive, receipt.package.marketplaceArchiveSha256),
     exactFile(root, receipt.package.checksums, receipt.package.checksumsSha256),
     exactFile(root, receipt.image.archive, receipt.image.archiveSha256),
   ]);
-  const observedImage = await inspectOciCandidateArchive(
-    join(root, receipt.image.archive),
-  );
+  const observedImage = await inspectOciCandidateArchive(join(root, receipt.image.archive));
   if (
     observedImage.manifestDigest !== receipt.image.manifestDigest ||
     observedImage.archiveSha256 !== receipt.image.archiveSha256

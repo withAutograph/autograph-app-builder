@@ -3,10 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import {
-  SOURCE_RECEIPT_VERSION,
-  type SourceReceipt,
-} from "../repository/source-receipt";
+import { SOURCE_RECEIPT_VERSION, type SourceReceipt } from "../repository/source-receipt";
 import type { FreshBootstrapSourceWorkspace } from "../repository/node-fresh-bootstrap";
 
 /**
@@ -27,10 +24,7 @@ export async function freshBootstrapSourceWorkspace(input: {
     });
   };
   await reverify();
-  const files = await readPreparedSandboxSourceManifest(
-    input.sandbox,
-    input.workspace,
-  );
+  const files = await readPreparedSandboxSourceManifest(input.sandbox, input.workspace);
   return {
     files,
     readSourceFile: async (path) =>

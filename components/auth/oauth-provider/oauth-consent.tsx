@@ -47,8 +47,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   const { authClient } = useAuth();
   const { localization, scopeMetadata } = useAuthPlugin(oauthProviderPlugin);
   const oauthClient = authClient as OAuthProviderAuthClient;
-  const { data: session, isPending: isSessionPending } =
-    useSession(oauthClient);
+  const { data: session, isPending: isSessionPending } = useSession(oauthClient);
   const locationSearch = useSyncExternalStore(
     subscribeToLocation,
     getLocationSearch,
@@ -74,20 +73,14 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
       (!isSessionPending && !session) ||
       publicClient.isError ||
       (!publicClient.isPending && session && !client));
-  const canRespond = Boolean(
-    request?.clientId && session && client && !consent.isPending,
-  );
+  const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
 
   if (invalidRequest) {
     return (
       <Card className={cn("w-full max-w-md", className)}>
         <CardHeader>
-          <CardTitle className="text-xl">
-            {localization.invalidRequest}
-          </CardTitle>
-          <CardDescription>
-            {localization.invalidRequestDescription}
-          </CardDescription>
+          <CardTitle className="text-xl">{localization.invalidRequest}</CardTitle>
+          <CardDescription>{localization.invalidRequestDescription}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -99,11 +92,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
         <div className="flex items-center gap-3">
           {client ? (
             <Avatar size="lg">
-              <AvatarImage
-                alt={clientName}
-                referrerPolicy="no-referrer"
-                src={logoUrl}
-              />
+              <AvatarImage alt={clientName} referrerPolicy="no-referrer" src={logoUrl} />
               <AvatarFallback>
                 <ShieldCheck className="size-5" />
               </AvatarFallback>
@@ -119,9 +108,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               <Skeleton className="h-4 w-36" />
             )}
             {client?.client_uri ? (
-              <p className="truncate text-xs text-muted-foreground">
-                {client.client_uri}
-              </p>
+              <p className="truncate text-xs text-muted-foreground">{client.client_uri}</p>
             ) : null}
           </div>
         </div>
@@ -131,10 +118,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
             {interpolateClient(localization.authorize, clientName)}
           </CardTitle>
           <CardDescription>
-            {interpolateClient(
-              localization.authorizationDescription,
-              clientName,
-            )}
+            {interpolateClient(localization.authorizationDescription, clientName)}
           </CardDescription>
         </div>
       </CardHeader>
@@ -148,14 +132,10 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           {request ? (
             <ul className="grid gap-3">
               {request.scopes.map((scope) => {
-                const metadata = resolveOAuthScopeMetadata(
-                  scopeMetadata,
-                  scope,
-                  {
-                    clientId: request.clientId,
-                    requestedScopes: request.scopes,
-                  },
-                );
+                const metadata = resolveOAuthScopeMetadata(scopeMetadata, scope, {
+                  clientId: request.clientId,
+                  requestedScopes: request.scopes,
+                });
 
                 return (
                   <li className="flex gap-3" key={scope}>
@@ -163,9 +143,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
                     <div className="grid gap-0.5">
                       <p className="text-sm font-medium">{metadata.label}</p>
                       {metadata.description ? (
-                        <p className="text-xs text-muted-foreground">
-                          {metadata.description}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{metadata.description}</p>
                       ) : null}
                     </div>
                   </li>
@@ -188,18 +166,14 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
         <div className="flex items-center gap-3">
           <UserAvatar isPending={isSessionPending} user={session?.user} />
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">
-              {localization.signedInAs}
-            </p>
+            <p className="text-xs text-muted-foreground">{localization.signedInAs}</p>
             {session ? (
               <>
                 <p className="truncate text-sm font-medium">
                   {session.user.name || session.user.email}
                 </p>
                 {session.user.name ? (
-                  <p className="truncate text-xs text-muted-foreground">
-                    {session.user.email}
-                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
                 ) : null}
               </>
             ) : (
@@ -240,18 +214,11 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           variant="outline"
           onClick={() => consent.mutate({ accept: false })}
         >
-          {consent.isPending && consent.variables?.accept === false ? (
-            <Spinner />
-          ) : null}
+          {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
           {localization.cancel}
         </Button>
-        <Button
-          disabled={!canRespond}
-          onClick={() => consent.mutate({ accept: true })}
-        >
-          {consent.isPending && consent.variables?.accept === true ? (
-            <Spinner />
-          ) : null}
+        <Button disabled={!canRespond} onClick={() => consent.mutate({ accept: true })}>
+          {consent.isPending && consent.variables?.accept === true ? <Spinner /> : null}
           {localization.allow}
         </Button>
       </CardFooter>

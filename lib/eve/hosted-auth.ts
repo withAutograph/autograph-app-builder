@@ -45,11 +45,7 @@ export const hostedEveOperationScopes = {
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;
 
 export class HostedAuthorizationError extends Error {
-  readonly code:
-    | "invalid_claims"
-    | "issuer_mismatch"
-    | "audience_mismatch"
-    | "insufficient_scope";
+  readonly code: "invalid_claims" | "issuer_mismatch" | "audience_mismatch" | "insufficient_scope";
 
   constructor(code: HostedAuthorizationError["code"]) {
     super("The hosted Eve request is not authorized.");

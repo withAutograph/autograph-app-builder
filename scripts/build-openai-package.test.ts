@@ -9,12 +9,7 @@ const runGenerator = (cwd: string, endpoint: string) =>
     let stderr = "";
     const child = spawn(
       process.execPath,
-      [
-        ...process.execArgv,
-        resolve("scripts/build-openai-package.mts"),
-        "--endpoint",
-        endpoint,
-      ],
+      [...process.execArgv, resolve("scripts/build-openai-package.mts"), "--endpoint", endpoint],
       { cwd, stdio: ["ignore", "ignore", "pipe"] },
     );
     child.stderr.setEncoding("utf8");
@@ -25,20 +20,13 @@ const runGenerator = (cwd: string, endpoint: string) =>
     child.once("exit", (code) =>
       code === 0
         ? resolveRun()
-        : rejectRun(
-            new Error(
-              `OpenAI package generator exited ${code}: ${stderr.trim()}`,
-            ),
-          ),
+        : rejectRun(new Error(`OpenAI package generator exited ${code}: ${stderr.trim()}`)),
     );
   });
 
 const writeFixture = async (
   root: string,
-  {
-    version = "0.2.12",
-    extraServer = false,
-  }: { version?: string; extraServer?: boolean } = {},
+  { version = "0.2.12", extraServer = false }: { version?: string; extraServer?: boolean } = {},
 ) => {
   await writeFile(
     join(root, "plugin.json"),
@@ -84,13 +72,9 @@ describe("OpenAI package generator", () => {
       const endpoint = "https://preview.autograph.dev/mcp";
       await runGenerator(root, endpoint);
 
-      const portable = JSON.parse(
-        await readFile(join(root, "mcp.json"), "utf8"),
-      );
+      const portable = JSON.parse(await readFile(join(root, "mcp.json"), "utf8"));
       const codex = JSON.parse(await readFile(join(root, ".mcp.json"), "utf8"));
-      const manifest = JSON.parse(
-        await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"),
-      );
+      const manifest = JSON.parse(await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"));
       expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
       expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);
@@ -114,12 +98,8 @@ describe("OpenAI package generator", () => {
         "Build an event planning app for coordinating guests, schedules, and tasks",
         "Design a customer feedback app with a clear review workflow",
       ]);
-      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
-        "App Builder session",
-      );
-      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain(
-        "through Eve",
-      );
+      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain("App Builder session");
+      expect(manifest.interface.defaultPrompt.join(" ")).not.toContain("through Eve");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -142,10 +122,7 @@ describe("OpenAI package generator", () => {
     ["an IPv4-mapped loopback", "https://[::ffff:7f00:1]/mcp"],
     ["a noncanonical IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/mcp"],
     ["a raw dot-segment alias", "https://preview.autograph.dev/a/../mcp"],
-    [
-      "a percent-encoded dot-segment alias",
-      "https://preview.autograph.dev/a/%2e%2e/mcp",
-    ],
+    ["a percent-encoded dot-segment alias", "https://preview.autograph.dev/a/%2e%2e/mcp"],
     ["a mixed-case hostname", "https://PREVIEW.autograph.dev/mcp"],
     ["an explicit default port", "https://preview.autograph.dev:443/mcp"],
   ])("rejects %s", async (_name, endpoint) => {
@@ -156,9 +133,7 @@ describe("OpenAI package generator", () => {
       await expect(runGenerator(root, endpoint)).rejects.toThrow();
       expect(await readFile(join(root, "mcp.json"))).toEqual(originalMcp);
       await expect(readFile(join(root, ".mcp.json"))).rejects.toThrow();
-      await expect(
-        readFile(join(root, ".codex-plugin/plugin.json")),
-      ).rejects.toThrow();
+      await expect(readFile(join(root, ".codex-plugin/plugin.json"))).rejects.toThrow();
       await expect(readFile(join(root, ".app.json"))).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -169,26 +144,19 @@ describe("OpenAI package generator", () => {
     const root = await mkdtemp(join(tmpdir(), "autograph-openai-package-"));
     try {
       await writeFixture(root, { extraServer: true });
-      await expect(
-        runGenerator(root, "https://preview.autograph.dev/mcp"),
-      ).rejects.toThrow();
+      await expect(runGenerator(root, "https://preview.autograph.dev/mcp")).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it.each(["0.1.0", "0.2.0", "1.0.0"])(
-    "rejects package version %s",
-    async (version) => {
-      const root = await mkdtemp(join(tmpdir(), "autograph-openai-package-"));
-      try {
-        await writeFixture(root, { version });
-        await expect(
-          runGenerator(root, "https://preview.autograph.dev/mcp"),
-        ).rejects.toThrow();
-      } finally {
-        await rm(root, { recursive: true, force: true });
-      }
-    },
-  );
+  it.each(["0.1.0", "0.2.0", "1.0.0"])("rejects package version %s", async (version) => {
+    const root = await mkdtemp(join(tmpdir(), "autograph-openai-package-"));
+    try {
+      await writeFixture(root, { version });
+      await expect(runGenerator(root, "https://preview.autograph.dev/mcp")).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -15,20 +15,17 @@ export class VirtualAuthenticator {
   static async create(context: BrowserContext, page: Page) {
     const session = await context.newCDPSession(page);
     await session.send("WebAuthn.enable");
-    const { authenticatorId } = await session.send(
-      "WebAuthn.addVirtualAuthenticator",
-      {
-        options: {
-          protocol: "ctap2",
-          ctap2Version: "ctap2_1",
-          transport: "internal",
-          hasResidentKey: true,
-          hasUserVerification: true,
-          isUserVerified: true,
-          automaticPresenceSimulation: true,
-        },
+    const { authenticatorId } = await session.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        ctap2Version: "ctap2_1",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
       },
-    );
+    });
     return new VirtualAuthenticator(session, authenticatorId);
   }
 

@@ -9,9 +9,7 @@ import {
 } from "./arrusted-template-reader";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey
-  .export({ type: "pkcs8", format: "pem" })
-  .toString();
+const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -44,9 +42,9 @@ function readerFetch(input?: {
             checks: "read",
           },
           repository_selection: input?.repositorySelection ?? "all",
-          repositories: (
-            input?.tokenRepositoryIds ?? [ARRUSTED_TEMPLATE_REPOSITORY_ID]
-          ).map((id) => ({ id })),
+          repositories: (input?.tokenRepositoryIds ?? [ARRUSTED_TEMPLATE_REPOSITORY_ID]).map(
+            (id) => ({ id }),
+          ),
         },
         input?.status ?? 201,
       );
@@ -92,9 +90,7 @@ describe("Arrusted private template reader", () => {
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });
     expect(
-      mock.calls.filter(({ url }) =>
-        url.includes("/installation/repositories?"),
-      ),
+      mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
     ).toHaveLength(1);
   });
 
@@ -156,15 +152,12 @@ describe("Arrusted private template reader", () => {
       },
     },
     { totalCount: 2 },
-  ])(
-    "rejects a write-capable token or mismatched repository %#",
-    async (input) => {
-      const mock = readerFetch(input);
-      await expect(reader(mock.implementation).acquire()).rejects.toThrow(
-        "template reader is unavailable",
-      );
-    },
-  );
+  ])("rejects a write-capable token or mismatched repository %#", async (input) => {
+    const mock = readerFetch(input);
+    await expect(reader(mock.implementation).acquire()).rejects.toThrow(
+      "template reader is unavailable",
+    );
+  });
 
   it("fails closed when the deployment-owned reader configuration is absent", () => {
     expect(() => readDeploymentArrustedTemplateReaderConfig({})).toThrow(

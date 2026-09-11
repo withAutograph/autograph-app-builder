@@ -55,14 +55,11 @@ describe.skip("retired template-backed Vercel backend", () => {
       .fn<typeof globalThis.fetch>()
       .mockRejectedValueOnce(new Error("fetch failed"))
       .mockResolvedValueOnce(new Response("ok"));
-    const request = new Request(
-      "https://sandbox.example.test/v1/create?secret=hidden",
-      {
-        method: "POST",
-        headers: { authorization: "Bearer hidden", "x-private": "hidden" },
-        body: "hidden",
-      },
-    );
+    const request = new Request("https://sandbox.example.test/v1/create?secret=hidden", {
+      method: "POST",
+      headers: { authorization: "Bearer hidden", "x-private": "hidden" },
+      body: "hidden",
+    });
     await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
       status: 200,
     });
@@ -76,11 +73,9 @@ describe.skip("retired template-backed Vercel backend", () => {
       .mockImplementationOnce(
         (_input, init) =>
           new Promise((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(init.signal?.reason),
-              { once: true },
-            );
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+              once: true,
+            });
           }),
       )
       .mockResolvedValueOnce(new Response("ok"));
@@ -189,12 +184,8 @@ describe.skip("retired template-backed Vercel backend", () => {
       templateKey: "authored-key-b",
     });
 
-    expect(prewarm).toHaveBeenCalledWith(
-      expect.objectContaining({ templateKey: providerKey }),
-    );
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ templateKey: providerKey }),
-    );
+    expect(prewarm).toHaveBeenCalledWith(expect.objectContaining({ templateKey: providerKey }));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: providerKey }));
   });
 
   it("reuses one live Development session until its handle is closed", async () => {
@@ -394,10 +385,7 @@ describe.skip("retired template-backed Vercel backend", () => {
       backendName: "vercel",
       templateKey,
     });
-    const create = vi
-      .fn()
-      .mockRejectedValueOnce(first)
-      .mockRejectedValueOnce(second);
+    const create = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
     const prewarm = vi.fn(async (input: SandboxBackendPrewarmInput) => {
       void input;
       return { reused: false };
@@ -453,14 +441,8 @@ describe("provider-native Vercel source", () => {
       templateKey,
     });
     expect(result.session.id).toBe("fresh-session");
-    expect(create).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ templateKey }),
-    );
-    expect(create).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ templateKey: null }),
-    );
+    expect(create).toHaveBeenNthCalledWith(1, expect.objectContaining({ templateKey }));
+    expect(create).toHaveBeenNthCalledWith(2, expect.objectContaining({ templateKey: null }));
     expect(prewarm).not.toHaveBeenCalled();
   });
 
@@ -477,14 +459,10 @@ describe("provider-native Vercel source", () => {
     });
     try {
       createHostedVercelBackend({ factory });
-      expect(
-        options?.sessionCreateOptions({ session: { id: "other" } }),
-      ).toEqual({
+      expect(options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
         networkPolicy: "allow-all",
       });
-      expect(
-        options?.sessionCreateOptions({ session: { id: "session-source" } }),
-      ).toEqual({
+      expect(options?.sessionCreateOptions({ session: { id: "session-source" } })).toEqual({
         networkPolicy: "allow-all",
         source: {
           type: "git",

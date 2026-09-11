@@ -21,8 +21,7 @@ export const repositoryScopeRequest: PublicInputRequest = {
   requestId: "github-installation-scope",
   kind: "question",
   title: "Which GitHub account should Autograph use?",
-  description:
-    "Choose the account that owns the repository you want Autograph to use.",
+  description: "Choose the account that owns the repository you want Autograph to use.",
   options: [
     { id: "123", label: "withAutograph (Organization)" },
     { id: "456", label: "jasonmorganson (User)" },
@@ -78,9 +77,7 @@ export const authorizationRequest: PublicInputRequest = {
   },
 };
 
-export function sessionResult(
-  inputRequests: PublicInputRequest[],
-): EveSessionResult {
+export function sessionResult(inputRequests: PublicInputRequest[]): EveSessionResult {
   return {
     sessionId: "session-story",
     status: "input_required",

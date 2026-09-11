@@ -34,12 +34,8 @@ type Story = StoryObj<typeof meta>;
 export const MixedRequests: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole("button", { name: "Continue" }),
-    ).toBeDisabled();
-    await expect(
-      canvas.getByText("Answer all 3 remaining requests to continue."),
-    ).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Continue" })).toBeDisabled();
+    await expect(canvas.getByText("Answer all 3 remaining requests to continue.")).toBeVisible();
   },
 };
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
@@ -55,10 +51,7 @@ export const CompleteBatchAction: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText("Cursor"));
-    await userEvent.type(
-      canvas.getByLabelText("Who will use this app?"),
-      "Finance operators",
-    );
+    await userEvent.type(canvas.getByLabelText("Who will use this app?"), "Finance operators");
     await userEvent.click(canvas.getByRole("button", { name: "Build app" }));
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(args.onRespond).toHaveBeenCalledOnce();
@@ -107,9 +100,7 @@ export const SubmittingAndDuplicateProtection: Story = {
     const button = canvas.getByRole("button", { name: "Continue" });
     await userEvent.dblClick(button);
     await expect(args.onRespond).toHaveBeenCalledOnce();
-    await expect(
-      canvas.getByRole("button", { name: "Submitting…" }),
-    ).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Submitting…" })).toBeDisabled();
   },
 };
 export const ActionableFailure: Story = {

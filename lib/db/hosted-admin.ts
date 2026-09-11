@@ -59,9 +59,7 @@ const requestBase = {
   requestedAt: instantSchema,
 };
 
-const seedPlanSchema = z
-  .object({ ...requestBase, action: z.literal("membership.seed") })
-  .strict();
+const seedPlanSchema = z.object({ ...requestBase, action: z.literal("membership.seed") }).strict();
 const revokePlanSchema = z
   .object({ ...requestBase, action: z.literal("membership.revoke") })
   .strict();
@@ -87,9 +85,7 @@ export const hostedAdminPlanRequestSchema = z.discriminatedUnion("action", [
   deletePlanSchema,
 ]);
 
-export type HostedAdminPlanRequest = z.infer<
-  typeof hostedAdminPlanRequestSchema
->;
+export type HostedAdminPlanRequest = z.infer<typeof hostedAdminPlanRequestSchema>;
 
 export const hostedAdminApplyRequestSchema = z.discriminatedUnion("action", [
   seedPlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
@@ -98,9 +94,7 @@ export const hostedAdminApplyRequestSchema = z.discriminatedUnion("action", [
   deletePlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
 ]);
 
-export type HostedAdminApplyRequest = z.infer<
-  typeof hostedAdminApplyRequestSchema
->;
+export type HostedAdminApplyRequest = z.infer<typeof hostedAdminApplyRequestSchema>;
 
 const effectsSchema = z
   .object({
@@ -116,12 +110,7 @@ const effectsSchema = z
 export const hostedAdminReceiptSchema = z
   .object({
     version: z.literal(1),
-    action: z.enum([
-      "membership.seed",
-      "membership.revoke",
-      "retention.apply",
-      "tenant.delete",
-    ]),
+    action: z.enum(["membership.seed", "membership.revoke", "retention.apply", "tenant.delete"]),
     status: z.enum(["applied", "no-op"]),
     requestDigest: sha256Schema,
     authorityDigest: sha256Schema,
@@ -143,34 +132,34 @@ export interface HostedAdminStore {
   seedMembership: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-}) => Promise<{
+  }) => Promise<{
     membershipRowsAffected: number;
-}>;
+  }>;
   revokeMembership: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-}) => Promise<{
+  }) => Promise<{
     membershipRowsAffected: number;
-}>;
+  }>;
   applyRetention: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     deleteBefore: Date;
-}) => Promise<{
+  }) => Promise<{
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
     integrationRowsDeleted?: number;
     authorizationStateRowsDeleted?: number;
-}>;
+  }>;
   deleteTenant: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     membershipRevokedBefore: Date;
-}) => Promise<{
+  }) => Promise<{
     membershipRowsDeleted: number;
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
     integrationRowsDeleted?: number;
     authorizationStateRowsDeleted?: number;
-}>;
+  }>;
 }
 
 function canonicalRequest(request: HostedAdminPlanRequest): string {
@@ -264,10 +253,7 @@ export async function executeHostedAdminRequest(input: {
 
   const nowEpochMs = input.now?.() ?? Date.now();
   const requestedAtEpochMs = Date.parse(request.requestedAt);
-  if (
-    requestedAtEpochMs > nowEpochMs + 30_000 ||
-    nowEpochMs - requestedAtEpochMs > 15 * 60_000
-  ) {
+  if (requestedAtEpochMs > nowEpochMs + 30_000 || nowEpochMs - requestedAtEpochMs > 15 * 60_000) {
     throw new Error("Hosted database action plan is stale.");
   }
   if (
@@ -278,12 +264,9 @@ export async function executeHostedAdminRequest(input: {
   }
   if (
     request.action === "tenant.delete" &&
-    Date.parse(request.membershipRevokedBefore) >
-      requestedAtEpochMs - 5 * 60_000
+    Date.parse(request.membershipRevokedBefore) > requestedAtEpochMs - 5 * 60_000
   ) {
-    throw new Error(
-      "Hosted tenant deletion requires a five-minute revocation drain.",
-    );
+    throw new Error("Hosted tenant deletion requires a five-minute revocation drain.");
   }
 
   let effects = { ...emptyEffects };

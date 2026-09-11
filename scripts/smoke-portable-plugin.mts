@@ -7,8 +7,7 @@ const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--"))
-    throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
 };
 const releaseValue = argument("--release");
@@ -17,9 +16,7 @@ if (!releaseValue || !installValue)
   throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");
 const releaseRoot = resolve(releaseValue);
 const installRoot = resolve(installValue);
-const receipt = JSON.parse(
-  await readFile(join(releaseRoot, "release-receipt.json"), "utf8"),
-);
+const receipt = JSON.parse(await readFile(join(releaseRoot, "release-receipt.json"), "utf8"));
 if (
   receipt.format !== "autograph-portable-plugin-release-v3" ||
   receipt.specification !== "1.0.0" ||
@@ -32,17 +29,11 @@ if (
 const archive = await readFile(join(releaseRoot, receipt.archive.name));
 if (sha256(archive) !== receipt.archive.sha256)
   throw new Error("Portable archive digest did not match its receipt.");
-const marketplaceArchive = await readFile(
-  join(releaseRoot, receipt.codexMarketplaceArchive.name),
-);
+const marketplaceArchive = await readFile(join(releaseRoot, receipt.codexMarketplaceArchive.name));
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
   throw new Error("Codex marketplace digest did not match its receipt.");
-const discovery = JSON.parse(
-  await readFile(join(releaseRoot, "mock/tools-list.json"), "utf8"),
-);
-const discovered = discovery.result?.tools?.map(
-  (tool: { name?: unknown }) => tool.name,
-);
+const discovery = JSON.parse(await readFile(join(releaseRoot, "mock/tools-list.json"), "utf8"));
+const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
   throw new Error("Offline MCP discovery did not return the exact five tools.");
 
@@ -55,9 +46,7 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
     release: true,
     packageKind: "generated-artifact",
   });
-  for (const [path, digest] of Object.entries(
-    receipt.coreFiles as Record<string, string>,
-  )) {
+  for (const [path, digest] of Object.entries(receipt.coreFiles as Record<string, string>)) {
     const relativePath = path.replace(/^app-builder\//u, "");
     const bytes = await readFile(join(pluginRoot, relativePath));
     if (sha256(bytes) !== digest)
@@ -71,12 +60,8 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  const harness = JSON.parse(
-    await readFile(join(root, "client-harness.json"), "utf8"),
-  );
-  const installation = JSON.parse(
-    await readFile(join(root, "installation-receipt.json"), "utf8"),
-  );
+  const harness = JSON.parse(await readFile(join(root, "client-harness.json"), "utf8"));
+  const installation = JSON.parse(await readFile(join(root, "installation-receipt.json"), "utf8"));
   if (
     harness.format !== "agent-plugins-client-harness-v2" ||
     harness.client !== client ||

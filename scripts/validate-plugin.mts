@@ -11,9 +11,7 @@ const result = await validateAgentPluginPackage({
   pluginRoot,
   repositoryRoot: resolve("."),
   release: process.argv.includes("--release"),
-  packageKind: process.argv.includes("--artifact")
-    ? "generated-artifact"
-    : "source",
+  packageKind: process.argv.includes("--artifact") ? "generated-artifact" : "source",
 });
 console.log(
   result.packageKind === "source"

@@ -8,18 +8,13 @@ describe("canonical portable-release remotes", () => {
   it.each([repository, `${repository}.git`])(
     "accepts the exact HTTPS fetch remote: %s",
     (remote) => {
-      expect(
-        hasCanonicalFetchRemote(`origin\t${remote} (fetch)`, repository),
-      ).toBe(true);
+      expect(hasCanonicalFetchRemote(`origin\t${remote} (fetch)`, repository)).toBe(true);
     },
   );
 
   it("accepts the exact canonical fetch remote in a blobless partial clone", () => {
     expect(
-      hasCanonicalFetchRemote(
-        `origin\t${repository}.git (fetch) [blob:none]`,
-        repository,
-      ),
+      hasCanonicalFetchRemote(`origin\t${repository}.git (fetch) [blob:none]`, repository),
     ).toBe(true);
   });
 

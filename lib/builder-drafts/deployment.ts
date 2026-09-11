@@ -4,10 +4,7 @@ import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { createBuilderDraftStore } from "../db/builder-drafts";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import {
-  builderDraftPageDataSchema,
-  saveActiveBuilderDraftInputSchema,
-} from "./contracts";
+import { builderDraftPageDataSchema, saveActiveBuilderDraftInputSchema } from "./contracts";
 import { createBuilderDraftService } from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
@@ -16,9 +13,7 @@ const maximumRequestBytes = 65_536;
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 function pageData(
-  row: Awaited<
-    ReturnType<ReturnType<typeof createBuilderDraftService>["readActive"]>
-  >,
+  row: Awaited<ReturnType<ReturnType<typeof createBuilderDraftService>["readActive"]>>,
 ) {
   if (!row) return undefined;
   return builderDraftPageDataSchema.parse({
@@ -47,9 +42,7 @@ export async function getAuthenticatedBuilderDraftContext(input: {
       ownerUserId: session.user.id,
     },
     drafts: createBuilderDraftService({
-      store: createBuilderDraftStore(
-        openHostedPostgresDatabase(preview.databaseUrl),
-      ),
+      store: createBuilderDraftStore(openHostedPostgresDatabase(preview.databaseUrl)),
     }),
   };
 }
@@ -83,45 +76,36 @@ export async function deleteInactiveBuilderDraftsForMaintenance(input: {
 }) {
   const preview = readPreviewOAuthRuntimeConfig(input.environment);
   return createBuilderDraftService({
-    store: createBuilderDraftStore(
-      openHostedPostgresDatabase(preview.databaseUrl),
-    ),
+    store: createBuilderDraftStore(openHostedPostgresDatabase(preview.databaseUrl)),
     now: input.now,
   }).deleteInactiveSince(input.maxAgeMs);
 }
 
 export function createBuilderDraftRouteHandler(input: {
   origin: string;
-  authorityForRequest: (request: Request) => Promise<{
-    issuer: string;
-    audience: string;
-    workspaceId: string;
-    ownerUserId: string;
-} | undefined>;
+  authorityForRequest: (request: Request) => Promise<
+    | {
+        issuer: string;
+        audience: string;
+        workspaceId: string;
+        ownerUserId: string;
+      }
+    | undefined
+  >;
   drafts: ReturnType<typeof createBuilderDraftService>;
 }) {
-  const {origin} = new URL(input.origin);
+  const { origin } = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (
         request.method !== "POST" ||
         request.headers.get("origin") !== origin ||
-        request.headers.get("content-type")?.split(";", 1)[0] !==
-          "application/json"
+        request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       const length = request.headers.get("content-length");
-      if (
-        length &&
-        (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes)
-      )
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+      if (length && (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes))
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       const authority = await input.authorityForRequest(request);
       if (!authority)
         return Response.json(
@@ -130,10 +114,7 @@ export function createBuilderDraftRouteHandler(input: {
         );
       const raw = await request.text();
       if (new TextEncoder().encode(raw).byteLength > maximumRequestBytes)
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       const saved = await input.drafts.saveActive(
         authority,
         saveActiveBuilderDraftInputSchema.parse(JSON.parse(raw)),
@@ -152,8 +133,7 @@ export function createBuilderDraftRouteHandler(input: {
       const invalid =
         error instanceof z.ZodError ||
         error instanceof SyntaxError ||
-        (error instanceof Error &&
-          error.message === "builder-draft-contention");
+        (error instanceof Error && error.message === "builder-draft-contention");
       return Response.json(
         { error: invalid ? "request_invalid" : "draft_unavailable" },
         { status: invalid ? 400 : 503, headers: noStore },

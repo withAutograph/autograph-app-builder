@@ -41,15 +41,11 @@ export const builderIntegrationStateSchema = z
       })
       .strict()
       .superRefine((value, context) => {
-        if (
-          (value.status === "unavailable") !==
-          (value.unavailableReason !== undefined)
-        ) {
+        if ((value.status === "unavailable") !== (value.unavailableReason !== undefined)) {
           context.addIssue({
             code: "custom",
             path: ["unavailableReason"],
-            message:
-              "Unavailable Vercel state requires exactly one failure reason.",
+            message: "Unavailable Vercel state requires exactly one failure reason.",
           });
         }
       }),
@@ -61,15 +57,11 @@ export const builderIntegrationStateSchema = z
       })
       .strict()
       .superRefine((value, context) => {
-        if (
-          (value.status === "unavailable") !==
-          (value.unavailableReason !== undefined)
-        ) {
+        if ((value.status === "unavailable") !== (value.unavailableReason !== undefined)) {
           context.addIssue({
             code: "custom",
             path: ["unavailableReason"],
-            message:
-              "Unavailable GitHub state requires exactly one failure reason.",
+            message: "Unavailable GitHub state requires exactly one failure reason.",
           });
         }
       }),
@@ -84,9 +76,7 @@ export const builderIntegrationStateSchema = z
   })
   .strict();
 
-export type BuilderIntegrationState = z.infer<
-  typeof builderIntegrationStateSchema
->;
+export type BuilderIntegrationState = z.infer<typeof builderIntegrationStateSchema>;
 
 export const disconnectedBuilderIntegrationState: BuilderIntegrationState = {
   vercel: { status: "disconnected", scopes: [] },

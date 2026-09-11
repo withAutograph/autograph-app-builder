@@ -40,9 +40,7 @@ export const AddRemoveAndCustomize: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Customize" }));
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Remove QuickBooks" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Remove QuickBooks" }));
     await expect(args.onCustomize).toHaveBeenCalledWith("QuickBooks");
     await expect(args.onRemove).toHaveBeenCalledWith("QuickBooks");
   },
@@ -50,14 +48,9 @@ export const AddRemoveAndCustomize: Story = {
 export const SearchClearAndShowMore: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.type(
-      canvas.getByPlaceholderText("Search connections…"),
-      "quick",
-    );
+    await userEvent.type(canvas.getByPlaceholderText("Search connections…"), "quick");
     await expect(args.onSearchChange).toHaveBeenCalled();
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Show more connections" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Show more connections" }));
     await expect(args.onShowMore).toHaveBeenCalledOnce();
   },
 };

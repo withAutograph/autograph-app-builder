@@ -11,11 +11,7 @@ import { HandoffProvisioningProgress } from "../../../ui/handoff-provisioning-pr
 import styles from "../../../ui/app-builder.module.css";
 import handoffStyles from "../../../ui/handoff.module.css";
 
-export async function HandoffContent({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const requestHeaders = await headers();
   let data;
@@ -33,8 +29,8 @@ export async function HandoffContent({
           <section className={styles.readyCard}>
             <h1>Handoff unavailable</h1>
             <p>
-              Use the same Autograph account and workspace as the web form. If
-              you are already signed into that account, try reloading this page.
+              Use the same Autograph account and workspace as the web form. If you are already
+              signed into that account, try reloading this page.
             </p>
             <Link
               href={`/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`}
@@ -48,29 +44,21 @@ export async function HandoffContent({
   }
   if (!data) {
     redirect(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`
+      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
     );
   }
   const { intent, ...controls } = data;
   const github = intent.provisioning?.github;
   const vercel = intent.provisioning?.vercel;
-  const returnTo = encodeURIComponent(
-    `/handoff/${encodeURIComponent(data.handoffId)}`
-  );
+  const returnTo = encodeURIComponent(`/handoff/${encodeURIComponent(data.handoffId)}`);
   return (
     <div className={styles.appShell}>
       <Header />
       <main id="main-content" className={styles.flowPage}>
         <section className={`${styles.readyCard} ${handoffStyles.card}`}>
           <h1>{intent.appName}</h1>
-          <p>
-            Your prepared app and existing provider connections are saved with
-            Autograph.
-          </p>
-          <div
-            className={handoffStyles.resources}
-            aria-label="Prepared resources"
-          >
+          <p>Your prepared app and existing provider connections are saved with Autograph.</p>
+          <div className={handoffStyles.resources} aria-label="Prepared resources">
             <article>
               <div>
                 <strong>GitHub repository</strong>
@@ -80,53 +68,41 @@ export async function HandoffContent({
                   </a>
                 ) : (
                   <span>
-                    {intent.repository.resolvedFullName ??
-                      intent.repository.requestedName}{" "}
-                    ({intent.repository.private ? "Private" : "Public"})
+                    {intent.repository.resolvedFullName ?? intent.repository.requestedName} (
+                    {intent.repository.private ? "Private" : "Public"})
                   </span>
                 )}
                 {github?.status === "failed" ? (
                   <small>
-                    GitHub setup needs attention. Continue in Autograph to
-                    recover; your saved brief is retained.
+                    GitHub setup needs attention. Continue in Autograph to recover; your saved brief
+                    is retained.
                   </small>
                 ) : null}
                 {github?.status === "failed" &&
-                ["credential_unavailable", "installation_inactive"].includes(
-                  github.code
-                ) ? (
-                  <Link href={`/github/installations?returnTo=${returnTo}`}>
-                    Reconnect GitHub
-                  </Link>
+                ["credential_unavailable", "installation_inactive"].includes(github.code) ? (
+                  <Link href={`/github/installations?returnTo=${returnTo}`}>Reconnect GitHub</Link>
                 ) : null}
               </div>
             </article>
-            {vercel &&
-            !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
+            {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>
                 <div>
                   <strong>Vercel project</strong>
                   {vercel.status === "succeeded" ? (
                     <>
-                      <a
-                        href={vercel.dashboardUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+                      <a href={vercel.dashboardUrl} target="_blank" rel="noreferrer">
                         {vercel.name}
                       </a>
                       <small>{vercel.scope.slug}</small>
                     </>
                   ) : (
                     <small>
-                      Vercel setup needs attention. Continue in Autograph to
-                      recover without recreating completed resources.
+                      Vercel setup needs attention. Continue in Autograph to recover without
+                      recreating completed resources.
                     </small>
                   )}
                   {vercel.status === "failed" &&
-                  ["credential_unavailable", "installation_inactive"].includes(
-                    vercel.code
-                  ) ? (
+                  ["credential_unavailable", "installation_inactive"].includes(vercel.code) ? (
                     <Link href={`/vercel/installations?returnTo=${returnTo}`}>
                       Reconnect Vercel
                     </Link>

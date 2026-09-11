@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  BuilderDraftRecord,
-  SaveActiveBuilderDraftInput,
-} from "./contracts";
+import type { BuilderDraftRecord, SaveActiveBuilderDraftInput } from "./contracts";
 import {
   createBuilderDraftService,
   type BuilderDraftAuthority,
@@ -28,10 +25,7 @@ const otherDraftId = "00000000-0000-4000-8000-000000000002";
 const firstMutation = "00000000-0000-4000-8000-000000000011";
 const secondMutation = "00000000-0000-4000-8000-000000000012";
 
-function sameAuthority(
-  left: BuilderDraftAuthority,
-  right: BuilderDraftAuthority,
-) {
+function sameAuthority(left: BuilderDraftAuthority, right: BuilderDraftAuthority) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -39,16 +33,10 @@ function memoryStore(): BuilderDraftStore {
   const rows: BuilderDraftRow[] = [];
   const find = (input: { authority: BuilderDraftAuthority; draftId: string }) =>
     rows.find(
-      (row) =>
-        sameAuthority(row.authority, input.authority) &&
-        row.draftId === input.draftId,
+      (row) => sameAuthority(row.authority, input.authority) && row.draftId === input.draftId,
     );
   const findActive = (input: { authority: BuilderDraftAuthority }) =>
-    rows.find(
-      (row) =>
-        sameAuthority(row.authority, input.authority) &&
-        row.status === "active",
-    );
+    rows.find((row) => sameAuthority(row.authority, input.authority) && row.status === "active");
 
   return {
     async read(input) {

@@ -54,9 +54,7 @@ export function SearchCombobox({
   const displayedQuery = filtering ? query : (selected?.label ?? "");
   const shown = filtering
     ? options.filter((option) =>
-        `${option.label} ${option.detail ?? ""}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
+        `${option.label} ${option.detail ?? ""}`.toLowerCase().includes(query.toLowerCase()),
       )
     : options;
   useEffect(() => {
@@ -73,8 +71,7 @@ export function SearchCombobox({
     setActive(0);
   };
   const choose = (option: ComboOption) => {
-    if (option.value.startsWith("create-") || option.value.startsWith("add-"))
-      return;
+    if (option.value.startsWith("create-") || option.value.startsWith("add-")) return;
     onChange(option.value);
     setQuery(option.label);
     setFiltering(false);
@@ -121,9 +118,7 @@ export function SearchCombobox({
           if (event.key === "ArrowDown") {
             event.preventDefault();
             setOpen(true);
-            setActive((index) =>
-              Math.min(index + 1, Math.max(shown.length - 1, 0)),
-            );
+            setActive((index) => Math.min(index + 1, Math.max(shown.length - 1, 0)));
           }
           if (event.key === "ArrowUp") {
             event.preventDefault();
@@ -135,9 +130,7 @@ export function SearchCombobox({
           }
         }}
       />
-      {selected?.detail ? (
-        <span className={styles.comboDetail}>{selected.detail}</span>
-      ) : null}
+      {selected?.detail ? <span className={styles.comboDetail}>{selected.detail}</span> : null}
       <button
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
@@ -166,18 +159,14 @@ export function SearchCombobox({
               ) : null}
               <span className={styles.comboOptionLabel}>{option.label}</span>
               {option.detail ? (
-                <small data-pill={detailPills || undefined}>
-                  {option.detail}
-                </small>
+                <small data-pill={detailPills || undefined}>{option.detail}</small>
               ) : null}
               {showSelectedCheck && option.value === value ? (
                 <Check size={16} aria-hidden="true" />
               ) : null}
             </button>
           ))}
-          {!shown.length ? (
-            <p className={styles.noResults}>No results found.</p>
-          ) : null}
+          {!shown.length ? <p className={styles.noResults}>No results found.</p> : null}
         </div>
         {menuFooter ? (
           <button

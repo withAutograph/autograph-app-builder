@@ -57,11 +57,7 @@ const apply: TargetApplyReceipt = {
     },
     mutations: ["apps/example", "microfrontends.json"],
     recovered: false,
-    omittedAuthorities: [
-      "provider-provisioning",
-      "deployment",
-      "production-readiness",
-    ],
+    omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
   },
   digest: digest("5"),
 };
@@ -103,10 +99,7 @@ describe("target validation", () => {
   it("runs repository commands without receipt or source preflight", async () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };
-    const attempt = createTargetValidationAttempt(
-      currentApply,
-      "validation-call",
-    );
+    const attempt = createTargetValidationAttempt(currentApply, "validation-call");
     const execute = vi.fn(async () => ({
       exitCode: 0,
       stdout: "passed",
@@ -173,16 +166,14 @@ describe("target validation", () => {
         path: "apps/stock-exceptions/app/page.test.tsx",
         line: 1,
         column: 1,
-        message:
-          "A referenced name is missing; inspect its declaration or import.",
+        message: "A referenced name is missing; inspect its declaration or import.",
       },
       {
         code: "TS2304",
         path: "apps/stock-exceptions/app/page.test.tsx",
         line: 2,
         column: 1,
-        message:
-          "A referenced name is missing; inspect its declaration or import.",
+        message: "A referenced name is missing; inspect its declaration or import.",
       },
       {
         code: "VITEST",
@@ -216,9 +207,7 @@ describe("target validation", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(
-      run.mock.calls.every(([input]) => input.abortSignal === undefined),
-    ).toBe(true);
+    expect(run.mock.calls.every(([input]) => input.abortSignal === undefined)).toBe(true);
     expect(run.mock.calls.map(([input]) => input.command)).toEqual([
       "bun run --cwd apps/example check",
       "bun run --cwd apps/example check -- --fix",

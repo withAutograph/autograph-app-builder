@@ -7,13 +7,7 @@ import {
   builderValidationModelId,
 } from "../../lib/integrations/active-model";
 
-export const axes = [
-  "hierarchy",
-  "layout",
-  "typography",
-  "responsive",
-  "productClarity",
-] as const;
+export const axes = ["hierarchy", "layout", "typography", "responsive", "productClarity"] as const;
 const rating = z.object({
   score: z.number().int().min(0).max(4),
   reason: z.string().min(1),
@@ -60,8 +54,7 @@ export function validateJudgment(value: unknown, images: ImageEvidence[]) {
   return {
     ...judgment,
     subjectiveScore: Math.round(
-      (25 * axes.reduce((sum, axis) => sum + judgment.ratings[axis].score, 0)) /
-        axes.length,
+      (25 * axes.reduce((sum, axis) => sum + judgment.ratings[axis].score, 0)) / axes.length,
     ),
   };
 }
@@ -88,9 +81,10 @@ export async function judgeDesign(
     if (hooks) token = await hooks.getToken();
     else {
       // Official SDK refreshes project OIDC; no static-key fallback is selected.
-      const project = JSON.parse(
-        await readFile(".vercel/project.json", "utf8"),
-      ) as { projectId: string; orgId: string };
+      const project = JSON.parse(await readFile(".vercel/project.json", "utf8")) as {
+        projectId: string;
+        orgId: string;
+      };
       token = await getVercelOidcToken({
         project: project.projectId,
         team: project.orgId,
@@ -163,8 +157,7 @@ export async function judgeDesign(
     return {
       ...base,
       status: "incomplete" as const,
-      reason:
-        "AI review was unavailable or returned invalid evidence. No score was assigned.",
+      reason: "AI review was unavailable or returned invalid evidence. No score was assigned.",
     };
   }
 }

@@ -18,9 +18,7 @@ export function AuthContinuity({
 }) {
   const hasSavedBrief = useSyncExternalStore(
     () => () => undefined,
-    () =>
-      (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length >
-      0,
+    () => (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length > 0,
     () => false,
   );
 
@@ -34,19 +32,13 @@ export function AuthContinuity({
         <Image src={autographIcon} alt="" width={32} height={32} priority />
         <span className="flex flex-col leading-none">
           <strong className="text-sm font-semibold">Autograph</strong>
-          <span className="mt-1 text-xs text-muted-foreground">
-            App Builder
-          </span>
+          <span className="mt-1 text-xs text-muted-foreground">App Builder</span>
         </span>
       </Link>
 
       {hasSavedBrief ? (
-        <p
-          className="mt-4 text-center text-sm text-muted-foreground"
-          role="status"
-        >
-          Your brief is saved. {action === "sign-in" ? "Sign in" : "Sign up"} to
-          continue building.
+        <p className="mt-4 text-center text-sm text-muted-foreground" role="status">
+          Your brief is saved. {action === "sign-in" ? "Sign in" : "Sign up"} to continue building.
         </p>
       ) : null}
 

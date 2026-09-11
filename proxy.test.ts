@@ -16,9 +16,7 @@ describe("Preview authentication origin proxy", () => {
     process.env.VERCEL_BRANCH_URL = "app-git-feature-team.vercel.app";
 
     const response = proxy(
-      new NextRequest(
-        "https://app-deployment-team.vercel.app/auth/sign-in?callbackURL=%2F",
-      ),
+      new NextRequest("https://app-deployment-team.vercel.app/auth/sign-in?callbackURL=%2F"),
     );
 
     expect(response.status).toBe(307);
@@ -38,14 +36,12 @@ describe("Preview authentication origin proxy", () => {
 
     process.env.VERCEL_ENV = "preview";
     expect(
-      proxy(
-        new NextRequest("https://app-git-feature-team.vercel.app/auth/sign-in"),
-      ).headers.get("location"),
+      proxy(new NextRequest("https://app-git-feature-team.vercel.app/auth/sign-in")).headers.get(
+        "location",
+      ),
     ).toBeNull();
     expect(
-      proxy(
-        new NextRequest("https://attacker.example.com/auth/sign-in"),
-      ).headers.get("location"),
+      proxy(new NextRequest("https://attacker.example.com/auth/sign-in")).headers.get("location"),
     ).toBeNull();
   });
 });

@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type AdditionalFieldValue,
-  parseAdditionalFieldValue,
-} from "@better-auth-ui/core";
+import { type AdditionalFieldValue, parseAdditionalFieldValue } from "@better-auth-ui/core";
 import type { UsernameAuthClient } from "@better-auth-ui/core/plugins/username";
 import { useAuth, useSession, useUpdateUser } from "@better-auth-ui/react";
 import { type SyntheticEvent, useState } from "react";
@@ -30,8 +27,7 @@ export type UserProfileProps = {
  * @returns A JSX element containing the profile card with avatar upload and editable name/username fields
  */
 export function UserProfile({ className }: UserProfileProps) {
-  const { additionalFields, authClient, localization } =
-    useAuth<UsernameAuthClient>();
+  const { additionalFields, authClient, localization } = useAuth<UsernameAuthClient>();
   const { data: session } = useSession(authClient);
 
   const { mutate: updateUser, isPending } = useUpdateUser(authClient, {
@@ -52,10 +48,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
     for (const field of additionalFields ?? []) {
       if (field.profile === false || field.readOnly) continue;
-      const value = parseAdditionalFieldValue(
-        field,
-        formData.get(field.name) as string | null,
-      );
+      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
         try {
@@ -80,9 +73,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
   return (
     <div>
-      <h2 className="text-sm font-semibold mb-3">
-        {localization.settings.userProfile}
-      </h2>
+      <h2 className="text-sm font-semibold mb-3">{localization.settings.userProfile}</h2>
 
       <form onSubmit={handleSubmit}>
         <Card className={cn(className)}>
@@ -142,16 +133,12 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
-              const value = (session.user as Record<string, unknown>)[
-                field.name
-              ];
+              const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
               const key = `${field.name}:${
-                value instanceof Date
-                  ? value.toISOString()
-                  : String(value ?? "")
+                value instanceof Date ? value.toISOString() : String(value ?? "")
               }`;
 
               return (

@@ -32,10 +32,7 @@ function pendingVercelCodeCount(state: string | undefined) {
     const snapshot = JSON.parse(state) as {
       store?: { data?: Record<string, { entries?: unknown[] }> };
     };
-    return (
-      snapshot.store?.data?.["vercel:vercel.oauth.pendingCodes"]?.entries
-        ?.length ?? 0
-    );
+    return snapshot.store?.data?.["vercel:vercel.oauth.pendingCodes"]?.entries?.length ?? 0;
   } catch {
     return 0;
   }
@@ -59,11 +56,7 @@ export function createPreviewEmulatePersistence(input: {
       return state === undefined ? null : validateState(state);
     },
     async save(state) {
-      await input.store.write(
-        input.namespace,
-        validateState(state),
-        input.now?.() ?? new Date(),
-      );
+      await input.store.write(input.namespace, validateState(state), input.now?.() ?? new Date());
       console.info(
         JSON.stringify({
           level: "info",
@@ -110,10 +103,7 @@ export function createPostgresPreviewEmulateStateStore(
   };
 }
 
-export async function resetPostgresPreviewEmulateState(
-  databaseUrl: string,
-  namespace: string,
-) {
+export async function resetPostgresPreviewEmulateState(databaseUrl: string, namespace: string) {
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   try {
     const rows = await sql<Array<{ namespace: string }>>`

@@ -3,10 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  canAutoSelectDevelopmentSource,
-  developmentSourceReceipt,
-} from "./development-source";
+import { canAutoSelectDevelopmentSource, developmentSourceReceipt } from "./development-source";
 import type { SourceKind } from "./source-receipt";
 
 const inspectSourceReceipt = vi.hoisted(() => vi.fn());
@@ -46,9 +43,7 @@ function exactEnvironment(root: string) {
 }
 
 function fixtureRoot() {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "app-builder-development-source-")),
-  );
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-development-source-")));
   roots.push(root);
   return root;
 }
@@ -89,18 +84,10 @@ describe("Development source selection", () => {
     inspectSourceReceipt.mockResolvedValue(expected);
 
     await expect(
-      developmentSourceReceipt(
-        "existing-repository",
-        root,
-        exactEnvironment(root),
-      ),
+      developmentSourceReceipt("existing-repository", root, exactEnvironment(root)),
     ).resolves.toEqual(expected);
     await expect(
-      developmentSourceReceipt(
-        "existing-repository",
-        `${root}-other`,
-        exactEnvironment(root),
-      ),
+      developmentSourceReceipt("existing-repository", `${root}-other`, exactEnvironment(root)),
     ).rejects.toThrow("did not match the selected snapshot");
     expect(inspectSourceReceipt).toHaveBeenCalledTimes(1);
   });
@@ -155,11 +142,7 @@ describe("Development source selection", () => {
       sourceSha: "9".repeat(40),
     });
     await expect(
-      developmentSourceReceipt(
-        "existing-repository",
-        undefined,
-        exactEnvironment(root),
-      ),
+      developmentSourceReceipt("existing-repository", undefined, exactEnvironment(root)),
     ).resolves.toMatchObject({ sourceSha: "9".repeat(40) });
   });
 });

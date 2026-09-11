@@ -1,9 +1,5 @@
 import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
-import type {
-  SandboxBackend,
-  SandboxBackendHandle,
-  SandboxBackendPrewarmInput,
-} from "eve/sandbox";
+import type { SandboxBackend, SandboxBackendHandle, SandboxBackendPrewarmInput } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
 
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
@@ -14,9 +10,7 @@ export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
   readonly env?: Readonly<Record<string, string>>;
   readonly networkPolicy: "allow-all";
-  readonly sessionCreateOptions: (context?: {
-    readonly session: { readonly id: string };
-  }) => {
+  readonly sessionCreateOptions: (context?: { readonly session: { readonly id: string } }) => {
     readonly networkPolicy: "allow-all";
     readonly source?: {
       readonly type: "git";
@@ -55,9 +49,8 @@ const PROVIDER_RETRY_DELAY_MS = 250;
 
 function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  const {status} = (error as Error & { status?: unknown });
-  if (typeof status === "number" && (status === 429 || status >= 500))
-    return true;
+  const { status } = error as Error & { status?: unknown };
+  if (typeof status === "number" && (status === 429 || status >= 500)) return true;
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
     `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
   );
@@ -65,21 +58,15 @@ function retryableProviderFailure(error: unknown): boolean {
 
 function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) return "unknown";
-  const {cause} = (error as Error & { cause?: unknown });
+  const { cause } = error as Error & { cause?: unknown };
   const code =
-    cause &&
-    typeof cause === "object" &&
-    "code" in cause &&
-    typeof cause.code === "string"
+    cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
       ? cause.code
       : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }
 
-type ProviderFetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
+type ProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export function createProviderFetch(
   fetchImpl: typeof fetch = fetch,
@@ -95,10 +82,7 @@ export function createProviderFetch(
         : AbortSignal.any([original.signal, timeout.signal]);
       try {
         const response = await fetchImpl(original.clone(), { signal });
-        if (
-          attempt === 0 &&
-          (response.status === 429 || response.status >= 500)
-        ) {
+        if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
           await response.body?.cancel();
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
@@ -111,8 +95,7 @@ export function createProviderFetch(
         return response;
       } catch (error) {
         const callerCancelled = original.signal.aborted;
-        const providerRequestTimedOut =
-          timeout.signal.aborted && !callerCancelled;
+        const providerRequestTimedOut = timeout.signal.aborted && !callerCancelled;
         if (
           attempt === 0 &&
           !callerCancelled &&
@@ -145,8 +128,7 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
   const providerTemplateKey = (authoredTemplateKey: string | null) =>
     authoredTemplateKey === null
       ? null
-      : (input.providerTemplateKey?.(authoredTemplateKey) ??
-        authoredTemplateKey);
+      : (input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey);
   return {
     name: input.backend.name,
     prewarm: (prewarmInput) =>
@@ -185,13 +167,12 @@ function createProcessSessionReusingBackend<BO, SO>(
   backend: SandboxBackend<BO, SO>,
 ): SandboxBackend<BO, SO> {
   const processState = globalThis as typeof globalThis & {
-    __autographDevelopmentSandboxHandles?: Map<
-      string,
-      Promise<SandboxBackendHandle<unknown>>
-    >;
+    __autographDevelopmentSandboxHandles?: Map<string, Promise<SandboxBackendHandle<unknown>>>;
   };
-  const sessions = (processState.__autographDevelopmentSandboxHandles ??=
-    new Map()) as Map<string, Promise<SandboxBackendHandle<SO>>>;
+  const sessions = (processState.__autographDevelopmentSandboxHandles ??= new Map()) as Map<
+    string,
+    Promise<SandboxBackendHandle<SO>>
+  >;
   return {
     name: backend.name,
     prewarm: (input) => backend.prewarm(input),
@@ -259,20 +240,15 @@ export function createHostedVercelBackend(
   // Eve merges session-only creation options into the provider request,
   // although its public return type currently names only mounts. Keep the
   // compatibility assertion isolated at this boundary.
-  const factory =
-    input.factory ?? (vercel as unknown as HostedVercelBackendFactory);
+  const factory = input.factory ?? (vercel as unknown as HostedVercelBackendFactory);
   const backend = factory({
-    ...(input.sandboxEnvironment === undefined
-      ? {}
-      : { env: { ...input.sandboxEnvironment } }),
+    ...(input.sandboxEnvironment === undefined ? {} : { env: { ...input.sandboxEnvironment } }),
     networkPolicy: "allow-all",
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.
     sessionCreateOptions: (context) => {
       const source =
-        context === undefined
-          ? undefined
-          : readVercelSessionGitSource(context.session.id);
+        context === undefined ? undefined : readVercelSessionGitSource(context.session.id);
       return {
         networkPolicy: "allow-all" as const,
         ...(source === undefined
@@ -293,8 +269,7 @@ export function createHostedVercelBackend(
   });
   const authorized = createAuthorizedSandboxBackend({
     backend,
-    authorizeSessionCommand: (sessionId) =>
-      assertHostedSandboxCommandAuthority({ sessionId }),
+    authorizeSessionCommand: (sessionId) => assertHostedSandboxCommandAuthority({ sessionId }),
   });
   const templateOptional = createRuntimeRecoveringBackend({
     backend: authorized,

@@ -9,8 +9,7 @@ export type {
   StorageProvider,
 } from "./builder-types";
 
-const builderDraftStorageKey = (resumeKey: string) =>
-  `autograph-builder-draft:${resumeKey}`;
+const builderDraftStorageKey = (resumeKey: string) => `autograph-builder-draft:${resumeKey}`;
 const builderDraftCache = new Map<
   string,
   { raw: string | null; resume: BuilderDraftResume | undefined }
@@ -22,9 +21,7 @@ export type BuilderDraftResume = {
   acknowledgedRevision?: number;
 };
 
-function parseBuilderDraft(
-  value: string | null,
-): BuilderDraftResume | undefined {
+function parseBuilderDraft(value: string | null): BuilderDraftResume | undefined {
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(value) as Partial<BuilderDraft> & {
@@ -53,11 +50,10 @@ function parseBuilderDraft(
               : "codex",
         },
         storageProvider: draft.storageProvider === null ? null : "github",
-        deploymentProvider:
-          draft.deploymentProvider === "vercel" ? "vercel" : null,
+        deploymentProvider: draft.deploymentProvider === "vercel" ? "vercel" : null,
       } as BuilderDraft,
     };
-    const {acknowledgedRevision} = parsed;
+    const { acknowledgedRevision } = parsed;
     if (
       typeof acknowledgedRevision === "number" &&
       Number.isSafeInteger(acknowledgedRevision) &&

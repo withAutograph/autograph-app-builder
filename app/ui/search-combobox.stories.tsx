@@ -48,9 +48,7 @@ export const FooterAction: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Select a Vercel Team"));
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Connect another Vercel team" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Connect another Vercel team" }));
     await expect(args.onFooterSelect).toHaveBeenCalledOnce();
   },
 };

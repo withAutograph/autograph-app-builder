@@ -8,9 +8,7 @@ const httpsUrlSchema = z.string().url().startsWith("https://");
 const identifierSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u);
 const roleSchema = z.string().regex(/^[a-z][a-z0-9_]{2,62}$/u);
 const githubAccountIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/u);
-const githubLoginSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u);
+const githubLoginSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u);
 const passwordSchema = z
   .string()
   .min(12)
@@ -63,11 +61,7 @@ const oauthInitializeSchema = z
   .strict();
 
 export const previewActivationPlanRequestSchema = z
-  .discriminatedUnion("action", [
-    invitedUserSchema,
-    runtimeRoleSchema,
-    oauthInitializeSchema,
-  ])
+  .discriminatedUnion("action", [invitedUserSchema, runtimeRoleSchema, oauthInitializeSchema])
   .superRefine((request, context) => {
     if (request.action === "runtime-role.configure") return;
     const issuer = new URL(request.issuer);
@@ -83,15 +77,12 @@ export const previewActivationPlanRequestSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message:
-          "Preview activation requires one same-origin /api/auth and /mcp pair.",
+        message: "Preview activation requires one same-origin /api/auth and /mcp pair.",
       });
     }
   });
 
-export type PreviewActivationPlanRequest = z.infer<
-  typeof previewActivationPlanRequestSchema
->;
+export type PreviewActivationPlanRequest = z.infer<typeof previewActivationPlanRequestSchema>;
 
 export const previewActivationApplyRequestSchema = z.union([
   invitedUserSchema.extend({ confirmationDigest: sha256Schema }).strict(),
@@ -123,11 +114,7 @@ const effectsSchema = z
 export const previewActivationReceiptSchema = z
   .object({
     version: z.literal(1),
-    action: z.enum([
-      "invited-user.provision",
-      "runtime-role.configure",
-      "oauth.initialize",
-    ]),
+    action: z.enum(["invited-user.provision", "runtime-role.configure", "oauth.initialize"]),
     status: z.enum(["applied", "no-op"]),
     requestDigest: sha256Schema,
     authorityDigest: sha256Schema,
@@ -143,20 +130,56 @@ export const previewActivationReceiptSchema = z
   })
   .strict();
 
-export type PreviewActivationReceipt = z.infer<
-  typeof previewActivationReceiptSchema
->;
+export type PreviewActivationReceipt = z.infer<typeof previewActivationReceiptSchema>;
 
 export interface PreviewActivationStore {
-  provisionInvitedUser: (input: Extract<PreviewActivationPlanRequest, {
-    action: "invited-user.provision";
-}>) => Promise<Pick<z.infer<typeof effectsSchema>, "userRowsAffected" | "accountRowsAffected" | "membershipRowsAffected">>;
-  configureRuntimeRole: (input: Extract<PreviewActivationPlanRequest, {
-    action: "runtime-role.configure";
-}>) => Promise<Pick<z.infer<typeof effectsSchema>, "runtimeRoleCreated" | "runtimeRoleLogin" | "runtimeRoleCanConnect" | "runtimeRoleCanUseSchema" | "runtimeRoleCanCreateSchemaObjects" | "runtimeRoleTablePrivilegesExact" | "runtimeRoleSequencePrivilegesExact" | "runtimeRoleAttributesExact" | "runtimeRoleMembershipCount">>;
-  initializeOAuth: (input: Extract<PreviewActivationPlanRequest, {
-    action: "oauth.initialize";
-}>) => Promise<Pick<z.infer<typeof effectsSchema>, "resourceRowsBefore" | "resourceRowsAfter" | "jwksRowsBefore" | "jwksRowsAfter">>;
+  provisionInvitedUser: (
+    input: Extract<
+      PreviewActivationPlanRequest,
+      {
+        action: "invited-user.provision";
+      }
+    >,
+  ) => Promise<
+    Pick<
+      z.infer<typeof effectsSchema>,
+      "userRowsAffected" | "accountRowsAffected" | "membershipRowsAffected"
+    >
+  >;
+  configureRuntimeRole: (
+    input: Extract<
+      PreviewActivationPlanRequest,
+      {
+        action: "runtime-role.configure";
+      }
+    >,
+  ) => Promise<
+    Pick<
+      z.infer<typeof effectsSchema>,
+      | "runtimeRoleCreated"
+      | "runtimeRoleLogin"
+      | "runtimeRoleCanConnect"
+      | "runtimeRoleCanUseSchema"
+      | "runtimeRoleCanCreateSchemaObjects"
+      | "runtimeRoleTablePrivilegesExact"
+      | "runtimeRoleSequencePrivilegesExact"
+      | "runtimeRoleAttributesExact"
+      | "runtimeRoleMembershipCount"
+    >
+  >;
+  initializeOAuth: (
+    input: Extract<
+      PreviewActivationPlanRequest,
+      {
+        action: "oauth.initialize";
+      }
+    >,
+  ) => Promise<
+    Pick<
+      z.infer<typeof effectsSchema>,
+      "resourceRowsBefore" | "resourceRowsAfter" | "jwksRowsBefore" | "jwksRowsAfter"
+    >
+  >;
 }
 
 function canonicalRequest(request: PreviewActivationPlanRequest) {
@@ -264,10 +287,7 @@ export async function executePreviewActivation(input: {
   }
   const nowEpochMs = input.now?.() ?? Date.now();
   const requestedAt = Date.parse(request.requestedAt);
-  if (
-    requestedAt > nowEpochMs + 30_000 ||
-    nowEpochMs - requestedAt > 15 * 60_000
-  ) {
+  if (requestedAt > nowEpochMs + 30_000 || nowEpochMs - requestedAt > 15 * 60_000) {
     throw new Error("Preview activation request is stale.");
   }
   let effects = { ...emptyEffects };
@@ -285,10 +305,7 @@ export async function executePreviewActivation(input: {
     effects = { ...effects, ...(await input.store.initializeOAuth(request)) };
   }
   const changed =
-    effects.userRowsAffected +
-      effects.accountRowsAffected +
-      effects.membershipRowsAffected >
-      0 ||
+    effects.userRowsAffected + effects.accountRowsAffected + effects.membershipRowsAffected > 0 ||
     request.action === "runtime-role.configure" ||
     effects.runtimeRoleCreated ||
     effects.resourceRowsAfter > effects.resourceRowsBefore ||

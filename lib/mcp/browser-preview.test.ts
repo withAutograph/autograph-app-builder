@@ -43,9 +43,7 @@ describe("Browser prototype preview", () => {
       },
       requestUrl: "http://localhost:3000/mcp",
     });
-    expect(
-      attachPrototypePreviewUrl(result, developmentRequestUrl).prototype,
-    ).toMatchObject({
+    expect(attachPrototypePreviewUrl(result, developmentRequestUrl).prototype).toMatchObject({
       previewUrl: `http://127.0.0.1:3100/preview/session-one/${prototype.digest}`,
     });
 
@@ -66,18 +64,13 @@ describe("Browser prototype preview", () => {
 
   it("attaches only hosted HTTPS or loopback URLs", () => {
     expect(
-      attachPrototypePreviewUrl(result, "https://builder.example.test/mcp")
-        .prototype?.previewUrl,
-    ).toBe(
-      `https://builder.example.test/preview/session-one/${prototype.digest}`,
-    );
+      attachPrototypePreviewUrl(result, "https://builder.example.test/mcp").prototype?.previewUrl,
+    ).toBe(`https://builder.example.test/preview/session-one/${prototype.digest}`);
     expect(
-      attachPrototypePreviewUrl(result, "http://127.0.0.1:3000/mcp").prototype
-        ?.previewUrl,
+      attachPrototypePreviewUrl(result, "http://127.0.0.1:3000/mcp").prototype?.previewUrl,
     ).toBe(`http://127.0.0.1:3000/preview/session-one/${prototype.digest}`);
     expect(
-      attachPrototypePreviewUrl(result, "http://builder.example.test/mcp")
-        .prototype?.previewUrl,
+      attachPrototypePreviewUrl(result, "http://builder.example.test/mcp").prototype?.previewUrl,
     ).toBeUndefined();
   });
 
@@ -91,29 +84,17 @@ describe("Browser prototype preview", () => {
 
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe(content);
-    expect(response.headers.get("content-type")).toBe(
-      "text/html; charset=utf-8",
-    );
-    expect(response.headers.get("cache-control")).toBe(
-      "private, no-store, max-age=0",
-    );
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
     expect(response.headers.get("content-security-policy")).toBe(
       prototypePreviewContentSecurityPolicy,
     );
     // Forms must dispatch their local submit event so generated prototypes can
     // handle it with preventDefault(); CSP still rejects every navigation.
-    expect(prototypePreviewContentSecurityPolicy).toContain(
-      "sandbox allow-forms allow-scripts",
-    );
-    expect(prototypePreviewContentSecurityPolicy).not.toContain(
-      "allow-same-origin",
-    );
-    expect(prototypePreviewContentSecurityPolicy).toContain(
-      "connect-src 'none'",
-    );
-    expect(prototypePreviewContentSecurityPolicy).toContain(
-      "form-action 'none'",
-    );
+    expect(prototypePreviewContentSecurityPolicy).toContain("sandbox allow-forms allow-scripts");
+    expect(prototypePreviewContentSecurityPolicy).not.toContain("allow-same-origin");
+    expect(prototypePreviewContentSecurityPolicy).toContain("connect-src 'none'");
+    expect(prototypePreviewContentSecurityPolicy).toContain("form-action 'none'");
     expect(resolvePrototype).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "session-one" }),
     );
@@ -151,9 +132,7 @@ describe("Browser prototype preview", () => {
         },
       });
       const response = await handler(
-        new Request(
-          `https://builder.example.test/preview/session-one/${digest}`,
-        ),
+        new Request(`https://builder.example.test/preview/session-one/${digest}`),
         candidate.route,
       );
       projections.push({
@@ -162,17 +141,13 @@ describe("Browser prototype preview", () => {
         cache: response.headers.get("cache-control"),
         contentSecurityPolicy: response.headers.get("content-security-policy"),
         contentType: response.headers.get("content-type"),
-        crossOriginResourcePolicy: response.headers.get(
-          "cross-origin-resource-policy",
-        ),
+        crossOriginResourcePolicy: response.headers.get("cross-origin-resource-policy"),
         permissionsPolicy: response.headers.get("permissions-policy"),
         referrerPolicy: response.headers.get("referrer-policy"),
         contentTypeOptions: response.headers.get("x-content-type-options"),
       });
     }
-    expect(
-      new Set(projections.map((projection) => JSON.stringify(projection))).size,
-    ).toBe(1);
+    expect(new Set(projections.map((projection) => JSON.stringify(projection))).size).toBe(1);
     expect(projections[0]).toEqual({
       status: 404,
       body: "",

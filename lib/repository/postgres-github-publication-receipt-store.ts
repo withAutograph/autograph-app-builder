@@ -27,9 +27,7 @@ const journalRowSchema = z
   })
   .strict();
 
-export function parseGitHubPublicationJournalRow(
-  input: unknown,
-): GitHubMutationReceipt {
+export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
   const receipt = row.record as GitHubMutationReceipt;
   assertCanonicalGitHubMutationReceipt(receipt);
@@ -84,23 +82,17 @@ export function createPostgresGitHubPublicationReceiptStore(
         .select()
         .from(hostedGitHubPublicationJournals)
         .where(
-          and(
-            tenantPredicate,
-            eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest),
-          ),
+          and(tenantPredicate, eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)),
         )
         .limit(1);
-      return rows[0] === undefined
-        ? undefined
-        : parseGitHubPublicationJournalRow(rows[0]);
+      return rows[0] === undefined ? undefined : parseGitHubPublicationJournalRow(rows[0]);
     },
 
     async compareAndSet(proposalDigest, expectedDigest, receipt) {
       if (
         !/^[0-9a-f]{64}$/u.test(proposalDigest) ||
         receipt.proposalDigest !== proposalDigest ||
-        (expectedDigest !== undefined &&
-          !/^[0-9a-f]{64}$/u.test(expectedDigest))
+        (expectedDigest !== undefined && !/^[0-9a-f]{64}$/u.test(expectedDigest))
       ) {
         throw new Error("GitHub journal CAS binding is invalid.");
       }
@@ -135,10 +127,7 @@ export function createPostgresGitHubPublicationReceiptStore(
             eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest),
             eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest),
             eq(hostedGitHubPublicationJournals.kind, receipt.kind),
-            eq(
-              hostedGitHubPublicationJournals.idempotencyKey,
-              receipt.idempotencyKey,
-            ),
+            eq(hostedGitHubPublicationJournals.idempotencyKey, receipt.idempotencyKey),
           ),
         )
         .returning({

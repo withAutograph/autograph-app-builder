@@ -16,11 +16,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "branch-publication-success");
     const beforeHead = git(repository, ["rev-parse", "HEAD"]);
-    const beforeStatus = git(repository, [
-      "status",
-      "--porcelain=v2",
-      "--untracked-files=all",
-    ]);
+    const beforeStatus = git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]);
 
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
@@ -32,10 +28,7 @@ export default defineEval({
     t.check(t.reply, includes("no commit, push, GitHub, provider"));
     if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead)
       throw new Error("The original checkout HEAD changed.");
-    if (
-      git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]) !==
-      beforeStatus
-    )
+    if (git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]) !== beforeStatus)
       throw new Error("The original checkout status changed.");
     t.check(
       git(repository, ["branch", "--list", "app-builder/*"]),

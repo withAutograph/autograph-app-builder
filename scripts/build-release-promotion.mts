@@ -15,8 +15,7 @@ const option = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index < 0 ? undefined : process.argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`Missing ${name}.`);
-  if (process.argv.indexOf(name, index + 1) >= 0)
-    throw new Error(`Duplicate ${name}.`);
+  if (process.argv.indexOf(name, index + 1) >= 0) throw new Error(`Duplicate ${name}.`);
   return value;
 };
 
@@ -31,11 +30,8 @@ if (
   deploymentUrl.search ||
   deploymentUrl.hash
 )
-  throw new Error(
-    "Deployment URL must be one exact provider-owned Vercel origin.",
-  );
-if (!isAbsolute(outputInput))
-  throw new Error("Release output must be absolute.");
+  throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
+if (!isAbsolute(outputInput)) throw new Error("Release output must be absolute.");
 const outputParent = await realpath(resolve(outputInput, ".."));
 const output = join(outputParent, basename(outputInput));
 try {
@@ -67,8 +63,7 @@ gitObject.parse(source.sha);
 gitObject.parse(source.tree);
 
 const node = process.env.APP_BUILDER_RELEASE_NODE_BIN;
-if (!node || !isAbsolute(node))
-  throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
+if (!node || !isAbsolute(node)) throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
 const packageRoot = join(output, "package");
 execFileSync(
   node,
@@ -122,15 +117,10 @@ const response = await fetch(`${new URL(endpoint).origin}/healthz`, {
 });
 if (!response.ok) throw new Error("Canonical release health check failed.");
 const health = Buffer.from(await response.arrayBuffer());
-const digest = (value: Uint8Array | string) =>
-  createHash("sha256").update(value).digest("hex");
-const packageReceipt = await readFile(
-  join(packageRoot, "release-receipt.json"),
-);
+const digest = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
+const packageReceipt = await readFile(join(packageRoot, "release-receipt.json"));
 const checksums = await readFile(join(packageRoot, "SHA256SUMS"));
-const archive = await readFile(
-  join(packageRoot, portable.receipt.archive.name),
-);
+const archive = await readFile(join(packageRoot, portable.receipt.archive.name));
 const marketplaceArchive = await readFile(
   join(packageRoot, portable.receipt.codexMarketplaceArchive.name),
 );
@@ -168,9 +158,8 @@ const unsigned = {
 };
 const receipt = { ...unsigned, digest: digest(JSON.stringify(unsigned)) };
 hash.parse(receipt.digest);
-await writeFile(
-  join(output, "promotion-receipt.json"),
-  `${JSON.stringify(receipt, null, 2)}\n`,
-  { mode: 0o600, flag: "wx" },
-);
+await writeFile(join(output, "promotion-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, {
+  mode: 0o600,
+  flag: "wx",
+});
 console.log(`Release candidate proved: ${receipt.digest}`);

@@ -154,9 +154,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"
-                  ],
+                  "target": [".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -2705,10 +2703,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -3749,10 +3744,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -4796,10 +4788,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -4973,10 +4962,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5150,10 +5136,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5327,10 +5310,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5504,10 +5484,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5681,10 +5658,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5858,10 +5832,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -21310,9 +21281,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #747778, background color: #f8f8f8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"
-                  ],
+                  "target": [".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -23861,10 +23830,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -24905,10 +24871,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -25952,10 +25915,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26129,10 +26089,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26306,10 +26263,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26483,10 +26437,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26660,10 +26611,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26837,10 +26785,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -27014,10 +26959,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -42509,9 +42451,7 @@
               "help": "Elements must meet minimum color contrast ratio thresholds",
               "nodes": [
                 {
-                  "target": [
-                    ".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"
-                  ],
+                  "target": [".bg-transparent > .min-w-\\[var\\(--space-0\\)\\].break-words"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #f45d48, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -45060,10 +45000,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -46104,10 +46041,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {

@@ -19,9 +19,7 @@ export function createHostedBunRuntimeInstaller() {
     const existing = installs.get(sandbox.id);
     if (existing !== undefined) return existing;
 
-    const install: Promise<void> = Promise.resolve(
-      sandbox.run(hostedBunRuntimeInstallRequest),
-    )
+    const install: Promise<void> = Promise.resolve(sandbox.run(hostedBunRuntimeInstallRequest))
       .then((result) => {
         if (result.exitCode !== 0)
           throw new Error("The hosted Bun runtime could not be installed.");

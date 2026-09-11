@@ -40,19 +40,15 @@ const silentInternalApprovalTools = new Set([
   "validate_app_creation",
   "accept_change_set",
 ]);
-const unavailableConfirmationMessage =
-  "I couldn't verify this action, so it was not run.";
+const unavailableConfirmationMessage = "I couldn't verify this action, so it was not run.";
 const unavailableContinuationMessage =
   "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
 const maximumPrototypeBytes = 8 * 1024 * 1024;
-const prototypePathPattern =
-  /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
+const prototypePathPattern = /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const prefixedSha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
-const immutableExecutionArtifactSchema = z
-  .string()
-  .regex(/^(?!fixture@).+@sha256:[a-f0-9]{64}$/u);
+const immutableExecutionArtifactSchema = z.string().regex(/^(?!fixture@).+@sha256:[a-f0-9]{64}$/u);
 const prototypeRequestSchema = z
   .object({
     path: z.string().regex(prototypePathPattern),
@@ -139,7 +135,7 @@ function verifiedImplementationPlan(
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
-  const {target} = result;
+  const { target } = result;
   const requestedChanges = request.existingAppChanges;
   const iterationMatchesRequest =
     requestedChanges === undefined
@@ -224,7 +220,7 @@ export function latestInstalledImplementationPlan(
       continue;
 
     if (event.data.result.toolName === "record_prototype_artifact") {
-      const {output} = event.data.result;
+      const { output } = event.data.result;
       if (
         typeof output === "object" &&
         output !== null &&
@@ -236,14 +232,10 @@ export function latestInstalledImplementationPlan(
     }
     if (event.data.result.toolName !== "plan_app_creation") continue;
 
-    const {callId} = event.data.result;
+    const { callId } = event.data.result;
     const input = requested.get(callId);
     if (input === undefined) continue;
-    const plan = verifiedImplementationPlan(
-      callId,
-      input,
-      event.data.result.output,
-    );
+    const plan = verifiedImplementationPlan(callId, input, event.data.result.output);
     if (plan !== undefined) latest = plan;
   }
 
@@ -286,11 +278,7 @@ export function latestInstalledPrototype(
 
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-      if (
-        !preview.success ||
-        sha256(preview.data.content) !== preview.data.digest
-      )
-        continue;
+      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
       latest = publicPrototypeSchema.parse({
         path: `prototype/${preview.data.appId}/index.html`,
         mediaType: "text/html",
@@ -302,7 +290,7 @@ export function latestInstalledPrototype(
     }
     if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
-    const {callId} = event.data.result;
+    const { callId } = event.data.result;
     const input = requested.get(callId);
     const output = prototypeResultSchema.safeParse(event.data.result.output);
     if (input === undefined || !output.success) continue;
@@ -356,11 +344,7 @@ export function latestInstalledUiPreview(
     )
       continue;
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-    if (
-      !preview.success ||
-      sha256(preview.data.content) !== preview.data.digest
-    )
-      continue;
+    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
     latest = publicUiPreviewSchema.parse({
       appId: preview.data.appId,
       revision: preview.data.revision,
@@ -396,9 +380,7 @@ function inputRequest(request: {
   )
     return undefined;
   const title =
-    request.kind === "tool-approval" &&
-    toolName !== undefined &&
-    toolName in approvalTitles
+    request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   const description =
@@ -407,9 +389,7 @@ function inputRequest(request: {
           .object({ productSummary: z.string().trim().min(1).max(600) })
           .safeParse(request.action?.input).data?.productSummary ??
         "Build and validate the preview shown above. This changes only the private App Builder workspace.")
-      : request.kind === "tool-approval" &&
-          toolName !== undefined &&
-          toolName in approvalTitles
+      : request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
         ? publicApprovalDescription(request.action?.input, toolName)
         : undefined;
   if (
@@ -500,11 +480,9 @@ export function projectInstalledEveEvent(
         },
       ];
     case "authorization.required":
-      const {authorization} = event.data;
+      const { authorization } = event.data;
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
-        authorization === undefined
-          ? undefined
-          : Reflect.get(authorization, "repositoryAccess"),
+        authorization === undefined ? undefined : Reflect.get(authorization, "repositoryAccess"),
       );
       const storeIn = repositoryAccess.success
         ? githubRepositoryAccessViewModel(repositoryAccess.data)
@@ -533,9 +511,7 @@ export function projectInstalledEveEvent(
               ? {}
               : {
                   authorization: {
-                    ...(authorization.url === undefined
-                      ? {}
-                      : { url: authorization.url }),
+                    ...(authorization.url === undefined ? {} : { url: authorization.url }),
                     ...(authorization.userCode === undefined
                       ? {}
                       : { userCode: authorization.userCode }),
@@ -588,15 +564,12 @@ export function outstandingInstalledEveRequests(
       if (projected.some((request) => request === undefined)) return [];
       for (const request of event.data.requests) {
         const publicRequest = inputRequest(request);
-        if (publicRequest !== undefined)
-          outstanding.set(request.requestId, publicRequest);
+        if (publicRequest !== undefined) outstanding.set(request.requestId, publicRequest);
       }
     }
     if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions)
-        outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled")
-      outstanding.delete(event.data.requestId);
+      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
   }
   return [...outstanding.values()];
 }
@@ -609,15 +582,12 @@ export function outstandingInternalEveRequests(
     if (event.type === "input.requested" && event.request !== undefined)
       outstanding.set(event.request.requestId, event.request);
     if (event.type === "input.resolved")
-      for (const requestId of event.requestIds ?? [])
-        outstanding.delete(requestId);
+      for (const requestId of event.requestIds ?? []) outstanding.delete(requestId);
   }
   return [...outstanding.values()];
 }
 
-export function deriveInstalledEveStatus(
-  events: readonly MessageStreamEvent[],
-): EveSessionStatus {
+export function deriveInstalledEveStatus(events: readonly MessageStreamEvent[]): EveSessionStatus {
   const outstanding = new Set<string>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
@@ -628,10 +598,8 @@ export function deriveInstalledEveStatus(
         if (request !== undefined) outstanding.add(request.requestId);
     }
     if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions)
-        outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled")
-      outstanding.delete(event.data.requestId);
+      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
     if (event.type === "turn.cancelled") boundary = "cancelled";
     if (event.type === "session.waiting") boundary = "waiting";
     if (event.type === "session.completed") boundary = "completed";
@@ -644,9 +612,7 @@ export function deriveInstalledEveStatus(
 }
 
 /** Project one durable Eve stream into a dense, cursor-addressable public stream. */
-export function projectInstalledEveEvents(
-  events: readonly MessageStreamEvent[],
-): PublicEveEvent[] {
+export function projectInstalledEveEvents(events: readonly MessageStreamEvent[]): PublicEveEvent[] {
   return events
     .flatMap((event) => projectInstalledEveEvent(event, 0))
     .flatMap((event) => {
@@ -683,9 +649,7 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
         ? { type: "input_required", index: event.index, request: event.request }
         : null;
     case "status":
-      return event.status
-        ? { type: "status", index: event.index, status: event.status }
-        : null;
+      return event.status ? { type: "status", index: event.index, status: event.status } : null;
     case "error.public":
       return event.code && event.message
         ? {

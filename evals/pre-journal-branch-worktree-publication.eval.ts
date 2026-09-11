@@ -14,11 +14,7 @@ export default defineEval({
     "A branch-worktree interruption before durable intent preserves the reviewed workflow and creates no branch.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "branch-publication-pre-journal-interruption",
-    );
+    await prepareReviewedWorkflow(t, repository, "branch-publication-pre-journal-interruption");
 
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({

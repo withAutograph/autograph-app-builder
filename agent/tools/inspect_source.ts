@@ -1,10 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  APP_BUILDER_SOURCE_VERSION,
-  sourceWorkflowState,
-} from "@/lib/agent/source-state";
+import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
 import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-template";
 import {
   canAutoSelectDevelopmentSource,
@@ -41,8 +38,7 @@ export default defineTool({
         context.addIssue({
           code: "custom",
           path: ["path"],
-          message:
-            "Fresh templates are acquired from the canonical Arrusted remote.",
+          message: "Fresh templates are acquired from the canonical Arrusted remote.",
         });
     }),
   async execute({ sourceKind, path }, ctx) {
@@ -59,18 +55,12 @@ export default defineTool({
       });
     if (receipt === undefined && isHostedVercelRuntime(process.env)) {
       const selected = sourceWorkflowState.get();
-    if (selected.phase !== "empty") ({ receipt } = selected);
+      if (selected.phase !== "empty") ({ receipt } = selected);
     }
-    if (
-      receipt === undefined &&
-      path !== undefined &&
-      !isHostedVercelRuntime(process.env)
-    )
+    if (receipt === undefined && path !== undefined && !isHostedVercelRuntime(process.env))
       receipt = await inspectSourceReceipt(sourceKind, path);
     if (receipt === undefined)
-      throw new Error(
-        "The selected source is not available in this app build session.",
-      );
+      throw new Error("The selected source is not available in this app build session.");
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

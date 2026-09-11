@@ -23,8 +23,6 @@ export const Focused: Story = {
     const canvas = within(canvasElement);
     await userEvent.tab();
     await expect(canvas.getByRole("button")).toHaveFocus();
-    await expect(canvas.getByRole("tooltip")).toHaveTextContent(
-      "Only use approved providers.",
-    );
+    await expect(canvas.getByRole("tooltip")).toHaveTextContent("Only use approved providers.");
   },
 };

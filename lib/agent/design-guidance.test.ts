@@ -3,10 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf8");
-const reviewExperiences = readFileSync(
-  "docs/ui-preview-review-experiences.md",
-  "utf8",
-);
+const reviewExperiences = readFileSync("docs/ui-preview-review-experiences.md", "utf8");
 
 describe("high-fidelity design guidance", () => {
   it("inspects public components, compositions, stories, and consumers in order", () => {
@@ -17,9 +14,7 @@ describe("high-fidelity design guidance", () => {
       "representative production consumers",
     ].map((value) => skill.indexOf(value));
     expect(evidence.every((index) => index >= 0)).toBe(true);
-    expect(evidence).toEqual(
-      [...evidence].toSorted((left, right) => left - right),
-    );
+    expect(evidence).toEqual([...evidence].toSorted((left, right) => left - right));
   });
 
   it("prefers compositions and records justified catalog gaps", () => {

@@ -12,11 +12,7 @@ export async function ensureSandboxDirectories(
   paths: readonly string[],
 ): Promise<void> {
   const directories = [...new Set(paths)].toSorted();
-  for (
-    let index = 0;
-    index < directories.length;
-    index += DIRECTORY_BATCH_SIZE
-  ) {
+  for (let index = 0; index < directories.length; index += DIRECTORY_BATCH_SIZE) {
     const batch = directories.slice(index, index + DIRECTORY_BATCH_SIZE);
     const result = await sandbox.run({
       command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
@@ -24,8 +20,6 @@ export async function ensureSandboxDirectories(
       abortSignal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
     if (result.exitCode !== 0)
-      throw new Error(
-        "The sandbox workspace directories could not be prepared.",
-      );
+      throw new Error("The sandbox workspace directories could not be prepared.");
   }
 }

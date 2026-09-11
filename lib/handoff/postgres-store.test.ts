@@ -123,9 +123,9 @@ describe("PostgreSQL handoff renewal", () => {
     expect(readback.toISOString()).toBe("2026-09-01T12:01:00.000Z");
     const test = store({ updated: [{ ...row, expiresAt: renewal.expiresAt }] });
     const timestamp = new Date("2026-09-01T12:01:00.001Z");
-    expect(
-      await test.handoffs.renewExpired!({ ...renewal, now: timestamp }),
-    ).toMatchObject({ disposition: "renewed" });
+    expect(await test.handoffs.renewExpired!({ ...renewal, now: timestamp })).toMatchObject({
+      disposition: "renewed",
+    });
     const [[query]] = test.updateWhere.mock.calls;
     // The SQL must compare expiry only against current time, not the lossy
     // readback. The stored .000789 timestamp is already before .001000.
@@ -136,15 +136,11 @@ describe("PostgreSQL handoff renewal", () => {
   });
 
   it("fails closed when a missed update reads back an expired unbound row", async () => {
-    expect(
-      await store({ current: [row] }).handoffs.renewExpired!(renewal),
-    ).toBeUndefined();
+    expect(await store({ current: [row] }).handoffs.renewExpired!(renewal)).toBeUndefined();
     // A previously bound session remains recoverable even after expiry.
     expect(
       await store({
-        current: [
-          { ...row, redeemedAt: row.createdAt, sessionId: "session-one" },
-        ],
+        current: [{ ...row, redeemedAt: row.createdAt, sessionId: "session-one" }],
       }).handoffs.renewExpired!(renewal),
     ).toMatchObject({
       disposition: "existing",
@@ -158,9 +154,7 @@ describe("PostgreSQL handoff renewal", () => {
       const current = {
         ...row,
         expiresAt: renewal.expiresAt,
-        ...(bound
-          ? { redeemedAt: row.createdAt, sessionId: "existing-session" }
-          : {}),
+        ...(bound ? { redeemedAt: row.createdAt, sessionId: "existing-session" } : {}),
       };
       const test = store({ current: [current] });
       expect(await test.handoffs.renewExpired!(renewal)).toMatchObject({
@@ -184,8 +178,9 @@ describe("PostgreSQL handoff renewal", () => {
   it("does not treat a missing row or mismatched digest as renewal success", async () => {
     expect(await store({}).handoffs.renewExpired!(renewal)).toBeUndefined();
     expect(
-      await store({ current: [{ ...row, requestDigest: "b".repeat(64) }] })
-        .handoffs.renewExpired!(renewal),
+      await store({ current: [{ ...row, requestDigest: "b".repeat(64) }] }).handoffs.renewExpired!(
+        renewal,
+      ),
     ).toBeUndefined();
   });
 
@@ -200,11 +195,7 @@ describe("PostgreSQL handoff renewal", () => {
         now: row.expiresAt,
       }),
     ).toBeUndefined();
-    expect(test.updateWhere.mock.calls[0][0].sql).toContain(
-      '"builder_handoff"."expires_at" >',
-    );
-    expect(test.updateWhere.mock.calls[0][0].params).toContain(
-      row.expiresAt.toISOString(),
-    );
+    expect(test.updateWhere.mock.calls[0][0].sql).toContain('"builder_handoff"."expires_at" >');
+    expect(test.updateWhere.mock.calls[0][0].params).toContain(row.expiresAt.toISOString());
   });
 });

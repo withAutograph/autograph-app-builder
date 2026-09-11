@@ -37,11 +37,7 @@ export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
   {
     version: 1,
     kind: "arrusted-component-composition-v1",
-    publicImports: [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons",
-    ],
+    publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     tokenEntrypoints: ["@autograph/design-system/tokens.css"],
     providers: ["@autograph/components/providers"],
     routeGlue: {
@@ -75,9 +71,7 @@ export function createSupportedRepositoryFixture(): string {
       recursive: true,
       mode: 0o700,
     });
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")),
-  );
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")));
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',
@@ -111,10 +105,8 @@ export function createSupportedRepositoryFixture(): string {
       null,
       2,
     )}\n`,
-    ".config/mise/scripts/repository/app-contract.ts":
-      'const source = { runtime: "nextjs" };\n',
-    ".config/mise/scripts/repository/app-identity.ts":
-      'const scope = "@autograph/${appId}";\n',
+    ".config/mise/scripts/repository/app-contract.ts": 'const source = { runtime: "nextjs" };\n',
+    ".config/mise/scripts/repository/app-identity.ts": 'const scope = "@autograph/${appId}";\n',
     ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts": [
       'const observed = { runtime: "nextjs" };',
@@ -126,8 +118,7 @@ export function createSupportedRepositoryFixture(): string {
     ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
-    ".config/turbo/generators/templates/app/next.config.ts.hbs":
-      "export default {};\n",
+    ".config/turbo/generators/templates/app/next.config.ts.hbs": "export default {};\n",
     "docs/component-composition.json": ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
   };
   for (const [path, content] of Object.entries(files)) {

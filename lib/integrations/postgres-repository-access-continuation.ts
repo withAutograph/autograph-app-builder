@@ -22,8 +22,7 @@ const columns = {
   requestId: githubRepositoryAccessContinuations.requestId,
   repositoryOwner: githubRepositoryAccessContinuations.repositoryOwner,
   repositoryName: githubRepositoryAccessContinuations.repositoryName,
-  selectedInstallationId:
-    githubRepositoryAccessContinuations.selectedInstallationId,
+  selectedInstallationId: githubRepositoryAccessContinuations.selectedInstallationId,
   callbackUrl: githubRepositoryAccessContinuations.callbackUrl,
   createdAt: githubRepositoryAccessContinuations.createdAt,
   expiresAt: githubRepositoryAccessContinuations.expiresAt,
@@ -58,9 +57,7 @@ function record(
       name: row.repositoryName,
       fullName: `${String(row.repositoryOwner)}/${String(row.repositoryName)}`,
     },
-    ...(row.selectedInstallationId
-      ? { selectedInstallationId: row.selectedInstallationId }
-      : {}),
+    ...(row.selectedInstallationId ? { selectedInstallationId: row.selectedInstallationId } : {}),
     callbackUrl: row.callbackUrl,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -97,10 +94,7 @@ export function createPostgresRepositoryAccessContinuationStore(
         .where(
           and(
             tenant(value.authority),
-            eq(
-              githubRepositoryAccessContinuations.continuationDigest,
-              value.continuationDigest,
-            ),
+            eq(githubRepositoryAccessContinuations.continuationDigest, value.continuationDigest),
             isNull(githubRepositoryAccessContinuations.authorizedAt),
             isNull(githubRepositoryAccessContinuations.consumedAt),
             gt(githubRepositoryAccessContinuations.expiresAt, value.now),
@@ -117,24 +111,13 @@ export function createPostgresRepositoryAccessContinuationStore(
         .where(
           and(
             tenant(value.authority),
-            eq(
-              githubRepositoryAccessContinuations.continuationDigest,
-              value.continuationDigest,
-            ),
+            eq(githubRepositoryAccessContinuations.continuationDigest, value.continuationDigest),
             eq(githubRepositoryAccessContinuations.sessionId, value.sessionId),
             eq(githubRepositoryAccessContinuations.requestId, value.requestId),
-            eq(
-              githubRepositoryAccessContinuations.repositoryOwner,
-              value.repository.owner,
-            ),
-            eq(
-              githubRepositoryAccessContinuations.repositoryName,
-              value.repository.name,
-            ),
+            eq(githubRepositoryAccessContinuations.repositoryOwner, value.repository.owner),
+            eq(githubRepositoryAccessContinuations.repositoryName, value.repository.name),
             value.selectedInstallationId === undefined
-              ? isNull(
-                  githubRepositoryAccessContinuations.selectedInstallationId,
-                )
+              ? isNull(githubRepositoryAccessContinuations.selectedInstallationId)
               : eq(
                   githubRepositoryAccessContinuations.selectedInstallationId,
                   value.selectedInstallationId,

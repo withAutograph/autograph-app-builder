@@ -1,8 +1,6 @@
 export const HOSTED_ARTIFACT_CONTRACT_VERSION = 1;
-export const HOSTED_ARTIFACT_RELEASE_TAG =
-  "hosted-arrusted-d378904a-execution-v6";
-export const HOSTED_ARTIFACT_RELEASE_NAME =
-  "arrusted-d378904a-dependencies.tar.gz";
+export const HOSTED_ARTIFACT_RELEASE_TAG = "hosted-arrusted-d378904a-execution-v6";
+export const HOSTED_ARTIFACT_RELEASE_NAME = "arrusted-d378904a-dependencies.tar.gz";
 export const HOSTED_ARTIFACT_URL = `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`;
 export const HOSTED_ARTIFACT_BYTES = 175_953_869;
 export const HOSTED_ARTIFACT_SHA256 =

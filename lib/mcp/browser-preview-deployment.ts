@@ -1,20 +1,11 @@
 import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
-import {
-  createHostedEveSessionService,
-  type HostedEveTransport,
-} from "../eve/hosted-service";
+import { createHostedEveSessionService, type HostedEveTransport } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
-import {
-  createSameOriginEveTransport,
-  type HostedWorkloadIdentity,
-} from "../eve/same-origin-http";
-import {
-  createEveSessionService,
-  type EveSessionService,
-} from "../eve/service";
+import { createSameOriginEveTransport, type HostedWorkloadIdentity } from "../eve/same-origin-http";
+import { createEveSessionService, type EveSessionService } from "../eve/service";
 import {
   createPrototypePreviewRequestHandler,
   createServicePrototypePreviewResolver,
@@ -23,9 +14,7 @@ import { openHostedPostgresDatabase } from "./hosted-route";
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
-function adapterMode(
-  environment: Environment,
-): "local" | "hosted" | "unavailable" {
+function adapterMode(environment: Environment): "local" | "hosted" | "unavailable" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
   if (![undefined, "0", "1"].includes(local)) return "unavailable";
@@ -40,9 +29,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
   environment: Environment;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation?: typeof fetch;
-  serviceForRequest?: (
-    request: Request,
-  ) => Promise<EveSessionService | undefined>;
+  serviceForRequest?: (request: Request) => Promise<EveSessionService | undefined>;
 }) {
   let hosted:
     | {
@@ -50,9 +37,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         issuer: string;
         audience: string;
         auth: ReturnType<typeof getPreviewOAuthDeploymentAuth>;
-        membership: ReturnType<
-          typeof createPostgresPreviewOrganizationAuthority
-        >;
+        membership: ReturnType<typeof createPostgresPreviewOrganizationAuthority>;
         store: ReturnType<typeof createPostgresHostedEveStore>;
         transport: HostedEveTransport;
       }

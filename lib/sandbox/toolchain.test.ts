@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  configuredToolchainImage,
-  sandboxRevalidationKey,
-  toolVersionMatches,
-} from "./toolchain";
+import { configuredToolchainImage, sandboxRevalidationKey, toolVersionMatches } from "./toolchain";
 
 const image =
   "registry.example/autograph/app-builder-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -12,13 +8,10 @@ const image =
 describe("sandbox toolchain contract", () => {
   it("accepts only an immutable OCI digest", () => {
     expect(configuredToolchainImage({})).toBeUndefined();
-    expect(configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: image })).toBe(
-      image,
-    );
+    expect(configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: image })).toBe(image);
     expect(() =>
       configuredToolchainImage({
-        APP_BUILDER_SANDBOX_IMAGE:
-          "registry.example/autograph/app-builder:latest",
+        APP_BUILDER_SANDBOX_IMAGE: "registry.example/autograph/app-builder:latest",
       }),
     ).toThrow("must be an OCI image reference pinned");
     expect(
@@ -38,9 +31,9 @@ describe("sandbox toolchain contract", () => {
         APP_BUILDER_SANDBOX_IMAGE: developmentImage,
       }),
     ).toBe(developmentImage);
-    expect(() =>
-      configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: developmentImage }),
-    ).toThrow("pinned");
+    expect(() => configuredToolchainImage({ APP_BUILDER_SANDBOX_IMAGE: developmentImage })).toThrow(
+      "pinned",
+    );
     expect(() =>
       configuredToolchainImage({
         APP_BUILDER_EXECUTION_MODE: "development",

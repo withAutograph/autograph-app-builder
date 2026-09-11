@@ -68,20 +68,13 @@ export type SpendAction =
   | { type: "decision-applied" }
   | { type: "decision-deferred" };
 
-const requiredTargets: SpendTarget[] = [
-  "vendor_name",
-  "amount",
-  "transaction_date",
-];
+const requiredTargets: SpendTarget[] = ["vendor_name", "amount", "transaction_date"];
 
 export function initialSpendState(fixture: SpendFixture): SpendState {
   return {
     stage: "mapping",
     mapping: Object.fromEntries(
-      Object.entries(fixture.fieldMapping).map(([target, source]) => [
-        source,
-        target,
-      ]),
+      Object.entries(fixture.fieldMapping).map(([target, source]) => [source, target]),
     ) as SpendMapping,
   };
 }
@@ -99,20 +92,12 @@ function mappedValue(
   return key === undefined ? undefined : source[key];
 }
 
-export function deriveSpendPreview(
-  fixture: SpendFixture,
-  mapping: SpendMapping,
-): SpendPreview {
-  const complete = requiredTargets.every((target) =>
-    sourceFor(mapping, target),
-  );
+export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping): SpendPreview {
+  const complete = requiredTargets.every((target) => sourceFor(mapping, target));
   const representativeBaselineReady = fixture.representativeRows.filter(
     ({ issue }) => !issue,
   ).length;
-  const unshownReady = Math.max(
-    0,
-    fixture.preview.creates - representativeBaselineReady,
-  );
+  const unshownReady = Math.max(0, fixture.preview.creates - representativeBaselineReady);
   const rows = fixture.representativeRows.map((row) => {
     const vendor = mappedValue(row.source, mapping, "vendor_name");
     const amount = mappedValue(row.source, mapping, "amount");
@@ -138,9 +123,7 @@ export function deriveSpendPreview(
     ? unshownReady + rows.filter(({ result }) => result === "Ready").length
     : 0;
   const needsReview = fixture.import.rows - ready;
-  const ignored = Object.values(mapping).filter(
-    (value) => value === "ignore",
-  ).length;
+  const ignored = Object.values(mapping).filter((value) => value === "ignore").length;
   return {
     rows,
     ready,
@@ -152,24 +135,16 @@ export function deriveSpendPreview(
   };
 }
 
-export function reduceSpendState(
-  state: SpendState,
-  action: SpendAction,
-): SpendState {
+export function reduceSpendState(state: SpendState, action: SpendAction): SpendState {
   if (action.type === "mapping-changed") {
     const mapping = { ...state.mapping };
     for (const [source, target] of Object.entries(mapping))
-      if (
-        source !== action.source &&
-        target === action.target &&
-        target !== "ignore"
-      )
+      if (source !== action.source && target === action.target && target !== "ignore")
         mapping[source] = "ignore";
     mapping[action.source] = action.target;
     return { stage: "mapping", mapping };
   }
-  if (action.type === "preview-requested")
-    return { ...state, stage: "preview", saved: undefined };
+  if (action.type === "preview-requested") return { ...state, stage: "preview", saved: undefined };
   if (action.type === "save-requested") {
     const preview = deriveSpendPreview(action.fixture, state.mapping);
     const saved = {
@@ -183,8 +158,7 @@ export function reduceSpendState(
   if (action.type === "review-requested") return { ...state, stage: "review" };
   if (action.type === "match-selected")
     return { ...state, selectedMatchId: action.id, decision: undefined };
-  if (action.type === "decision-deferred")
-    return { ...state, decision: "deferred" };
+  if (action.type === "decision-deferred") return { ...state, decision: "deferred" };
   if (action.type === "decision-applied" && state.selectedMatchId)
     return {
       ...state,
@@ -205,9 +179,7 @@ export function spendActionModel(state: SpendState) {
   return {
     saveEnabled: state.stage === "preview",
     applyEnabled:
-      state.stage === "review" &&
-      Boolean(state.selectedMatchId) &&
-      state.decision === undefined,
+      state.stage === "review" && Boolean(state.selectedMatchId) && state.decision === undefined,
     result:
       state.decision === "resolved"
         ? "Simulated decision recorded."

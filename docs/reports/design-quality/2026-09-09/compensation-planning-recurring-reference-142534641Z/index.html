@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T14:25:34.641Z ·
@@ -74,62 +73,48 @@
     <section>
       <h2>Compensation planning review</h2>
       <p>
-        Synthetic planning case grounded in implemented compensation policy,
-        template, and derived-fact substrate; the roadmap&#39;s broader
-        compensation-planning workflow is planned.
+        Synthetic planning case grounded in implemented compensation policy, template, and
+        derived-fact substrate; the roadmap&#39;s broader compensation-planning workflow is planned.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
           <li>
             arrusted:
-            <code>domain-libs/compensation/src/model-compensation.ts</code> —
-            implemented
+            <code>domain-libs/compensation/src/model-compensation.ts</code> — implemented
           </li>
           <li>
             ag2:
-            <code
-              >frontend/src/app-templates/templates/compensation/manifest.ts</code
-            >
+            <code>frontend/src/app-templates/templates/compensation/manifest.ts</code>
             — implemented
           </li>
           <li>
             ag2:
-            <code>backend/src/services/compensation/derivedFacts.ts</code> —
-            implemented
+            <code>backend/src/services/compensation/derivedFacts.ts</code> — implemented
           </li>
-          <li>
-            ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned
-          </li>
+          <li>ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned</li>
         </ul>
         <h3>Review questions</h3>
         <ul>
           <li>
-            Can a reviewer assess proposed compensation with base, bonus,
-            benefits, and employer-tax context?
+            Can a reviewer assess proposed compensation with base, bonus, benefits, and employer-tax
+            context?
           </li>
           <li>
-            Does the design show uncertainty and policy assumptions instead of
-            presenting a draft as payroll truth?
+            Does the design show uncertainty and policy assumptions instead of presenting a draft as
+            payroll truth?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
-          <li>
-            A reviewer can identify out-of-band proposals and their cost
-            drivers.
-          </li>
-          <li>
-            A reviewer can request changes or prepare a decision-ready
-            compensation summary.
-          </li>
+          <li>A reviewer can identify out-of-band proposals and their cost drivers.</li>
+          <li>A reviewer can request changes or prepare a decision-ready compensation summary.</li>
         </ul>
       </details>
     </section>
     <h2>Arrusted adherence: 93/100 · partial</h2>
     <p>
-      Evidence coverage: 1.91%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 1.91%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -170,50 +155,40 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
       <li>
-        No generated CSS source files were supplied; compiled stylesheet source
-        maps cannot establish generated declaration provenance.
+        No generated CSS source files were supplied; compiled stylesheet source maps cannot
+        establish generated declaration provenance.
       </li>
     </ul>
     <details open>
       <summary>Generated-code changes (5)</summary>
       <article id="finding-9">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-9">src/CompensationPlanning.tsx:122</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-9">src/CompensationPlanning.tsx:122</a></small>
         <details id="source-9">
           <summary>Source location: src/CompensationPlanning.tsx:122</summary>
           <pre>
@@ -225,14 +200,8 @@
       </article>
       <article id="finding-32">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public disabled prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-32">src/CompensationPlanning.tsx:204</a></small
-        >
+        <p>Button has no public disabled prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-32">src/CompensationPlanning.tsx:204</a></small>
         <details id="source-32">
           <summary>Source location: src/CompensationPlanning.tsx:204</summary>
           <pre>
@@ -244,14 +213,8 @@
       </article>
       <article id="finding-33">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-33">src/CompensationPlanning.tsx:207</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-33">src/CompensationPlanning.tsx:207</a></small>
         <details id="source-33">
           <summary>Source location: src/CompensationPlanning.tsx:207</summary>
           <pre>
@@ -263,14 +226,8 @@
       </article>
       <article id="finding-34">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public disabled prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-34">src/CompensationPlanning.tsx:212</a></small
-        >
+        <p>Button has no public disabled prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-34">src/CompensationPlanning.tsx:212</a></small>
         <details id="source-34">
           <summary>Source location: src/CompensationPlanning.tsx:212</summary>
           <pre>
@@ -282,14 +239,8 @@
       </article>
       <article id="finding-35">
         <strong>prop · nonconforming</strong>
-        <p>
-          Button has no public onClick prop in the selected Arrusted type
-          surface.
-        </p>
-        <small
-          >static evidence ·
-          <a href="#source-35">src/CompensationPlanning.tsx:213</a></small
-        >
+        <p>Button has no public onClick prop in the selected Arrusted type surface.</p>
+        <small>static evidence · <a href="#source-35">src/CompensationPlanning.tsx:213</a></small>
         <details id="source-35">
           <summary>Source location: src/CompensationPlanning.tsx:213</summary>
           <pre>
@@ -309,13 +260,10 @@
       <article id="finding-0">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-0">src/CompensationPlanning.tsx:107</a></small
-        >
+        <small>static evidence · <a href="#source-0">src/CompensationPlanning.tsx:107</a></small>
         <details id="source-0">
           <summary>Source location: src/CompensationPlanning.tsx:107</summary>
           <pre>
@@ -328,13 +276,10 @@
       <article id="finding-1">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-1">src/CompensationPlanning.tsx:108</a></small
-        >
+        <small>static evidence · <a href="#source-1">src/CompensationPlanning.tsx:108</a></small>
         <details id="source-1">
           <summary>Source location: src/CompensationPlanning.tsx:108</summary>
           <pre>
@@ -347,13 +292,10 @@
       <article id="finding-2">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-2">src/CompensationPlanning.tsx:109</a></small
-        >
+        <small>static evidence · <a href="#source-2">src/CompensationPlanning.tsx:109</a></small>
         <details id="source-2">
           <summary>Source location: src/CompensationPlanning.tsx:109</summary>
           <pre>
@@ -366,13 +308,10 @@
       <article id="finding-4">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-4">src/CompensationPlanning.tsx:109</a></small
-        >
+        <small>static evidence · <a href="#source-4">src/CompensationPlanning.tsx:109</a></small>
         <details id="source-4">
           <summary>Source location: src/CompensationPlanning.tsx:109</summary>
           <pre>
@@ -385,13 +324,10 @@
       <article id="finding-5">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-5">src/CompensationPlanning.tsx:109</a></small
-        >
+        <small>static evidence · <a href="#source-5">src/CompensationPlanning.tsx:109</a></small>
         <details id="source-5">
           <summary>Source location: src/CompensationPlanning.tsx:109</summary>
           <pre>
@@ -404,13 +340,10 @@
       <article id="finding-10">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-10">src/CompensationPlanning.tsx:132</a></small
-        >
+        <small>static evidence · <a href="#source-10">src/CompensationPlanning.tsx:132</a></small>
         <details id="source-10">
           <summary>Source location: src/CompensationPlanning.tsx:132</summary>
           <pre>
@@ -423,13 +356,10 @@
       <article id="finding-11">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-11">src/CompensationPlanning.tsx:134</a></small
-        >
+        <small>static evidence · <a href="#source-11">src/CompensationPlanning.tsx:134</a></small>
         <details id="source-11">
           <summary>Source location: src/CompensationPlanning.tsx:134</summary>
           <pre>
@@ -442,13 +372,10 @@
       <article id="finding-12">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-12">src/CompensationPlanning.tsx:143</a></small
-        >
+        <small>static evidence · <a href="#source-12">src/CompensationPlanning.tsx:143</a></small>
         <details id="source-12">
           <summary>Source location: src/CompensationPlanning.tsx:143</summary>
           <pre>
@@ -461,13 +388,10 @@
       <article id="finding-13">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-13">src/CompensationPlanning.tsx:144</a></small
-        >
+        <small>static evidence · <a href="#source-13">src/CompensationPlanning.tsx:144</a></small>
         <details id="source-13">
           <summary>Source location: src/CompensationPlanning.tsx:144</summary>
           <pre>
@@ -480,13 +404,10 @@
       <article id="finding-14">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-14">src/CompensationPlanning.tsx:145</a></small
-        >
+        <small>static evidence · <a href="#source-14">src/CompensationPlanning.tsx:145</a></small>
         <details id="source-14">
           <summary>Source location: src/CompensationPlanning.tsx:145</summary>
           <pre>
@@ -499,13 +420,10 @@
       <article id="finding-15">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-15">src/CompensationPlanning.tsx:151</a></small
-        >
+        <small>static evidence · <a href="#source-15">src/CompensationPlanning.tsx:151</a></small>
         <details id="source-15">
           <summary>Source location: src/CompensationPlanning.tsx:151</summary>
           <pre>
@@ -518,13 +436,10 @@
       <article id="finding-16">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-16">src/CompensationPlanning.tsx:152</a></small
-        >
+        <small>static evidence · <a href="#source-16">src/CompensationPlanning.tsx:152</a></small>
         <details id="source-16">
           <summary>Source location: src/CompensationPlanning.tsx:152</summary>
           <pre>
@@ -537,13 +452,10 @@
       <article id="finding-18">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-18">src/CompensationPlanning.tsx:155</a></small
-        >
+        <small>static evidence · <a href="#source-18">src/CompensationPlanning.tsx:155</a></small>
         <details id="source-18">
           <summary>Source location: src/CompensationPlanning.tsx:155</summary>
           <pre>
@@ -556,13 +468,10 @@
       <article id="finding-28">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-28">src/CompensationPlanning.tsx:192</a></small
-        >
+        <small>static evidence · <a href="#source-28">src/CompensationPlanning.tsx:192</a></small>
         <details id="source-28">
           <summary>Source location: src/CompensationPlanning.tsx:192</summary>
           <pre>
@@ -575,13 +484,9 @@
       <article id="finding-38">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-38">src/CompensationPlanning.tsx:112</a></small
-        >
+        <small>static evidence · <a href="#source-38">src/CompensationPlanning.tsx:112</a></small>
         <details id="source-38">
           <summary>Source location: src/CompensationPlanning.tsx:112</summary>
           <pre>
@@ -594,13 +499,9 @@
       <article id="finding-39">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-39">src/CompensationPlanning.tsx:163</a></small
-        >
+        <small>static evidence · <a href="#source-39">src/CompensationPlanning.tsx:163</a></small>
         <details id="source-39">
           <summary>Source location: src/CompensationPlanning.tsx:163</summary>
           <pre>
@@ -613,13 +514,9 @@
       <article id="finding-40">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-40">src/CompensationPlanning.tsx:185</a></small
-        >
+        <small>static evidence · <a href="#source-40">src/CompensationPlanning.tsx:185</a></small>
         <details id="source-40">
           <summary>Source location: src/CompensationPlanning.tsx:185</summary>
           <pre>
@@ -632,13 +529,9 @@
       <article id="finding-41">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-41">src/CompensationPlanning.tsx:197</a></small
-        >
+        <small>static evidence · <a href="#source-41">src/CompensationPlanning.tsx:197</a></small>
         <details id="source-41">
           <summary>Source location: src/CompensationPlanning.tsx:197</summary>
           <pre>
@@ -652,8 +545,7 @@
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-78">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-78">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-78">
@@ -665,8 +557,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-79">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-79">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-79">
@@ -678,8 +569,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-80">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-80">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-80">
@@ -691,8 +581,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-81">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-81">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-81">
@@ -703,23 +592,18 @@
       <article id="finding-82">
         <strong>unknown · unassessed</strong>
         <p>column-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-83">
         <strong>unknown · unassessed</strong>
         <p>row-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-84">
         <strong>unknown · unassessed</strong>
         <p>border-top-left-radius: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-84">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-84">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-84">
@@ -731,8 +615,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-width: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-85">/compensation-planning:184</a> ·
+          >browser evidence · <a href="#source-85">/compensation-planning:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-85">
@@ -744,8 +627,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-86">/compensation-planning:184</a> ·
+          >browser evidence · <a href="#source-86">/compensation-planning:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-86">
@@ -756,16 +638,13 @@
       <article id="finding-87">
         <strong>unknown · unassessed</strong>
         <p>box-shadow: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-88">
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-88">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-88">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-88">
@@ -777,8 +656,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-89">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-89">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-89">
@@ -788,24 +666,21 @@
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 75/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -820,10 +695,9 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The page title, editable assumptions, package comparison, and next
-            decision form a clear review sequence. Current and proposed totals
-            are prominent, and draft/applied statuses are visible, though the
-            detailed compensation components are not given comparable visual
+            The page title, editable assumptions, package comparison, and next decision form a clear
+            review sequence. Current and proposed totals are prominent, and draft/applied statuses
+            are visible, though the detailed compensation components are not given comparable visual
             priority.
           </td>
         </tr>
@@ -831,21 +705,19 @@
           <th>layout</th>
           <td>3/4</td>
           <td>
-            The two-column composition is aligned and comfortably spaced at
-            1024, 1440, and 1920 widths, with consistent card boundaries and
-            field rhythm. The wide view leaves substantial unused space, but the
-            bounded content width remains coherent; the 768px-tall capture
-            requires modest page scrolling to reach the assumption actions.
+            The two-column composition is aligned and comfortably spaced at 1024, 1440, and 1920
+            widths, with consistent card boundaries and field rhythm. The wide view leaves
+            substantial unused space, but the bounded content width remains coherent; the 768px-tall
+            capture requires modest page scrolling to reach the assumption actions.
           </td>
         </tr>
         <tr>
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Headings, labels, totals, and supporting copy use a consistent,
-            readable hierarchy. Readability is weakened by the employer-tax
-            input displaying 7.6499999999999995 and by several small muted
-            captions that automated evidence flags as marginal or insufficient
+            Headings, labels, totals, and supporting copy use a consistent, readable hierarchy.
+            Readability is weakened by the employer-tax input displaying 7.6499999999999995 and by
+            several small muted captions that automated evidence flags as marginal or insufficient
             contrast.
           </td>
         </tr>
@@ -853,25 +725,21 @@
           <th>responsive</th>
           <td>3/4</td>
           <td>
-            The two-column review remains usable without clipping at the tested
-            1024, 1440, and 1920 desktop widths, and controls resize sensibly.
-            At the 1024×768 viewport, the apply/reset controls begin below the
-            visible viewport while the resulting comparison and decision remain
-            visible, creating some separation between editing and applying
-            assumptions.
+            The two-column review remains usable without clipping at the tested 1024, 1440, and 1920
+            desktop widths, and controls resize sensibly. At the 1024×768 viewport, the apply/reset
+            controls begin below the visible viewport while the resulting comparison and decision
+            remain visible, creating some separation between editing and applying assumptions.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            The interface repeatedly identifies the case as synthetic,
-            assumption-based, and a draft; the footer explicitly says
-            calculations and decisions exist only in the preview, avoiding a
-            payroll or approval claim. Base and employer-tax figures are
-            visible, but bonus and benefits are only represented as editable
-            inputs and are not itemized in the current/proposed comparison,
-            while band context is reduced to a midpoint delta.
+            The interface repeatedly identifies the case as synthetic, assumption-based, and a
+            draft; the footer explicitly says calculations and decisions exist only in the preview,
+            avoiding a payroll or approval claim. Base and employer-tax figures are visible, but
+            bonus and benefits are only represented as editable inputs and are not itemized in the
+            current/proposed comparison, while band context is reduced to a midpoint delta.
           </td>
         </tr>
       </tbody>
@@ -879,133 +747,120 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        Clear separation between editable policy assumptions, calculated
-        comparison, and the reviewer’s next decision.
+        Clear separation between editable policy assumptions, calculated comparison, and the
+        reviewer’s next decision.
       </li>
       <li>
-        Current and proposed totals are easy to compare, with base and
-        employer-tax context shown directly beneath each total.
+        Current and proposed totals are easy to compare, with base and employer-tax context shown
+        directly beneath each total.
       </li>
       <li>
-        Labels such as “Draft,” “synthetic,” “calculated draft,” and “Keep draft
-        for review” appropriately frame the proposal as planning material rather
-        than payroll truth.
+        Labels such as “Draft,” “synthetic,” “calculated draft,” and “Keep draft for review”
+        appropriately frame the proposal as planning material rather than payroll truth.
       </li>
       <li>
-        Helper text explains which values are held constant and clarifies that
-        the band midpoint is a comparison point rather than a policy limit.
+        Helper text explains which values are held constant and clarifies that the band midpoint is
+        a comparison point rather than a policy limit.
       </li>
       <li>
-        The tested edit/apply interaction updates the displayed synthetic total
-        consistently across the supplied desktop sizes.
+        The tested edit/apply interaction updates the displayed synthetic total consistently across
+        the supplied desktop sizes.
       </li>
-      <li>
-        The composition remains unclipped and legible across all three tested
-        desktop widths.
-      </li>
+      <li>The composition remains unclipped and legible across all three tested desktop widths.</li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>high · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The comparison emphasizes aggregate totals but itemizes only base and
-        estimated employer tax. Target bonus and annual benefits are absent from
-        both package breakdowns, so a reviewer cannot directly reconcile all
-        requested compensation components.
+        The comparison emphasizes aggregate totals but itemizes only base and estimated employer
+        tax. Target bonus and annual benefits are absent from both package breakdowns, so a reviewer
+        cannot directly reconcile all requested compensation components.
       </p>
       <p>
-        <strong>Improve:</strong> Add a compact, aligned breakdown under each
-        package for base, target bonus, benefits, employer-tax estimate, and
-        total. Mark held-constant items explicitly and distinguish estimates
-        from entered amounts.
+        <strong>Improve:</strong> Add a compact, aligned breakdown under each package for base,
+        target bonus, benefits, employer-tax estimate, and total. Mark held-constant items
+        explicitly and distinguish estimates from entered amounts.
       </p>
       <small>Screenshot region: x 674, y 120, width 636, height 223</small>
     </article>
     <article id="design-1">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        Band comparison is limited to “$20,680 above the supplied midpoint.”
-        This identifies direction and distance but gives no range, position, or
-        explanation of how the midpoint should inform the decision.
+        Band comparison is limited to “$20,680 above the supplied midpoint.” This identifies
+        direction and distance but gives no range, position, or explanation of how the midpoint
+        should inform the decision.
       </p>
       <p>
-        <strong>Improve:</strong> Present the supplied band information in a
-        dedicated comparison row and state what is known versus unavailable—for
-        example, proposed base, midpoint, dollar/percent variance, and “band
-        limits not supplied” if no range exists.
+        <strong>Improve:</strong> Present the supplied band information in a dedicated comparison
+        row and state what is known versus unavailable—for example, proposed base, midpoint,
+        dollar/percent variance, and “band limits not supplied” if no range exists.
       </p>
       <small>Screenshot region: x 691, y 303, width 472, height 25</small>
     </article>
     <article id="design-2">
       <h4>medium · <a href="#desktop-1">desktop-1</a></h4>
       <p>
-        The employer-tax assumption is displayed as 7.6499999999999995, which
-        looks like calculation leakage rather than an intentional policy
-        assumption and makes an estimate appear falsely precise.
+        The employer-tax assumption is displayed as 7.6499999999999995, which looks like calculation
+        leakage rather than an intentional policy assumption and makes an estimate appear falsely
+        precise.
       </p>
       <p>
-        <strong>Improve:</strong> Format the displayed assumption to an
-        appropriate planning precision such as 7.65%, while preserving any
-        internal numeric precision separately.
+        <strong>Improve:</strong> Format the displayed assumption to an appropriate planning
+        precision such as 7.65%, while preserving any internal numeric precision separately.
       </p>
       <small>Screenshot region: x 147, y 487, width 486, height 80</small>
     </article>
     <article id="design-3">
       <h4>low · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The draft badge communicates status, but “CMP-29” is unexplained and the
-        badge does not indicate whether inputs are sourced, provisional, or
-        reviewer-entered.
+        The draft badge communicates status, but “CMP-29” is unexplained and the badge does not
+        indicate whether inputs are sourced, provisional, or reviewer-entered.
       </p>
       <p>
-        <strong>Improve:</strong> Pair the draft identifier with concise
-        provenance or timing information, such as “Draft CMP-29 · reviewer
-        assumptions,” if that information is available.
+        <strong>Improve:</strong> Pair the draft identifier with concise provenance or timing
+        information, such as “Draft CMP-29 · reviewer assumptions,” if that information is
+        available.
       </p>
       <small>Screenshot region: x 1195, y 71, width 114, height 25</small>
     </article>
     <article id="design-4">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The strongest disclaimer—that calculations and decisions exist only in
-        this preview—is visually remote from the calculated totals and decision
-        controls. Reviewers may act before encountering it, especially in
-        shorter desktop windows.
+        The strongest disclaimer—that calculations and decisions exist only in this preview—is
+        visually remote from the calculated totals and decision controls. Reviewers may act before
+        encountering it, especially in shorter desktop windows.
       </p>
       <p>
-        <strong>Improve:</strong> Repeat a concise preview/estimate notice
-        inside the comparison or next-decision card, while retaining the footer
-        disclosure.
+        <strong>Improve:</strong> Repeat a concise preview/estimate notice inside the comparison or
+        next-decision card, while retaining the footer disclosure.
       </p>
       <small>Screenshot region: x 130, y 866, width 495, height 22</small>
     </article>
     <article id="design-5">
       <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
       <p>
-        At the measured 1024×768 desktop viewport, the final assumption field
-        and apply/reset controls extend below the initial viewport, while
-        comparison and decision controls remain visible to the right. This
-        weakens the perceived sequence from edit to apply to decide.
+        At the measured 1024×768 desktop viewport, the final assumption field and apply/reset
+        controls extend below the initial viewport, while comparison and decision controls remain
+        visible to the right. This weakens the perceived sequence from edit to apply to decide.
       </p>
       <p>
-        <strong>Improve:</strong> At shorter desktop windows, reduce vertical
-        field spacing or use a denser supported form composition so the apply
-        controls remain closer to the assumptions and comparison; scrolling can
-        remain available.
+        <strong>Improve:</strong> At shorter desktop windows, reduce vertical field spacing or use a
+        denser supported form composition so the apply controls remain closer to the assumptions and
+        comparison; scrolling can remain available.
       </p>
       <small>Screenshot region: x 24, y 688, width 428, height 154</small>
     </article>
     <article id="design-6">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The two decision options are understandable, but neither summarizes the
-        consequences. “Recommend for planning” may be mistaken for an
-        approval-like action despite the broader draft language.
+        The two decision options are understandable, but neither summarizes the consequences.
+        “Recommend for planning” may be mistaken for an approval-like action despite the broader
+        draft language.
       </p>
       <p>
-        <strong>Improve:</strong> Add short consequence text near the controls,
-        such as “Records a recommendation in this preview; does not approve or
-        send to payroll,” and clarify what retaining the draft means.
+        <strong>Improve:</strong> Add short consequence text near the controls, such as “Records a
+        recommendation in this preview; does not approve or send to payroll,” and clarify what
+        retaining the draft means.
       </p>
       <small>Screenshot region: x 691, y 427, width 602, height 122</small>
     </article>
@@ -1645,10 +1500,7 @@
       </details>
     </section>
     <section id="desktop-1">
-      <h2>
-        desktop-1 — edit, apply, hold, and clear synthetic compensation
-        assumptions
-      </h2>
+      <h2>desktop-1 — edit, apply, hold, and clear synthetic compensation assumptions</h2>
       <div class="capture">
         <img
           src="desktop-1.png"
@@ -2221,10 +2073,7 @@
       </details>
     </section>
     <section id="desktop-wide-1">
-      <h2>
-        desktop-wide-1 — edit, apply, hold, and clear synthetic compensation
-        assumptions
-      </h2>
+      <h2>desktop-wide-1 — edit, apply, hold, and clear synthetic compensation assumptions</h2>
       <div class="capture">
         <img
           src="desktop-wide-1.png"
@@ -2452,10 +2301,7 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        /><a
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" /><a
           class="region"
           href="#design-5"
           title="At the measured 1024×768 desktop viewport, the final assumption field and apply/reset controls extend below the initial viewport, while comparison and decision controls remain visible to the right. This weakens the perceived sequence from edit to apply to decide."
@@ -2800,10 +2646,7 @@
       </details>
     </section>
     <section id="desktop-window-1">
-      <h2>
-        desktop-window-1 — edit, apply, hold, and clear synthetic compensation
-        assumptions
-      </h2>
+      <h2>desktop-window-1 — edit, apply, hold, and clear synthetic compensation assumptions</h2>
       <div class="capture">
         <img
           src="desktop-window-1.png"

@@ -35,10 +35,5 @@ export default function SettingUpPage() {
     );
   }
 
-  return (
-    <WorkspaceSetupStatus
-      status="loading"
-      loadingTitle="Setting up your workspace…"
-    />
-  );
+  return <WorkspaceSetupStatus status="loading" loadingTitle="Setting up your workspace…" />;
 }

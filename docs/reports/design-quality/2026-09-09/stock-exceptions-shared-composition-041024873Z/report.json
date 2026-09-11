@@ -7168,11 +7168,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-81-color",
         "dimension": "styling",
@@ -7839,11 +7835,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-82-color",
         "dimension": "styling",
@@ -12057,10 +12049,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-40-color",
         "dimension": "styling",
@@ -13060,11 +13049,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-93-color",
         "dimension": "styling",
@@ -13731,11 +13716,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-94-color",
         "dimension": "styling",
@@ -15259,10 +15240,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-56-color",
         "dimension": "styling",
@@ -18754,11 +18732,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-105-color",
         "dimension": "styling",
@@ -19557,11 +19531,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-106-color",
         "dimension": "styling",
@@ -24678,11 +24648,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-117-color",
         "dimension": "styling",
@@ -25327,11 +25293,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-118-color",
         "dimension": "styling",
@@ -27522,10 +27484,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-151-color",
         "dimension": "styling",
@@ -28192,10 +28151,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-152-color",
         "dimension": "styling",
@@ -29819,11 +29775,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-129-color",
         "dimension": "styling",
@@ -30157,11 +30109,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-130-color",
         "dimension": "styling",
@@ -31129,10 +31077,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-154-color",
         "dimension": "styling",
@@ -31476,10 +31421,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-156-color",
         "dimension": "styling",
@@ -31812,10 +31754,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-157-color",
         "dimension": "styling",
@@ -32137,10 +32076,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-155-color",
         "dimension": "styling",
@@ -32484,10 +32420,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-159-color",
         "dimension": "styling",
@@ -32820,10 +32753,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-160-color",
         "dimension": "styling",
@@ -45636,11 +45566,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-81-color",
         "dimension": "styling",
@@ -46307,11 +46233,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-82-color",
         "dimension": "styling",
@@ -50525,10 +50447,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-40-color",
         "dimension": "styling",
@@ -51528,11 +51447,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-93-color",
         "dimension": "styling",
@@ -52199,11 +52114,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-94-color",
         "dimension": "styling",
@@ -53727,10 +53638,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-56-color",
         "dimension": "styling",
@@ -57222,11 +57130,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-105-color",
         "dimension": "styling",
@@ -58025,11 +57929,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-106-color",
         "dimension": "styling",
@@ -63146,11 +63046,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-117-color",
         "dimension": "styling",
@@ -63795,11 +63691,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-118-color",
         "dimension": "styling",
@@ -65990,10 +65882,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-151-color",
         "dimension": "styling",
@@ -66660,10 +66549,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-152-color",
         "dimension": "styling",
@@ -68287,11 +68173,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-129-color",
         "dimension": "styling",
@@ -68625,11 +68507,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-130-color",
         "dimension": "styling",
@@ -69597,10 +69475,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-154-color",
         "dimension": "styling",
@@ -69944,10 +69819,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-156-color",
         "dimension": "styling",
@@ -70280,10 +70152,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-157-color",
         "dimension": "styling",
@@ -70605,10 +70474,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-155-color",
         "dimension": "styling",
@@ -70952,10 +70818,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-159-color",
         "dimension": "styling",
@@ -71288,10 +71151,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-160-color",
         "dimension": "styling",
@@ -84104,11 +83964,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-81-color",
         "dimension": "styling",
@@ -84775,11 +84631,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-82-color",
         "dimension": "styling",
@@ -88993,10 +88845,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-40-color",
         "dimension": "styling",
@@ -89996,11 +89845,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-93-color",
         "dimension": "styling",
@@ -90667,11 +90512,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-94-color",
         "dimension": "styling",
@@ -92195,10 +92036,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-56-color",
         "dimension": "styling",
@@ -95690,11 +95528,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-105-color",
         "dimension": "styling",
@@ -96493,11 +96327,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-106-color",
         "dimension": "styling",
@@ -101614,11 +101444,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-117-color",
         "dimension": "styling",
@@ -102263,11 +102089,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-118-color",
         "dimension": "styling",
@@ -104458,10 +104280,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-151-color",
         "dimension": "styling",
@@ -105128,10 +104947,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-152-color",
         "dimension": "styling",
@@ -106755,11 +106571,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-129-color",
         "dimension": "styling",
@@ -107093,11 +106905,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-130-color",
         "dimension": "styling",
@@ -108065,10 +107873,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-154-color",
         "dimension": "styling",
@@ -108412,10 +108217,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-156-color",
         "dimension": "styling",
@@ -108748,10 +108550,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-157-color",
         "dimension": "styling",
@@ -109073,10 +108872,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-155-color",
         "dimension": "styling",
@@ -109420,10 +109216,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-159-color",
         "dimension": "styling",
@@ -109756,10 +109549,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-160-color",
         "dimension": "styling",
@@ -119758,10 +119548,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-151-color",
         "dimension": "styling",
@@ -120570,10 +120357,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-152-color",
         "dimension": "styling",
@@ -122615,10 +122399,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-154-color",
         "dimension": "styling",
@@ -123295,10 +123076,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-156-color",
         "dimension": "styling",
@@ -123997,10 +123775,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-157-color",
         "dimension": "styling",
@@ -124842,10 +124617,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-155-color",
         "dimension": "styling",
@@ -125522,10 +125294,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-159-color",
         "dimension": "styling",
@@ -126191,10 +125960,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-160-color",
         "dimension": "styling",
@@ -127914,10 +127680,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-40-color",
         "dimension": "styling",
@@ -131324,10 +131087,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-56-color",
         "dimension": "styling",
@@ -135257,11 +135017,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-135-color",
         "dimension": "styling",
@@ -135917,11 +135673,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-138-color",
         "dimension": "styling",
@@ -136599,11 +136351,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-136-color",
         "dimension": "styling",
@@ -142542,10 +142290,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-198-color",
         "dimension": "styling",
@@ -150116,11 +149861,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-230-color",
         "dimension": "styling",
@@ -150471,11 +150212,7 @@
   "reference": {
     "name": "arrusted-shared-record-list-detail-20260908",
     "commit": "e58fdf676e62d7180610c4125a05337d17b40633",
-    "publicModules": [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons"
-    ],
+    "publicModules": ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     "catalogAvailable": true
   },
   "captures": [
@@ -150661,27 +150398,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -150733,9 +150462,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -156142,11 +155869,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-81-color",
             "dimension": "styling",
@@ -156813,11 +156536,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-82-color",
             "dimension": "styling",
@@ -161031,10 +160750,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-40-color",
             "dimension": "styling",
@@ -162034,11 +161750,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-93-color",
             "dimension": "styling",
@@ -162705,11 +162417,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-94-color",
             "dimension": "styling",
@@ -164233,10 +163941,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-56-color",
             "dimension": "styling",
@@ -167728,11 +167433,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-105-color",
             "dimension": "styling",
@@ -168531,11 +168232,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-106-color",
             "dimension": "styling",
@@ -173652,11 +173349,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-117-color",
             "dimension": "styling",
@@ -174301,11 +173994,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-118-color",
             "dimension": "styling",
@@ -176496,10 +176185,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-151-color",
             "dimension": "styling",
@@ -177166,10 +176852,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-152-color",
             "dimension": "styling",
@@ -178793,11 +178476,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-129-color",
             "dimension": "styling",
@@ -179131,11 +178810,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-130-color",
             "dimension": "styling",
@@ -180103,10 +179778,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-154-color",
             "dimension": "styling",
@@ -180450,10 +180122,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-156-color",
             "dimension": "styling",
@@ -180786,10 +180455,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-157-color",
             "dimension": "styling",
@@ -181111,10 +180777,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-155-color",
             "dimension": "styling",
@@ -181458,10 +181121,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-159-color",
             "dimension": "styling",
@@ -181794,10 +181454,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-160-color",
             "dimension": "styling",
@@ -189524,27 +189181,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -189788,27 +189437,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -189860,9 +189501,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.68 (foreground color: #fefefe, background color: #6b7de2, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -189970,27 +189609,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -190042,9 +189673,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -190304,27 +189933,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -190376,9 +189997,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -195785,11 +195404,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-81-color",
             "dimension": "styling",
@@ -196456,11 +196071,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-82-color",
             "dimension": "styling",
@@ -200674,10 +200285,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-40-color",
             "dimension": "styling",
@@ -201677,11 +201285,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-93-color",
             "dimension": "styling",
@@ -202348,11 +201952,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-94-color",
             "dimension": "styling",
@@ -203876,10 +203476,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-56-color",
             "dimension": "styling",
@@ -207371,11 +206968,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-105-color",
             "dimension": "styling",
@@ -208174,11 +207767,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-106-color",
             "dimension": "styling",
@@ -213295,11 +212884,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-117-color",
             "dimension": "styling",
@@ -213944,11 +213529,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-118-color",
             "dimension": "styling",
@@ -216139,10 +215720,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-151-color",
             "dimension": "styling",
@@ -216809,10 +216387,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-152-color",
             "dimension": "styling",
@@ -218436,11 +218011,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-129-color",
             "dimension": "styling",
@@ -218774,11 +218345,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-130-color",
             "dimension": "styling",
@@ -219746,10 +219313,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-154-color",
             "dimension": "styling",
@@ -220093,10 +219657,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-156-color",
             "dimension": "styling",
@@ -220429,10 +219990,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-157-color",
             "dimension": "styling",
@@ -220754,10 +220312,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-155-color",
             "dimension": "styling",
@@ -221101,10 +220656,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-159-color",
             "dimension": "styling",
@@ -221437,10 +220989,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-160-color",
             "dimension": "styling",
@@ -229152,27 +228701,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -229416,27 +228957,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -229488,9 +229021,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -229598,27 +229129,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -229670,9 +229193,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -229947,27 +229468,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -230019,9 +229532,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -235428,11 +234939,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-81-color",
             "dimension": "styling",
@@ -236099,11 +235606,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-82-color",
             "dimension": "styling",
@@ -240317,10 +239820,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-40-color",
             "dimension": "styling",
@@ -241320,11 +240820,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-93-color",
             "dimension": "styling",
@@ -241991,11 +241487,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-94-color",
             "dimension": "styling",
@@ -243519,10 +243011,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-56-color",
             "dimension": "styling",
@@ -247014,11 +246503,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-105-color",
             "dimension": "styling",
@@ -247817,11 +247302,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-106-color",
             "dimension": "styling",
@@ -252938,11 +252419,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-117-color",
             "dimension": "styling",
@@ -253587,11 +253064,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-118-color",
             "dimension": "styling",
@@ -255782,10 +255255,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-151-color",
             "dimension": "styling",
@@ -256452,10 +255922,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-152-color",
             "dimension": "styling",
@@ -258079,11 +257546,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-129-color",
             "dimension": "styling",
@@ -258417,11 +257880,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-130-color",
             "dimension": "styling",
@@ -259389,10 +258848,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-154-color",
             "dimension": "styling",
@@ -259736,10 +259192,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-156-color",
             "dimension": "styling",
@@ -260072,10 +259525,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-157-color",
             "dimension": "styling",
@@ -260397,10 +259847,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-155-color",
             "dimension": "styling",
@@ -260744,10 +260191,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-159-color",
             "dimension": "styling",
@@ -261080,10 +260524,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-160-color",
             "dimension": "styling",
@@ -268810,27 +268251,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -269089,27 +268522,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -269161,9 +268586,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.68 (foreground color: #fefefe, background color: #6b7de2, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -269286,27 +268709,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -269358,9 +268773,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -269518,27 +268931,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -269590,9 +268995,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -272185,10 +271588,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-151-color",
             "dimension": "styling",
@@ -272997,10 +272397,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-152-color",
             "dimension": "styling",
@@ -275042,10 +274439,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-154-color",
             "dimension": "styling",
@@ -275722,10 +275116,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-156-color",
             "dimension": "styling",
@@ -276424,10 +275815,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-157-color",
             "dimension": "styling",
@@ -277269,10 +276657,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-155-color",
             "dimension": "styling",
@@ -277949,10 +277334,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-159-color",
             "dimension": "styling",
@@ -278618,10 +278000,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-160-color",
             "dimension": "styling",
@@ -280341,10 +279720,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-40-color",
             "dimension": "styling",
@@ -283751,10 +283127,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-56-color",
             "dimension": "styling",
@@ -287684,11 +287057,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-135-color",
             "dimension": "styling",
@@ -288344,11 +287713,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-138-color",
             "dimension": "styling",
@@ -289026,11 +288391,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-136-color",
             "dimension": "styling",
@@ -294969,10 +294330,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-198-color",
             "dimension": "styling",
@@ -302543,11 +301901,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-230-color",
             "dimension": "styling",
@@ -302993,27 +302347,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -303155,27 +302501,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -303227,9 +302565,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.68 (foreground color: #fefefe, background color: #6b7de2, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -303323,27 +302659,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -303395,9 +302723,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]

@@ -11,14 +11,11 @@ type FreshBootstrapTestContext = {
   capability: FreshBootstrapCapability;
   hooks?: FreshBootstrapFaultHooks;
 };
-const structurallyInjectedCapability =
-  new AsyncLocalStorage<FreshBootstrapTestContext>();
+const structurallyInjectedCapability = new AsyncLocalStorage<FreshBootstrapTestContext>();
 
 export function currentFreshBootstrapCapability(): Promise<FreshBootstrapCapability> {
   const injected = structurallyInjectedCapability.getStore()?.capability;
-  return injected === undefined
-    ? productionFreshBootstrapCapability()
-    : Promise.resolve(injected);
+  return injected === undefined ? productionFreshBootstrapCapability() : Promise.resolve(injected);
 }
 
 export function withFreshBootstrapTestCapability<T>(
@@ -27,19 +24,15 @@ export function withFreshBootstrapTestCapability<T>(
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<T> {
   if (capability.authority !== "structural-test-injection")
-    throw new Error(
-      "Only an explicit structural test capability can be injected.",
-    );
+    throw new Error("Only an explicit structural test capability can be injected.");
   return structurallyInjectedCapability.run({ capability, hooks }, operation);
 }
 
-export function currentFreshBootstrapTestHooks():
-  FreshBootstrapFaultHooks | undefined {
+export function currentFreshBootstrapTestHooks(): FreshBootstrapFaultHooks | undefined {
   return structurallyInjectedCapability.getStore()?.hooks;
 }
 
-export function configuredFreshBootstrapEvalHooks():
-  FreshBootstrapFaultHooks | undefined {
+export function configuredFreshBootstrapEvalHooks(): FreshBootstrapFaultHooks | undefined {
   if (
     !hasTestCapability("simulated-publication") ||
     process.env.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT !== "after-stage"

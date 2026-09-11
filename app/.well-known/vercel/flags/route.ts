@@ -3,6 +3,4 @@ import { createFlagsDiscoveryEndpoint } from "flags/next";
 
 import * as featureFlags from "../../../../lib/feature-flags";
 
-export const GET = createFlagsDiscoveryEndpoint(async () =>
-  getProviderData(featureFlags),
-);
+export const GET = createFlagsDiscoveryEndpoint(async () => getProviderData(featureFlags));

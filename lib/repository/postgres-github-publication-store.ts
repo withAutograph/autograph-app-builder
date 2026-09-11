@@ -16,8 +16,7 @@ import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-p
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
-export type GitHubPublicationProposal =
-  FreshRepositoryProposal | DraftPullRequestProposal;
+export type GitHubPublicationProposal = FreshRepositoryProposal | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {
   read: (proposalDigest: string) => Promise<GitHubPublicationProposal | undefined>;
@@ -55,9 +54,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   return proposal as DraftPullRequestProposal;
 }
 
-export function parseGitHubPublicationProposalRow(
-  input: unknown,
-): GitHubPublicationProposal {
+export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);
   if (
@@ -65,9 +62,7 @@ export function parseGitHubPublicationProposalRow(
     row.kind !== proposalKind(proposal) ||
     row.idempotencyKey !== proposal.idempotencyKey
   ) {
-    throw new Error(
-      "GitHub publication proposal row is not canonically bound.",
-    );
+    throw new Error("GitHub publication proposal row is not canonically bound.");
   }
   return proposal;
 }
@@ -108,15 +103,10 @@ export function createPostgresGitHubPublicationStores(
         .select()
         .from(hostedGitHubPublicationProposals)
         .where(
-          and(
-            tenantPredicate,
-            eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest),
-          ),
+          and(tenantPredicate, eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest)),
         )
         .limit(1);
-      return rows[0] === undefined
-        ? undefined
-        : parseGitHubPublicationProposalRow(rows[0]);
+      return rows[0] === undefined ? undefined : parseGitHubPublicationProposalRow(rows[0]);
     },
     async save(proposalInput) {
       const proposal = parseProposal(proposalInput);
@@ -136,8 +126,11 @@ export function createPostgresGitHubPublicationStores(
     },
   };
 
-  const receipts: GitHubPublicationReceiptStore =
-    createPostgresGitHubPublicationReceiptStore(database, authority, now);
+  const receipts: GitHubPublicationReceiptStore = createPostgresGitHubPublicationReceiptStore(
+    database,
+    authority,
+    now,
+  );
 
   return { proposals, receipts };
 }

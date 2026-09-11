@@ -19,17 +19,13 @@ export const ContinueAction: Story = {
       "Create a vendor portal",
     );
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
-    await expect(args.onContinue).toHaveBeenCalledWith(
-      "Create a vendor portal",
-    );
+    await expect(args.onContinue).toHaveBeenCalledWith("Create a vendor portal");
   },
 };
 export const SuggestionAction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Build a customer feedback portal" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Build a customer feedback portal" }));
     await expect(canvas.getByLabelText("What should this app do?")).toHaveValue(
       "Build a customer feedback portal",
     );

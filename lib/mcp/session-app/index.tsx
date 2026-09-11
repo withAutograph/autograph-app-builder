@@ -52,8 +52,7 @@ function SessionAppContainer() {
         limit: 100,
       },
     });
-    if (response.structuredContent)
-      publishResult(response.structuredContent as EveSessionResult);
+    if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);
   }, [capabilities?.serverTools, result]);
 
   useEffect(() => {
@@ -87,8 +86,7 @@ function SessionAppContainer() {
       },
     });
     if (response.isError) throw new Error("response rejected");
-    if (response.structuredContent)
-      publishResult(response.structuredContent as EveSessionResult);
+    if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);
   }
 
   return (

@@ -9,13 +9,9 @@ import { sha256, validAppId } from "./workflow-state";
 export const prototypeArtifactPathPattern =
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(app-spec\.md|decisions\.md|index\.html)$/u;
 
-export const prototypeArtifactMediaTypes = [
-  "text/markdown",
-  "text/html",
-] as const;
+export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as const;
 
-export type PrototypeArtifactMediaType =
-  (typeof prototypeArtifactMediaTypes)[number];
+export type PrototypeArtifactMediaType = (typeof prototypeArtifactMediaTypes)[number];
 
 export type PrototypeArtifactReceipt = Omit<PrototypeArtifact, "content"> & {
   size: number;
@@ -43,12 +39,8 @@ export function parsePrototypeArtifactPath(path: string): {
   };
 }
 
-export function expectedPrototypeArtifactMediaType(
-  path: string,
-): PrototypeArtifactMediaType {
-  return parsePrototypeArtifactPath(path).fileName === "index.html"
-    ? "text/html"
-    : "text/markdown";
+export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtifactMediaType {
+  return parsePrototypeArtifactPath(path).fileName === "index.html" ? "text/html" : "text/markdown";
 }
 
 export function recordPrototypeArtifactRevision(input: {
@@ -66,21 +58,14 @@ export function recordPrototypeArtifactRevision(input: {
 } {
   const { appId } = parsePrototypeArtifactPath(input.path);
   if (expectedPrototypeArtifactMediaType(input.path) !== input.mediaType)
-    throw new Error(
-      "Prototype artifact media type is not allowed for its path.",
-    );
-  if (
-    input.content.length === 0 ||
-    Buffer.byteLength(input.content) > maximumArtifactBytes
-  )
+    throw new Error("Prototype artifact media type is not allowed for its path.");
+  if (input.content.length === 0 || Buffer.byteLength(input.content) > maximumArtifactBytes)
     throw new Error("Prototype artifact content size is not allowed.");
   if (input.expectedAppId !== undefined && appId !== input.expectedAppId)
     throw new Error("Prototype artifact app id does not match this workflow.");
   if (input.artifacts.some(({ sessionId }) => sessionId !== input.sessionId))
     throw new Error("Prototype artifact state belongs to a different session.");
-  const recordedAppIds = new Set(
-    input.artifacts.map((artifact) => artifact.appId),
-  );
+  const recordedAppIds = new Set(input.artifacts.map((artifact) => artifact.appId));
   if (recordedAppIds.size > 1)
     throw new Error("Prototype artifact state contains multiple app ids.");
   const recordedAppId = input.artifacts[0]?.appId;
@@ -88,9 +73,7 @@ export function recordPrototypeArtifactRevision(input: {
     throw new Error("This app build already owns a different prototype app.");
 
   const digest = sha256(input.content);
-  const revision = sha256(
-    JSON.stringify({ path: input.path, mediaType: input.mediaType, digest }),
-  );
+  const revision = sha256(JSON.stringify({ path: input.path, mediaType: input.mediaType, digest }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
   if (prior?.revision === revision)
     return { artifact: prior, artifacts: input.artifacts, reused: true };
@@ -107,10 +90,9 @@ export function recordPrototypeArtifactRevision(input: {
   };
   return {
     artifact,
-    artifacts: [
-      ...input.artifacts.filter(({ path }) => path !== input.path),
-      artifact,
-    ].toSorted((left, right) => left.path.localeCompare(right.path)),
+    artifacts: [...input.artifacts.filter(({ path }) => path !== input.path), artifact].toSorted(
+      (left, right) => left.path.localeCompare(right.path),
+    ),
     reused: false,
   };
 }
@@ -139,9 +121,7 @@ export function exactPrototypeArtifact(
   return artifact;
 }
 
-export function prototypeArtifactReceipt(
-  artifact: PrototypeArtifact,
-): PrototypeArtifactReceipt {
+export function prototypeArtifactReceipt(artifact: PrototypeArtifact): PrototypeArtifactReceipt {
   const { content, ...receipt } = artifact;
   return { ...receipt, size: Buffer.byteLength(content) };
 }
@@ -189,7 +169,7 @@ export function recordPrototypeArtifactBundle(input: {
   reused: boolean;
 } {
   const appSpecMarkdown = normalizeBuildReadyAppSpec(input.appSpecMarkdown);
-  let {artifacts} = input;
+  let { artifacts } = input;
   let reused = true;
   for (const artifact of [
     {
@@ -225,9 +205,7 @@ export function recordPrototypeArtifactBundle(input: {
   if (appSpec === undefined) {
     const validation = validateBuildReadyAppSpec(appSpecMarkdown);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
-    throw new Error(
-      "The prototype bundle must contain a complete build-ready AppSpec.",
-    );
+    throw new Error("The prototype bundle must contain a complete build-ready AppSpec.");
   }
   return { artifacts, appSpec, reused };
 }

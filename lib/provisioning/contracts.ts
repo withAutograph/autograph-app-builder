@@ -35,20 +35,14 @@ export const builderProvisionRequestSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (
-      value.operation === "github" &&
-      value.providers.githubInstallationId === undefined
-    ) {
+    if (value.operation === "github" && value.providers.githubInstallationId === undefined) {
       context.addIssue({
         code: "custom",
         path: ["providers", "githubInstallationId"],
         message: "GitHub provisioning requires a selected installation.",
       });
     }
-    if (
-      value.operation === "vercel" &&
-      value.providers.vercelInstallationId === undefined
-    ) {
+    if (value.operation === "vercel" && value.providers.vercelInstallationId === undefined) {
       context.addIssue({
         code: "custom",
         path: ["providers", "vercelInstallationId"],
@@ -57,9 +51,7 @@ export const builderProvisionRequestSchema = z
     }
   });
 
-export type BuilderProvisionRequest = z.infer<
-  typeof builderProvisionRequestSchema
->;
+export type BuilderProvisionRequest = z.infer<typeof builderProvisionRequestSchema>;
 
 const failureSchema = z
   .object({
@@ -184,9 +176,7 @@ export const builderProvisionResponseSchema = z
   })
   .strict();
 
-export type BuilderProvisionResponse = z.infer<
-  typeof builderProvisionResponseSchema
->;
+export type BuilderProvisionResponse = z.infer<typeof builderProvisionResponseSchema>;
 
 /**
  * The authenticated, durable journal read model used by route consumers and
@@ -201,15 +191,11 @@ export const builderProvisionProjectionSchema = z
   })
   .strict();
 
-export type BuilderProvisionProjection = z.infer<
-  typeof builderProvisionProjectionSchema
->;
+export type BuilderProvisionProjection = z.infer<typeof builderProvisionProjectionSchema>;
 export type GitHubProvisionResult = z.infer<typeof githubProvisionResultSchema>;
 export type VercelProvisionResult = z.infer<typeof vercelProvisionResultSchema>;
 
-export function builderProvisionRequestDigest(
-  input: BuilderProvisionRequest,
-): string {
+export function builderProvisionRequestDigest(input: BuilderProvisionRequest): string {
   const request = builderProvisionRequestSchema.parse(input);
   return createHash("sha256")
     .update(

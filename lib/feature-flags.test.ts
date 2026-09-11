@@ -28,9 +28,7 @@ describe("Vercel feature flags", () => {
       { value: false, label: "Disabled" },
       { value: true, label: "Enabled" },
     ]);
-    expect(builderResourceProvisioningFlag.key).toBe(
-      "builder-resource-provisioning",
-    );
+    expect(builderResourceProvisioningFlag.key).toBe("builder-resource-provisioning");
     expect(builderResourceProvisioningFlag.defaultValue).toBe(false);
     expect(passkeysFlag.key).toBe("passkeys");
     expect(passkeysFlag.defaultValue).toBe(false);
@@ -43,8 +41,7 @@ describe("Vercel feature flags", () => {
   it("falls closed when Vercel does not provide an SDK key", async () => {
     vi.stubEnv("FLAGS", "");
     vi.resetModules();
-    const { builderConnectionsFlag: unavailableFlag } =
-      await import("./feature-flags");
+    const { builderConnectionsFlag: unavailableFlag } = await import("./feature-flags");
 
     await expect(
       unavailableFlag.run({
@@ -61,8 +58,7 @@ describe("Vercel feature flags", () => {
     const createVercelAdapter = vi.fn(() => () => ({ decide }));
     vi.doMock("@flags-sdk/vercel", () => ({ createVercelAdapter }));
 
-    const { builderConnectionsFlag: delayedFlag } =
-      await import("./feature-flags");
+    const { builderConnectionsFlag: delayedFlag } = await import("./feature-flags");
     vi.stubEnv("FLAGS", "server-sdk-key");
 
     await expect(

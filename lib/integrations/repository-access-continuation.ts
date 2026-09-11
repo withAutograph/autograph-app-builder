@@ -3,10 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  parseRepositoryReference,
-  type RepositoryReference,
-} from "./repository-access";
+import { parseRepositoryReference, type RepositoryReference } from "./repository-access";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const continuationIdSchema = z.string().uuid();
@@ -34,9 +31,7 @@ export const repositoryAccessContinuationSchema = z
   })
   .strict();
 
-export type RepositoryAccessContinuation = z.infer<
-  typeof repositoryAccessContinuationSchema
->;
+export type RepositoryAccessContinuation = z.infer<typeof repositoryAccessContinuationSchema>;
 
 export interface RepositoryAccessContinuationStore {
   create: (record: RepositoryAccessContinuation) => Promise<void>;
@@ -44,7 +39,7 @@ export interface RepositoryAccessContinuationStore {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-}) => Promise<RepositoryAccessContinuation | undefined>;
+  }) => Promise<RepositoryAccessContinuation | undefined>;
   consume: (input: {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
@@ -53,21 +48,18 @@ export interface RepositoryAccessContinuationStore {
     repository: RepositoryReference;
     selectedInstallationId?: string;
     now: Date;
-}) => Promise<RepositoryAccessContinuation | undefined>;
+  }) => Promise<RepositoryAccessContinuation | undefined>;
   listAuthorizedForSession: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     sessionId: string;
     now: Date;
-}) => Promise<RepositoryAccessContinuation[]>;
+  }) => Promise<RepositoryAccessContinuation[]>;
 }
 
 const continuationDigest = (continuationId: string) =>
   createHash("sha256").update(continuationId).digest("hex");
 
-function exactEveAuthorizationCallback(input: {
-  callbackUrl: string;
-  issuer: string;
-}) {
+function exactEveAuthorizationCallback(input: { callbackUrl: string; issuer: string }) {
   const callback = new URL(input.callbackUrl);
   const issuer = new URL(input.issuer);
   const loopback = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -80,9 +72,7 @@ function exactEveAuthorizationCallback(input: {
     callback.password ||
     callback.hash ||
     callback.search ||
-    !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(
-      callback.pathname,
-    )
+    !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname)
   ) {
     throw new Error("repository-access-callback-invalid");
   }
@@ -127,9 +117,7 @@ export function createRepositoryAccessContinuationService(input: {
         repository,
         ...(value.selectedInstallationId
           ? {
-              selectedInstallationId: decimal.parse(
-                value.selectedInstallationId,
-              ),
+              selectedInstallationId: decimal.parse(value.selectedInstallationId),
             }
           : {}),
         callbackUrl: callback.toString(),
@@ -174,9 +162,7 @@ export function createRepositoryAccessContinuationService(input: {
         repository: parseRepositoryReference(value.repository),
         ...(value.selectedInstallationId
           ? {
-              selectedInstallationId: decimal.parse(
-                value.selectedInstallationId,
-              ),
+              selectedInstallationId: decimal.parse(value.selectedInstallationId),
             }
           : {}),
         now: now(),

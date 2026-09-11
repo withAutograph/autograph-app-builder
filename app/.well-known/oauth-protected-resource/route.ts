@@ -6,9 +6,7 @@ import {
 
 export function GET(): Response {
   try {
-    const metadata = protectedResourceMetadata(
-      readHostedMcpAuthConfig(process.env),
-    );
+    const metadata = protectedResourceMetadata(readHostedMcpAuthConfig(process.env));
     return Response.json(metadata, {
       headers: {
         "Access-Control-Allow-Origin": "*",

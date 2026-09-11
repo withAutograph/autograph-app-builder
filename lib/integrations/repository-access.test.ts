@@ -31,9 +31,7 @@ function binding(
   };
 }
 
-function store(
-  bindings: HostedGitHubInstallationBinding[],
-): HostedGitHubInstallationStore {
+function store(bindings: HostedGitHubInstallationBinding[]): HostedGitHubInstallationStore {
   return {
     read: vi.fn(async () => undefined),
     list: vi.fn(async () => bindings),
@@ -128,10 +126,7 @@ describe("tenant-bound GitHub repository access", () => {
       },
       scope: { installationId: "10" },
     });
-    expect(result).toHaveProperty(
-      "accessDigest",
-      expect.stringMatching(/^[0-9a-f]{64}$/u),
-    );
+    expect(result).toHaveProperty("accessDigest", expect.stringMatching(/^[0-9a-f]{64}$/u));
   });
 
   it("accepts a provider-proven repository from an all-repositories installation", async () => {
@@ -157,8 +152,7 @@ describe("tenant-bound GitHub repository access", () => {
         authority,
         repository: "withAutograph/app-builder-dogfood",
         installations: store([first, second]),
-        providerFactory: async ({ installation }) =>
-          provider(installation, "200"),
+        providerFactory: async ({ installation }) => provider(installation, "200"),
       }),
     ).resolves.toMatchObject({
       status: "scope-selection-required",
@@ -195,17 +189,14 @@ describe("tenant-bound GitHub repository access", () => {
           authority,
           repository: "withAutograph/app-builder-dogfood",
           installations: store([connected]),
-          providerFactory: async () =>
-            provider(connected, "200", "selected", repositoryOverride),
+          providerFactory: async () => provider(connected, "200", "selected", repositoryOverride),
         }),
       ).resolves.toMatchObject({ status: "provider-unavailable" });
     }
   });
 
   it("rejects malformed repository references", () => {
-    expect(() => parseRepositoryReference("selected")).toThrow(
-      "repository-reference-invalid",
-    );
+    expect(() => parseRepositoryReference("selected")).toThrow("repository-reference-invalid");
     expect(() => parseRepositoryReference("owner/repo/extra")).toThrow(
       "repository-reference-invalid",
     );

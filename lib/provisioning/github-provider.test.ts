@@ -2,16 +2,10 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  provisionGitHubRepository,
-  starterSourceBinding,
-} from "./github-provider";
+import { provisionGitHubRepository, starterSourceBinding } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
 import type { StarterSource } from "./starter-source";
-import {
-  ARRUSTED_TARGET_SHA,
-  ARRUSTED_TARGET_TREE,
-} from "../repository/dependency-cache";
+import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 
 const authority = {
   issuer: "https://builder.example.test/api/auth",
@@ -148,8 +142,7 @@ describe("GitHub starter repository provisioning", () => {
         }));
       }
       let created = false;
-      const methods: Array<{ path: string; method: string; body?: unknown }> =
-        [];
+      const methods: Array<{ path: string; method: string; body?: unknown }> = [];
       const request = vi.fn<typeof fetch>(async (url, init) => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
@@ -159,10 +152,7 @@ describe("GitHub starter repository provisioning", () => {
             ? JSON.parse(String(init.body))
             : undefined;
         methods.push({ path, method, body });
-        if (
-          parsedUrl.origin === "https://github.com" &&
-          path === "/login/oauth/access_token"
-        )
+        if (parsedUrl.origin === "https://github.com" && path === "/login/oauth/access_token")
           return Response.json(
             {
               access_token: "refreshed-github-user-token",
@@ -175,8 +165,7 @@ describe("GitHub starter repository provisioning", () => {
         if (path === "/app/installations/101")
           return Response.json({
             id: 101,
-            repository_selection:
-              accountType === "Organization" ? "all" : "selected",
+            repository_selection: accountType === "Organization" ? "all" : "selected",
             suspended_at: null,
             account: {
               id: accountType === "User" ? 77 : 88,
@@ -184,8 +173,7 @@ describe("GitHub starter repository provisioning", () => {
               type: accountType,
             },
           });
-        if (path === "/user")
-          return Response.json({ id: 77, login: "octocat" });
+        if (path === "/user") return Response.json({ id: 77, login: "octocat" });
         if (path.endsWith("/access_tokens"))
           return Response.json(
             {
@@ -209,8 +197,7 @@ describe("GitHub starter repository provisioning", () => {
           created = true;
           return Response.json({ id: 202 }, { status: 201 });
         }
-        if (path.endsWith("/git/blobs"))
-          return Response.json({ sha: blobSha }, { status: 201 });
+        if (path.endsWith("/git/blobs")) return Response.json({ sha: blobSha }, { status: 201 });
         if (path.endsWith("/git/trees"))
           return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });
         if (path.endsWith("/git/commits"))
@@ -269,17 +256,16 @@ describe("GitHub starter repository provisioning", () => {
         visibility: isPrivate ? "private" : "public",
         headTree: ARRUSTED_TARGET_TREE,
       });
-      expect(methods).toContainEqual(
-        expect.objectContaining({ path: createPath, method: "POST" }),
-      );
-      expect(
-        methods.find((entry) => entry.path.endsWith("/git/commits"))?.body,
-      ).toMatchObject({ parents: [], tree: ARRUSTED_TARGET_TREE });
-      expect(
-        methods.find((entry) => entry.path === createPath)?.body,
-      ).toMatchObject({ private: isPrivate, auto_init: false });
-      if (accountType === "User")
-        expect(credentials.rotate).toHaveBeenCalledTimes(1);
+      expect(methods).toContainEqual(expect.objectContaining({ path: createPath, method: "POST" }));
+      expect(methods.find((entry) => entry.path.endsWith("/git/commits"))?.body).toMatchObject({
+        parents: [],
+        tree: ARRUSTED_TARGET_TREE,
+      });
+      expect(methods.find((entry) => entry.path === createPath)?.body).toMatchObject({
+        private: isPrivate,
+        auto_init: false,
+      });
+      if (accountType === "User") expect(credentials.rotate).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -384,8 +370,7 @@ describe("GitHub starter repository provisioning", () => {
               parents: [],
             })
           : Response.json({}, { status: 404 });
-      if (path.endsWith("/git/blobs"))
-        return Response.json({ sha: blobSha }, { status: 201 });
+      if (path.endsWith("/git/blobs")) return Response.json({ sha: blobSha }, { status: 201 });
       if (path.endsWith("/git/trees"))
         return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });
       if (path.endsWith("/git/commits"))
@@ -454,8 +439,7 @@ describe("GitHub starter repository provisioning", () => {
     expect(
       request.mock.calls.filter(
         ([url, init]) =>
-          new URL(String(url)).pathname === "/orgs/withAutograph/repos" &&
-          init?.method === "POST",
+          new URL(String(url)).pathname === "/orgs/withAutograph/repos" && init?.method === "POST",
       ),
     ).toHaveLength(1);
   });

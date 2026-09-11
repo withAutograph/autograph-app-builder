@@ -51,19 +51,16 @@ describe("PostgreSQL workspace membership", () => {
       ],
       false,
     ],
-  ] as const)(
-    "admits only one canonical Better Auth membership",
-    async (rows, expected) => {
-      const fixture = databaseReturning([...rows]);
-      await expect(
-        createPostgresWorkspaceMembership(fixture.database).isMember({
-          principal,
-          workspaceId: principal.workspaceId,
-        }),
-      ).resolves.toBe(expected);
-      expect(fixture.limit).toHaveBeenCalledWith(2);
-    },
-  );
+  ] as const)("admits only one canonical Better Auth membership", async (rows, expected) => {
+    const fixture = databaseReturning([...rows]);
+    await expect(
+      createPostgresWorkspaceMembership(fixture.database).isMember({
+        principal,
+        workspaceId: principal.workspaceId,
+      }),
+    ).resolves.toBe(expected);
+    expect(fixture.limit).toHaveBeenCalledWith(2);
+  });
 
   it("rejects a non-claim workspace before querying storage", async () => {
     const fixture = databaseReturning([{ active: true }]);
@@ -78,15 +75,9 @@ describe("PostgreSQL workspace membership", () => {
 
   it.each([
     [[], undefined],
-    [
-      [{ workspaceId: "workspace_1", role: "owner", banned: false }],
-      "workspace_1",
-    ],
+    [[{ workspaceId: "workspace_1", role: "owner", banned: false }], "workspace_1"],
     [[{ workspaceId: "workspace_1", role: "member", banned: true }], undefined],
-    [
-      [{ workspaceId: "workspace_1", role: "revoked", banned: false }],
-      undefined,
-    ],
+    [[{ workspaceId: "workspace_1", role: "revoked", banned: false }], undefined],
     [
       [
         { workspaceId: "workspace_1", role: "member", banned: false },
@@ -94,22 +85,17 @@ describe("PostgreSQL workspace membership", () => {
       ],
       undefined,
     ],
-  ] as const)(
-    "selects only one exact active OAuth workspace",
-    async (rows, expected) => {
-      const fixture = databaseReturning([...rows]);
-      await expect(
-        createPostgresOAuthMembershipAuthority(
-          fixture.database,
-        ).activeWorkspaceForUser({
-          issuer: principal.issuer,
-          audience: principal.audience,
-          ownerUserId: principal.ownerUserId,
-        }),
-      ).resolves.toBe(expected);
-      expect(fixture.limit).toHaveBeenCalledWith(2);
-    },
-  );
+  ] as const)("selects only one exact active OAuth workspace", async (rows, expected) => {
+    const fixture = databaseReturning([...rows]);
+    await expect(
+      createPostgresOAuthMembershipAuthority(fixture.database).activeWorkspaceForUser({
+        issuer: principal.issuer,
+        audience: principal.audience,
+        ownerUserId: principal.ownerUserId,
+      }),
+    ).resolves.toBe(expected);
+    expect(fixture.limit).toHaveBeenCalledWith(2);
+  });
 
   it("propagates database failures for the request boundary to fail closed", async () => {
     const database = {

@@ -31,10 +31,7 @@ function harness(input?: {
   fetch?: typeof fetch;
   emulation?: ProviderEmulation;
 }) {
-  const states = new Map<
-    string,
-    { consumed: boolean; authorityDigest: string }
-  >();
+  const states = new Map<string, { consumed: boolean; authorityDigest: string }>();
   const events: string[] = [];
   const stateStore: GitHubInstallationAuthorizationStateStore = {
     async create(value) {
@@ -85,10 +82,7 @@ function harness(input?: {
   return { authorization, bind, events, membership };
 }
 
-function setupCallbackUrl(
-  state: string,
-  setupAction: "install" | "update" = "install",
-) {
+function setupCallbackUrl(state: string, setupAction: "install" | "update" = "install") {
   const url = new URL("https://builder.example/github/installations/callback");
   url.searchParams.set("installation_id", "98765");
   url.searchParams.set("setup_action", setupAction);
@@ -111,19 +105,14 @@ async function prepareAuthorization(
 ) {
   const begun = await authorization.begin(authority, returnState);
   const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
-  const authorize = await authorization.complete(
-    setupCallbackUrl(installState),
-    authority,
-  );
+  const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
   if (authorize.status !== "redirect") throw new Error("expected redirect");
   const authorizeUrl = new URL(authorize.redirectUrl);
   expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
     "https://github.com/login/oauth/authorize",
   );
   expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
-  expect(authorizeUrl.searchParams.get("code_challenge")).toMatch(
-    /^[A-Za-z0-9_-]{43}$/u,
-  );
+  expect(authorizeUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   return {
     begun,
     installState,
@@ -148,9 +137,7 @@ function successfulFetch(
     if (url === "https://api.github.com/user") {
       return Response.json({ id: 321, login: "installer" });
     }
-    if (
-      url === "https://api.github.com/user/installations?per_page=100&page=1"
-    ) {
+    if (url === "https://api.github.com/user/installations?per_page=100&page=1") {
       return Response.json({
         total_count: 1,
         installations: [
@@ -216,10 +203,7 @@ describe("public GitHub App installation authorization", () => {
     expect(state).not.toContain(authority.workspaceId);
     expect(state).not.toContain(authority.ownerUserId);
 
-    const authorize = await authorization.complete(
-      setupCallbackUrl(state!),
-      authority,
-    );
+    const authorize = await authorization.complete(setupCallbackUrl(state!), authority);
     expect(authorize.status).toBe("redirect");
     if (authorize.status !== "redirect") throw new Error("expected redirect");
     const authorizeUrl = new URL(authorize.redirectUrl);
@@ -259,9 +243,7 @@ describe("public GitHub App installation authorization", () => {
       client_secret: config.clientSecret,
       code_verifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
     });
-    expect(String(requests[1]?.init?.headers)).not.toContain(
-      "github-user-token-sentinel-value",
-    );
+    expect(String(requests[1]?.init?.headers)).not.toContain("github-user-token-sentinel-value");
   });
 
   it("preserves the embedded Preview emulator route for authorization and API requests", async () => {
@@ -290,8 +272,7 @@ describe("public GitHub App installation authorization", () => {
           token_type: "bearer",
           scope: "",
         });
-      if (url.endsWith("/user"))
-        return Response.json({ id: 321, login: "installer" });
+      if (url.endsWith("/user")) return Response.json({ id: 321, login: "installer" });
       return Response.json({
         id: 98765,
         app_id: 12345,
@@ -311,14 +292,9 @@ describe("public GitHub App installation authorization", () => {
       fetch: request,
     });
     const begun = await authorization.begin(authority);
-    expect(new URL(begun.redirectUrl).pathname).toBe(
-      "/local-connections/github",
-    );
+    expect(new URL(begun.redirectUrl).pathname).toBe("/local-connections/github");
     const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
-    const authorize = await authorization.complete(
-      setupCallbackUrl(installState),
-      authority,
-    );
+    const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
     if (authorize.status !== "redirect") throw new Error("expected redirect");
     const authorizeUrl = new URL(authorize.redirectUrl);
     expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
@@ -344,10 +320,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorization } = harness();
     const begun = await authorization.begin(authority, { returnTo: "/" });
     const installState = new URL(begun.redirectUrl).searchParams.get("state")!;
-    const authorize = await authorization.complete(
-      setupCallbackUrl(installState),
-      authority,
-    );
+    const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
     if (authorize.status !== "redirect") throw new Error("expected redirect");
     const state = new URL(authorize.redirectUrl).searchParams.get("state")!;
     await expect(
@@ -373,19 +346,10 @@ describe("public GitHub App installation authorization", () => {
         returnTo,
         resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
       };
-      const { authorizeState } = await prepareAuthorization(
-        authorization,
-        returnState,
-      );
-      await authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      );
+      const { authorizeState } = await prepareAuthorization(authorization, returnState);
+      await authorization.complete(authorizationCallbackUrl(authorizeState), authority);
       await expect(
-        authorization.complete(
-          authorizationCallbackUrl(authorizeState),
-          authority,
-        ),
+        authorization.complete(authorizationCallbackUrl(authorizeState), authority),
       ).rejects.toMatchObject({
         message: "GitHub App installation authorization failed.",
         returnState,
@@ -402,10 +366,7 @@ describe("public GitHub App installation authorization", () => {
     });
     const { authorizeState } = await prepareAuthorization(authorization);
     await expect(
-      authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      ),
+      authorization.complete(authorizationCallbackUrl(authorizeState), authority),
     ).resolves.toMatchObject({ setupAction: "install", status: "bound" });
     expect(bind).toHaveBeenCalledOnce();
   });
@@ -418,10 +379,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorizeState } = await prepareAuthorization(authorization);
 
     await expect(
-      authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      ),
+      authorization.complete(authorizationCallbackUrl(authorizeState), authority),
     ).resolves.toMatchObject({
       status: "bound",
       repositorySelection: "all",
@@ -445,9 +403,7 @@ describe("public GitHub App installation authorization", () => {
 
     await expect(
       authorization.complete(
-        authorizationCallbackUrl(
-          new URL(authorize.redirectUrl).searchParams.get("state")!,
-        ),
+        authorizationCallbackUrl(new URL(authorize.redirectUrl).searchParams.get("state")!),
         authority,
       ),
     ).resolves.toMatchObject({ status: "bound", setupAction: "update" });
@@ -467,16 +423,12 @@ describe("public GitHub App installation authorization", () => {
     );
     if (authorize.status !== "redirect") throw new Error("expected redirect");
     const callback = new URL(
-      authorizationCallbackUrl(
-        new URL(authorize.redirectUrl).searchParams.get("state")!,
-      ),
+      authorizationCallbackUrl(new URL(authorize.redirectUrl).searchParams.get("state")!),
     );
     callback.searchParams.set("installation_id", "98765");
     callback.searchParams.set("setup_action", "update");
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
       status: "bound",
       setupAction: "update",
     });
@@ -492,9 +444,9 @@ describe("public GitHub App installation authorization", () => {
     const callback = new URL(authorizationCallbackUrl(authorizeState));
     callback.searchParams.set("code", "c".repeat(8_192));
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({ status: "bound" });
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
+      status: "bound",
+    });
     expect(bind).toHaveBeenCalledOnce();
   });
 
@@ -546,9 +498,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
     const replacement = authorizeState.endsWith("A") ? "B" : "A";
-    const callback = authorizationCallbackUrl(
-      `${authorizeState.slice(0, -1)}${replacement}`,
-    );
+    const callback = authorizationCallbackUrl(`${authorizeState.slice(0, -1)}${replacement}`);
 
     let error: unknown;
     try {
@@ -606,9 +556,9 @@ describe("public GitHub App installation authorization", () => {
     const callback = new URL(setupCallbackUrl(state));
     callback.searchParams.set("code", "one-time-code");
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).rejects.toThrow("GitHub App installation authorization failed.");
+    await expect(authorization.complete(callback.toString(), authority)).rejects.toThrow(
+      "GitHub App installation authorization failed.",
+    );
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });
@@ -652,11 +602,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorizeState } = await prepareAuthorization(authorization);
     const callback = new URL(authorizationCallbackUrl(authorizeState));
     callback.searchParams.set("iss", "https://github.com");
-    expect([...callback.searchParams.keys()].toSorted()).toEqual([
-      "code",
-      "iss",
-      "state",
-    ]);
+    expect([...callback.searchParams.keys()].toSorted()).toEqual(["code", "iss", "state"]);
     expect(
       Object.fromEntries(
         [...new Set(callback.searchParams.keys())].map((key) => [
@@ -666,9 +612,9 @@ describe("public GitHub App installation authorization", () => {
       ),
     ).toEqual({ code: 1, state: 1, iss: 1 });
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({ status: "bound" });
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
+      status: "bound",
+    });
     expect(bind).toHaveBeenCalledOnce();
   });
 
@@ -682,9 +628,9 @@ describe("public GitHub App installation authorization", () => {
     callback.searchParams.append("iss", "https://github.example");
     callback.searchParams.append("iss", "https://github.example");
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({ status: "bound" });
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
+      status: "bound",
+    });
     expect(bind).toHaveBeenCalledOnce();
   });
 
@@ -697,9 +643,9 @@ describe("public GitHub App installation authorization", () => {
     callback.searchParams.append("iss", "https://github.example");
     callback.searchParams.append("iss", "https://github.example");
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({ status: "redirect" });
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
+      status: "redirect",
+    });
     expect(request).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   });
@@ -714,9 +660,9 @@ describe("public GitHub App installation authorization", () => {
     callback.searchParams.set("provider-detail-sentinel", "secret-value");
     callback.searchParams.append("provider-detail-sentinel", "second-value");
 
-    await expect(
-      authorization.complete(callback.toString(), authority),
-    ).resolves.toMatchObject({ status: "bound" });
+    await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
+      status: "bound",
+    });
     expect(bind).toHaveBeenCalledOnce();
   });
 
@@ -738,10 +684,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
     await expect(
-      authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      ),
+      authorization.complete(authorizationCallbackUrl(authorizeState), authority),
     ).resolves.toMatchObject({ status: "bound" });
     expect(bind).toHaveBeenCalledOnce();
   });
@@ -761,10 +704,7 @@ describe("public GitHub App installation authorization", () => {
 
     let error: unknown;
     try {
-      await authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      );
+      await authorization.complete(authorizationCallbackUrl(authorizeState), authority);
     } catch (caught) {
       error = caught;
     }
@@ -788,10 +728,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorizeState } = await prepareAuthorization(authorization);
     let error: unknown;
     try {
-      await authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      );
+      await authorization.complete(authorizationCallbackUrl(authorizeState), authority);
     } catch (caught) {
       error = caught;
     }
@@ -813,8 +750,7 @@ describe("public GitHub App installation authorization", () => {
           token_type: "bearer",
           scope: "",
         });
-      if (url.endsWith("/user"))
-        return Response.json({ id: 321, login: "installer" });
+      if (url.endsWith("/user")) return Response.json({ id: 321, login: "installer" });
       return Response.json({
         total_count: 1,
         installations: [
@@ -833,10 +769,7 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
     await expect(
-      authorization.complete(
-        authorizationCallbackUrl(authorizeState),
-        authority,
-      ),
+      authorization.complete(authorizationCallbackUrl(authorizeState), authority),
     ).rejects.toThrow("GitHub App installation authorization failed.");
     expect(bind).not.toHaveBeenCalled();
   });

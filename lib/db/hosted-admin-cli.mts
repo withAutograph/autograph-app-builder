@@ -26,14 +26,9 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   if (!isAbsolute(path)) {
     throw new Error("Hosted admin request path must be absolute.");
   }
-  const [link, canonicalPath] = await Promise.all([
-    lstat(path),
-    realpath(path),
-  ]);
+  const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path) {
-    throw new Error(
-      "Hosted admin request path must be canonical and unsymlinked.",
-    );
+    throw new Error("Hosted admin request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
   if (
@@ -43,9 +38,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     metadata.size === 0 ||
     metadata.size > MAX_REQUEST_BYTES
   ) {
-    throw new Error(
-      "Hosted admin request must be an owner-only nonempty regular file.",
-    );
+    throw new Error("Hosted admin request must be an owner-only nonempty regular file.");
   }
   return JSON.parse(await readFile(path, "utf8"));
 }
@@ -55,9 +48,7 @@ if (argv[0] === "plan") {
   if (argv.length !== 3 || argv[1] !== "--request-file") {
     throw new Error("hosted:admin-plan requires --request-file PATH.");
   }
-  const request = hostedAdminPlanRequestSchema.parse(
-    await readPrivateRequest(argv[2]),
-  );
+  const request = hostedAdminPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planHostedAdminRequest(request))}\n`);
 } else if (argv[0] === "apply") {
   if (
@@ -70,9 +61,7 @@ if (argv[0] === "plan") {
   ) {
     throw new Error("Hosted admin apply arguments were invalid.");
   }
-  const request = hostedAdminApplyRequestSchema.parse(
-    await readPrivateRequest(argv[6]),
-  );
+  const request = hostedAdminApplyRequestSchema.parse(await readPrivateRequest(argv[6]));
   if (request.action !== argv[2]) {
     throw new Error("Hosted admin request did not match the task action.");
   }

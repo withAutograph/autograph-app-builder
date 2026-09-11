@@ -13,15 +13,9 @@ import * as databaseSchema from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
-function verify(input: {
-  body: Uint8Array;
-  signature: string;
-  secret: string;
-}) {
+function verify(input: { body: Uint8Array; signature: string; secret: string }) {
   if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) return false;
-  const expected = `sha256=${createHmac("sha256", input.secret)
-    .update(input.body)
-    .digest("hex")}`;
+  const expected = `sha256=${createHmac("sha256", input.secret).update(input.body).digest("hex")}`;
   return timingSafeEqual(Buffer.from(expected), Buffer.from(input.signature));
 }
 
@@ -48,10 +42,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
   return async (request: Request) => {
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const declaredLength = request.headers.get("content-length");
-    if (
-      declaredLength &&
-      (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
-    )
+    if (declaredLength && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024))
       return new Response(null, { status: 413 });
     const body = new Uint8Array(await request.arrayBuffer());
     if (
@@ -77,12 +68,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
       await input.database
         .update(hostedGitHubUserCredentials)
         .set({ active: false, updatedAt })
-        .where(
-          eq(
-            hostedGitHubUserCredentials.providerUserId,
-            String(parsed.data.sender.id),
-          ),
-        );
+        .where(eq(hostedGitHubUserCredentials.providerUserId, String(parsed.data.sender.id)));
     }
     if (event === "installation") {
       const parsed = installationEvent.safeParse(value);
@@ -97,9 +83,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
         await transaction
           .update(hostedGitHubInstallationBindings)
           .set({ active: false, updatedAt })
-          .where(
-            eq(hostedGitHubInstallationBindings.installationId, installationId),
-          );
+          .where(eq(hostedGitHubInstallationBindings.installationId, installationId));
       });
     }
     return new Response(null, {

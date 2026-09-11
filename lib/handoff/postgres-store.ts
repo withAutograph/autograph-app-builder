@@ -24,9 +24,7 @@ function authorityPredicate(authorityInput: Authority) {
   );
 }
 
-function rowRecord(
-  row: typeof builderHandoffs.$inferSelect,
-): BuilderHandoffRecord {
+function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffRecord {
   return builderHandoffRecordSchema.parse({
     version: 1,
     handoffId: row.handoffId,
@@ -46,26 +44,21 @@ function rowRecord(
   });
 }
 
-export function createPostgresBuilderHandoffStore(
-  database: Database,
-): BuilderHandoffStore {
+export function createPostgresBuilderHandoffStore(database: Database): BuilderHandoffStore {
   const read: BuilderHandoffStore["read"] = async (input) => {
     const rows = await database
       .select()
       .from(builderHandoffs)
       .where(
-        and(
-          authorityPredicate(input.authority),
-          eq(builderHandoffs.handoffId, input.handoffId),
-        ),
+        and(authorityPredicate(input.authority), eq(builderHandoffs.handoffId, input.handoffId)),
       )
       .limit(1);
     return rows[0] ? rowRecord(rows[0]) : undefined;
   };
 
-  const findLatestPending: NonNullable<
-    BuilderHandoffStore["findLatestPending"]
-  > = async ({ authority: authorityInput }) => {
+  const findLatestPending: NonNullable<BuilderHandoffStore["findLatestPending"]> = async ({
+    authority: authorityInput,
+  }) => {
     const authority = hostedTenantAuthoritySchema.parse(authorityInput);
     const rows = await database
       .select({ handoff: builderHandoffs })
@@ -75,14 +68,8 @@ export function createPostgresBuilderHandoffStore(
         and(
           eq(builderProvisioningJournals.issuer, builderHandoffs.issuer),
           eq(builderProvisioningJournals.audience, builderHandoffs.audience),
-          eq(
-            builderProvisioningJournals.workspaceId,
-            builderHandoffs.workspaceId,
-          ),
-          eq(
-            builderProvisioningJournals.ownerUserId,
-            builderHandoffs.ownerUserId,
-          ),
+          eq(builderProvisioningJournals.workspaceId, builderHandoffs.workspaceId),
+          eq(builderProvisioningJournals.ownerUserId, builderHandoffs.ownerUserId),
           eq(
             builderProvisioningJournals.requestId,
             sql<string>`${builderHandoffs.intent}->>'provisioningRequestId'`,
@@ -91,10 +78,7 @@ export function createPostgresBuilderHandoffStore(
         ),
       )
       .where(authorityPredicate(authority))
-      .orderBy(
-        desc(builderProvisioningJournals.updatedAt),
-        desc(builderHandoffs.createdAt),
-      )
+      .orderBy(desc(builderProvisioningJournals.updatedAt), desc(builderHandoffs.createdAt))
       .limit(1);
     return rows[0] ? rowRecord(rows[0].handoff) : undefined;
   };
@@ -115,8 +99,7 @@ export function createPostgresBuilderHandoffStore(
         })
         .onConflictDoNothing()
         .returning();
-      if (inserted[0])
-        return { disposition: "created", record: rowRecord(inserted[0]) };
+      if (inserted[0]) return { disposition: "created", record: rowRecord(inserted[0]) };
       const existing = await database
         .select()
         .from(builderHandoffs)
@@ -150,8 +133,7 @@ export function createPostgresBuilderHandoffStore(
           ),
         )
         .returning();
-      if (updated[0])
-        return { disposition: "renewed", record: rowRecord(updated[0]) };
+      if (updated[0]) return { disposition: "renewed", record: rowRecord(updated[0]) };
       // A concurrent renewal or bind won the CAS. Return its current reference.
       const existing = await read(input);
       return existing?.requestDigest === input.requestDigest &&

@@ -13,9 +13,7 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
  * tenant, but only a currently active exact user/workspace row admits it.
  * Missing rows, revoked rows, and database errors all fail closed.
  */
-export function createPostgresWorkspaceMembership(
-  database: Database,
-): HostedWorkspaceMembership {
+export function createPostgresWorkspaceMembership(database: Database): HostedWorkspaceMembership {
   return {
     async isMember({ principal: principalInput, workspaceId }) {
       const principal = hostedPrincipalSchema.parse(principalInput);

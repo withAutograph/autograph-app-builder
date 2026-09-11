@@ -12009,10 +12009,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-94-color",
         "dimension": "styling",
@@ -12700,10 +12697,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-95-color",
         "dimension": "styling",
@@ -15256,10 +15250,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-40-color",
         "dimension": "styling",
@@ -18501,10 +18492,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-56-color",
         "dimension": "styling",
@@ -20191,10 +20179,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-109-color",
         "dimension": "styling",
@@ -20882,10 +20867,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-110-color",
         "dimension": "styling",
@@ -29786,10 +29768,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-79-color",
         "dimension": "styling",
@@ -30144,10 +30123,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-128-color",
         "dimension": "styling",
@@ -30502,10 +30478,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-80-color",
         "dimension": "styling",
@@ -30838,10 +30811,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-129-color",
         "dimension": "styling",
@@ -37943,10 +37913,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-143-color",
         "dimension": "styling",
@@ -38301,10 +38268,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-144-color",
         "dimension": "styling",
@@ -42255,10 +42219,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-158-color",
         "dimension": "styling",
@@ -42613,10 +42574,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-159-color",
         "dimension": "styling",
@@ -52874,10 +52832,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-94-color",
         "dimension": "styling",
@@ -53565,10 +53520,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-95-color",
         "dimension": "styling",
@@ -56121,10 +56073,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-40-color",
         "dimension": "styling",
@@ -59366,10 +59315,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-56-color",
         "dimension": "styling",
@@ -61056,10 +61002,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-109-color",
         "dimension": "styling",
@@ -61747,10 +61690,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-110-color",
         "dimension": "styling",
@@ -70651,10 +70591,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-79-color",
         "dimension": "styling",
@@ -71009,10 +70946,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-128-color",
         "dimension": "styling",
@@ -71367,10 +71301,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-80-color",
         "dimension": "styling",
@@ -71703,10 +71634,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-129-color",
         "dimension": "styling",
@@ -78808,10 +78736,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-143-color",
         "dimension": "styling",
@@ -79166,10 +79091,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-144-color",
         "dimension": "styling",
@@ -83120,10 +83042,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-158-color",
         "dimension": "styling",
@@ -83478,10 +83397,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-159-color",
         "dimension": "styling",
@@ -93739,10 +93655,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-94-color",
         "dimension": "styling",
@@ -94430,10 +94343,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-95-color",
         "dimension": "styling",
@@ -96986,10 +96896,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-40-color",
         "dimension": "styling",
@@ -100231,10 +100138,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-56-color",
         "dimension": "styling",
@@ -101921,10 +101825,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-109-color",
         "dimension": "styling",
@@ -102612,10 +102513,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-110-color",
         "dimension": "styling",
@@ -111516,10 +111414,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-79-color",
         "dimension": "styling",
@@ -111874,10 +111769,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-128-color",
         "dimension": "styling",
@@ -112232,10 +112124,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-80-color",
         "dimension": "styling",
@@ -112568,10 +112457,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-129-color",
         "dimension": "styling",
@@ -119673,10 +119559,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-143-color",
         "dimension": "styling",
@@ -120031,10 +119914,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-144-color",
         "dimension": "styling",
@@ -123985,10 +123865,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-158-color",
         "dimension": "styling",
@@ -124343,10 +124220,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-159-color",
         "dimension": "styling",
@@ -134604,10 +134478,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-94-color",
         "dimension": "styling",
@@ -135295,10 +135166,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-95-color",
         "dimension": "styling",
@@ -137851,10 +137719,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-40-color",
         "dimension": "styling",
@@ -141096,10 +140961,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-56-color",
         "dimension": "styling",
@@ -142786,10 +142648,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-109-color",
         "dimension": "styling",
@@ -143477,10 +143336,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-110-color",
         "dimension": "styling",
@@ -152381,10 +152237,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-79-color",
         "dimension": "styling",
@@ -152739,10 +152592,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-128-color",
         "dimension": "styling",
@@ -153097,10 +152947,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-80-color",
         "dimension": "styling",
@@ -153433,10 +153280,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-129-color",
         "dimension": "styling",
@@ -160538,10 +160382,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-143-color",
         "dimension": "styling",
@@ -160896,10 +160737,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-144-color",
         "dimension": "styling",
@@ -164850,10 +164688,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-158-color",
         "dimension": "styling",
@@ -165208,10 +165043,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-900x900-0-style-159-color",
         "dimension": "styling",
@@ -166216,11 +166048,7 @@
   "reference": {
     "name": "arrusted-record-detail-a11y-20260908",
     "commit": "a93ecef05e14da68f239eb74a48cd7f6942c2a63",
-    "publicModules": [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons"
-    ],
+    "publicModules": ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     "catalogAvailable": true
   },
   "captures": [
@@ -175723,10 +175551,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-94-color",
             "dimension": "styling",
@@ -176414,10 +176239,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-95-color",
             "dimension": "styling",
@@ -178970,10 +178792,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-40-color",
             "dimension": "styling",
@@ -182215,10 +182034,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-56-color",
             "dimension": "styling",
@@ -183905,10 +183721,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-109-color",
             "dimension": "styling",
@@ -184596,10 +184409,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-110-color",
             "dimension": "styling",
@@ -193500,10 +193310,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-79-color",
             "dimension": "styling",
@@ -193858,10 +193665,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-128-color",
             "dimension": "styling",
@@ -194216,10 +194020,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-80-color",
             "dimension": "styling",
@@ -194552,10 +194353,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-129-color",
             "dimension": "styling",
@@ -201657,10 +201455,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-143-color",
             "dimension": "styling",
@@ -202015,10 +201810,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-144-color",
             "dimension": "styling",
@@ -205969,10 +205761,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-158-color",
             "dimension": "styling",
@@ -206327,10 +206116,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-159-color",
             "dimension": "styling",
@@ -217328,10 +217114,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-94-color",
             "dimension": "styling",
@@ -218019,10 +217802,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-95-color",
             "dimension": "styling",
@@ -220575,10 +220355,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-40-color",
             "dimension": "styling",
@@ -223820,10 +223597,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-56-color",
             "dimension": "styling",
@@ -225510,10 +225284,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-109-color",
             "dimension": "styling",
@@ -226201,10 +225972,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-110-color",
             "dimension": "styling",
@@ -235105,10 +234873,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-79-color",
             "dimension": "styling",
@@ -235463,10 +235228,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-128-color",
             "dimension": "styling",
@@ -235821,10 +235583,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-80-color",
             "dimension": "styling",
@@ -236157,10 +235916,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-129-color",
             "dimension": "styling",
@@ -243262,10 +243018,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-143-color",
             "dimension": "styling",
@@ -243620,10 +243373,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-144-color",
             "dimension": "styling",
@@ -247574,10 +247324,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-158-color",
             "dimension": "styling",
@@ -247932,10 +247679,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-159-color",
             "dimension": "styling",
@@ -258933,10 +258677,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-94-color",
             "dimension": "styling",
@@ -259624,10 +259365,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-95-color",
             "dimension": "styling",
@@ -262180,10 +261918,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-40-color",
             "dimension": "styling",
@@ -265425,10 +265160,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-56-color",
             "dimension": "styling",
@@ -267115,10 +266847,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-109-color",
             "dimension": "styling",
@@ -267806,10 +267535,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-110-color",
             "dimension": "styling",
@@ -276710,10 +276436,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-79-color",
             "dimension": "styling",
@@ -277068,10 +276791,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-128-color",
             "dimension": "styling",
@@ -277426,10 +277146,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-80-color",
             "dimension": "styling",
@@ -277762,10 +277479,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-129-color",
             "dimension": "styling",
@@ -284867,10 +284581,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-143-color",
             "dimension": "styling",
@@ -285225,10 +284936,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-144-color",
             "dimension": "styling",
@@ -289179,10 +288887,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-158-color",
             "dimension": "styling",
@@ -289537,10 +289242,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-159-color",
             "dimension": "styling",
@@ -300538,10 +300240,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-94-color",
             "dimension": "styling",
@@ -301229,10 +300928,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-95-color",
             "dimension": "styling",
@@ -303785,10 +303481,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-40-color",
             "dimension": "styling",
@@ -307030,10 +306723,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-56-color",
             "dimension": "styling",
@@ -308720,10 +308410,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-109-color",
             "dimension": "styling",
@@ -309411,10 +309098,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-110-color",
             "dimension": "styling",
@@ -318315,10 +317999,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-79-color",
             "dimension": "styling",
@@ -318673,10 +318354,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-128-color",
             "dimension": "styling",
@@ -319031,10 +318709,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-80-color",
             "dimension": "styling",
@@ -319367,10 +319042,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-129-color",
             "dimension": "styling",
@@ -326472,10 +326144,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-143-color",
             "dimension": "styling",
@@ -326830,10 +326499,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-144-color",
             "dimension": "styling",
@@ -330784,10 +330450,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-158-color",
             "dimension": "styling",
@@ -331142,10 +330805,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-900x900-0-style-159-color",
             "dimension": "styling",

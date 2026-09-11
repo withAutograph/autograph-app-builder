@@ -15,9 +15,7 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace readiness inspection");
     if (current.phase === "empty")
-      throw new Error(
-        "Prepare an eligible repository before checking workspace readiness.",
-      );
+      throw new Error("Prepare an eligible repository before checking workspace readiness.");
     const receipt = {
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,

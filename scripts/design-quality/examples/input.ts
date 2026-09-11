@@ -4,8 +4,7 @@ import { resolve } from "node:path";
 import type { UiPreviewInput } from "../../../lib/agent/ui-preview";
 import { validateUiPreview } from "../../../lib/agent/ui-preview";
 
-export type DesignQualityExampleId =
-  "spend-import-review" | "compensation-planning";
+export type DesignQualityExampleId = "spend-import-review" | "compensation-planning";
 
 type ExampleConfig = {
   appId: string;
@@ -84,16 +83,10 @@ const exampleManifests: Record<
     ],
   },
   "compensation-planning": {
-    productionComponents: [
-      "Button",
-      "Card",
-      "PageHeader",
-      "StatusPill",
-      "Typography",
-    ].map((name) => ({ name, source: "@autograph/components" as const })),
-    productionCompositions: [
-      { name: "SchemaFormComposition", source: "@autograph/compositions" },
-    ],
+    productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
+      (name) => ({ name, source: "@autograph/components" as const }),
+    ),
+    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
     fixtureFacts: [
       {
         id: "synthetic-proposal",
@@ -128,8 +121,7 @@ const exampleManifests: Record<
     ],
     implementationNotes: [
       {
-        visibleElement:
-          "Editable assumptions and calculated package comparison",
+        visibleElement: "Editable assumptions and calculated package comparison",
         productionMeaning:
           "Production must calculate authoritative current and proposed totals from governed compensation inputs.",
         routes: ["/"],
@@ -170,9 +162,7 @@ export async function loadDesignQualityExample(
         {
           id,
           title:
-            id === "spend-import-review"
-              ? "Spend import review"
-              : "Compensation planning review",
+            id === "spend-import-review" ? "Spend import review" : "Compensation planning review",
           route: config.route,
           entry: config.entry,
         },

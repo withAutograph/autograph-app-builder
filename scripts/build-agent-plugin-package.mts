@@ -5,10 +5,7 @@ import {
 } from "../lib/plugin/agent-plugin-package";
 
 const repositoryRoot = resolve(".");
-const outputRoot = resolve(
-  repositoryRoot,
-  ".artifacts/agent-plugin/app-builder",
-);
+const outputRoot = resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder");
 await validateAgentPluginPackage({
   pluginRoot: repositoryRoot,
   repositoryRoot,

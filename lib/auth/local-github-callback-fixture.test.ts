@@ -53,8 +53,6 @@ describe("local GitHub callback fixtures", () => {
       NODE_ENV: "test",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
     });
-    expect(new URL(result.request.url).searchParams.getAll(key)).toHaveLength(
-      count,
-    );
+    expect(new URL(result.request.url).searchParams.getAll(key)).toHaveLength(count);
   });
 });

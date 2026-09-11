@@ -1,13 +1,10 @@
 import { sha256, TOOL_NAMES } from "../../scripts/portable-release";
 
-export type ReleaseEvaluation =
-  "sandbox-reviewed-change-set" | "sandbox-existing-iteration";
+export type ReleaseEvaluation = "sandbox-reviewed-change-set" | "sandbox-existing-iteration";
 
 export function assertExactToolDiscovery(tools: readonly string[]) {
   if (JSON.stringify(tools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error(
-      "Fresh portable clients did not discover five public tools.",
-    );
+    throw new Error("Fresh portable clients did not discover five public tools.");
 }
 
 export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
@@ -29,9 +26,7 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
         value.browserPreview === true,
     );
   if (terminal === undefined)
-    throw new Error(
-      `${evaluation} did not produce the reviewed proof receipt.`,
-    );
+    throw new Error(`${evaluation} did not produce the reviewed proof receipt.`);
   return {
     eval: evaluation,
     terminalPhase: "reviewed",

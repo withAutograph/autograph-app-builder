@@ -49,7 +49,7 @@ async function currentUser() {
     ensurePreviewOAuthDeploymentSessionOrganization({
       environment: process.env,
       headers: await headers(),
-    })
+    }),
   );
   if (state.status === "anonymous") {
     console.warn(
@@ -57,7 +57,7 @@ async function currentUser() {
         level: "error",
         message: "preview_workspace_reconciliation_skipped",
         reason: "session_unavailable",
-      })
+      }),
     );
     return state;
   }
@@ -67,7 +67,7 @@ async function currentUser() {
         level: "error",
         message: "preview_workspace_reconciliation_failed",
         reason: state.status,
-      })
+      }),
     );
     return state;
   }
@@ -85,19 +85,14 @@ async function currentUser() {
 
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
-  const [
-    query,
-    user,
-    connectionsEnabled,
-    comingSoonEnabled,
-    provisioningEnabled,
-  ] = await Promise.all([
-    searchParams,
-    currentUser(),
-    builderConnectionsFlag(),
-    builderComingSoonFlag(),
-    builderResourceProvisioningFlag(),
-  ]);
+  const [query, user, connectionsEnabled, comingSoonEnabled, provisioningEnabled] =
+    await Promise.all([
+      searchParams,
+      currentUser(),
+      builderConnectionsFlag(),
+      builderComingSoonFlag(),
+      builderResourceProvisioningFlag(),
+    ]);
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
@@ -114,8 +109,7 @@ async function HomeContent({ searchParams }: PageProps) {
       ...(status === "failed"
         ? {
             reason: parseProviderConnectionFailureReason(
-              query[provider === "vercel" ? "vercelReason" : "githubReason"] ??
-                query.reason
+              query[provider === "vercel" ? "vercelReason" : "githubReason"] ?? query.reason,
             ),
           }
         : {}),
@@ -136,8 +130,7 @@ async function HomeContent({ searchParams }: PageProps) {
       environment: process.env,
       headers: await headers(),
     });
-    if (pendingHandoff)
-      redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
+    if (pendingHandoff) redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
   }
   const durableDraft = authenticated
     ? resumeKey
@@ -173,9 +166,7 @@ async function HomeContent({ searchParams }: PageProps) {
       integrations={integrations}
       providerNotices={notices}
       providerResumeKey={resumeKey}
-      initialDurableDraft={
-        durableDraft?.record.draft as BuilderDraft | undefined
-      }
+      initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
       durableDraftId={durableDraft?.draftId}
       durableDraftRevision={durableDraft?.revision}
       durableDraftUpdatedAt={durableDraft?.updatedAt}

@@ -34,16 +34,13 @@ const configSchema = z
 export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 
 const credentialsSchema = configSchema.omit({ installationId: true });
-export type GitHubAppHttpProviderCredentials = z.infer<
-  typeof credentialsSchema
->;
+export type GitHubAppHttpProviderCredentials = z.infer<typeof credentialsSchema>;
 
 export function parseGitHubAppHttpProviderCredentials(
   input: unknown,
 ): GitHubAppHttpProviderCredentials {
   const parsed = credentialsSchema.safeParse(input);
-  if (!parsed.success)
-    throw new Error("GitHub App provider configuration is invalid.");
+  if (!parsed.success) throw new Error("GitHub App provider configuration is invalid.");
   try {
     const key = createPrivateKey(parsed.data.privateKey);
     if (key.asymmetricKeyType !== "rsa") throw new Error("not-rsa");
@@ -53,12 +50,9 @@ export function parseGitHubAppHttpProviderCredentials(
   return parsed.data;
 }
 
-export function parseGitHubAppHttpProviderConfig(
-  input: unknown,
-): GitHubAppHttpProviderConfig {
+export function parseGitHubAppHttpProviderConfig(input: unknown): GitHubAppHttpProviderConfig {
   const parsed = configSchema.safeParse(input);
-  if (!parsed.success)
-    throw new Error("GitHub App provider configuration is invalid.");
+  if (!parsed.success) throw new Error("GitHub App provider configuration is invalid.");
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: parsed.data.appId,
     privateKey: parsed.data.privateKey,
@@ -73,15 +67,10 @@ export type GitHubPublicationFile = {
 };
 
 export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
-  inspectRepositoryByName: (input: {
-    owner: string;
-    name: string;
-}) => Promise<unknown | undefined>;
-  acquireRepositoryReadCredential: (input: {
-    repositoryId: string;
-}) => Promise<{
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  acquireRepositoryReadCredential: (input: { repositoryId: string }) => Promise<{
     token: string;
-}>;
+  }>;
 }
 
 type Fetch = typeof fetch;
@@ -94,8 +83,7 @@ type PermissionSnapshot = {
   variables: "read";
 };
 
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -115,9 +103,7 @@ function stringProperty(value: unknown, key: string): string {
 function decimalProperty(value: unknown, key: string): string {
   const result = property(value, key);
   if (
-    (typeof result !== "number" ||
-      !Number.isSafeInteger(result) ||
-      result < 1) &&
+    (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
     (typeof result !== "string" || !decimal.safeParse(result).success)
   )
     throw new Error("invalid-response");
@@ -157,11 +143,8 @@ function validateFile(file: GitHubPublicationFile): void {
     throw new Error("invalid-material");
 }
 
-function canonicalFiles(
-  input: readonly GitHubPublicationFile[],
-): readonly GitHubPublicationFile[] {
-  if (input.length === 0 || input.length > MAX_FILES)
-    throw new Error("invalid-material");
+function canonicalFiles(input: readonly GitHubPublicationFile[]): readonly GitHubPublicationFile[] {
+  if (input.length === 0 || input.length > MAX_FILES) throw new Error("invalid-material");
   const paths = new Set<string>();
   let totalBytes = 0;
   for (const file of input) {
@@ -170,33 +153,23 @@ function canonicalFiles(
     if (
       paths.has(file.path) ||
       [...paths].some(
-        (path) =>
-          path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
+        (path) => path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
       )
     )
       throw new Error("invalid-material");
     paths.add(file.path);
   }
-  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
-    throw new Error("invalid-material");
-  return [...input].toSorted((left, right) =>
-    compareOverlayPaths(left.path, right.path),
-  );
+  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) throw new Error("invalid-material");
+  return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
 
 function permissionRequest(permission: PermissionSnapshot) {
   return {
     metadata: "read" as const,
     contents: permission.contents,
-    ...(permission.workflows === "write"
-      ? { workflows: "write" as const }
-      : {}),
-    ...(permission.pullRequests === "write"
-      ? { pull_requests: "write" as const }
-      : {}),
-    ...(permission.administration === "write"
-      ? { administration: "write" as const }
-      : {}),
+    ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
+    ...(permission.pullRequests === "write" ? { pull_requests: "write" as const } : {}),
+    ...(permission.administration === "write" ? { administration: "write" as const } : {}),
     actions_variables: "read" as const,
   };
 }
@@ -211,10 +184,9 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
     "administration",
     "actions_variables",
   ]);
-  if (Object.keys(value).some((key) => !allowed.has(key)))
-    throw new Error("invalid-response");
-  const {metadata} = value;
-  const {contents} = value;
+  if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("invalid-response");
+  const { metadata } = value;
+  const { contents } = value;
   const workflows = value.workflows ?? "none";
   const pullRequests = value.pull_requests ?? "none";
   const administration = value.administration ?? "none";
@@ -239,9 +211,7 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
 }
 
 function requestId(value: string): string {
-  return /^[A-Za-z0-9_-]{1,128}$/u.test(value)
-    ? value
-    : sha256(value).slice(0, 32);
+  return /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
 }
 
 export function createGitHubAppHttpProvider(input: {
@@ -276,9 +246,7 @@ export function createGitHubAppHttpProvider(input: {
       return {
         status: response.status,
         body: response.data,
-        requestId: requestId(
-          String(response.headers["x-github-request-id"] ?? "github"),
-        ),
+        requestId: requestId(String(response.headers["x-github-request-id"] ?? "github")),
       };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
@@ -298,10 +266,9 @@ export function createGitHubAppHttpProvider(input: {
   }
 
   async function installation() {
-    const { data } = await app.octokit.request(
-      "GET /app/installations/{installation_id}",
-      { installation_id: Number(config.installationId) },
-    );
+    const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
+      installation_id: Number(config.installationId),
+    });
     const account = property(data, "account");
     const selection = stringProperty(data, "repository_selection");
     const accountType = stringProperty(account, "type");
@@ -320,10 +287,7 @@ export function createGitHubAppHttpProvider(input: {
     };
   }
 
-  async function token(
-    permissions: PermissionSnapshot,
-    repositoryIds?: readonly string[],
-  ) {
+  async function token(permissions: PermissionSnapshot, repositoryIds?: readonly string[]) {
     const authentication = await app.octokit.auth({
       type: "installation",
       installationId: config.installationId,
@@ -334,11 +298,8 @@ export function createGitHubAppHttpProvider(input: {
       refresh: true,
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512)
-      throw new Error("invalid-response");
-    const granted = normalizedPermissions(
-      property(authentication, "permissions"),
-    );
+    if (value.length < 20 || value.length > 512) throw new Error("invalid-response");
+    const granted = normalizedPermissions(property(authentication, "permissions"));
     if (JSON.stringify(granted) !== JSON.stringify(permissions))
       throw new Error("invalid-response");
     return value;
@@ -354,24 +315,19 @@ export function createGitHubAppHttpProvider(input: {
       refresh: true,
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512)
-      throw new Error("invalid-response");
+    if (value.length < 20 || value.length > 512) throw new Error("invalid-response");
     const permissions = property(authentication, "permissions");
     if (
       !record(permissions) ||
       permissions.contents !== "read" ||
       (permissions.metadata !== undefined && permissions.metadata !== "read") ||
-      Object.keys(permissions).some(
-        (key) => key !== "contents" && key !== "metadata",
-      )
+      Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")
     )
       throw new Error("invalid-response");
     return value;
   }
 
-  async function selectedRepositories(
-    permissions: PermissionSnapshot,
-  ): Promise<readonly string[]> {
+  async function selectedRepositories(permissions: PermissionSnapshot): Promise<readonly string[]> {
     const accessToken = await token(permissions);
     const ids: string[] = [];
     for (let page = 1; ; page += 1) {
@@ -381,11 +337,8 @@ export function createGitHubAppHttpProvider(input: {
         expected: [200],
       });
       const repositories = arrayProperty(response.body, "repositories");
-      ids.push(
-        ...repositories.map((repository) => decimalProperty(repository, "id")),
-      );
-      if (ids.length > MAX_INSTALLATION_REPOSITORIES)
-        throw new Error("installation-too-large");
+      ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
+      if (ids.length > MAX_INSTALLATION_REPOSITORIES) throw new Error("installation-too-large");
       if (repositories.length < 100) break;
     }
     return [...new Set(ids)].toSorted();
@@ -406,10 +359,7 @@ export function createGitHubAppHttpProvider(input: {
     const owner = property(repositoryResponse.body, "owner");
     const repositoryOwner = stringProperty(owner, "login");
     const repositoryName = stringProperty(repositoryResponse.body, "name");
-    if (
-      !name.safeParse(repositoryOwner).success ||
-      !name.safeParse(repositoryName).success
-    )
+    if (!name.safeParse(repositoryOwner).success || !name.safeParse(repositoryName).success)
       throw new Error("invalid-response");
     const commit = await github({
       path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${encodePath(ref)}`,
@@ -426,14 +376,11 @@ export function createGitHubAppHttpProvider(input: {
         expected: [200],
       });
       const pageVariables = arrayProperty(variables.body, "variables");
-      variableNames.push(
-        ...pageVariables.map((value) => stringProperty(value, "name")),
-      );
+      variableNames.push(...pageVariables.map((value) => stringProperty(value, "name")));
       if (pageVariables.length < 100) break;
       if (page === 10) throw new Error("repository-variables-too-large");
     }
-    if (!booleanProperty(repositoryResponse.body, "private"))
-      throw new Error("invalid-response");
+    if (!booleanProperty(repositoryResponse.body, "private")) throw new Error("invalid-response");
     return {
       repositoryId,
       owner: repositoryOwner,
@@ -452,10 +399,7 @@ export function createGitHubAppHttpProvider(input: {
     repositoryName: string,
     permissions: PermissionSnapshot,
   ) {
-    if (
-      !name.safeParse(owner).success ||
-      !name.safeParse(repositoryName).success
-    )
+    if (!name.safeParse(owner).success || !name.safeParse(repositoryName).success)
       throw new Error("invalid-destination");
     const accessToken = await token(permissions);
     let response;
@@ -515,12 +459,7 @@ export function createGitHubAppHttpProvider(input: {
         path: file.path,
         mode: file.mode,
         type: "blob",
-        sha: await createBlob(
-          input.owner,
-          input.repositoryName,
-          input.accessToken,
-          file,
-        ),
+        sha: await createBlob(input.owner, input.repositoryName, input.accessToken, file),
       });
     }
     const response = await github({
@@ -548,20 +487,14 @@ export function createGitHubAppHttpProvider(input: {
     proposal: DraftPullRequestProposal,
     permissions: PermissionSnapshot,
   ) {
-    const snapshot = await repositoryById(
-      proposal.repositoryId,
-      proposal.baseBranch,
-      permissions,
-    );
+    const snapshot = await repositoryById(proposal.repositoryId, proposal.baseBranch, permissions);
     return {
       snapshot: publicRepositorySnapshot(snapshot),
       accessToken: snapshot.accessToken,
     };
   }
 
-  function publicRepositorySnapshot(
-    snapshot: Awaited<ReturnType<typeof repositoryById>>,
-  ) {
+  function publicRepositorySnapshot(snapshot: Awaited<ReturnType<typeof repositoryById>>) {
     return {
       repositoryId: snapshot.repositoryId,
       owner: snapshot.owner,
@@ -584,8 +517,7 @@ export function createGitHubAppHttpProvider(input: {
     },
     async inspectInstallation({ requestedPermissions }) {
       const identity = await installation();
-      const selectedRepositoryIds =
-        await selectedRepositories(requestedPermissions);
+      const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
       return {
         ...identity,
         selectedRepositoryIds,
@@ -615,11 +547,7 @@ export function createGitHubAppHttpProvider(input: {
         administration: "none",
         variables: "read",
       };
-      const snapshot = await repositoryByName(
-        owner,
-        repositoryName,
-        permissions,
-      );
+      const snapshot = await repositoryByName(owner, repositoryName, permissions);
       if (snapshot === undefined) return undefined;
       const response = await github({
         path: `/repositories/${snapshot.repositoryId}`,
@@ -641,11 +569,7 @@ export function createGitHubAppHttpProvider(input: {
         administration: "write",
         variables: "read",
       };
-      const snapshot = await repositoryByName(
-        owner,
-        repositoryName,
-        permissions,
-      );
+      const snapshot = await repositoryByName(owner, repositoryName, permissions);
       if (snapshot === undefined) return "absent";
       return publicRepositorySnapshot(snapshot);
     },
@@ -778,10 +702,7 @@ export function createGitHubAppHttpProvider(input: {
         administration: "none",
         variables: "read",
       };
-      const { snapshot, accessToken } = await repositorySnapshotForProposal(
-        proposal,
-        permissions,
-      );
+      const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
       const compare = await github({
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(snapshot.headSha)}`,
         authorization: accessToken,
@@ -816,10 +737,7 @@ export function createGitHubAppHttpProvider(input: {
             authorization: accessToken,
             expected: [200],
           });
-          const normalizedChangedPaths = arrayProperty(
-            branchCompare.body,
-            "files",
-          )
+          const normalizedChangedPaths = arrayProperty(branchCompare.body, "files")
             .map((file) => stringProperty(file, "filename"))
             .toSorted();
           branch = {
@@ -828,12 +746,8 @@ export function createGitHubAppHttpProvider(input: {
             branchSha,
             branchTree: objectId.parse(stringProperty(tree, "sha")),
             normalizedChangedPaths,
-            changedContentDigest: markerMatches
-              ? proposal.changedContentDigest
-              : "0".repeat(64),
-            idempotencyKey: markerMatches
-              ? proposal.idempotencyKey
-              : "0".repeat(64),
+            changedContentDigest: markerMatches ? proposal.changedContentDigest : "0".repeat(64),
+            idempotencyKey: markerMatches ? proposal.idempotencyKey : "0".repeat(64),
           };
         }
       } catch {
@@ -847,7 +761,7 @@ export function createGitHubAppHttpProvider(input: {
       if (!Array.isArray(pulls.body)) throw new Error("invalid-response");
       const candidates = pulls.body;
       if (candidates.length > 1) throw new Error("invalid-response");
-    const [pull] = candidates;
+      const [pull] = candidates;
       const exactPull =
         pull !== undefined &&
         stringProperty(pull, "title") === proposal.title &&
@@ -861,28 +775,14 @@ export function createGitHubAppHttpProvider(input: {
               pullRequestId: decimalProperty(pull, "id"),
               pullRequestNumber: Number(decimalProperty(pull, "number")),
               draft: booleanProperty(pull, "draft"),
-              headRepositoryId: decimalProperty(
-                property(property(pull, "head"), "repo"),
-                "id",
-              ),
+              headRepositoryId: decimalProperty(property(property(pull, "head"), "repo"), "id"),
               headBranch: stringProperty(property(pull, "head"), "ref"),
-              headSha: objectId.parse(
-                stringProperty(property(pull, "head"), "sha"),
-              ),
-              baseRepositoryId: decimalProperty(
-                property(property(pull, "base"), "repo"),
-                "id",
-              ),
+              headSha: objectId.parse(stringProperty(property(pull, "head"), "sha")),
+              baseRepositoryId: decimalProperty(property(property(pull, "base"), "repo"), "id"),
               baseBranch: stringProperty(property(pull, "base"), "ref"),
-              baseSha: objectId.parse(
-                stringProperty(property(pull, "base"), "sha"),
-              ),
-              changeSetDigest: exactPull
-                ? proposal.changeSetDigest
-                : "0".repeat(64),
-              idempotencyKey: exactPull
-                ? proposal.idempotencyKey
-                : "0".repeat(64),
+              baseSha: objectId.parse(stringProperty(property(pull, "base"), "sha")),
+              changeSetDigest: exactPull ? proposal.changeSetDigest : "0".repeat(64),
+              idempotencyKey: exactPull ? proposal.idempotencyKey : "0".repeat(64),
             };
       return {
         idempotencyKey: proposal.idempotencyKey,
@@ -923,9 +823,7 @@ export function createGitHubAppHttpProvider(input: {
           changes.some((change) => !safeSourcePath(change.path))
         )
           throw new Error("invalid-material");
-        const paths = changes
-          .map(({ path }) => path)
-          .toSorted(compareOverlayPaths);
+        const paths = changes.map(({ path }) => path).toSorted(compareOverlayPaths);
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths))
           throw new Error("invalid-material");
         let totalBytes = 0;
@@ -943,12 +841,9 @@ export function createGitHubAppHttpProvider(input: {
                     digest: sha256(change.after.content),
                   };
             if (
-              (change.kind === "added" &&
-                (change.before !== undefined || after === undefined)) ||
-              (change.kind === "deleted" &&
-                (change.before === undefined || after !== undefined)) ||
-              (change.kind === "modified" &&
-                (change.before === undefined || after === undefined))
+              (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
+              (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
+              (change.kind === "modified" && (change.before === undefined || after === undefined))
             )
               throw new Error("invalid-material");
             return {
@@ -958,15 +853,9 @@ export function createGitHubAppHttpProvider(input: {
               ...(after === undefined ? {} : { after }),
             };
           })
-          .toSorted((left, right) =>
-            compareOverlayPaths(left.path, right.path),
-          );
-        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES)
-          throw new Error("invalid-material");
-        if (
-          sha256(JSON.stringify(receiptChanges)) !==
-          proposal.changedContentDigest
-        )
+          .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) throw new Error("invalid-material");
+        if (sha256(JSON.stringify(receiptChanges)) !== proposal.changedContentDigest)
           throw new Error("invalid-material");
       } catch {
         return {
@@ -982,18 +871,10 @@ export function createGitHubAppHttpProvider(input: {
         administration: "none",
         variables: "read",
       };
-      const { snapshot, accessToken } = await repositorySnapshotForProposal(
-        proposal,
-        permissions,
-      );
-      if (
-        snapshot.headSha !== proposal.baseSha ||
-        snapshot.headTree !== proposal.baseTree
-      )
+      const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
+      if (snapshot.headSha !== proposal.baseSha || snapshot.headTree !== proposal.baseTree)
         return { status: "rejected", code: "stale-base" };
-      const files = changes.flatMap((change) =>
-        change.after === undefined ? [] : [change.after],
-      );
+      const files = changes.flatMap((change) => (change.after === undefined ? [] : [change.after]));
       const deletions = changes.flatMap((change) =>
         change.kind === "deleted" ? [change.path] : [],
       );

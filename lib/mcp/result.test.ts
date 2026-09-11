@@ -53,33 +53,23 @@ describe("safe MCP tool errors", () => {
 
   it("makes a provider outage retryable without a new OAuth challenge", () => {
     const result = safeToolError(new McpProviderUnavailableError());
-    expect(result.structuredContent.error?.message).toContain(
-      "Retry this same handoff",
-    );
-    expect(result.structuredContent.error?.message).toContain(
-      "No provider login",
-    );
+    expect(result.structuredContent.error?.message).toContain("Retry this same handoff");
+    expect(result.structuredContent.error?.message).toContain("No provider login");
     expect(result._meta).toBeUndefined();
   });
 
   it("gives same-account guidance without disclosing handoff ownership", () => {
     const result = safeToolError(new BuilderHandoffUnavailableError());
-    expect(result.structuredContent.error?.message).toContain(
-      "same account used on the web",
-    );
+    expect(result.structuredContent.error?.message).toContain("same account used on the web");
     expect(result.structuredContent.error?.code).toBe("not_found");
   });
 
   it("returns the MCP OAuth challenge as protected tool metadata", () => {
     const challenge =
       'Bearer resource_metadata="https://new.autograph.so/.well-known/oauth-protected-resource", error="invalid_token", error_description="Sign in to continue"';
-    const result = safeToolError(
-      new McpToolAuthenticationRequiredError(challenge),
-    );
+    const result = safeToolError(new McpToolAuthenticationRequiredError(challenge));
 
-    expect(result.structuredContent.error?.code).toBe(
-      "authentication_required",
-    );
+    expect(result.structuredContent.error?.code).toBe("authentication_required");
     expect(result._meta).toEqual({ "mcp/www_authenticate": [challenge] });
     expect(result.isError).toBe(true);
   });

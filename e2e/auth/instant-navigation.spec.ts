@@ -3,10 +3,7 @@ import { expect, test } from "playwright/test";
 
 const signUpPath = "/auth/sign-up?callbackURL=%2F";
 
-test("sign-up exposes its useful shell on the initial response", async ({
-  page,
-  baseURL,
-}) => {
+test("sign-up exposes its useful shell on the initial response", async ({ page, baseURL }) => {
   await instant(
     page,
     async () => {
@@ -16,14 +13,10 @@ test("sign-up exposes its useful shell on the initial response", async ({
     { baseURL },
   );
 
-  await expect(
-    page.getByRole("button", { name: "Continue with Passkey" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Passkey" })).toBeVisible();
 });
 
-test("sign-up exposes its useful shell on client navigation", async ({
-  page,
-}) => {
+test("sign-up exposes its useful shell on client navigation", async ({ page }) => {
   await page.goto("/auth/sign-in?callbackURL=%2F");
 
   await instant(page, async () => {
@@ -31,7 +24,5 @@ test("sign-up exposes its useful shell on client navigation", async ({
     await page.waitForURL((url) => url.pathname === "/auth/sign-up");
   });
 
-  await expect(
-    page.getByRole("button", { name: "Continue with Passkey" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Passkey" })).toBeVisible();
 });

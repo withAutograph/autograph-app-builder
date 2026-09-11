@@ -17,7 +17,7 @@ type ContinuationState =
 
 export async function continueBuilderHandoff(
   previous: ContinuationState | undefined,
-  input: unknown
+  input: unknown,
 ): Promise<ContinuationState> {
   // validate, authorize, run durable operations, return a safe result
 }
@@ -43,7 +43,7 @@ Use `useActionState` in the narrow client leaf that needs the result. For an obj
 ```tsx
 const [continuation, dispatchContinuation, pending] = useActionState(
   continueBuilderHandoff,
-  undefined
+  undefined,
 );
 
 startTransition(() =>
@@ -53,7 +53,7 @@ startTransition(() =>
     creationRequestId,
     provisioningEnabled,
     form,
-  })
+  }),
 );
 ```
 

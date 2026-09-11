@@ -28,10 +28,7 @@ import {
   sealPromotionReceipt,
   sha256,
 } from "../lib/release/promotion";
-import {
-  assertExactToolDiscovery,
-  parseReviewedProof,
-} from "../lib/release/proof-evidence";
+import { assertExactToolDiscovery, parseReviewedProof } from "../lib/release/proof-evidence";
 import { verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { releaseEndpoint, TOOL_NAMES } from "./portable-release";
 
@@ -50,9 +47,7 @@ function parseArguments(args: readonly string[]) {
       value.startsWith("--") ||
       values.has(name)
     )
-      throw new Error(
-        "Release proof arguments must be unique --name value pairs.",
-      );
+      throw new Error("Release proof arguments must be unique --name value pairs.");
     values.set(name, value);
   }
   const required = (name: string) => {
@@ -68,9 +63,7 @@ function parseArguments(args: readonly string[]) {
     output: required("--output"),
   };
   if (values.size !== 0)
-    throw new Error(
-      `Unsupported release proof options: ${[...values.keys()].join(", ")}.`,
-    );
+    throw new Error(`Unsupported release proof options: ${[...values.keys()].join(", ")}.`);
   if (!isAbsolute(parsed.arrustedRoot) || !isAbsolute(parsed.output))
     throw new Error("Release proof roots must be absolute.");
   return parsed;
@@ -98,10 +91,8 @@ async function run(
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (!options.capture && result.stdout.trim() !== "")
-    process.stdout.write(result.stdout);
-  if (!options.capture && result.stderr.trim() !== "")
-    process.stderr.write(result.stderr);
+  if (!options.capture && result.stdout.trim() !== "") process.stdout.write(result.stdout);
+  if (!options.capture && result.stderr.trim() !== "") process.stderr.write(result.stderr);
   return result.stdout;
 }
 
@@ -121,13 +112,8 @@ const args = parseArguments(process.argv.slice(2));
 const endpointOrigin = releaseEndpoint(args.endpoint);
 const builder = await exactCleanGitSource(repositoryRoot, "Builder");
 const arrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
-if (
-  arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA ||
-  arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE
-)
-  throw new Error(
-    "Arrusted release source does not match the source-bound image target.",
-  );
+if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE)
+  throw new Error("Arrusted release source does not match the source-bound image target.");
 const projectBinding = await ownerBoundFile(
   join(repositoryRoot, ".vercel/project.json"),
   "Vercel release project binding",
@@ -159,12 +145,7 @@ try {
     arrusted.commit,
     arrusted.tree,
   );
-  materializeSanitizedGitTree(
-    builder.root,
-    temporaryBuilder,
-    builder.commit,
-    builder.tree,
-  );
+  materializeSanitizedGitTree(builder.root, temporaryBuilder, builder.commit, builder.tree);
 
   const packageRoot = join(output, "package");
   await run(node, [
@@ -201,10 +182,7 @@ try {
   assertExactToolDiscovery(portable.receipt.tools);
 
   const imageArchive = join(output, "image.oci.tar");
-  const dockerfile = join(
-    temporaryBuilder,
-    "containers/eve-sandbox/Dockerfile",
-  );
+  const dockerfile = join(temporaryBuilder, "containers/eve-sandbox/Dockerfile");
   const dockerfileSha256 = sha256(await readFile(dockerfile));
   const provisionalTag = `${IMAGE_REPOSITORY}:candidate-${sha256(
     `${builder.commit}\0${arrusted.commit}\0${dockerfileSha256}`,
@@ -233,14 +211,7 @@ try {
     .slice("sha256:".length)
     .slice(0, 16)}`;
   const imageReference = `${IMAGE_REPOSITORY}@${image.manifestDigest}`;
-  await run(msb, [
-    "load",
-    "--input",
-    imageArchive,
-    "--tag",
-    publicationTag,
-    "--quiet",
-  ]);
+  await run(msb, ["load", "--input", imageArchive, "--tag", publicationTag, "--quiet"]);
 
   const evalArguments = (evaluation: string) => [
     "--import",
@@ -264,32 +235,20 @@ try {
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
     EVE_HOSTED_ADAPTER: "0",
   };
-  const createOutput = await run(
-    node,
-    evalArguments("sandbox-reviewed-change-set"),
-    {
-      capture: true,
-      environment: proofEnvironment,
-    },
-  );
-  const iterationOutput = await run(
-    node,
-    evalArguments("sandbox-existing-iteration"),
-    {
-      capture: true,
-      environment: proofEnvironment,
-    },
-  );
+  const createOutput = await run(node, evalArguments("sandbox-reviewed-change-set"), {
+    capture: true,
+    environment: proofEnvironment,
+  });
+  const iterationOutput = await run(node, evalArguments("sandbox-existing-iteration"), {
+    capture: true,
+    environment: proofEnvironment,
+  });
 
   await mkdir(join(temporaryBuilder, ".vercel"), {
     recursive: true,
     mode: 0o700,
   });
-  await writeFile(
-    join(temporaryBuilder, ".vercel/project.json"),
-    projectBinding,
-    { mode: 0o600 },
-  );
+  await writeFile(join(temporaryBuilder, ".vercel/project.json"), projectBinding, { mode: 0o600 });
   await run(vercel, ["build", "--prod", "--yes"], {
     cwd: temporaryBuilder,
   });
@@ -298,31 +257,22 @@ try {
     recursive: true,
     mode: 0o700,
   });
-  await cp(
-    join(temporaryBuilder, ".vercel/output"),
-    join(deploymentRoot, ".vercel/output"),
-    { recursive: true },
-  );
+  await cp(join(temporaryBuilder, ".vercel/output"), join(deploymentRoot, ".vercel/output"), {
+    recursive: true,
+  });
   await copyFile(
     join(temporaryBuilder, ".vercel/project.json"),
     join(deploymentRoot, ".vercel/project.json"),
   );
 
-  const packageReceiptBytes = await readFile(
-    join(packageRoot, "release-receipt.json"),
-  );
+  const packageReceiptBytes = await readFile(join(packageRoot, "release-receipt.json"));
   const checksumsBytes = await readFile(join(packageRoot, "SHA256SUMS"));
-  const releaseArchive = await readFile(
-    join(packageRoot, portable.receipt.archive.name),
-  );
+  const releaseArchive = await readFile(join(packageRoot, portable.receipt.archive.name));
   const marketplaceArchive = await readFile(
     join(packageRoot, portable.receipt.codexMarketplaceArchive.name),
   );
   const finalBuilder = await exactCleanGitSource(repositoryRoot, "Builder");
-  const finalArrusted = await exactCleanGitSource(
-    args.arrustedRoot,
-    "Arrusted",
-  );
+  const finalArrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
   if (
     finalBuilder.commit !== builder.commit ||
     finalBuilder.tree !== builder.tree ||
@@ -383,17 +333,12 @@ try {
     },
     deployment: {
       root: "deployment",
-      outputTreeSha256: await immutableTreeDigest(
-        join(deploymentRoot, ".vercel/output"),
-      ),
+      outputTreeSha256: await immutableTreeDigest(join(deploymentRoot, ".vercel/output")),
       projectBindingSha256: sha256(projectBinding),
     },
     proofs: {
       create: parseReviewedProof(createOutput, "sandbox-reviewed-change-set"),
-      iteration: parseReviewedProof(
-        iterationOutput,
-        "sandbox-existing-iteration",
-      ),
+      iteration: parseReviewedProof(iterationOutput, "sandbox-existing-iteration"),
     },
     bindings: {
       execution: "release",
@@ -403,11 +348,10 @@ try {
       deployment: "production",
     },
   });
-  await writeFile(
-    join(output, "promotion-receipt.json"),
-    `${JSON.stringify(receipt, null, 2)}\n`,
-    { mode: 0o600, flag: "wx" },
-  );
+  await writeFile(join(output, "promotion-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, {
+    mode: 0o600,
+    flag: "wx",
+  });
   await rm(installRoot, { recursive: true, force: false });
   await rm(temporaryArrusted, { recursive: true, force: false });
   await rm(temporaryBuilder, { recursive: true, force: false });

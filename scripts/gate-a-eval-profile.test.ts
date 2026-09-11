@@ -15,15 +15,11 @@ import { gateAEvalWorkflowBodyTimeout } from "./run-with-test-capability.mts";
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
 function hostileEnvironment(): Record<string, string | undefined> {
-  return Object.fromEntries(
-    gateAEnvironmentFields.map((field) => [field, `hostile-${field}`]),
-  );
+  return Object.fromEntries(gateAEnvironmentFields.map((field) => [field, `hostile-${field}`]));
 }
 
 function freshRoots() {
-  const owner = realpathSync(
-    mkdtempSync(join(tmpdir(), "gate-a-eval-profile-")),
-  );
+  const owner = realpathSync(mkdtempSync(join(tmpdir(), "gate-a-eval-profile-")));
   const stateRoot = join(owner, "state");
   const allowedRoot = join(owner, "destinations");
   mkdirSync(stateRoot, { mode: 0o700 });
@@ -118,10 +114,7 @@ describe("closed Gate A eval profile", () => {
     const environment: Record<string, string | undefined> = {};
     installGateAEvalProfile(
       environment,
-      createGateAEvalProfile(
-        { profile: "sandbox", image, sourceRoot: null },
-        repositoryRoot,
-      ),
+      createGateAEvalProfile({ profile: "sandbox", image, sourceRoot: null }, repositoryRoot),
       repositoryRoot,
     );
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBe(image);
@@ -171,9 +164,7 @@ describe("closed Gate A eval profile", () => {
       ),
       repositoryRoot,
     );
-    expect(
-      ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF,
-    ).toBeUndefined();
+    expect(ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF).toBeUndefined();
   });
 
   it("binds and reobserves an explicit read-only sandbox source root", () => {
@@ -192,8 +183,7 @@ describe("closed Gate A eval profile", () => {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
-    if (profile?.profile !== "sandbox")
-      throw new Error("Expected sandbox profile.");
+    if (profile?.profile !== "sandbox") throw new Error("Expected sandbox profile.");
     expect(() =>
       validateGateAEvalProfile(
         {
@@ -244,8 +234,7 @@ describe("closed Gate A eval profile", () => {
       },
       repositoryRoot,
     );
-    if (profile?.profile !== "fresh")
-      throw new Error("Expected fresh profile.");
+    if (profile?.profile !== "fresh") throw new Error("Expected fresh profile.");
     expect(() =>
       validateGateAEvalProfile(
         {

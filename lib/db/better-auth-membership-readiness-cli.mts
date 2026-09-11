@@ -9,9 +9,7 @@ if (
   process.argv[2] !== "--database-url-fd" ||
   process.argv[3] !== "0"
 ) {
-  throw new Error(
-    "hosted:membership-migration-verify requires its private database URL fd.",
-  );
+  throw new Error("hosted:membership-migration-verify requires its private database URL fd.");
 }
 
 const databaseUrl = readPrivateDatabaseUrl(0);

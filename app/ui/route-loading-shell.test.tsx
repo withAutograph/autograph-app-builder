@@ -9,9 +9,7 @@ import {
 
 describe("route loading shells", () => {
   it("keeps authentication routes identifiable before request data streams", () => {
-    const html = renderToStaticMarkup(
-      <AuthLoadingShell title="Sign in to Autograph" />,
-    );
+    const html = renderToStaticMarkup(<AuthLoadingShell title="Sign in to Autograph" />);
 
     expect(html).toContain("Sign in to Autograph");
     expect(html).toContain("Preparing secure sign-in");

@@ -29,14 +29,8 @@ export const builderDraftSchema = z
     showMoreConnections: z.boolean(),
     search: boundedText(256),
     connectedConnections: z.array(connectionSchema).max(100),
-    storageProvider: z
-      .enum(["github", "gitlab", "bitbucket"])
-      .nullable()
-      .optional(),
-    deploymentProvider: z
-      .enum(["vercel", "netlify", "cloudflare"])
-      .nullable()
-      .optional(),
+    storageProvider: z.enum(["github", "gitlab", "bitbucket"]).nullable().optional(),
+    deploymentProvider: z.enum(["vercel", "netlify", "cloudflare"]).nullable().optional(),
     focusOrigin: z.enum(["vercel", "github"]),
     appNameEditedByUser: z.boolean(),
     repositoryEditedByUser: z.boolean(),
@@ -64,9 +58,7 @@ export const saveActiveBuilderDraftInputSchema = z
   })
   .strict();
 
-export type SaveActiveBuilderDraftInput = z.infer<
-  typeof saveActiveBuilderDraftInputSchema
->;
+export type SaveActiveBuilderDraftInput = z.infer<typeof saveActiveBuilderDraftInputSchema>;
 
 export const builderDraftPageDataSchema = z
   .object({

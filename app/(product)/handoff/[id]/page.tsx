@@ -10,9 +10,7 @@ export const metadata = {
   referrer: "no-referrer" as const,
 };
 
-export default function HandoffPage(props: {
-  params: Promise<{ id: string }>;
-}) {
+export default function HandoffPage(props: { params: Promise<{ id: string }> }) {
   return (
     <Suspense fallback={<HandoffLoadingShell />}>
       <ViewTransition>

@@ -92,22 +92,16 @@ describe("authenticated builder provisioning route", () => {
     );
     expect(created.status).toBe(200);
     expect(await created.json()).toEqual(response);
-    expect(execute).toHaveBeenCalledWith(
-      expect.objectContaining({ authority, request }),
-    );
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ authority, request }));
 
     const recovered = await handler(
-      new Request(
-        `${origin}/api/builder/provision?requestId=${request.requestId}`,
-      ),
+      new Request(`${origin}/api/builder/provision?requestId=${request.requestId}`),
     );
     expect(recovered.status).toBe(200);
     expect(read).toHaveBeenCalledWith(
       expect.objectContaining({ authority, requestId: request.requestId }),
     );
-    expect(JSON.stringify(await recovered.json())).not.toMatch(
-      /token|authorization/iu,
-    );
+    expect(JSON.stringify(await recovered.json())).not.toMatch(/token|authorization/iu);
   });
 
   it("exposes a monotonic journal projection only to an authenticated reader", async () => {
@@ -127,9 +121,7 @@ describe("authenticated builder provisioning route", () => {
     });
 
     const projection = await handler(
-      new Request(
-        `${origin}/api/builder/provision?projection=1&requestId=${request.requestId}`,
-      ),
+      new Request(`${origin}/api/builder/provision?projection=1&requestId=${request.requestId}`),
     );
 
     expect(projection.status).toBe(200);
@@ -165,9 +157,7 @@ describe("authenticated builder provisioning route", () => {
 
     expect(reserved.status).toBe(200);
     expect(await reserved.json()).toEqual(response);
-    expect(reserve).toHaveBeenCalledWith(
-      expect.objectContaining({ authority, request }),
-    );
+    expect(reserve).toHaveBeenCalledWith(expect.objectContaining({ authority, request }));
   });
 
   it("does not disclose internal failures", async () => {

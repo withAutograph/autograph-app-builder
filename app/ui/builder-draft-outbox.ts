@@ -18,10 +18,7 @@ export type BuilderDraftOutbox<T> = {
   write: (entry: BuilderDraftOutboxEntry<T>) => Promise<void>;
   clearIfMutationId: (mutationId: string) => Promise<boolean>;
   /** Clears only the snapshot represented by this server acknowledgement. */
-  clearIfAcknowledged?(acknowledgement: {
-    mutationId: string;
-    revision: number;
-  }): Promise<boolean>;
+  clearIfAcknowledged?(acknowledgement: { mutationId: string; revision: number }): Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
   clear: () => Promise<void>;
 };
@@ -67,8 +64,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       "upgradeneeded",
       () => {
         const database = request.result;
-        if (!database.objectStoreNames.contains(storeName))
-          database.createObjectStore(storeName);
+        if (!database.objectStoreNames.contains(storeName)) database.createObjectStore(storeName);
       },
       { once: true },
     );
@@ -92,8 +88,7 @@ function defaultFactory() {
 export function createBuilderDraftOutbox<T>(
   options: BuilderDraftOutboxOptions,
 ): BuilderDraftOutbox<T> {
-  const factory =
-    options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
+  const factory = options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
   let operations = Promise.resolve();
 
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
@@ -128,15 +123,11 @@ export function createBuilderDraftOutbox<T>(
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readonly");
-            const result = await requestResult(
-              transaction.objectStore(storeName).get(options.key),
-            );
+            const result = await requestResult(transaction.objectStore(storeName).get(options.key));
             await transactionResult(transaction);
             return result as BuilderDraftOutboxEntry<T> | undefined;
           },
-          () =>
-            memoryFallback.get(options.key) as
-              BuilderDraftOutboxEntry<T> | undefined,
+          () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
         ),
       ),
     write: (entry) =>
@@ -159,15 +150,15 @@ export function createBuilderDraftOutbox<T>(
             const transaction = database.transaction(storeName, "readwrite");
             const store = transaction.objectStore(storeName);
             const entry = (await requestResult(store.get(options.key))) as
-              BuilderDraftOutboxEntry<T> | undefined;
+              | BuilderDraftOutboxEntry<T>
+              | undefined;
             const cleared = entry?.mutationId === mutationId;
             if (cleared) store.delete(options.key);
             await transactionResult(transaction);
             return cleared;
           },
           () => {
-            const entry = memoryFallback.get(options.key) as
-              BuilderDraftOutboxEntry<T> | undefined;
+            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
             if (entry?.mutationId !== mutationId) return false;
             memoryFallback.delete(options.key);
             return true;
@@ -189,9 +180,7 @@ export function createBuilderDraftOutbox<T>(
             return cleared;
           },
           () => {
-            const entry = memoryFallback.get(options.key) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
+            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
             if (entry?.mutationId !== acknowledgement.mutationId) return false;
             memoryFallback.delete(options.key);
             return true;

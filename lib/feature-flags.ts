@@ -7,10 +7,7 @@ const booleanOptions = [
   { value: true, label: "Enabled" },
 ];
 
-function failClosedAdapter<ValueType, EntitiesType>(): Adapter<
-  ValueType,
-  EntitiesType
-> {
+function failClosedAdapter<ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> {
   return {
     async decide() {
       throw new Error("Vercel Flags is unavailable");
@@ -18,10 +15,7 @@ function failClosedAdapter<ValueType, EntitiesType>(): Adapter<
   };
 }
 
-function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<
-  ValueType,
-  EntitiesType
-> {
+function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> {
   let adapter: Adapter<ValueType, EntitiesType> | undefined;
 
   function resolveAdapter() {
@@ -59,8 +53,7 @@ export const builderResourceProvisioningFlag = flag<boolean>({
   key: "builder-resource-provisioning",
   adapter: managedVercelAdapter,
   defaultValue: false,
-  description:
-    "Provision selected GitHub repositories and Vercel projects before handoff.",
+  description: "Provision selected GitHub repositories and Vercel projects before handoff.",
   options: booleanOptions,
 });
 

@@ -24,9 +24,7 @@ describe("parseTokens", () => {
   });
 
   it("reads adjacent declarations and real core-theme aliases", () => {
-    expect(
-      parseTokens(`/* first */ @theme { --one: #fff; --two: var(--one); }`),
-    ).toEqual({
+    expect(parseTokens(`/* first */ @theme { --one: #fff; --two: var(--one); }`)).toEqual({
       "--one": "#fff",
       "--two": "#fff",
     });
@@ -70,9 +68,7 @@ describe("analyzeSource", () => {
         },
       ],
     });
-    expect(
-      report.observations.some((o) => o.classification === "local-control"),
-    ).toBe(false);
+    expect(report.observations.some((o) => o.classification === "local-control")).toBe(false);
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -110,11 +106,9 @@ describe("analyzeSource", () => {
         },
       ],
     });
-    expect(
-      report.observations.some((o) =>
-        o.summary.includes("outside the public variants"),
-      ),
-    ).toBe(false);
+    expect(report.observations.some((o) => o.summary.includes("outside the public variants"))).toBe(
+      false,
+    );
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -123,11 +117,9 @@ describe("analyzeSource", () => {
         }),
       ]),
     );
-    expect(
-      report.observations.some((o) =>
-        o.summary.includes("Local custom visual control"),
-      ),
-    ).toBe(false);
+    expect(report.observations.some((o) => o.summary.includes("Local custom visual control"))).toBe(
+      false,
+    );
   });
 
   it("reports public component color overrides and excludes responsive dimensions", () => {
@@ -153,9 +145,7 @@ describe("analyzeSource", () => {
         }),
       ]),
     );
-    expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(
-      false,
-    );
+    expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(false);
   });
 
   it("credits only TypeScript-proven static primitive prop values", () => {
@@ -173,10 +163,7 @@ describe("analyzeSource", () => {
       ],
     });
     const labels = report.observations.filter(
-      (o) =>
-        o.dimension === "api" &&
-        o.classification === "prop" &&
-        o.summary.includes("label"),
+      (o) => o.dimension === "api" && o.classification === "prop" && o.summary.includes("label"),
     );
     expect(labels.map((o) => o.verdict).sort()).toEqual([
       "conforming",

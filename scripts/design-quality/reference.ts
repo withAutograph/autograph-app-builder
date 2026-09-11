@@ -70,11 +70,8 @@ function exportTargets(value: unknown): string[] {
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
 }
 
-function packageEntryPoints(
-  pkg: PackageJson,
-): Array<{ suffix: string; target: string }> {
-  if (typeof pkg.exports === "string")
-    return [{ suffix: "", target: pkg.exports }];
+function packageEntryPoints(pkg: PackageJson): Array<{ suffix: string; target: string }> {
+  if (typeof pkg.exports === "string") return [{ suffix: "", target: pkg.exports }];
   if (pkg.exports && typeof pkg.exports === "object") {
     const entries = Object.entries(pkg.exports as Record<string, unknown>)
       .filter(([key]) => key === "." || key.startsWith("./"))
@@ -88,21 +85,13 @@ function packageEntryPoints(
     const root = exportTargets(pkg.exports);
     if (root.length) return root.map((target) => ({ suffix: "", target }));
   }
-  return pkg.types || pkg.main
-    ? [{ suffix: "", target: pkg.types ?? pkg.main! }]
-    : [];
+  return pkg.types || pkg.main ? [{ suffix: "", target: pkg.types ?? pkg.main! }] : [];
 }
 
-async function aliasEntryPoints(
-  root: string,
-  limitations: string[],
-): Promise<EntryPoint[]> {
+async function aliasEntryPoints(root: string, limitations: string[]): Promise<EntryPoint[]> {
   let parsed: ts.ParsedCommandLine;
   try {
-    const config = ts.readConfigFile(
-      join(root, "tsconfig.json"),
-      ts.sys.readFile,
-    );
+    const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
     if (config.error) throw new Error();
     parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   } catch {
@@ -131,14 +120,9 @@ async function aliasEntryPoints(
 
 function sourcePath(packageRoot: string, target: string): string | undefined {
   const base = resolve(packageRoot, target);
-  const possibilities = [
-    base,
-    ...sourceExtensions.map((extension) => base + extension),
-  ];
+  const possibilities = [base, ...sourceExtensions.map((extension) => base + extension)];
   if (!extname(base))
-    possibilities.push(
-      ...sourceExtensions.map((extension) => join(base, `index${extension}`)),
-    );
+    possibilities.push(...sourceExtensions.map((extension) => join(base, `index${extension}`)));
   return possibilities.find(existsSync);
 }
 
@@ -148,8 +132,7 @@ function literalValues(type: ts.Type): string[] | undefined {
   );
   const values = members
     .map((member) => {
-      if (member.flags & ts.TypeFlags.StringLiteral)
-        return (member as ts.StringLiteralType).value;
+      if (member.flags & ts.TypeFlags.StringLiteral) return (member as ts.StringLiteralType).value;
       if (member.flags & ts.TypeFlags.NumberLiteral)
         return String((member as ts.NumberLiteralType).value);
       return undefined;
@@ -166,17 +149,13 @@ function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
   );
   if (
     !members.length ||
-    members.some(
-      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
-    )
+    members.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
   )
     return undefined;
   const kinds = new Set<"string" | "number" | "boolean">();
   for (const member of members) {
-    if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral))
-      kinds.add("string");
-    else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral))
-      kinds.add("number");
+    if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) kinds.add("string");
+    else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)) kinds.add("number");
     else if (member.flags & ts.TypeFlags.BooleanLike) kinds.add("boolean");
     else return undefined;
   }
@@ -195,12 +174,8 @@ function propsForExport(
   const propsType = checker.getTypeOfSymbolAtLocation(parameter, location);
   const props: Record<string, PublicProp> = {};
   for (const property of checker.getPropertiesOfType(propsType)) {
-    const declaration =
-      property.valueDeclaration ?? property.declarations?.[0] ?? location;
-    const propertyType = checker.getTypeOfSymbolAtLocation(
-      property,
-      declaration,
-    );
+    const declaration = property.valueDeclaration ?? property.declarations?.[0] ?? location;
+    const propertyType = checker.getTypeOfSymbolAtLocation(property, declaration);
     const values = literalValues(propertyType);
     const primitive = values ? undefined : primitiveKinds(propertyType);
     props[property.getName()] = {
@@ -238,9 +213,7 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
       }))
       .filter((entry): entry is EntryPoint => Boolean(entry.path));
     if (!entries.length) {
-      limitations.push(
-        `Could not resolve a TypeScript public entry point for ${pkg.name}.`,
-      );
+      limitations.push(`Could not resolve a TypeScript public entry point for ${pkg.name}.`);
       continue;
     }
     const program = ts.createProgram(
@@ -272,8 +245,7 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
       skipLibCheck: true,
     });
     const source = program.getSourceFile(entry.path);
-    const moduleSymbol =
-      source && program.getTypeChecker().getSymbolAtLocation(source);
+    const moduleSymbol = source && program.getTypeChecker().getSymbolAtLocation(source);
     if (!source || !moduleSymbol) {
       limitations.push(
         `Could not load TypeScript exports for ${entry.module}; its public types are unassessed.`,
@@ -300,10 +272,7 @@ function reliableExpressionType(
   seen = new Set<ts.Type>(),
 ): boolean {
   if (depth > 5 || seen.has(type)) return false;
-  if (
-    type.flags &
-    (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter)
-  )
+  if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
     return false;
   const nextSeen = new Set(seen);
   nextSeen.add(type);
@@ -314,11 +283,8 @@ function reliableExpressionType(
   if (checker.isArrayType(type) || checker.isTupleType(type))
     return checker
       .getTypeArguments(type as ts.TypeReference)
-      .every((item) =>
-        reliableExpressionType(item, checker, depth + 1, nextSeen),
-      );
-  if (type.getCallSignatures().length || type.getConstructSignatures().length)
-    return false;
+      .every((item) => reliableExpressionType(item, checker, depth + 1, nextSeen));
+  if (type.getCallSignatures().length || type.getConstructSignatures().length) return false;
   if (!(type.flags & ts.TypeFlags.Object)) return true;
   return checker.getPropertiesOfType(type).every((property) => {
     const declaration = property.valueDeclaration ?? property.declarations?.[0];
@@ -343,11 +309,7 @@ function reliableExpectedAssignment(
     return reliableExpressionType(expected, checker)
       ? checker.isTypeAssignableTo(actual, expected)
       : undefined;
-  if (
-    expected.types.some(
-      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
-    )
-  )
+  if (expected.types.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)))
     return undefined;
   if (expected.types.every((member) => reliableExpressionType(member, checker)))
     return checker.isTypeAssignableTo(actual, expected);
@@ -361,12 +323,9 @@ function reliableExpectedAssignment(
       ts.TypeFlags.BooleanLiteral),
   );
   if (!primitiveActual) return undefined;
-  const candidates = expected.types.filter((member) =>
-    reliableExpressionType(member, checker),
-  );
+  const candidates = expected.types.filter((member) => reliableExpressionType(member, checker));
   if (!candidates.length) return undefined;
-  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member)))
-    return true;
+  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member))) return true;
   return undefined;
 }
 
@@ -384,8 +343,7 @@ function finiteLiteralEvidence(
   seen = new Set<ts.Symbol>(),
 ): true | undefined {
   if (depth > 8) return undefined;
-  if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
-    return undefined;
+  if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return undefined;
   // A JSX element or fragment is a concrete expression with a compiler-owned
   // element type. Its descendants may still be dynamic, but that does not make
   // the outer prop callback-shaped or unresolved. Do not admit any/unknown
@@ -399,9 +357,7 @@ function finiteLiteralEvidence(
     if (
       actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
       (expected.isUnion() &&
-        expected.types.some(
-          (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
-        ))
+        expected.types.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)))
     )
       return undefined;
     return checker.isTypeAssignableTo(actual, expected) ? true : undefined;
@@ -429,32 +385,15 @@ function finiteLiteralEvidence(
       return undefined;
     const nextSeen = new Set(seen);
     nextSeen.add(symbol);
-    return finiteLiteralEvidence(
-      declaration.initializer,
-      expected,
-      checker,
-      depth + 1,
-      nextSeen,
-    );
+    return finiteLiteralEvidence(declaration.initializer, expected, checker, depth + 1, nextSeen);
   }
   // A conditional is finite only when every possible branch is independently
   // finite. The condition itself may be runtime state; TypeScript remains the
   // authority for the conditional expression's final assignability.
   if (ts.isConditionalExpression(expression))
-    return finiteLiteralEvidence(
-      expression.whenTrue,
-      expected,
-      checker,
-      depth + 1,
-      seen,
-    ) === true &&
-      finiteLiteralEvidence(
-        expression.whenFalse,
-        expected,
-        checker,
-        depth + 1,
-        seen,
-      ) === true
+    return finiteLiteralEvidence(expression.whenTrue, expected, checker, depth + 1, seen) ===
+      true &&
+      finiteLiteralEvidence(expression.whenFalse, expected, checker, depth + 1, seen) === true
       ? true
       : undefined;
   if (expected.isUnion()) {
@@ -468,8 +407,7 @@ function finiteLiteralEvidence(
       : undefined;
   }
   if (ts.isArrayLiteralExpression(expression)) {
-    if (!checker.isArrayType(expected) && !checker.isTupleType(expected))
-      return undefined;
+    if (!checker.isArrayType(expected) && !checker.isTupleType(expected)) return undefined;
     if (!expression.elements.length) return true;
     // Non-empty tuples need cardinality/rest handling; retain the conservative
     // existing path instead of approximating it here.
@@ -493,12 +431,10 @@ function finiteLiteralEvidence(
     )
       return undefined;
     for (const property of expression.properties) {
-      if (!ts.isPropertyAssignment(property) || !property.name)
-        return undefined;
+      if (!ts.isPropertyAssignment(property) || !property.name) return undefined;
       const name = ts.isIdentifier(property.name)
         ? property.name.text
-        : ts.isStringLiteral(property.name) ||
-            ts.isNumericLiteral(property.name)
+        : ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name)
           ? property.name.text
           : undefined;
       if (!name) return undefined;
@@ -511,13 +447,7 @@ function finiteLiteralEvidence(
         : checker.getIndexTypeOfType(expected, ts.IndexKind.String);
       if (!propertyType) return undefined;
       if (
-        finiteLiteralEvidence(
-          property.initializer,
-          propertyType,
-          checker,
-          depth + 1,
-          seen,
-        ) !== true
+        finiteLiteralEvidence(property.initializer, propertyType, checker, depth + 1, seen) !== true
       )
         return undefined;
     }
@@ -548,8 +478,7 @@ function jsxAttributeExpectedType(
   checker: ts.TypeChecker,
 ): ts.Type | undefined {
   const opening = attribute.parent.parent;
-  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening))
-    return undefined;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) return undefined;
   const symbol = checker.getSymbolAtLocation(opening.tagName);
   const component = symbol
     ? checker.getTypeOfSymbolAtLocation(symbol, opening.tagName)
@@ -593,10 +522,7 @@ export function checkJsxAttributes({
   implementationDiagnostics: ImplementationDiagnostic[];
 } {
   const limitations: string[] = [];
-  const config = ts.readConfigFile(
-    join(arrustedRoot, "tsconfig.json"),
-    ts.sys.readFile,
-  );
+  const config = ts.readConfigFile(join(arrustedRoot, "tsconfig.json"), ts.sys.readFile);
   if (config.error)
     return {
       attributes: [],
@@ -605,23 +531,13 @@ export function checkJsxAttributes({
       ],
       implementationDiagnostics: [],
     };
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    arrustedRoot,
-  );
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, arrustedRoot);
   const virtual = new Map(
     files
       .filter((file) => /\.tsx?$/i.test(file.path))
-      .map((file) => [
-        resolve(arrustedRoot, ".design-quality-virtual", file.path),
-        file.content,
-      ]),
+      .map((file) => [resolve(arrustedRoot, ".design-quality-virtual", file.path), file.content]),
   );
-  const host = ts.createCompilerHost(
-    { ...parsed.options, jsx: ts.JsxEmit.Preserve },
-    true,
-  );
+  const host = ts.createCompilerHost({ ...parsed.options, jsx: ts.JsxEmit.Preserve }, true);
   const originalFileExists = host.fileExists.bind(host);
   const originalReadFile = host.readFile.bind(host);
   const originalGetSourceFile = host.getSourceFile.bind(host);
@@ -631,13 +547,7 @@ export function checkJsxAttributes({
     const content = virtual.get(path);
     return content === undefined
       ? originalGetSourceFile(path, languageVersion)
-      : ts.createSourceFile(
-          path,
-          content,
-          languageVersion,
-          true,
-          ts.ScriptKind.TSX,
-        );
+      : ts.createSourceFile(path, content, languageVersion, true, ts.ScriptKind.TSX);
   };
   try {
     const program = ts.createProgram(
@@ -656,8 +566,7 @@ export function checkJsxAttributes({
         if (
           ts.isJsxAttribute(node) &&
           node.initializer &&
-          ((ts.isJsxExpression(node.initializer) &&
-            node.initializer.expression) ||
+          ((ts.isJsxExpression(node.initializer) && node.initializer.expression) ||
             ts.isStringLiteral(node.initializer))
         ) {
           const expression = ts.isJsxExpression(node.initializer)
@@ -667,20 +576,12 @@ export function checkJsxAttributes({
             ? checker.getStringLiteralType(node.initializer.text)
             : checker.getTypeAtLocation(expression);
           let expected = checker.getContextualType(expression);
-          if (
-            !expected ||
-            expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
-          )
+          if (!expected || expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
             expected = jsxAttributeExpectedType(node, checker);
           const key = {
             path:
               files.find(
-                (file) =>
-                  resolve(
-                    arrustedRoot,
-                    ".design-quality-virtual",
-                    file.path,
-                  ) === path,
+                (file) => resolve(arrustedRoot, ".design-quality-virtual", file.path) === path,
               )?.path ?? path,
             start: node.getStart(source),
           };
@@ -695,9 +596,7 @@ export function checkJsxAttributes({
             (item) => ![2322, 2353].includes(item.code),
           );
           for (const item of implementationOnlyDiagnostics) {
-            const position = source.getLineAndCharacterOfPosition(
-              item.start ?? 0,
-            );
+            const position = source.getLineAndCharacterOfPosition(item.start ?? 0);
             implementationDiagnostics.push({
               path: key.path,
               line: position.line + 1,
@@ -706,8 +605,8 @@ export function checkJsxAttributes({
               message: ts.flattenDiagnosticMessageText(item.messageText, " "),
             });
           }
-          const safetyDiagnostics = implementationOnlyDiagnostics.filter(
-            (item) => [2531, 2532, 18047, 18048].includes(item.code),
+          const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
+            [2531, 2532, 18047, 18048].includes(item.code),
           );
           const propDiagnostics = attributeDiagnostics.filter((item) =>
             [2322, 2353].includes(item.code),
@@ -725,9 +624,7 @@ export function checkJsxAttributes({
               verdict: "nonconforming",
               reason: `TypeScript prop error: ${propDiagnostics
                 .slice(0, 3)
-                .map((item) =>
-                  ts.flattenDiagnosticMessageText(item.messageText, " "),
-                )
+                .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
                 .join("; ")}`,
             });
           else if (!expected)
@@ -773,12 +670,7 @@ export function checkJsxAttributes({
                     : propDiagnostics.length
                       ? `TypeScript prop error: ${propDiagnostics
                           .slice(0, 3)
-                          .map((item) =>
-                            ts.flattenDiagnosticMessageText(
-                              item.messageText,
-                              " ",
-                            ),
-                          )
+                          .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
                           .join("; ")}`
                       : "The static JSX expression is not assignable to the selected Arrusted prop type.",
                 });

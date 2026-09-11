@@ -3730,10 +3730,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -3907,10 +3904,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5128,10 +5122,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -5305,10 +5296,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6526,10 +6514,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -6703,10 +6688,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -7924,10 +7906,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -8101,10 +8080,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -9322,10 +9298,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -10540,10 +10513,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -11236,10 +11206,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12109,10 +12076,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -12805,10 +12769,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -13678,10 +13639,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -14896,10 +14854,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -15765,11 +15720,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -16115,11 +16066,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -20023,10 +19970,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -20200,10 +20144,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -21421,10 +21362,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -21598,10 +21536,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -22819,10 +22754,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -22996,10 +22928,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -24217,10 +24146,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -24394,10 +24320,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -25615,10 +25538,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -26833,10 +26753,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -27529,10 +27446,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -28402,10 +28316,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29098,10 +29009,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -29971,10 +29879,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -31189,10 +31094,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32058,11 +31960,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -32408,11 +32306,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36316,10 +36210,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -36493,10 +36384,7 @@
             "category": "color",
             "computed": "rgb(129, 146, 255)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-action-primary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-action-primary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37714,10 +37602,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -37891,10 +37776,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -39112,10 +38994,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -39289,10 +39168,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -40510,10 +40386,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -40687,10 +40560,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -41908,10 +41778,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -43126,10 +42993,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -43822,10 +43686,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -44695,10 +44556,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -45391,10 +45249,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -46264,10 +46119,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -47482,10 +47334,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -48351,11 +48200,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {
@@ -48701,11 +48546,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unassessed",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "inherited-or-unknown"
           },
           {

@@ -20,9 +20,7 @@ const authorizationSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (
-      Boolean(value.code_challenge) !== Boolean(value.code_challenge_method)
-    ) {
+    if (Boolean(value.code_challenge) !== Boolean(value.code_challenge_method)) {
       context.addIssue({
         code: "custom",
         message: "PKCE challenge and method must be supplied together.",
@@ -41,16 +39,11 @@ const approvalRelaySchema = z
   })
   .strict();
 
-export function signLocalOAuthApproval(
-  input: z.infer<typeof approvalRelaySchema>,
-  secret: string,
-) {
-  const payload = Buffer.from(
-    JSON.stringify(approvalRelaySchema.parse(input)),
-  ).toString("base64url");
-  const signature = createHmac("sha256", secret)
-    .update(payload)
-    .digest("base64url");
+export function signLocalOAuthApproval(input: z.infer<typeof approvalRelaySchema>, secret: string) {
+  const payload = Buffer.from(JSON.stringify(approvalRelaySchema.parse(input))).toString(
+    "base64url",
+  );
+  const signature = createHmac("sha256", secret).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
 
@@ -58,25 +51,15 @@ export function signFreshLocalOAuthApproval(
   input: Omit<z.infer<typeof approvalRelaySchema>, "expiresAt">,
   secret: string,
 ) {
-  return signLocalOAuthApproval(
-    { ...input, expiresAt: Date.now() + 5 * 60_000 },
-    secret,
-  );
+  return signLocalOAuthApproval({ ...input, expiresAt: Date.now() + 5 * 60_000 }, secret);
 }
 
-export function verifyLocalOAuthApproval(
-  value: string,
-  secret: string,
-  now = Date.now(),
-) {
+export function verifyLocalOAuthApproval(value: string, secret: string, now = Date.now()) {
   const [payload, signature, extra] = value.split(".");
   if (!payload || !signature || extra) throw new Error("invalid-approval");
   const expected = createHmac("sha256", secret).update(payload).digest();
   const provided = Buffer.from(signature, "base64url");
-  if (
-    provided.length !== expected.length ||
-    !timingSafeEqual(provided, expected)
-  )
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
     throw new Error("invalid-approval");
   const result = approvalRelaySchema.parse(
     JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
@@ -95,12 +78,10 @@ export function parseLocalOAuthAuthorization(input: {
 }): { provider: LocalOAuthProvider; authorization: LocalOAuthAuthorization } {
   const provider = localOAuthProviderSchema.parse(input.provider);
   const authorization = authorizationSchema.parse(input.values);
-  const expectedClientId =
-    provider === "github" ? input.githubClientId : input.vercelClientId;
+  const expectedClientId = provider === "github" ? input.githubClientId : input.vercelClientId;
   if (
     authorization.client_id !== expectedClientId ||
-    authorization.redirect_uri !==
-      `${input.appOrigin}/api/auth/callback/${provider}`
+    authorization.redirect_uri !== `${input.appOrigin}/api/auth/callback/${provider}`
   ) {
     throw new Error("Local OAuth authorization binding is invalid.");
   }

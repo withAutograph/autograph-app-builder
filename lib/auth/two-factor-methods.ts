@@ -18,8 +18,7 @@ export const TWO_FACTOR_PLUGIN_ID = "twoFactor";
  * Only the non-sensitive method names are stored, never a code, token, or the
  * two-factor cookie, which stays HTTP-only.
  */
-export const TWO_FACTOR_METHODS_STORAGE_KEY =
-  "better-auth-ui.two-factor-methods";
+export const TWO_FACTOR_METHODS_STORAGE_KEY = "better-auth-ui.two-factor-methods";
 
 type TwoFactorRedirect = {
   twoFactorRedirect: true;

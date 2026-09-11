@@ -25,8 +25,7 @@ export type DesktopSize = { width: number; height: number };
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^([1-9]\d*)x([1-9]\d*)$/.exec(value);
-  if (!match)
-    throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
+  if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
   const width = Number(match[1]);
   const height = Number(match[2]);
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
@@ -57,17 +56,13 @@ export const scenariosSchema = z.array(
           selector: z.string().optional(),
           value: z.string().optional(),
         })
-        .refine(
-          (s) => Boolean(s.selector || (s.role && s.name)),
-          "Select a role/name or selector",
-        ),
+        .refine((s) => Boolean(s.selector || (s.role && s.name)), "Select a role/name or selector"),
     ),
     expect: z.object({ text: z.string().optional() }).optional(),
   }),
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
-export type Category =
-  "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
+export type Category = "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
 export const properties: Record<string, Category> = {
   color: "color",
   "background-color": "color",
@@ -89,19 +84,13 @@ export const properties: Record<string, Category> = {
   "border-top-color": "border",
   "box-shadow": "shadow",
 };
-export function classifyStyle(
-  values: string[],
-  computed: string,
-  tokenValues: string[],
-) {
+export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
   const unique = [...new Set(values)];
   if (unique.length !== 1) return "unassessed" as const;
   const value = unique[0]!;
   if (/var\(--/.test(value)) return "token-reference" as const;
   if (
-    /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/.test(
-      value,
-    ) ||
+    /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/.test(value) ||
     /%|\d(?:\.\d+)?fr\b/.test(value)
   )
     return "structural" as const;
@@ -171,26 +160,19 @@ export const sourcePath = (value: string | undefined) => {
   if (!value) return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === "file:"
-      ? decodeURIComponent(url.pathname)
-      : url.pathname;
+    return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
   } catch {
     return value.split(/[?#]/, 1)[0];
   }
 };
 
-export const generatedSource = (
-  path: string | undefined,
-  generated: string[],
-) => {
+export const generatedSource = (path: string | undefined, generated: string[]) => {
   if (!path) return false;
   const clean = path.replace(/\\/g, "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replace(/\\/g, "/");
     return Boolean(
-      expected &&
-      (clean === expected ||
-        clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
+      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
     );
   });
 };
@@ -198,9 +180,7 @@ export const generatedSource = (
 // A stylesheet URL alone is not provenance. The only shared source family we
 // recognise in browser evidence is the checked-in Arrusted design-system tree.
 export const arrustedSharedSource = (path: string | undefined) =>
-  Boolean(
-    path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/),
-  );
+  Boolean(path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
 
 type CssSourceFile = { path: string; content: string };
 
@@ -217,8 +197,7 @@ export function mappedSharedCssRule(input: {
   sharedCssRules: CssRuleEvidence[];
   sharedCssSourceFiles: CssSourceFile[];
 }) {
-  const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } =
-    input;
+  const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } = input;
   if (!map || !mapped || value === undefined) return undefined;
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
   if (typeof sourceContent !== "string") return undefined;
@@ -256,9 +235,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(
-      finite.map((motion) => motion.finished.catch(() => undefined)),
-    );
+    await Promise.all(finite.map((motion) => motion.finished.catch(() => undefined)));
   });
 }
 
@@ -278,17 +255,10 @@ export async function measurePage(page: Page) {
     const visible = (el: Element) => {
       const r = el.getBoundingClientRect(),
         s = getComputedStyle(el);
-      return (
-        r.width > 0 &&
-        r.height > 0 &&
-        s.visibility !== "hidden" &&
-        s.display !== "none"
-      );
+      return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
     const label = (el: Element) =>
-      (el.getAttribute("aria-label") || el.textContent || el.tagName)
-        .trim()
-        .slice(0, 160);
+      (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
     const findings: Array<{
       kind: string;
       description: string;
@@ -299,15 +269,9 @@ export async function measurePage(page: Page) {
       if (!visible(el)) return [];
       const style = getComputedStyle(el);
       const axes: Array<"x" | "y"> = [];
-      if (
-        el.scrollWidth > el.clientWidth + 2 &&
-        /auto|scroll/.test(style.overflowX)
-      )
+      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(style.overflowX))
         axes.push("x");
-      if (
-        el.scrollHeight > el.clientHeight + 2 &&
-        /auto|scroll/.test(style.overflowY)
-      )
+      if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/.test(style.overflowY))
         axes.push("y");
       return axes.map((axis) => ({
         el,
@@ -327,9 +291,7 @@ export async function measurePage(page: Page) {
         reviewRequired: true,
       });
     const controls = [
-      ...document.querySelectorAll(
-        "button,input,select,textarea,a[href],[role=button]",
-      ),
+      ...document.querySelectorAll("button,input,select,textarea,a[href],[role=button]"),
     ].filter(visible);
     for (const el of controls) {
       let parent = el.parentElement;
@@ -337,10 +299,7 @@ export async function measurePage(page: Page) {
         const s = getComputedStyle(parent),
           a = el.getBoundingClientRect(),
           b = parent.getBoundingClientRect();
-        if (
-          /hidden|clip/.test(s.overflowX) &&
-          (a.left < b.left - 2 || a.right > b.right + 2)
-        ) {
+        if (/hidden|clip/.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
           findings.push({
             kind: "possible-clipping",
             description: `${label(el)} extends beyond a clipped ancestor.`,
@@ -352,28 +311,17 @@ export async function measurePage(page: Page) {
         parent = parent.parentElement;
       }
     }
-    for (const table of document.querySelectorAll(
-      "table,[role=table],[role=grid]",
-    )) {
-      const headers = [
-        ...table.querySelectorAll("th,[role=columnheader]"),
-      ].filter(visible);
+    for (const table of document.querySelectorAll("table,[role=table],[role=grid]")) {
+      const headers = [...table.querySelectorAll("th,[role=columnheader]")].filter(visible);
       const row = [...table.querySelectorAll("tr,[role=row]")].find((r) =>
         r.querySelector("td,[role=cell],[role=gridcell]"),
       );
       const cells = row
-        ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(
-            visible,
-          )
+        ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(visible)
         : [];
       if (headers.length === cells.length)
         headers.forEach((h, i) => {
-          if (
-            Math.abs(
-              h.getBoundingClientRect().left -
-                cells[i]!.getBoundingClientRect().left,
-            ) > 4
-          )
+          if (Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4)
             findings.push({
               kind: "possible-column-misalignment",
               description: `Column ${label(h)} and its first cell have different left edges.`,
@@ -387,12 +335,7 @@ export async function measurePage(page: Page) {
       for (let j = i + 1; j < Math.min(controls.length, 150); j++) {
         const a = controls[i]!,
           b = controls[j]!;
-        if (
-          a.parentElement !== b.parentElement ||
-          a.contains(b) ||
-          b.contains(a)
-        )
-          continue;
+        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
         const x = a.getBoundingClientRect(),
           y = b.getBoundingClientRect();
         if (
@@ -476,10 +419,7 @@ export async function measureStyles(
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
   try {
-    const headers = new Map<
-      string,
-      { sourceURL?: string; sourceMapURL?: string }
-    >();
+    const headers = new Map<string, { sourceURL?: string; sourceMapURL?: string }>();
     session.on(
       "CSS.styleSheetAdded",
       ({
@@ -503,9 +443,7 @@ export async function measureStyles(
         .send("CSS.getStyleSheetText", { styleSheetId })
         .then((result: { text: string }) => result.text)
         .catch(() => "");
-      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(
-        css,
-      )?.[1];
+      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
       const url = header?.sourceMapURL || declared;
@@ -543,11 +481,8 @@ export async function measureStyles(
           parsed &&
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
-          parsed.sources.every(
-            (source: unknown) => typeof source === "string",
-          ) &&
-          (parsed.sourceRoot === undefined ||
-            typeof parsed.sourceRoot === "string") &&
+          parsed.sources.every((source: unknown) => typeof source === "string") &&
+          (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
         )
           map = parsed;
@@ -562,22 +497,17 @@ export async function measureStyles(
       nodeId: root.nodeId,
       selector: "body,body *",
     });
-    const { nodeIds: interactiveNodeIds } = await session.send(
-      "DOM.querySelectorAll",
-      {
-        nodeId: root.nodeId,
-        selector:
-          "button,input,select,textarea,a[href],[role=button],[role=link]",
-      },
-    );
+    const { nodeIds: interactiveNodeIds } = await session.send("DOM.querySelectorAll", {
+      nodeId: root.nodeId,
+      selector: "button,input,select,textarea,a[href],[role=button],[role=link]",
+    });
     const interactiveNodes = new Set(interactiveNodeIds);
     // Resolve tokens in the active browser theme. A detached element only sees a
     // flattened default cascade and is misleading for dark or inherited themes.
     const normalized = await page.evaluate(
       ({ tokens, properties }) => {
         const el = document.createElement("span");
-        el.style.cssText =
-          "position:absolute;visibility:hidden;pointer-events:none";
+        el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
         document.body.appendChild(el);
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
@@ -585,9 +515,7 @@ export async function measureStyles(
           for (const [name] of Object.entries(tokens)) {
             const relevant = prop.includes("color")
               ? name.startsWith("--color-")
-              : prop.includes("font") ||
-                  prop.includes("line") ||
-                  prop.includes("letter")
+              : prop.includes("font") || prop.includes("line") || prop.includes("letter")
                 ? /--(font|text|leading|tracking)/.test(name)
                 : prop.includes("radius")
                   ? name.includes("radius")
@@ -631,9 +559,7 @@ export async function measureStyles(
     const regions = ["top", "middle", "bottom"] as const;
     const buckets = regions.flatMap((region) =>
       [true, false].map((interactive) =>
-        candidates.filter(
-          (item) => item.region === region && item.interactive === interactive,
-        ),
+        candidates.filter((item) => item.region === region && item.interactive === interactive),
       ),
     );
     // Reserve controls before using a round-robin budget across each rendered
@@ -659,11 +585,7 @@ export async function measureStyles(
       const described = await session.send("DOM.describeNode", { nodeId });
       const signature = domClassSignature(described.node);
       const generatedSignature = signature
-        ? uniqueIntrinsicSignature(
-            generatedClassSignatures,
-            signature.tag,
-            signature.classes,
-          )
+        ? uniqueIntrinsicSignature(generatedClassSignatures, signature.tag, signature.classes)
         : undefined;
       const signatureOrigin = signature
         ? signatureAttribution(
@@ -676,9 +598,7 @@ export async function measureStyles(
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
-      const cv = Object.fromEntries(
-        computed.computedStyle.map((p) => [p.name, p.value]),
-      );
+      const cv = Object.fromEntries(computed.computedStyle.map((p) => [p.name, p.value]));
       if (cv.display === "none" || cv.visibility === "hidden") continue;
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
@@ -690,24 +610,16 @@ export async function measureStyles(
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
             m.rule.origin !== "user-agent" &&
-            !(m.rule.media ?? []).some((media) =>
-              media.mediaList?.every((q) => !q.active),
-            ),
+            !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
         );
-        const inherited = /^(font-|line-height|letter-spacing|color$)/.test(
-          property,
-        )
+        const inherited = /^(font-|line-height|letter-spacing|color$)/.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
-              (i.matchedCSSRules ?? []).filter(
-                (m) => m.rule.origin !== "user-agent",
-              ),
+              (i.matchedCSSRules ?? []).filter((m) => m.rule.origin !== "user-agent"),
             )
           : [];
         const own = rules.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter(
-              (p) => p.name === property && !p.disabled && p.parsedOk !== false,
-            )
+            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
             .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const needsGapFallback =
@@ -721,8 +633,7 @@ export async function measureStyles(
             )
           : [];
         const unsupportedGap = gapShorthands.some(
-          (declaration) =>
-            declaration.value.trim() && !singleGapValue(declaration.value),
+          (declaration) => declaration.value.trim() && !singleGapValue(declaration.value),
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -749,12 +660,7 @@ export async function measureStyles(
             ? ownEvidence
             : inherited.flatMap((m) =>
                 m.rule.style.cssProperties
-                  .filter(
-                    (p) =>
-                      p.name === property &&
-                      !p.disabled &&
-                      p.parsedOk !== false,
-                  )
+                  .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
                   .map((p) => ({
                     p,
                     rule: m.rule,
@@ -776,9 +682,7 @@ export async function measureStyles(
         const rule = uniqueDeclarationEntries[0]?.rule;
         const selector = uniqueDeclarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
-        const path = sourcePath(
-          styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
-        );
+        const path = sourcePath(styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined);
         const declaration = uniqueDeclarationEntries[0]?.p;
         const styleMap = await sourceMapFor(styleSheetId);
         // CDP omits CSSProperty.range in some backends. A rule range can only
@@ -788,9 +692,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
-              !entry.disabled &&
-              entry.parsedOk !== false &&
-              typeof entry.text === "string",
+              !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
             : undefined);
@@ -826,18 +728,14 @@ export async function measureStyles(
                   : undefined,
                 (rule?.style.cssProperties ?? []).filter(
                   (entry) =>
-                    !entry.disabled &&
-                    entry.parsedOk !== false &&
-                    typeof entry.text === "string",
+                    !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
                 ),
               )
             : undefined;
-        const mappedSourceContent =
-          mapped && styleMap?.sourcesContent?.[mapped.sourceIndex];
+        const mappedSourceContent = mapped && styleMap?.sourcesContent?.[mapped.sourceIndex];
         const mappedFile = generatedCssSourceFiles.find(
           (file) =>
-            generatedSource(mappedPath, [file.path]) &&
-            file.content === mappedSourceContent,
+            generatedSource(mappedPath, [file.path]) && file.content === mappedSourceContent,
         );
         const mappedGenerated = Boolean(
           mappedFile &&
@@ -861,8 +759,7 @@ export async function measureStyles(
                 sharedCssSourceFiles,
               })
             : undefined;
-        const generated =
-          generatedByPath || Boolean(generatedRule) || mappedGenerated;
+        const generated = generatedByPath || Boolean(generatedRule) || mappedGenerated;
         const inheritedDeclaration =
           !inline.length && !own.length && uniqueDeclarationEntries.length > 0;
         let classification: string = classifyStyle(
@@ -878,8 +775,7 @@ export async function measureStyles(
           )
         )
           classification = "unassessed";
-        if (classification === "token-reference")
-          classification = "semantic-token-reference";
+        if (classification === "token-reference") classification = "semantic-token-reference";
         if (generated && classification === "unmatched-literal")
           classification = "generated-override";
         if (
@@ -890,10 +786,7 @@ export async function measureStyles(
           classification !== "structural"
         )
           classification = "inherited-shared";
-        if (
-          classification === "unassessed" ||
-          classification === "unmatched-literal"
-        )
+        if (classification === "unassessed" || classification === "unmatched-literal")
           classification = "unknown";
         // Structural layout values are not adherence evidence, so exclude them
         // entirely rather than allowing downstream global scores to count them.
@@ -957,12 +850,10 @@ export async function measureStyles(
           id: `style-${nodeId}-${property}`,
           dimension: "styling",
           verdict:
-            provenance === "generated" &&
-            classification === "semantic-token-reference"
+            provenance === "generated" && classification === "semantic-token-reference"
               ? "conforming"
               : provenance === "generated" &&
-                  (classification === "matching-literal" ||
-                    classification === "generated-override")
+                  (classification === "matching-literal" || classification === "generated-override")
                 ? "nonconforming"
                 : "unassessed",
           provenance,
@@ -990,23 +881,16 @@ export async function measureStyles(
             "generated-override",
             "inherited-shared",
             "unknown",
-          ].map((key) => [
-            key,
-            items.filter((o) => o.classification === key).length,
-          ]),
+          ].map((key) => [key, items.filter((o) => o.classification === key).length]),
         );
-        const assessed = items.filter(
-          (item) => item.verdict !== "unassessed",
-        ).length;
+        const assessed = items.filter((item) => item.verdict !== "unassessed").length;
         return [
           category,
           {
             counts,
             assessed,
             total: items.length,
-            coveragePercent: items.length
-              ? Math.round((assessed / items.length) * 100)
-              : null,
+            coveragePercent: items.length ? Math.round((assessed / items.length) * 100) : null,
             tokenReferencePercent: assessed
               ? Math.round(
                   (items.filter(
@@ -1035,8 +919,7 @@ export async function measureStyles(
           (["top", "middle", "bottom"] as const).map((region) => [
             region,
             {
-              eligible: candidates.filter((item) => item.region === region)
-                .length,
+              eligible: candidates.filter((item) => item.region === region).length,
               sampled: selected.filter((item) => item.region === region).length,
             },
           ]),
@@ -1091,8 +974,7 @@ export async function capturePreview(input: {
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
       const response = await page.goto(input.url, { waitUntil: "load" });
-      if (response && !response.ok())
-        throw new Error(`Preview returned HTTP ${response.status()}`);
+      if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index++) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -1107,13 +989,12 @@ export async function capturePreview(input: {
             for (const step of scenario.steps) {
               const locator = step.selector
                 ? page.locator(step.selector)
-                : page.getByRole(
-                    step.role as Parameters<Page["getByRole"]>[0],
-                    { name: step.name, exact: true },
-                  );
+                : page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
+                    name: step.name,
+                    exact: true,
+                  });
               if (step.action === "click") await locator.click();
-              else if (step.action === "fill")
-                await locator.fill(step.value ?? "");
+              else if (step.action === "fill") await locator.fill(step.value ?? "");
               else await locator.selectOption({ label: step.value ?? "" });
             }
             if (scenario.expect?.text)

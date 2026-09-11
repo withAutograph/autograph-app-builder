@@ -37,7 +37,7 @@ export function prototypePreviewRequestUrl(input: {
   environment: Environment;
   requestUrl: string;
 }): string {
-  const {environment} = input;
+  const { environment } = input;
   const exactDevelopmentAdapter =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
@@ -102,10 +102,7 @@ function emptyPreviewNotFoundResponse(): Response {
 function equalDigest(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left, "hex");
   const rightBytes = Buffer.from(right, "hex");
-  return (
-    leftBytes.byteLength === rightBytes.byteLength &&
-    timingSafeEqual(leftBytes, rightBytes)
-  );
+  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
 }
 
 function previewUrl(input: {
@@ -124,13 +121,9 @@ function previewUrl(input: {
   } catch {
     return undefined;
   }
-  const candidate = new URL(
-    `/preview/${parsed.data.sessionId}/${parsed.data.digest}`,
-    `${origin}/`,
-  ).href;
-  return publicPrototypePreviewUrlSchema.safeParse(candidate).success
-    ? candidate
-    : undefined;
+  const candidate = new URL(`/preview/${parsed.data.sessionId}/${parsed.data.digest}`, `${origin}/`)
+    .href;
+  return publicPrototypePreviewUrlSchema.safeParse(candidate).success ? candidate : undefined;
 }
 
 export function attachPrototypePreviewUrl(
@@ -209,9 +202,9 @@ export function createServicePrototypePreviewResolver(input: {
       const result = await service.get({ sessionId, cursor: 0, limit: 1 });
       if (result.prototype !== undefined) return result.prototype;
       if (attempt < 4)
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 100);
-      });
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 100);
+        });
     }
     return undefined;
   };

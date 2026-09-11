@@ -55,8 +55,7 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
  * @param view - Current auth view. Selects registration on `"signUp"`.
  */
 export function PasskeyButton({ view }: PasskeyButtonProps) {
-  const { authClient, localization, redirectTo, navigate } =
-    useAuth<PasskeyAuthClient>();
+  const { authClient, localization, redirectTo, navigate } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
   // A completed WebAuthn ceremony cannot safely be replayed. In particular,
@@ -74,11 +73,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     enabled: view !== "signUp",
     onSuccess: () =>
       navigate({
-        to: resolvePasskeyRedirectTo(
-          redirectTo,
-          window.location.search,
-          window.location.origin,
-        ),
+        to: resolvePasskeyRedirectTo(redirectTo, window.location.search, window.location.origin),
       }),
   });
 
@@ -160,10 +155,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       if (resultError) throw resultError;
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
-      if (
-        authenticatedRedirectTo &&
-        isPasskeyOnboardingAlreadyAuthenticated(error)
-      ) {
+      if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {
         navigate({ to: authenticatedRedirectTo, replace: true });
         return;
       }
@@ -190,10 +182,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         {pending ? <Spinner /> : <Fingerprint />}
         {failed
           ? "Passkey failed (try again)"
-          : localization.auth.continueWith.replace(
-              "{{provider}}",
-              passkeyLocalization.passkey,
-            )}
+          : localization.auth.continueWith.replace("{{provider}}", passkeyLocalization.passkey)}
       </Button>
     </div>
   );

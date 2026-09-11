@@ -2,25 +2,16 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
-import {
-  appBuilderWorkflowState,
-  workflowWorkspace,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, workflowWorkspace } from "@/lib/agent/workflow-state";
 import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-function isReviewedPhase(
-  state: ReturnType<typeof appBuilderWorkflowState.get>,
-): state is Extract<
+function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
-    phase:
-      | "reviewed"
-      | "publication_pending"
-      | "publication_failed"
-      | "published_local";
+    phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local";
   }
 > {
   return (
@@ -32,10 +23,7 @@ function isReviewedPhase(
 }
 
 function statusReceipt(
-  state: Exclude<
-    ReturnType<typeof appBuilderWorkflowState.get>,
-    { phase: "empty" }
-  >,
+  state: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
   recovered: boolean,
 ) {
   return {
@@ -185,17 +173,13 @@ export default defineTool({
       sandbox,
       receipt: durable.sourceReceipt,
       expectedWorkspace: durable.workspace,
-      ...(durable.githubSource === undefined
-        ? {}
-        : { githubSource: durable.githubSource }),
+      ...(durable.githubSource === undefined ? {} : { githubSource: durable.githubSource }),
     });
     if (
       !canAutoSelectDevelopmentSource() &&
       JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
     )
-      throw new Error(
-        "The durable workflow receipt does not match the sandbox workspace.",
-      );
+      throw new Error("The durable workflow receipt does not match the sandbox workspace.");
     return {
       ...statusReceipt(durable, false),
       workspace: observed,

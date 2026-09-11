@@ -2,10 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
-import {
-  EmulationApproval,
-  emulationApprovalStyles,
-} from "@/app/ui/emulation-approval";
+import { EmulationApproval, emulationApprovalStyles } from "@/app/ui/emulation-approval";
 import {
   localOAuthProviderDetails,
   parseLocalOAuthAuthorization,
@@ -67,9 +64,7 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
     emulation.relaySecret,
   );
   const environment =
-    emulation.mode === "preview"
-      ? ("Preview deployment" as const)
-      : ("Local development" as const);
+    emulation.mode === "preview" ? ("Preview deployment" as const) : ("Local development" as const);
   const actionLabel = `Continue with ${details.name}`;
 
   return (
@@ -92,14 +87,9 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
             {actionLabel}
           </a>
         ) : (
-          <form
-            method="post"
-            action={`/local-oauth/${parsed.provider}/approve`}
-          >
+          <form method="post" action={`/local-oauth/${parsed.provider}/approve`}>
             {Object.entries(parsed.authorization).map(([name, value]) =>
-              value ? (
-                <input key={name} type="hidden" name={name} value={value} />
-              ) : null,
+              value ? <input key={name} type="hidden" name={name} value={value} /> : null,
             )}
             <button className={emulationApprovalStyles.button} type="submit">
               {actionLabel}

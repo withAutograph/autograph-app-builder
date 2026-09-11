@@ -10,51 +10,36 @@ import {
 
 const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
-const connectionId =
-  connectionIndex >= 0 ? process.argv[connectionIndex + 1] : undefined;
+const connectionId = connectionIndex >= 0 ? process.argv[connectionIndex + 1] : undefined;
 const endpointIndex = process.argv.indexOf("--endpoint");
-const suppliedEndpoint =
-  endpointIndex >= 0 ? process.argv[endpointIndex + 1] : undefined;
+const suppliedEndpoint = endpointIndex >= 0 ? process.argv[endpointIndex + 1] : undefined;
 const endpoint =
-  suppliedEndpoint ??
-  (connectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
+  suppliedEndpoint ?? (connectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
 
-if (connectionIndex >= 0 && !connectionId)
-  throw new Error("Missing value for --connection-id.");
-if (endpointIndex >= 0 && !suppliedEndpoint)
-  throw new Error("Missing value for --endpoint.");
+if (connectionIndex >= 0 && !connectionId) throw new Error("Missing value for --connection-id.");
+if (endpointIndex >= 0 && !suppliedEndpoint) throw new Error("Missing value for --endpoint.");
 
 if (connectionId && suppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");
 }
 
 if (portable.version !== AUTOGRAPH_PACKAGE_VERSION)
-  throw new Error(
-    `plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`,
-  );
+  throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
 
-if (suppliedEndpoint)
-  assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
+if (suppliedEndpoint) assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
 
 const portableMcpPath = resolve("mcp.json");
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf8"));
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
-if (
-  portableServerNames.length !== 1 ||
-  portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME
-)
-  throw new Error(
-    `mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`,
-  );
+if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME)
+  throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
 if (
   !portableServer ||
   typeof portableServer !== "object" ||
   portableServer.type !== "streamable-http"
 )
-  throw new Error(
-    `${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`,
-  );
+  throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifest = {
@@ -89,16 +74,11 @@ const manifest = {
     screenshots: [],
   },
 };
-const apps = connectionId
-  ? { apps: { "app-builder": { id: connectionId } } }
-  : { apps: {} };
+const apps = connectionId ? { apps: { "app-builder": { id: connectionId } } } : { apps: {} };
 await mkdir(resolve(".codex-plugin"), { recursive: true });
 await writeFile(
   resolve(".codex-plugin/plugin.json"),
-    await formatWithOxfmt(
-      ".codex-plugin/plugin.json",
-      JSON.stringify(manifest),
-    ),
+  await formatWithOxfmt(".codex-plugin/plugin.json", JSON.stringify(manifest)),
 );
 if (endpoint) {
   portableServer.url = endpoint;
@@ -122,10 +102,7 @@ if (endpoint) {
     ),
   );
 }
-await writeFile(
-  resolve(".app.json"),
-  await formatWithOxfmt(".app.json", JSON.stringify(apps)),
-);
+await writeFile(resolve(".app.json"), await formatWithOxfmt(".app.json", JSON.stringify(apps)));
 console.log(
   connectionId
     ? "Generated the OpenAI adapter with its registered MCP connection."

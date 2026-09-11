@@ -5,10 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderDraftOutbox } from "./builder-draft-outbox";
-import {
-  type BuilderDraftAutosave,
-  useBuilderDraftAutosave,
-} from "./use-builder-draft-autosave";
+import { type BuilderDraftAutosave, useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 
 type Snapshot = { brief: string };
 
@@ -16,9 +13,8 @@ let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 function Harness({
   outbox,
@@ -97,9 +93,7 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("clears only the exact acknowledged outbox snapshot", async () => {
-    let entry:
-      | import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot>
-      | undefined;
+    let entry: import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       read: vi.fn(async () => entry),
       write: vi.fn(async (next) => {
@@ -140,9 +134,7 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("discards queued recovery work superseded by a remote revision", async () => {
-    let entry:
-      | import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot>
-      | undefined;
+    let entry: import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       read: vi.fn(async () => entry),
       write: vi.fn(async (next) => {
@@ -164,9 +156,7 @@ describe("useBuilderDraftAutosave", () => {
       value.schedule({ brief: "local" });
     });
     await act(async () => {
-      await expect(value.discardSupersededByRemoteRevision(1)).resolves.toBe(
-        true,
-      );
+      await expect(value.discardSupersededByRemoteRevision(1)).resolves.toBe(true);
     });
 
     expect(outbox.clearIfMutationId).toHaveBeenCalledTimes(1);

@@ -12,19 +12,15 @@ import {
 
 async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
-  const {origin} = new URL(
-    process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth",
-  );
+  const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
   const state = await resolveWorkspaceOnboardingState(() =>
     ensurePreviewOAuthDeploymentSessionOrganization({
       environment: process.env,
       headers: requestHeaders,
     }),
   );
-  if (state.status === "anonymous")
-    redirect(signInForWorkspaceRedirect(origin));
-  if (state.status !== "ready")
-    redirect(workspaceOnboardingRedirect(origin, state.status));
+  if (state.status === "anonymous") redirect(signInForWorkspaceRedirect(origin));
+  if (state.status !== "ready") redirect(workspaceOnboardingRedirect(origin, state.status));
 
   return null;
 }

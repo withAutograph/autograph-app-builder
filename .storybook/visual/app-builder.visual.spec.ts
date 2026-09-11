@@ -1,9 +1,7 @@
 import { expect, test, type Page } from "playwright/test";
 
-const authenticatedStory =
-  "/iframe.html?id=create-app-flow-page--default&viewMode=story";
-const anonymousStory =
-  "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";
+const authenticatedStory = "/iframe.html?id=create-app-flow-page--default&viewMode=story";
+const anonymousStory = "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";
 
 async function openAuthenticatedStory(page: Page) {
   await page.goto(authenticatedStory);
@@ -15,9 +13,7 @@ async function openAuthenticatedStory(page: Page) {
 
 async function openAnonymousStory(page: Page) {
   await page.goto(anonymousStory);
-  await expect(
-    page.getByRole("heading", { name: "Build an app" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();
   await expect(page.getByLabel("What should this app do?")).toBeVisible();
 }
 

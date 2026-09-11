@@ -11,8 +11,7 @@ export async function completeAuthorization(
   try {
     const { provider } = await context.params;
     const emulation = readProviderEmulation(process.env);
-    if (!emulation)
-      throw new Error("Local authentication emulation is unavailable.");
+    if (!emulation) throw new Error("Local authentication emulation is unavailable.");
     const appOrigin = emulation.canonicalOrigin;
     const parsed = parseLocalOAuthAuthorization({
       provider,
@@ -59,8 +58,7 @@ export async function completeAuthorization(
       path: destination.pathname === `/api/auth/callback/${parsed.provider}`,
       codeCount: destination.searchParams.getAll("code").length,
       stateCount: destination.searchParams.getAll("state").length,
-      stateMatches:
-        destination.searchParams.get("state") === parsed.authorization.state,
+      stateMatches: destination.searchParams.get("state") === parsed.authorization.state,
     };
     if (
       !callbackValidation.origin ||

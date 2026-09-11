@@ -90,22 +90,19 @@ describe("Preview activation prerequisite contract", () => {
       resource: "https://builder.example.test/mcp",
       authSecret: "a".repeat(32),
     },
-  ])(
-    "supports a closed confirmation-bound $action receipt",
-    async (request) => {
-      const plan = planPreviewActivation(request);
-      const receipt = await executePreviewActivation({
-        request: {
-          ...request,
-          confirmationDigest: plan.requiredConfirmationDigest,
-        },
-        store: store(),
-        now: () => now,
-      });
-      expect(receipt.action).toBe(request.action);
-      expect(receipt.status).toBe("applied");
-    },
-  );
+  ])("supports a closed confirmation-bound $action receipt", async (request) => {
+    const plan = planPreviewActivation(request);
+    const receipt = await executePreviewActivation({
+      request: {
+        ...request,
+        confirmationDigest: plan.requiredConfirmationDigest,
+      },
+      store: store(),
+      now: () => now,
+    });
+    expect(receipt.action).toBe(request.action);
+    expect(receipt.status).toBe("applied");
+  });
 
   it("rejects stale, mismatched, unknown, and cross-origin inputs", async () => {
     const plan = planPreviewActivation(invite);
@@ -176,9 +173,7 @@ describe("Preview activation prerequisite contract", () => {
 
   it("has PostgreSQL quote the validated role credential without exposing failed SQL", async () => {
     const cli = await readFile("lib/db/preview-activation-cli.mts", "utf8");
-    expect(cli).toContain(
-      "select format(${template}::text, ${roleName}::text, ${password}::text)",
-    );
+    expect(cli).toContain("select format(${template}::text, ${roleName}::text, ${password}::text)");
     expect(cli).toContain("await sql.unsafe(statement)");
     expect(cli).toContain("Runtime database role configuration failed.");
     expect(cli).not.toContain("sql.unsafe(input.password)");
@@ -201,9 +196,7 @@ describe("Preview activation prerequisite contract", () => {
     expect(provision).toContain("'local:oauth:github'");
     expect(provision).toContain("'github'");
     expect(provision).not.toContain("hashPassword");
-    expect(provision).not.toMatch(
-      /hosted_workspace_membership[^;]*created_at/u,
-    );
+    expect(provision).not.toMatch(/hosted_workspace_membership[^;]*created_at/u);
     expect(migration).toContain('"updated_at" timestamptz NOT NULL');
     expect(migration).not.toContain('"created_at"');
   });

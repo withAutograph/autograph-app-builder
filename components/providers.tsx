@@ -23,10 +23,7 @@ import { DEFAULT_AUTH_REDIRECT_TO } from "@/lib/auth/preview-auth-ui";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
-export function authPlugins(
-  passkeysEnabled: boolean,
-  themeHook: typeof useTheme,
-) {
+export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
   return [
     {
       ...oauthProviderPlugin(),
@@ -76,16 +73,12 @@ export function Providers({
         <AuthProvider
           authClient={authClient}
           Link={Link}
-          navigate={({ to, replace }) =>
-            replace ? router.replace(to) : router.push(to)
-          }
+          navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
           plugins={authPlugins(passkeysEnabled, useTheme)}
           emailAndPassword={{ enabled: false }}
           redirectTo={DEFAULT_AUTH_REDIRECT_TO}
           socialProviders={[
-            ...(vercelAuthEnabled
-              ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }]
-              : []),
+            ...(vercelAuthEnabled ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }] : []),
             ...(githubAuthEnabled ? (["github"] as const) : []),
           ]}
         >

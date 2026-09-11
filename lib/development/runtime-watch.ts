@@ -26,10 +26,7 @@ const runtimePrefixes = [
 ] as const;
 
 export function isDevelopmentRuntimePath(path: string) {
-  return (
-    exactRuntimeFiles.has(path) ||
-    runtimePrefixes.some((prefix) => path.startsWith(prefix))
-  );
+  return exactRuntimeFiles.has(path) || runtimePrefixes.some((prefix) => path.startsWith(prefix));
 }
 
 async function runtimePaths(repositoryRoot: string) {
@@ -110,8 +107,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       checking = true;
       try {
         if (
-          (await fingerprintDevelopmentRuntime(input.repositoryRoot)) !==
-          input.expectedFingerprint
+          (await fingerprintDevelopmentRuntime(input.repositoryRoot)) !== input.expectedFingerprint
         ) {
           finish(true);
           return;

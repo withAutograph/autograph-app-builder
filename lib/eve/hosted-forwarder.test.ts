@@ -5,9 +5,7 @@ import { readHostedForwarderSubject } from "./hosted-forwarder";
 describe("hosted Eve forwarder binding", () => {
   it("does not accept forwarded identity outside explicit hosted mode", () => {
     expect(readHostedForwarderSubject({})).toBeUndefined();
-    expect(
-      readHostedForwarderSubject({ EVE_HOSTED_ADAPTER: "0" }),
-    ).toBeUndefined();
+    expect(readHostedForwarderSubject({ EVE_HOSTED_ADAPTER: "0" })).toBeUndefined();
   });
 
   it("binds one exact project environment without wildcards", () => {
@@ -19,9 +17,7 @@ describe("hosted Eve forwarder binding", () => {
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
       }),
-    ).toBe(
-      "owner:withautograph:project:autograph-app-builder:environment:preview",
-    );
+    ).toBe("owner:withautograph:project:autograph-app-builder:environment:preview");
   });
 
   it("binds the exact Production subject only when both environments agree", () => {
@@ -33,9 +29,7 @@ describe("hosted Eve forwarder binding", () => {
         EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
       }),
-    ).toBe(
-      "owner:withautograph:project:autograph-app-builder:environment:production",
-    );
+    ).toBe("owner:withautograph:project:autograph-app-builder:environment:production");
   });
 
   it("fails closed on missing, wildcard, or unsupported bindings", () => {

@@ -45,9 +45,7 @@ export function providerEmulationSeed(input: SeedInput): {
         app_id: 12345,
         slug: "autograph-app-builder",
         name: "Autograph App Builder",
-        ...(input.githubAppPrivateKey
-          ? { private_key: input.githubAppPrivateKey }
-          : {}),
+        ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
         installations: [
           {
             installation_id: EMULATED_GITHUB_INSTALLATION_ID,

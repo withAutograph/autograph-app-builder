@@ -8,18 +8,10 @@ import {
   validateBuildReadyAppSpec,
 } from "./app-spec-validation";
 
-function completeAppSpec(
-  handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE,
-): string {
-  return `${REQUIRED_APP_SPEC_HEADINGS.filter(
-    (heading) => heading !== "Build handoff",
-  )
+function completeAppSpec(handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE): string {
+  return `${REQUIRED_APP_SPEC_HEADINGS.filter((heading) => heading !== "Build handoff")
     .map((heading) => `## ${heading}\n\nProduct decision.`)
-    .join("\n\n")}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(
-    handoff,
-    null,
-    2,
-  )}\n\`\`\``;
+    .join("\n\n")}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(handoff, null, 2)}\n\`\`\``;
 }
 
 describe("build-ready AppSpec validation", () => {
@@ -36,19 +28,14 @@ describe("build-ready AppSpec validation", () => {
   ])("accepts harmless handoff Markdown %s", (_label, headingAndFence) => {
     expect(
       validateBuildReadyAppSpec(
-        completeAppSpec().replace(
-          "## Build handoff\n\n```json",
-          headingAndFence,
-        ),
+        completeAppSpec().replace("## Build handoff\n\n```json", headingAndFence),
       ),
     ).toEqual({ valid: true });
   });
 
   it("accepts CRLF and trailing whitespace", () => {
     expect(
-      validateBuildReadyAppSpec(
-        `${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `,
-      ),
+      validateBuildReadyAppSpec(`${completeAppSpec().replaceAll("\n", "\r\n")}\r\n  `),
     ).toEqual({ valid: true });
   });
 
@@ -80,16 +67,12 @@ describe("build-ready AppSpec validation", () => {
   ])("rejects %s after the terminal handoff", (_label, content) => {
     expect(validateBuildReadyAppSpec(content)).toMatchObject({
       valid: false,
-      issues: expect.arrayContaining([
-        expect.objectContaining({ code: "build_handoff_format" }),
-      ]),
+      issues: expect.arrayContaining([expect.objectContaining({ code: "build_handoff_format" })]),
     });
   });
 
   it("returns exact repair instructions for missing sections and handoff", () => {
-    const result = validateBuildReadyAppSpec(
-      "## Status and prototype\n\nA first prototype.",
-    );
+    const result = validateBuildReadyAppSpec("## Status and prototype\n\nA first prototype.");
     expect(result.valid).toBe(false);
     if (result.valid) throw new Error("expected invalid AppSpec");
     expect(result.issues).toEqual(

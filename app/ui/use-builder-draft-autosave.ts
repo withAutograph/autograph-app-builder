@@ -2,16 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  BuilderDraftOutbox,
-  BuilderDraftOutboxEntry,
-} from "./builder-draft-outbox";
+import type { BuilderDraftOutbox, BuilderDraftOutboxEntry } from "./builder-draft-outbox";
 
-export type BuilderDraftAutosaveStatus =
-  "idle" | "saving" | "saved" | "offline" | "error";
+export type BuilderDraftAutosaveStatus = "idle" | "saving" | "saved" | "offline" | "error";
 
-export type BuilderDraftAutosaveReason =
-  "debounce" | "flush" | "visibilitychange" | "pagehide";
+export type BuilderDraftAutosaveReason = "debounce" | "flush" | "visibilitychange" | "pagehide";
 
 export type BuilderDraftSaveContext<T> = {
   mutationId: string;
@@ -108,21 +103,13 @@ export function useBuilderDraftAutosave<T>(
     isOnline.current = options.isOnline;
     onVisibilityFlush.current = options.onVisibilityFlush;
     onAcknowledged.current = options.onAcknowledged;
-  }, [
-    options.isOnline,
-    options.onAcknowledged,
-    options.onVisibilityFlush,
-    options.save,
-  ]);
+  }, [options.isOnline, options.onAcknowledged, options.onVisibilityFlush, options.save]);
 
-  const updateStatus = useCallback(
-    (next: BuilderDraftAutosaveStatus, nextError?: Error) => {
-      if (!mounted.current) return;
-      setStatus(next);
-      setError(nextError);
-    },
-    [],
-  );
+  const updateStatus = useCallback((next: BuilderDraftAutosaveStatus, nextError?: Error) => {
+    if (!mounted.current) return;
+    setStatus(next);
+    setError(nextError);
+  }, []);
 
   const online = useCallback(() => {
     const check = isOnline.current ?? browserIsOnline;
@@ -144,7 +131,7 @@ export function useBuilderDraftAutosave<T>(
             return false;
           }
 
-          const {current} = queued;
+          const { current } = queued;
           queued.current = undefined;
           updateStatus("saving");
           try {
@@ -172,9 +159,7 @@ export function useBuilderDraftAutosave<T>(
             if (!queued.current) queued.current = current;
             updateStatus(
               online() ? "error" : "offline",
-              caught instanceof Error
-                ? caught
-                : new Error("builder-draft-save-failed"),
+              caught instanceof Error ? caught : new Error("builder-draft-save-failed"),
             );
             return false;
           }
@@ -194,9 +179,7 @@ export function useBuilderDraftAutosave<T>(
   );
 
   const flush = useCallback(
-    async (
-      reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush",
-    ) => {
+    async (reason: Exclude<BuilderDraftAutosaveReason, "debounce"> = "flush") => {
       // A newer snapshot can be queued in the narrow window while an older
       // dispatch is completing. In particular, provider redirects must not
       // continue until that newer snapshot has received its own acknowledgement.
@@ -232,10 +215,7 @@ export function useBuilderDraftAutosave<T>(
     [dispatch, online, options.debounceMs, options.outbox, updateStatus],
   );
 
-  const restorePending = useCallback(
-    () => options.outbox.read(),
-    [options.outbox],
-  );
+  const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
@@ -259,16 +239,9 @@ export function useBuilderDraftAutosave<T>(
 
   const discardSupersededByRemoteRevision = useCallback(
     async (revision: number) => {
-      if (
-        !Number.isSafeInteger(revision) ||
-        revision <= acknowledgedRevision.current
-      )
-        return false;
+      if (!Number.isSafeInteger(revision) || revision <= acknowledgedRevision.current) return false;
       acknowledgedRevision.current = revision;
-      if (
-        queued.current &&
-        (queued.current.baseRevision ?? 0) < revision
-      )
+      if (queued.current && (queued.current.baseRevision ?? 0) < revision)
         queued.current = undefined;
       const pending = await options.outbox.read();
       if (pending && (pending.baseRevision ?? 0) < revision)

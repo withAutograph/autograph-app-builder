@@ -2,10 +2,7 @@ import { always } from "eve/tools/approval";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  appBuilderWorkflowState,
-  updateExactWorkflow,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import {
   assertExactBranchWorktreeProposal,
   exactBranchWorktreeProposalMatch,
@@ -36,12 +33,8 @@ export default defineTool({
     });
     if (!exactBranchWorktreeProposalMatch(proposal, expected))
       throw new Error("Publication preconditions changed after approval.");
-    let pendingWorkflow:
-      ReturnType<typeof appBuilderWorkflowState.get> | undefined;
-    const relativeRoot = workflow.applyReceipt.applyRoot.replace(
-      /^\/workspace\//u,
-      "",
-    );
+    let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
+    const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await publishReviewedChangeSetToBranchWorktree({
       proposal,
       sourceReceipt: workflow.sourceReceipt,
@@ -50,18 +43,13 @@ export default defineTool({
       readOverlayFile: (path) =>
         ctx
           .getSandbox()
-          .then((sandbox) =>
-            sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
-          ),
+          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       hooks: {
         beforePendingJournal:
           hasTestCapability("simulated-publication") &&
-          workflow.appSpec.appId ===
-            "branch-publication-pre-journal-interruption"
+          workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
             ? () => {
-                throw new Error(
-                  "Fixture interruption before durable branch publication intent.",
-                );
+                throw new Error("Fixture interruption before durable branch publication intent.");
               }
             : undefined,
         afterPendingJournal: () => {
@@ -70,9 +58,7 @@ export default defineTool({
             operation: "branch publication pending recording",
             transition: (current) => {
               if (current.phase !== "reviewed")
-                throw new Error(
-                  "The reviewed workflow changed before publication.",
-                );
+                throw new Error("The reviewed workflow changed before publication.");
               return {
                 ...current,
                 phase: "branch_publication_pending",
@@ -87,9 +73,7 @@ export default defineTool({
         workflow.appSpec.appId === "branch-publication-lost-response"
           ? {
               beforeTerminalJournal: () => {
-                throw new Error(
-                  "Fixture interruption after branch-worktree side effects.",
-                );
+                throw new Error("Fixture interruption after branch-worktree side effects.");
               },
               preserveNonterminalJournal: true,
             }
@@ -98,19 +82,14 @@ export default defineTool({
         workflow.appSpec.appId === "branch-publication-partial-failure"
           ? {
               afterPathMutation: (_path: string, index: number) => {
-                if (index === 0)
-                  throw new Error(
-                    "Fixture partial branch-worktree apply failure.",
-                  );
+                if (index === 0) throw new Error("Fixture partial branch-worktree apply failure.");
               },
             }
           : {}),
       },
     });
     if (pendingWorkflow === undefined)
-      throw new Error(
-        "The durable branch publication intent was not bound to workflow state.",
-      );
+      throw new Error("The durable branch publication intent was not bound to workflow state.");
     const exactPendingWorkflow = pendingWorkflow;
     updateExactWorkflow({
       expected: exactPendingWorkflow,
@@ -119,14 +98,9 @@ export default defineTool({
         if (
           current.phase !== "branch_publication_pending" ||
           current.branchPublicationCallId !== ctx.callId ||
-          !exactBranchWorktreeProposalMatch(
-            current.branchPublicationProposal,
-            proposal,
-          )
+          !exactBranchWorktreeProposalMatch(current.branchPublicationProposal, proposal)
         )
-          throw new Error(
-            "The pending publication workflow changed before terminal recording.",
-          );
+          throw new Error("The pending publication workflow changed before terminal recording.");
         return result.status === "succeeded"
           ? {
               ...current,

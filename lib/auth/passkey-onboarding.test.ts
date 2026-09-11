@@ -88,45 +88,35 @@ async function insertOnboardingContext(
 }
 
 async function requestOnboardingContext(
-  fetchImplementation: Awaited<
-    ReturnType<typeof setupOnboarding>
-  >["customFetchImpl"],
+  fetchImplementation: Awaited<ReturnType<typeof setupOnboarding>>["customFetchImpl"],
   headers?: Headers,
 ) {
   const requestHeaders = new Headers(headers);
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
-  return fetchImplementation(
-    `${integrationConfig.origin}/api/auth/passkey/onboarding-context`,
-    {
-      method: "POST",
-      headers: requestHeaders,
-      body: "{}",
-    },
-  );
+  return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/onboarding-context`, {
+    method: "POST",
+    headers: requestHeaders,
+    body: "{}",
+  });
 }
 
 async function requestRegistrationVerification(
-  fetchImplementation: Awaited<
-    ReturnType<typeof setupOnboarding>
-  >["customFetchImpl"],
+  fetchImplementation: Awaited<ReturnType<typeof setupOnboarding>>["customFetchImpl"],
   headers: Headers,
   createSession?: true,
 ) {
   const requestHeaders = new Headers(headers);
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
-  return fetchImplementation(
-    `${integrationConfig.origin}/api/auth/passkey/verify-registration`,
-    {
-      method: "POST",
-      headers: requestHeaders,
-      body: JSON.stringify({
-        response: {},
-        ...(createSession ? { createSession } : {}),
-      }),
-    },
-  );
+  return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/verify-registration`, {
+    method: "POST",
+    headers: requestHeaders,
+    body: JSON.stringify({
+      response: {},
+      ...(createSession ? { createSession } : {}),
+    }),
+  });
 }
 
 describe("passkey-first onboarding authority", () => {
@@ -281,16 +271,9 @@ describe("passkey-first onboarding authority", () => {
 
   it("binds signed contexts to deployment, origin, RP ID, and expiry", () => {
     const config = readPasskeyOnboardingConfig(previewEnvironment)!;
-    const issued = createPasskeyOnboardingToken(
-      config,
-      new Date("2026-08-30T12:00:00Z"),
-    );
+    const issued = createPasskeyOnboardingToken(config, new Date("2026-08-30T12:00:00Z"));
     expect(
-      verifyPasskeyOnboardingToken(
-        issued.token,
-        config,
-        new Date("2026-08-30T12:04:59Z"),
-      ),
+      verifyPasskeyOnboardingToken(issued.token, config, new Date("2026-08-30T12:04:59Z")),
     ).toMatchObject({ digest: issued.digest, payload: issued.payload });
     expect(
       verifyPasskeyOnboardingToken(
@@ -307,11 +290,7 @@ describe("passkey-first onboarding authority", () => {
       ),
     ).toBeNull();
     expect(
-      verifyPasskeyOnboardingToken(
-        issued.token,
-        config,
-        new Date("2026-08-30T12:05:01Z"),
-      ),
+      verifyPasskeyOnboardingToken(issued.token, config, new Date("2026-08-30T12:05:01Z")),
     ).toBeNull();
   });
 
@@ -350,9 +329,7 @@ describe("passkey-first onboarding authority", () => {
     expect(rows.map(({ id }) => id)).toContain("future-other-deployment");
     expect(rows.map(({ id }) => id)).not.toContain("expired-other-deployment");
     expect(rows.map(({ id }) => id)).not.toContain("boundary-other-deployment");
-    const issued = rows.find(
-      ({ deploymentId }) => deploymentId === integrationConfig.deploymentId,
-    );
+    const issued = rows.find(({ deploymentId }) => deploymentId === integrationConfig.deploymentId);
     expect(rows).toHaveLength(2);
     expect(issued).toMatchObject({
       createdAt: fixedNow,
@@ -368,9 +345,9 @@ describe("passkey-first onboarding authority", () => {
       typeof issuePasskeyOnboardingContext
     >[0];
 
-    await expect(
-      issuePasskeyOnboardingContext(adapter, previewConfig, fixedNow),
-    ).rejects.toBe(cleanupFailure);
+    await expect(issuePasskeyOnboardingContext(adapter, previewConfig, fixedNow)).rejects.toBe(
+      cleanupFailure,
+    );
     expect(deleteMany).toHaveBeenCalledWith({
       model: "passkeyOnboarding",
       where: [
@@ -386,8 +363,7 @@ describe("passkey-first onboarding authority", () => {
 
   it("rejects context issuance for an authenticated session before cleanup", async () => {
     const now = vi.fn(() => fixedNow);
-    const { customFetchImpl, db, signInWithTestUser } =
-      await setupOnboarding(now);
+    const { customFetchImpl, db, signInWithTestUser } = await setupOnboarding(now);
     await insertOnboardingContext(db, {
       id: "expired-before-session-conflict",
       deploymentId: "retired_deployment",
@@ -420,13 +396,9 @@ describe("passkey-first onboarding authority", () => {
       userId: "user_1",
       name: "Additional passkey",
     });
-    expect(
-      authenticatedPasskeyRegistration(undefined, "onboarding-context"),
-    ).toBeNull();
+    expect(authenticatedPasskeyRegistration(undefined, "onboarding-context")).toBeNull();
 
-    expect(() =>
-      authenticatedPasskeyRegistration("user_1", "onboarding-context"),
-    ).toThrowError(
+    expect(() => authenticatedPasskeyRegistration("user_1", "onboarding-context")).toThrowError(
       expect.objectContaining({
         status: "CONFLICT",
         statusCode: 409,
@@ -441,11 +413,7 @@ describe("passkey-first onboarding authority", () => {
     const { customFetchImpl, signInWithTestUser } = await setupOnboarding();
     const { headers } = await signInWithTestUser();
 
-    const response = await requestRegistrationVerification(
-      customFetchImpl,
-      headers,
-      true,
-    );
+    const response = await requestRegistrationVerification(customFetchImpl, headers, true);
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
@@ -457,10 +425,7 @@ describe("passkey-first onboarding authority", () => {
     const { customFetchImpl, signInWithTestUser } = await setupOnboarding();
     const { headers } = await signInWithTestUser();
 
-    const response = await requestRegistrationVerification(
-      customFetchImpl,
-      headers,
-    );
+    const response = await requestRegistrationVerification(customFetchImpl, headers);
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({

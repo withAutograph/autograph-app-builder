@@ -36,9 +36,7 @@ describe("Eve input response mapping", () => {
 
 describe("local Eve acceptance", () => {
   it("lists recent work and resumes the selected local session", async () => {
-    const events = [
-      { type: "session.waiting", data: {} },
-    ] as MessageStreamEvent[];
+    const events = [{ type: "session.waiting", data: {} }] as MessageStreamEvent[];
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
@@ -69,9 +67,7 @@ describe("local Eve acceptance", () => {
       clientRequestId: "recent-start",
     });
     await vi.waitFor(async () => {
-      await expect(
-        service.list({ cursor: 0, limit: 10 }),
-      ).resolves.toMatchObject({
+      await expect(service.list({ cursor: 0, limit: 10 })).resolves.toMatchObject({
         sessions: [
           {
             sessionId: started.sessionId,
@@ -335,9 +331,7 @@ describe("local Eve acceptance", () => {
         expect.objectContaining({ type: "status", status: "waiting" }),
       ]),
     });
-    await expect(
-      reloadedService.list({ cursor: 0, limit: 10 }),
-    ).resolves.toMatchObject({
+    await expect(reloadedService.list({ cursor: 0, limit: 10 })).resolves.toMatchObject({
       sessions: [
         expect.objectContaining({
           sessionId: started.sessionId,
@@ -414,9 +408,7 @@ describe("local Eve acceptance", () => {
         });
       },
     };
-    const resumedEvents = [
-      { type: "session.waiting", data: {} },
-    ] as MessageStreamEvent[];
+    const resumedEvents = [{ type: "session.waiting", data: {} }] as MessageStreamEvent[];
     const resumedResponse = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
@@ -466,9 +458,7 @@ describe("local Eve acceptance", () => {
     await expect(
       restarted.get({ sessionId: started.sessionId, cursor: 0, limit: 100 }),
     ).resolves.toMatchObject({ status: "waiting", cursor: 1 });
-    await expect(
-      restarted.cancel({ sessionId: started.sessionId }),
-    ).resolves.toMatchObject({
+    await expect(restarted.cancel({ sessionId: started.sessionId })).resolves.toMatchObject({
       status: "waiting",
     });
     expect(session.cancel).not.toHaveBeenCalled();
@@ -882,9 +872,9 @@ describe("local Eve acceptance", () => {
         clientRequestId: "prompt-lifecycle-3",
       }),
     ).rejects.toThrow("complete outstanding Eve input batch");
-    await expect(
-      service.cancel({ sessionId: start.sessionId }),
-    ).resolves.toMatchObject({ sessionId: start.sessionId });
+    await expect(service.cancel({ sessionId: start.sessionId })).resolves.toMatchObject({
+      sessionId: start.sessionId,
+    });
     await vi.waitFor(async () => {
       await expect(
         service.get({ sessionId: start.sessionId, cursor: 0, limit: 100 }),
@@ -979,21 +969,17 @@ describe("local Eve acceptance", () => {
         for (const event of events) yield event;
       },
     });
-    const initial = stream([
-      { type: "session.waiting", data: {} } as MessageStreamEvent,
-    ]);
+    const initial = stream([{ type: "session.waiting", data: {} } as MessageStreamEvent]);
     const followUp = stream([
       {
         type: "input.requested",
         data: {
           turnId: "turn-follow-up",
-          requests: ["request-source", "request-plan", "request-preview"].map(
-            (requestId) => ({
-              requestId,
-              kind: "tool-approval",
-              prompt: requestId,
-            }),
-          ),
+          requests: ["request-source", "request-plan", "request-preview"].map((requestId) => ({
+            requestId,
+            kind: "tool-approval",
+            prompt: requestId,
+          })),
         },
       } as unknown as MessageStreamEvent,
     ]);
@@ -1002,11 +988,7 @@ describe("local Eve acceptance", () => {
         type: "input.resolved",
         data: {
           turnId: "turn-follow-up",
-          resolutions: [
-            "request-source",
-            "request-plan",
-            "request-preview",
-          ].map((requestId) => ({
+          resolutions: ["request-source", "request-plan", "request-preview"].map((requestId) => ({
             requestId,
             kind: "tool-approval",
             outcome: "approved",
@@ -1088,9 +1070,7 @@ describe("local Eve acceptance", () => {
       expect(result.status).toBe("waiting");
       expect(result.inputRequests).toBeUndefined();
       expect(
-        result.events.filter(
-          (event) => event.type === "status" && event.status === "waiting",
-        ),
+        result.events.filter((event) => event.type === "status" && event.status === "waiting"),
       ).toHaveLength(2);
       expect(result.events).toEqual(
         expect.arrayContaining([

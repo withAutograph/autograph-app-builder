@@ -2,11 +2,7 @@ import { createHash, createPrivateKey, randomBytes } from "node:crypto";
 
 import { z } from "zod";
 
-import {
-  createGitHubApp,
-  createGitHubOAuthApp,
-  createGitHubTokenOctokit,
-} from "../github/octokit";
+import { createGitHubApp, createGitHubOAuthApp, createGitHubTokenOctokit } from "../github/octokit";
 import type { HostedGitHubInstallationBinding } from "../repository/postgres-github-installation-store";
 import type { GitHubProvisionResult } from "./contracts";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
@@ -70,16 +66,11 @@ function marker(requestId: string) {
 
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  return [...randomBytes(6)]
-    .map((value) => alphabet[value % alphabet.length])
-    .join("");
+  return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
 function gitBlobSha(bytes: Uint8Array) {
-  return createHash("sha1")
-    .update(`blob ${bytes.byteLength}\0`)
-    .update(bytes)
-    .digest("hex");
+  return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
 }
 
 export function starterSourceBinding(source: StarterSource) {
@@ -106,9 +97,7 @@ export function starterSourceBinding(source: StarterSource) {
           method: source.provenance.method,
           readinessDigest: digest.parse(source.provenance.readinessDigest),
           receiptVersion: source.provenance.receiptVersion,
-          sourceReceiptDigest: digest.parse(
-            source.provenance.sourceReceiptDigest,
-          ),
+          sourceReceiptDigest: digest.parse(source.provenance.sourceReceiptDigest),
           eligibilityDigest: digest.parse(source.provenance.eligibilityDigest),
           contractDigest: digest.parse(source.provenance.contractDigest),
         },
@@ -214,12 +203,10 @@ export async function provisionGitHubRepository(input: {
     });
     const token = stringProperty(authentication, "token");
     const permissions = property(authentication, "permissions");
-    if (token.length < 20 || token.length > 512)
-      throw new Error("invalid-response");
+    if (token.length < 20 || token.length > 512) throw new Error("invalid-response");
     if (
       !record(permissions) ||
-      Object.keys(permissions).toSorted().join(",") !==
-        "administration,contents,metadata" ||
+      Object.keys(permissions).toSorted().join(",") !== "administration,contents,metadata" ||
       permissions.administration !== "write" ||
       permissions.contents !== "write" ||
       permissions.metadata !== "read"
@@ -229,19 +216,16 @@ export async function provisionGitHubRepository(input: {
   }
 
   async function verifyInstallation() {
-    const { data } = await app.octokit.request(
-      "GET /app/installations/{installation_id}",
-      { installation_id: Number(input.installation.installationId) },
-    );
+    const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
+      installation_id: Number(input.installation.installationId),
+    });
     const account = property(data, "account");
     if (
       decimalProperty(data, "id") !== input.installation.installationId ||
       decimalProperty(account, "id") !== input.installation.accountId ||
       stringProperty(account, "login") !== input.installation.accountLogin ||
       stringProperty(account, "type") !== input.installation.accountType ||
-      !["all", "selected"].includes(
-        stringProperty(data, "repository_selection"),
-      ) ||
+      !["all", "selected"].includes(stringProperty(data, "repository_selection")) ||
       property(data, "suspended_at") !== null
     )
       throw new Error("installation-inactive");
@@ -257,8 +241,7 @@ export async function provisionGitHubRepository(input: {
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
         : undefined;
-      if (expires === undefined || expires > now() + 60_000)
-        return credential.tokens.accessToken;
+      if (expires === undefined || expires > now() + 60_000) return credential.tokens.accessToken;
       if (
         !credential.tokens.refreshToken ||
         !credential.tokens.refreshTokenExpiresAt ||
@@ -287,14 +270,8 @@ export async function provisionGitHubRepository(input: {
       const accessToken = stringProperty(authentication, "token");
       const refreshToken = stringProperty(authentication, "refreshToken");
       const accessTokenExpiresAt = stringProperty(authentication, "expiresAt");
-      const refreshTokenExpiresAt = stringProperty(
-        authentication,
-        "refreshTokenExpiresAt",
-      );
-      if (
-        Date.parse(accessTokenExpiresAt) <= now() ||
-        Date.parse(refreshTokenExpiresAt) <= now()
-      )
+      const refreshTokenExpiresAt = stringProperty(authentication, "refreshTokenExpiresAt");
+      if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now())
         throw new Error("invalid-response");
       const refreshedAt = now();
       const rotated = await input.credentialStore.rotate({
@@ -380,10 +357,7 @@ export async function provisionGitHubRepository(input: {
             },
             expected: [201],
           });
-          return [
-            file.path,
-            objectId.parse(stringProperty(response.body, "sha")),
-          ] as const;
+          return [file.path, objectId.parse(stringProperty(response.body, "sha"))] as const;
         }),
       );
       for (const [path, sha] of values) blobs.set(path, sha);
@@ -438,8 +412,7 @@ export async function provisionGitHubRepository(input: {
     const commitData = property(commit.body, "commit");
     const treeData = property(commitData, "tree");
     const parents = property(commit.body, "parents");
-    if (!Array.isArray(parents) || parents.length !== 0)
-      throw new Error("commit-not-parentless");
+    if (!Array.isArray(parents) || parents.length !== 0) throw new Error("commit-not-parentless");
     const headSha = objectId.parse(stringProperty(commit.body, "sha"));
     const headTree = objectId.parse(stringProperty(treeData, "sha"));
     if (headTree !== source.sourceTree) throw new Error("source-tree-mismatch");
@@ -448,8 +421,7 @@ export async function provisionGitHubRepository(input: {
       token,
       expected: [200],
     });
-    if (property(tree.body, "truncated") !== false)
-      throw new Error("tree-truncated");
+    if (property(tree.body, "truncated") !== false) throw new Error("tree-truncated");
     const entries = property(tree.body, "tree");
     if (!Array.isArray(entries)) throw new Error("invalid-response");
     const observed = entries
@@ -489,10 +461,7 @@ export async function provisionGitHubRepository(input: {
       fullName: `${owner}/${resolvedName}`,
       url: `https://github.com/${owner}/${resolvedName}`,
       scope: {
-        type:
-          input.installation.accountType === "Organization"
-            ? "organization"
-            : "user",
+        type: input.installation.accountType === "Organization" ? "organization" : "user",
         id: input.installation.accountId,
         login: input.installation.accountLogin,
       },
@@ -508,11 +477,7 @@ export async function provisionGitHubRepository(input: {
 
   try {
     const candidates = [...input.persistedCandidates];
-    for (
-      let generated = 0;
-      candidates.length < 5 && generated < 20;
-      generated += 1
-    ) {
+    for (let generated = 0; candidates.length < 5 && generated < 20; generated += 1) {
       const candidate =
         candidates.length === 0
           ? input.requestedName
@@ -529,8 +494,7 @@ export async function provisionGitHubRepository(input: {
       const before = await repository(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
       if (before.status === 200 && !wasAbsent) continue;
-      if (before.status === 404 && !wasAbsent)
-        await input.persistAbsent(candidate);
+      if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
       if (before.status === 404) {
         const createPath =
           input.installation.accountType === "Organization"
@@ -552,8 +516,7 @@ export async function provisionGitHubRepository(input: {
           const recovered = await repository(candidate);
           if (recovered.status !== 200) continue;
         } else {
-          if (input.installation.accountType === "Organization")
-            token = await installationToken();
+          if (input.installation.accountType === "Organization") token = await installationToken();
           await writeStarter(candidate);
         }
       }

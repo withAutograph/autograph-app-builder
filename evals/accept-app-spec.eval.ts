@@ -23,9 +23,7 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.check(t.reply, includes("ready for automatic implementation planning"));
 
@@ -37,10 +35,7 @@ export default defineEval({
 
     await t.send("Prepare offline target dependencies after a lost response.");
     t.succeeded();
-    t.check(
-      t.reply,
-      includes("reused the exact durable dependency-preparation receipt"),
-    );
+    t.check(t.reply, includes("reused the exact durable dependency-preparation receipt"));
 
     await t.send("Run target identity and planning.");
     t.succeeded();
@@ -52,9 +47,7 @@ export default defineEval({
       satisfies(
         (reply) =>
           typeof reply === "string" &&
-          !/target identity|canonical proposal|digest-bound|target mutation/iu.test(
-            reply,
-          ),
+          !/target identity|canonical proposal|digest-bound|target mutation/iu.test(reply),
         "planning result stays product-facing",
       ),
     );
@@ -63,10 +56,7 @@ export default defineEval({
 
     await t.send("Retry target planning after a lost response.");
     t.succeeded();
-    t.check(
-      t.reply,
-      includes("reused the exact durable target-planning receipt"),
-    );
+    t.check(t.reply, includes("reused the exact durable target-planning receipt"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -107,9 +97,7 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryValidation = await t.send(
-      "Retry target validation after a lost response.",
-    );
+    const retryValidation = await t.send("Retry target validation after a lost response.");
     t.succeeded();
     retryValidation.notEvent("input.requested");
     t.check(t.reply, includes("quality checks are still passing"));
@@ -129,9 +117,7 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryReview = await t.send(
-      "Retry change-set acceptance after a lost response.",
-    );
+    const retryReview = await t.send("Retry change-set acceptance after a lost response.");
     t.succeeded();
     retryReview.notEvent("input.requested");
     t.check(t.reply, includes("same completed app changes remain ready"));
@@ -159,10 +145,7 @@ export default defineEval({
     t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");
     t.succeeded();
-    t.check(
-      t.reply,
-      includes("reused the exact durable local-publication receipt"),
-    );
+    t.check(t.reply, includes("reused the exact durable local-publication receipt"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

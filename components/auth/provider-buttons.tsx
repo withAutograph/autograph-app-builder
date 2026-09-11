@@ -20,10 +20,7 @@ export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
  *
  * @param socialLayout - Preferred layout for the provider buttons; `"auto"` chooses based on the number of providers.
  */
-export function ProviderButtons({
-  socialLayout = "auto",
-  view = "signIn",
-}: ProviderButtonsProps) {
+export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: ProviderButtonsProps) {
   const { socialProviders } = useAuth();
   // Better Auth starts social sign-in through a client mutation. Keep its
   // controls disabled until React has attached those event handlers. The

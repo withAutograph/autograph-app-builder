@@ -1,15 +1,7 @@
-import {
-  createRemoteJWKSet,
-  customFetch,
-  decodeProtectedHeader,
-  jwtVerify,
-} from "jose";
+import { createRemoteJWKSet, customFetch, decodeProtectedHeader, jwtVerify } from "jose";
 import { z } from "zod";
 
-import {
-  verifiedHostedClaimsSchema,
-  type VerifiedHostedClaims,
-} from "../eve/hosted-auth";
+import { verifiedHostedClaimsSchema, type VerifiedHostedClaims } from "../eve/hosted-auth";
 
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
@@ -102,30 +94,20 @@ export class BearerAuthorizationError extends Error {
 // padding. In particular, embedded padding and combined header values fail.
 const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/;
 
-export function parseStrictBearerAuthorization(
-  authorization: string | null,
-): string {
+export function parseStrictBearerAuthorization(authorization: string | null): string {
   if (authorization === null) throw new BearerAuthorizationError();
   const match = /^Bearer ([^ ]+)$/i.exec(authorization);
-  if (
-    match === null ||
-    !bearerTokenPattern.test(match[1]) ||
-    match[1].includes(",")
-  ) {
+  if (match === null || !bearerTokenPattern.test(match[1]) || match[1].includes(",")) {
     throw new BearerAuthorizationError();
   }
   return match[1];
 }
 
 export interface HostedAccessTokenVerifier {
-  verify: (input: {
-    token: string;
-    nowEpochSeconds: number;
-}) => Promise<VerifiedHostedClaims>;
+  verify: (input: { token: string; nowEpochSeconds: number }) => Promise<VerifiedHostedClaims>;
 }
 
-const oauthScopeTokenPattern =
-  /^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$/;
+const oauthScopeTokenPattern = /^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$/;
 
 /**
  * Exact remote-JWKS verifier. Redirects are rejected and the configured URL,
@@ -224,13 +206,8 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
 }
 
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
-  const metadataUrl = new URL(
-    "/.well-known/oauth-protected-resource",
-    config.resourceUrl,
-  ).href;
-  return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(
-    ", ",
-  )}`;
+  const metadataUrl = new URL("/.well-known/oauth-protected-resource", config.resourceUrl).href;
+  return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(", ")}`;
 }
 
 export function unauthorizedResponse(

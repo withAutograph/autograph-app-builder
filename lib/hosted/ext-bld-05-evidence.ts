@@ -64,15 +64,11 @@ export const extBld05EvidenceInputSchema = z
     sourceValidation: proofReferenceSchema
       .extend({
         idleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000),
-        maximumLifetimeSeconds: z.literal(
-          HOSTED_SESSION_MAX_LIFETIME_MS / 1_000,
-        ),
+        maximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1_000),
         expiredSessionDeniedBeforeTransport: z.literal(true),
         expiredSessionsExcludedFromActiveCompute: z.literal(true),
         evePackageVersion: z.literal("0.43.0"),
-        continuationCredential: z.literal(
-          "not-applicable-canonical-session-id-only",
-        ),
+        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
       })
       .strict(),
   })
@@ -87,14 +83,7 @@ export const extBld05EvidenceReceiptSchema = z
     environment: hostedDeploymentEnvironmentSchema,
     evidenceDigest: sha256Schema,
     componentReceiptDigests: z
-      .tuple([
-        sha256Schema,
-        sha256Schema,
-        sha256Schema,
-        sha256Schema,
-        sha256Schema,
-        sha256Schema,
-      ])
+      .tuple([sha256Schema, sha256Schema, sha256Schema, sha256Schema, sha256Schema, sha256Schema])
       .readonly(),
     claims: z
       .object({
@@ -106,25 +95,17 @@ export const extBld05EvidenceReceiptSchema = z
         immediateTokenRevocationClaimed: z.literal(false),
         retentionApplied: z.literal(true),
         tenantDeletionAfterDrain: z.literal(true),
-        sessionIdleTimeoutSeconds: z.literal(
-          HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000,
-        ),
-        sessionMaximumLifetimeSeconds: z.literal(
-          HOSTED_SESSION_MAX_LIFETIME_MS / 1_000,
-        ),
+        sessionIdleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000),
+        sessionMaximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1_000),
         credentialsDisclosed: z.literal(false),
-        continuationCredential: z.literal(
-          "not-applicable-canonical-session-id-only",
-        ),
+        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
         productionReadinessClaimed: z.literal(false),
       })
       .strict(),
   })
   .strict();
 
-export type ExtBld05EvidenceReceipt = z.infer<
-  typeof extBld05EvidenceReceiptSchema
->;
+export type ExtBld05EvidenceReceipt = z.infer<typeof extBld05EvidenceReceiptSchema>;
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -141,9 +122,7 @@ function digest(value: unknown): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`;
 }
 
-export function buildExtBld05EvidenceReceipt(
-  input: unknown,
-): ExtBld05EvidenceReceipt {
+export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceReceipt {
   const evidence = extBld05EvidenceInputSchema.parse(input);
   return extBld05EvidenceReceiptSchema.parse({
     format: "autograph-ext-bld-05-evidence-v1",

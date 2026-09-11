@@ -52,10 +52,7 @@
 }
 .layout {
   display: grid;
-  grid-template-columns: minmax(12rem, 16rem) minmax(0, 46rem) minmax(
-      11rem,
-      14rem
-    );
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 46rem) minmax(11rem, 14rem);
   justify-content: center;
   gap: clamp(1.5rem, 4vw, 4rem);
   margin: 0 auto;

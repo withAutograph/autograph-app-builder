@@ -12,25 +12,19 @@ if (
   process.argv[2] !== "--database-url-fd" ||
   process.argv[3] !== "0"
 ) {
-  throw new Error(
-    "hosted:storage-verify requires its private database URL fd.",
-  );
+  throw new Error("hosted:storage-verify requires its private database URL fd.");
 }
 
 const databaseUrl = readPrivateDatabaseUrl(0);
 const client = postgres(databaseUrl, hostedTaskPostgresOptions);
-const managedTables = [
-  ...new Set(hostedStorageExpectedColumns.map(([table]) => table)),
-];
+const managedTables = [...new Set(hostedStorageExpectedColumns.map(([table]) => table))];
 try {
   const readBack = await client.begin(async (transaction) => {
     await transaction`SET TRANSACTION READ ONLY`;
     const mode = await transaction<{ transactionReadOnly: string }[]>`
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
     `;
-    const migrations = await transaction<
-      Array<{ hash: string; createdAt: string }>
-    >`
+    const migrations = await transaction<Array<{ hash: string; createdAt: string }>>`
       SELECT hash, created_at::text AS "createdAt"
       FROM drizzle.__drizzle_migrations
       ORDER BY created_at, id
@@ -66,9 +60,7 @@ try {
         AND tablename = ANY(${managedTables})
       ORDER BY tablename, indexname
     `;
-    const constraints = await transaction<
-      Array<{ table: string; name: string }>
-    >`
+    const constraints = await transaction<Array<{ table: string; name: string }>>`
       SELECT relation.relname AS "table", constraint_record.conname AS "name"
       FROM pg_catalog.pg_constraint AS constraint_record
       JOIN pg_catalog.pg_class AS relation

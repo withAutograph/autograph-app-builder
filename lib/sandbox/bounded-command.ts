@@ -1,8 +1,4 @@
-import type {
-  SandboxCommandResult,
-  SandboxRunOptions,
-  SandboxSession,
-} from "eve/sandbox";
+import type { SandboxCommandResult, SandboxRunOptions, SandboxSession } from "eve/sandbox";
 
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
@@ -97,20 +93,15 @@ export async function runBoundedSandboxCommand(
     SANDBOX_EXECUTION_POLICY.command.maximumOutputBytes,
   );
   const noOutputTimeoutMs = Math.min(
-    limits?.noOutputTimeoutMs ??
-      SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
+    limits?.noOutputTimeoutMs ?? SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
     SANDBOX_EXECUTION_POLICY.command.maximumNoOutputTimeMs,
   );
   const killCleanupTimeoutMs = Math.min(
-    limits?.killCleanupTimeoutMs ??
-      SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+    limits?.killCleanupTimeoutMs ?? SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
     SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
   );
   const controller = new AbortController();
-  const wallTimeout = timeoutRejection(
-    new SandboxCommandLimitError("timeout"),
-    timeoutMs,
-  );
+  const wallTimeout = timeoutRejection(new SandboxCommandLimitError("timeout"), timeoutMs);
   const signal = options.abortSignal
     ? AbortSignal.any([options.abortSignal, controller.signal])
     : controller.signal;
@@ -140,11 +131,7 @@ export async function runBoundedSandboxCommand(
     observed();
     const stdoutPromise = collectBounded(stdoutReader, outputState, observed);
     const stderrPromise = collectBounded(stderrReader, outputState, observed);
-    const completion = Promise.all([
-      stdoutPromise,
-      stderrPromise,
-      Promise.resolve(process.wait()),
-    ]);
+    const completion = Promise.all([stdoutPromise, stderrPromise, Promise.resolve(process.wait())]);
     completion.catch(() => undefined);
     const [stdout, stderr, result] = await Promise.race([
       completion,

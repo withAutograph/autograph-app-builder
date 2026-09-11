@@ -9,11 +9,7 @@ export default defineEval({
     "A durable success written before workflow CAS is verified and terminalized without mutation redispatch.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "publication-success-recovery",
-    );
+    await prepareReviewedWorkflow(t, repository, "publication-success-recovery");
     await t.send("Publish reviewed change set locally.");
     t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");

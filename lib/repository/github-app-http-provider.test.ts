@@ -17,18 +17,12 @@ import {
   type GitHubDraftPullRequestContent,
   type FreshRepositoryProposal,
 } from "./github-publication";
-import {
-  createReviewedChangeSetReceipt,
-  type NormalizedChangeSet,
-} from "./reviewed-change-set";
+import { createReviewedChangeSetReceipt, type NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey
-  .export({ type: "pkcs8", format: "pem" })
-  .toString();
-const hash = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
@@ -162,8 +156,7 @@ function freshProposal(): FreshRepositoryProposal {
       name: "REPOSITORY_RELEASE_ENABLED" as const,
       configured: false as const,
     },
-    initialCommitMessage:
-      "Initialize repository from supported template" as const,
+    initialCommitMessage: "Initialize repository from supported template" as const,
     idempotencyKey,
     intendedOutcome: "create-private-fresh-history-repository" as const,
   };
@@ -201,8 +194,7 @@ function providerFetch(input?: {
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
-      const requested = (body as { permissions: Record<string, string> })
-        .permissions;
+      const requested = (body as { permissions: Record<string, string> }).permissions;
       return json(
         {
           token: "ghs_operation_scoped_installation_token",
@@ -287,28 +279,18 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     "mints an exact operation-scoped installation token for %s",
     async (operation, contents, workflows, pullRequests, administration) => {
       const mock = providerFetch();
-      const adapter = createGitHubAppPublicationAdapter(
-        createProvider(mock.implementation),
-      );
+      const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
       const identity = await adapter.inspectInstallation(operation);
       expect(identity.selectedRepositoryIds).toEqual(["100", "200"]);
       expect(identity.permissions).toMatchObject({ contents, workflows });
 
-      const appCall = mock.calls.find(({ url }) =>
-        url.endsWith("/app/installations/456"),
-      );
+      const appCall = mock.calls.find(({ url }) => url.endsWith("/app/installations/456"));
       const tokenCall = mock.calls.find(({ url }) =>
         url.endsWith("/app/installations/456/access_tokens"),
       );
-      expect(
-        mock.calls.every(({ url }) =>
-          url.startsWith("https://api.github.com/"),
-        ),
-      ).toBe(true);
+      expect(mock.calls.every(({ url }) => url.startsWith("https://api.github.com/"))).toBe(true);
       expect(appCall?.init.redirect).toBe("error");
-      const authorization = new Headers(appCall?.init.headers).get(
-        "authorization",
-      )!;
+      const authorization = new Headers(appCall?.init.headers).get("authorization")!;
       const jwt = authorization.replace(/^bearer /iu, "");
       expect(decodeProtectedHeader(jwt)).toEqual({ alg: "RS256", typ: "JWT" });
       expect(decodeJwt(jwt)).toMatchObject({ iss: "123" });
@@ -319,9 +301,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           contents,
           ...(workflows === "write" ? { workflows } : {}),
           actions_variables: "read",
-          ...(pullRequests === undefined
-            ? {}
-            : { pull_requests: pullRequests }),
+          ...(pullRequests === undefined ? {} : { pull_requests: pullRequests }),
           ...(administration === undefined ? {} : { administration }),
         },
       });
@@ -346,9 +326,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       token: "ghs_operation_scoped_installation_token",
     });
     expect(
-      mock.calls.find(({ url }) =>
-        url.endsWith("/app/installations/456/access_tokens"),
-      )?.body,
+      mock.calls.find(({ url }) => url.endsWith("/app/installations/456/access_tokens"))?.body,
     ).toEqual({
       repository_ids: [200],
       permissions: { contents: "read" },
@@ -369,14 +347,10 @@ describe("GitHub App fixed-origin HTTP provider", () => {
 
   it("preserves an all-repositories installation through the adapter", async () => {
     const adapter = createGitHubAppPublicationAdapter(
-      createProvider(
-        providerFetch({ repositorySelection: "all" }).implementation,
-      ),
+      createProvider(providerFetch({ repositorySelection: "all" }).implementation),
     );
 
-    await expect(
-      adapter.inspectInstallation("resolve-existing-source"),
-    ).resolves.toMatchObject({
+    await expect(adapter.inspectInstallation("resolve-existing-source")).resolves.toMatchObject({
       repositorySelection: "all",
       selectedRepositoryIds: ["100", "200"],
     });
@@ -391,20 +365,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       repositorySelection: "all",
       repositoryPages: pages,
     });
-    const adapter = createGitHubAppPublicationAdapter(
-      createProvider(mock.implementation),
-    );
+    const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
 
-    await expect(
-      adapter.inspectInstallation("resolve-existing-source"),
-    ).resolves.toMatchObject({
+    await expect(adapter.inspectInstallation("resolve-existing-source")).resolves.toMatchObject({
       repositorySelection: "all",
       selectedRepositoryIds: expect.arrayContaining(["1", "500", "501"]),
     });
     expect(
-      mock.calls.filter(({ url }) =>
-        url.includes("/installation/repositories?"),
-      ),
+      mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
     ).toHaveLength(6);
   });
 
@@ -423,9 +391,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const escalated = createGitHubAppPublicationAdapter(
       createProvider(providerFetch({ extraPermission: true }).implementation),
     );
-    await expect(
-      escalated.inspectInstallation("resolve-existing-source"),
-    ).rejects.toThrow("GitHub provider operation failed.");
+    await expect(escalated.inspectInstallation("resolve-existing-source")).rejects.toThrow(
+      "GitHub provider operation failed.",
+    );
 
     const failed = createGitHubAppPublicationAdapter(
       createProvider(providerFetch({ fail: true }).implementation),
@@ -507,11 +475,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           commit: { tree: { sha: "b".repeat(40) } },
         });
       }
-      if (
-        url.endsWith(
-          "/repos/withAutograph/example-app/actions/variables?per_page=100&page=1",
-        )
-      ) {
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
         return json({ variables: [] });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -519,9 +483,10 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(implementation);
     const { proposal, content } = unicodeDraftMaterial();
 
-    await expect(
-      provider.publishDraftPullRequest(proposal, content),
-    ).resolves.toEqual({ status: "rejected", code: "stale-base" });
+    await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
+      status: "rejected",
+      code: "stale-base",
+    });
     expect(calls).toHaveLength(4);
   });
 });

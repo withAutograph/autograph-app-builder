@@ -3,10 +3,7 @@ import type { Adherence, Observation } from "./evidence";
 export function escapeHtml(value: unknown) {
   return String(value).replace(
     /[&<>"']/g,
-    (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        char
-      ]!,
+    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
   );
 }
 export function renderReport(report: {
@@ -37,9 +34,8 @@ export function renderReport(report: {
 }) {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
-  const {adherence} = report;
-  const pct = (n: number | null) =>
-    n === null ? "Not assessed" : `${Math.round(n * 100) / 100}%`;
+  const { adherence } = report;
+  const pct = (n: number | null) => (n === null ? "Not assessed" : `${Math.round(n * 100) / 100}%`);
   const observations = adherence?.observations ?? [];
   const location = (o: Observation, index: number) => {
     const candidate = o.originCandidate;
@@ -69,8 +65,7 @@ export function renderReport(report: {
           group === "unknown"
             ? o.provenance === "unknown" ||
               (o.provenance === "generated" && o.verdict === "unassessed")
-            : o.provenance === group &&
-              (group === "shared" || o.verdict === "nonconforming"),
+            : o.provenance === group && (group === "shared" || o.verdict === "nonconforming"),
         );
       const visible = group === "unknown" ? entries.slice(0, 30) : entries;
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
@@ -91,16 +86,11 @@ export function renderReport(report: {
   const implementationFindings = implementationDiagnostics.length
     ? `<details open><summary>Generated-code implementation diagnostics (${implementationDiagnostics.length})</summary>${implementationDiagnostics
         .map((diagnostic, index) => {
-          const file = report.sourceFiles?.find(
-            (candidate) => candidate.path === diagnostic.path,
-          );
+          const file = report.sourceFiles?.find((candidate) => candidate.path === diagnostic.path);
           const excerpt = file?.content
             .split("\n")
             .slice(Math.max(0, diagnostic.line - 2), diagnostic.line + 1)
-            .map(
-              (text, offset) =>
-                `${Math.max(1, diagnostic.line - 1) + offset}: ${text}`,
-            )
+            .map((text, offset) => `${Math.max(1, diagnostic.line - 1) + offset}: ${text}`)
             .join("\n");
           return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details></article>`;
         })
@@ -126,18 +116,10 @@ export function renderReport(report: {
           )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
       : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
     implementationFindings;
-  const annotated = (c: {
-    name: string;
-    state: string;
-    width?: number;
-    height?: number;
-  }) => {
+  const annotated = (c: { name: string; state: string; width?: number; height?: number }) => {
     const overlays = observations
       .map((o, index) => ({ o, index }))
-      .filter(
-        ({ o }) =>
-          o.capture === c.name && o.region && o.verdict === "nonconforming",
-      )
+      .filter(({ o }) => o.capture === c.name && o.region && o.verdict === "nonconforming")
       .map(({ o, index }) => {
         const r = o.region!;
         if (
@@ -156,8 +138,7 @@ export function renderReport(report: {
       .filter(({ f }) => f.image === c.name)
       .map(({ f, index }) => {
         const r = f.region;
-        if (!c.width || !c.height || !Object.values(r).every(Number.isFinite))
-          return "";
+        if (!c.width || !c.height || !Object.values(r).every(Number.isFinite)) return "";
         return `<a class="region" href="#design-${index}" title="${escapeHtml(f.explanation)}" aria-label="${escapeHtml(f.explanation)}" style="left:${(100 * r.x) / c.width}%;top:${(100 * r.y) / c.height}%;width:${(100 * r.width) / c.width}%;height:${(100 * r.height) / c.height}%"></a>`;
       })
       .join("");

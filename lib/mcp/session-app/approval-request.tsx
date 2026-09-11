@@ -31,9 +31,7 @@ export function ApprovalRequest({
           >
             Make changes
           </button>
-          <p className="approval-request__hint">
-            Keep chatting to refine your app.
-          </p>
+          <p className="approval-request__hint">Keep chatting to refine your app.</p>
         </div>
         <button
           type="button"

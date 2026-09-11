@@ -5,10 +5,7 @@ import {
   InMemorySandboxExecutionLeaseStore,
   reconcileExpiredSandboxLeases,
 } from "./execution-lease";
-import {
-  SANDBOX_EXECUTION_POLICY,
-  sandboxExecutionPolicyDigest,
-} from "./execution-policy";
+import { SANDBOX_EXECUTION_POLICY, sandboxExecutionPolicyDigest } from "./execution-policy";
 
 const principal = (ownerUserId: string): HostedPrincipal => ({
   issuer: "https://builder.example.test",
@@ -39,10 +36,7 @@ describe("sandbox execution lease", () => {
       acquire(store, "user_1", "session_1"),
       acquire(store, "user_1", "session_2"),
     ]);
-    expect([first.disposition, raced.disposition]).toEqual([
-      "acquired",
-      "acquired",
-    ]);
+    expect([first.disposition, raced.disposition]).toEqual(["acquired", "acquired"]);
     const replay = await acquire(store, "user_1", "session_1");
     expect(replay.disposition).toBe("existing");
     if (replay.disposition === "rejected") throw new Error("unexpected");
@@ -93,18 +87,8 @@ describe("sandbox execution lease", () => {
     expect(JSON.stringify(receipt)).not.toContain("session_1");
     await expect(
       Promise.all([
-        acquire(
-          store,
-          "user_1",
-          "session_1",
-          2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
-        ),
-        acquire(
-          store,
-          "user_1",
-          "session_1",
-          2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
-        ),
+        acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
+        acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
       ]),
     ).resolves.toEqual([
       { disposition: "rejected", reason: "recovery-in-progress" },
@@ -138,8 +122,7 @@ describe("sandbox execution lease", () => {
     await acquire(store, "user_1", "session_1", 1);
     await acquire(store, "user_2", "session_2", 1);
     const stopSandbox = vi.fn(async (providerSandboxId: string) => {
-      if (providerSandboxId === "sandbox_session_1")
-        throw new Error("provider unavailable");
+      if (providerSandboxId === "sandbox_session_1") throw new Error("provider unavailable");
     });
     const result = await reconcileExpiredSandboxLeases({
       store,
@@ -150,23 +133,13 @@ describe("sandbox execution lease", () => {
     expect(result.providerFailed).toHaveLength(1);
     expect(result.stopped).toHaveLength(1);
     await expect(
-      acquire(
-        store,
-        "user_1",
-        "session_1",
-        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
-      ),
+      acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
     ).resolves.toEqual({
       disposition: "rejected",
       reason: "recovery-in-progress",
     });
     await expect(
-      acquire(
-        store,
-        "user_2",
-        "session_2",
-        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
-      ),
+      acquire(store, "user_2", "session_2", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
     ).resolves.toMatchObject({ disposition: "acquired" });
   });
 
@@ -180,12 +153,7 @@ describe("sandbox execution lease", () => {
     });
     expect(claim).toBeDefined();
     await expect(
-      acquire(
-        store,
-        "user_1",
-        "session_1",
-        2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
-      ),
+      acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
     ).resolves.toEqual({
       disposition: "rejected",
       reason: "recovery-in-progress",

@@ -22,13 +22,9 @@ function parseArguments(args: readonly string[]): {
   values.delete("--source-kind");
   values.delete("--source-path");
   if (sourceKind !== "existing-repository" && sourceKind !== "fresh-template")
-    throw new Error(
-      "--source-kind must be existing-repository or fresh-template.",
-    );
-  if (sourcePath === undefined || sourcePath === "")
-    throw new Error("--source-path is required.");
-  if (values.size !== 0)
-    throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);
+    throw new Error("--source-kind must be existing-repository or fresh-template.");
+  if (sourcePath === undefined || sourcePath === "") throw new Error("--source-path is required.");
+  if (values.size !== 0) throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);
   return { sourceKind, sourcePath };
 }
 

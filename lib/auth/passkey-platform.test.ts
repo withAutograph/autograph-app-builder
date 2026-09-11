@@ -4,18 +4,14 @@ import { preferredPasskeyAuthenticatorAttachment } from "./passkey-platform";
 
 describe("preferredPasskeyAuthenticatorAttachment", () => {
   it("requests a platform authenticator when the browser reports one", async () => {
-    const isUserVerifyingPlatformAuthenticatorAvailable = vi.fn(
-      async () => true,
-    );
+    const isUserVerifyingPlatformAuthenticatorAvailable = vi.fn(async () => true);
 
     await expect(
       preferredPasskeyAuthenticatorAttachment({
         isUserVerifyingPlatformAuthenticatorAvailable,
       }),
     ).resolves.toBe("platform");
-    expect(
-      isUserVerifyingPlatformAuthenticatorAvailable,
-    ).toHaveBeenCalledOnce();
+    expect(isUserVerifyingPlatformAuthenticatorAvailable).toHaveBeenCalledOnce();
   });
 
   it("keeps the unrestricted fallback when no platform authenticator is available", async () => {
@@ -39,9 +35,7 @@ describe("preferredPasskeyAuthenticatorAttachment", () => {
   it.each([undefined, {}])(
     "keeps the unrestricted fallback when platform detection is unsupported",
     async (capability) => {
-      await expect(
-        preferredPasskeyAuthenticatorAttachment(capability),
-      ).resolves.toBeUndefined();
+      await expect(preferredPasskeyAuthenticatorAttachment(capability)).resolves.toBeUndefined();
     },
   );
 });

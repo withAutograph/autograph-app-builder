@@ -24,11 +24,7 @@ readPreviewOAuthContractConfig({
 });
 const client = postgres(readPrivateDatabaseUrl(0), hostedTaskPostgresOptions);
 try {
-  console.log(
-    JSON.stringify(
-      await setupCursorClient(drizzle(client, { schema }), resource),
-    ),
-  );
+  console.log(JSON.stringify(await setupCursorClient(drizzle(client, { schema }), resource)));
 } catch {
   console.error(
     "Cursor client setup failed. Check OAuth resource initialization and dedicated client configuration.",

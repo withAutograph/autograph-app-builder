@@ -1,10 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  appBuilderWorkflowState,
-  updateExactWorkflow,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import {
   exactBranchWorktreeProposalMatch,
   proposalFromBranchJournal,
@@ -35,9 +32,7 @@ export async function exactBranchWorktreePublicationProposal(input: {
 }) {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
-    throw new Error(
-      "The reviewed change-set receipt changed before publication.",
-    );
+    throw new Error("The reviewed change-set receipt changed before publication.");
   return deriveBranchWorktreePublicationProposal({
     sourceReceipt: workflow.sourceReceipt,
     review: workflow.reviewReceipt,
@@ -53,9 +48,7 @@ export default defineTool({
   async execute(input) {
     const workflow = branchWorkflow();
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
-      throw new Error(
-        "The reviewed receipt changed before publication status.",
-      );
+      throw new Error("The reviewed receipt changed before publication status.");
     const proposal =
       workflow.phase === "reviewed"
         ? await exactBranchWorktreePublicationProposal(input)
@@ -99,15 +92,8 @@ export default defineTool({
               retryAllowed: false,
             };
     }
-    if (
-      !exactBranchWorktreeProposalMatch(
-        proposalFromBranchJournal(journal),
-        proposal,
-      )
-    )
-      throw new Error(
-        "The durable branch-worktree journal belongs to a different proposal.",
-      );
+    if (!exactBranchWorktreeProposalMatch(proposalFromBranchJournal(journal), proposal))
+      throw new Error("The durable branch-worktree journal belongs to a different proposal.");
     if (journal.status === "succeeded") {
       await verifyBranchWorktreePublication({
         receipt: journal,
@@ -128,9 +114,7 @@ export default defineTool({
               current.phase !== "branch_publication_pending" &&
               current.phase !== "branch_publication_failed"
             )
-              throw new Error(
-                "The publication workflow changed before reconciliation.",
-              );
+              throw new Error("The publication workflow changed before reconciliation.");
             return {
               ...current,
               phase: "published_branch_worktree",
@@ -150,9 +134,7 @@ export default defineTool({
         operation: "branch publication pending reconciliation",
         transition: (current) => {
           if (current.phase !== "reviewed")
-            throw new Error(
-              "The publication workflow changed before pending reconciliation.",
-            );
+            throw new Error("The publication workflow changed before pending reconciliation.");
           return {
             ...current,
             phase: "branch_publication_pending",
@@ -163,20 +145,14 @@ export default defineTool({
       });
     if (
       journal.status === "failed" &&
-      (workflow.phase === "reviewed" ||
-        workflow.phase === "branch_publication_pending")
+      (workflow.phase === "reviewed" || workflow.phase === "branch_publication_pending")
     )
       updateExactWorkflow({
         expected: workflow,
         operation: "branch publication failure reconciliation",
         transition: (current) => {
-          if (
-            current.phase !== "reviewed" &&
-            current.phase !== "branch_publication_pending"
-          )
-            throw new Error(
-              "The publication workflow changed before reconciliation.",
-            );
+          if (current.phase !== "reviewed" && current.phase !== "branch_publication_pending")
+            throw new Error("The publication workflow changed before reconciliation.");
           return {
             ...current,
             phase: "branch_publication_failed",
@@ -186,10 +162,7 @@ export default defineTool({
       });
     return {
       ...journal,
-      workflowPhase:
-        journal.status === "failed"
-          ? "branch_publication_failed"
-          : workflow.phase,
+      workflowPhase: journal.status === "failed" ? "branch_publication_failed" : workflow.phase,
       retryAllowed: false,
       recoveryAllowed: true,
     };

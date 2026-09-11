@@ -18,14 +18,12 @@ async function exactReadBack() {
       hash,
       createdAt,
     })),
-    columns: hostedStorageExpectedColumns.map(
-      ([table, column, type, notNull]) => ({
-        table,
-        column,
-        type,
-        notNull,
-      }),
-    ),
+    columns: hostedStorageExpectedColumns.map(([table, column, type, notNull]) => ({
+      table,
+      column,
+      type,
+      notNull,
+    })),
     indexes: hostedStorageExpectedIndexes.map(([table, name]) => ({
       table,
       name,
@@ -135,15 +133,12 @@ describe("hosted storage read-only readiness", () => {
       {
         ...readBack,
         columns: readBack.columns.filter(
-          (row) =>
-            !(row.table === "oauth_client" && row.column === "client_id"),
+          (row) => !(row.table === "oauth_client" && row.column === "client_id"),
         ),
       },
       {
         ...readBack,
-        indexes: readBack.indexes.filter(
-          (row) => row.name !== "oauth_client_client_id_uidx",
-        ),
+        indexes: readBack.indexes.filter((row) => row.name !== "oauth_client_client_id_uidx"),
       },
       {
         ...readBack,
@@ -173,32 +168,21 @@ describe("hosted storage read-only readiness", () => {
     expect(cli).toContain("SET TRANSACTION READ ONLY");
     expect(cli).toContain("constraint_record.contype <> 'n'");
     expect(cli).toContain("hostedStorageExpectedColumns");
-    expect(cli).toContain(
-      "new Set(hostedStorageExpectedColumns.map(([table]) => table))",
-    );
+    expect(cli).toContain("new Set(hostedStorageExpectedColumns.map(([table]) => table))");
     expect(cli.match(/= ANY\(\$\{managedTables\}\)/gu)).toHaveLength(3);
     expect(cli).not.toContain("process.env.DATABASE_URL");
-    expect(contract).toContain(
-      'providerRestorePointStatus: "not-proven" as const',
-    );
+    expect(contract).toContain('providerRestorePointStatus: "not-proven" as const');
     expect(contract).toContain("githubJournalExcludedFromTenantRetention");
   });
 
   it("fails closed on normalized-email collisions before adding personal workspaces", async () => {
-    const migration = await readFile(
-      "drizzle/0011_self_service_onboarding.sql",
-      "utf8",
-    );
+    const migration = await readFile("drizzle/0011_self_service_onboarding.sql", "utf8");
     expect(migration).toContain('GROUP BY lower("email")');
-    expect(migration).toContain(
-      "case-insensitive Better Auth user email collision",
-    );
+    expect(migration).toContain("case-insensitive Better Auth user email collision");
     expect(migration).toContain('SET "email" = lower("email")');
     expect(migration).toContain('CREATE UNIQUE INDEX "user_email_lower_uidx"');
     expect(migration).toContain('CREATE TABLE "personal_workspace"');
     expect(migration).toContain('REFERENCES "user"("id") ON DELETE CASCADE');
-    expect(migration).toContain(
-      'REFERENCES "organization"("id") ON DELETE CASCADE',
-    );
+    expect(migration).toContain('REFERENCES "organization"("id") ON DELETE CASCADE');
   });
 });

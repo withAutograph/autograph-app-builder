@@ -14,9 +14,7 @@ const config = {
 
 function membership(active = true) {
   return {
-    activeWorkspaceForUser: vi.fn(async () =>
-      active ? "workspace_1" : undefined,
-    ),
+    activeWorkspaceForUser: vi.fn(async () => (active ? "workspace_1" : undefined)),
     isActiveMember: vi.fn(async () => active),
   };
 }
@@ -65,9 +63,7 @@ describe("Preview OAuth activation contract", () => {
       clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
     });
     expect(options.scopes).toEqual(previewOAuthScopes);
-    expect(options.clientRegistrationAllowedScopes).toEqual(
-      previewOAuthScopes.slice(1),
-    );
+    expect(options.clientRegistrationAllowedScopes).toEqual(previewOAuthScopes.slice(1));
     expect(options.resources).toEqual([
       {
         identifier: config.resource,
@@ -207,9 +203,7 @@ describe("Preview OAuth activation contract", () => {
     );
     const options = buildPreviewCimdOptions({ fetchClientMetadataResource });
     expect(options.metadataProfile).toBe("mcp-2026-07-28");
-    const response = await options.fetchClientMetadataResource(
-      "https://client.example/codex.json",
-    );
+    const response = await options.fetchClientMetadataResource("https://client.example/codex.json");
     await expect(response.json()).resolves.toMatchObject({
       token_endpoint_auth_method: "none",
     });
@@ -253,11 +247,7 @@ describe("Preview OAuth activation contract", () => {
           client_name: "Expanded client",
           redirect_uris: ["http://127.0.0.1/callback"],
           token_endpoint_auth_method: "none",
-          grant_types: [
-            "authorization_code",
-            "refresh_token",
-            "client_credentials",
-          ],
+          grant_types: ["authorization_code", "refresh_token", "client_credentials"],
           response_types: ["code"],
         }),
       ),
@@ -266,11 +256,7 @@ describe("Preview OAuth activation contract", () => {
       "https://client.example/expanded.json",
     );
     await expect(unsupportedResponse.json()).resolves.toMatchObject({
-      grant_types: [
-        "authorization_code",
-        "refresh_token",
-        "client_credentials",
-      ],
+      grant_types: ["authorization_code", "refresh_token", "client_credentials"],
     });
   });
 
@@ -288,9 +274,7 @@ describe("Preview OAuth activation contract", () => {
         ),
       });
       await expect(
-        options.fetchClientMetadataResource(
-          "https://client.example/metadata.json",
-        ),
+        options.fetchClientMetadataResource("https://client.example/metadata.json"),
       ).rejects.toThrow("token_endpoint_auth_method none");
     }
   });

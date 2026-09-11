@@ -50,8 +50,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("record_prototype_artifact", {
       input: {
         path: "prototype/vendor-onboarding/app-spec.md",
-        content: (value) =>
-          typeof value === "string" && !value.includes("## Build handoff"),
+        content: (value) => typeof value === "string" && !value.includes("## Build handoff"),
       },
       count: 1,
     });
@@ -92,9 +91,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       satisfies(
         (reply) =>
           isProductFacing(reply) &&
-          !/(?:no mutation|nothing was (?:created|written)|[0-9a-f]{40})/iu.test(
-            String(reply),
-          ) &&
+          !/(?:no mutation|nothing was (?:created|written)|[0-9a-f]{40})/iu.test(String(reply)) &&
           !/\b(?:queue|form|dashboard)\?/iu.test(String(reply)),
         "assistant reply stays product-facing and does not ask identity or interface-selection questions",
       ),
@@ -103,8 +100,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       "all public assistant messages omit routine source and authority mechanics",
       (events) => {
         const messages = events.flatMap((event) =>
-          event.type === "message.completed" &&
-          typeof event.data.message === "string"
+          event.type === "message.completed" && typeof event.data.message === "string"
             ? [event.data.message]
             : [],
         );

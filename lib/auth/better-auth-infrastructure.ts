@@ -21,18 +21,13 @@ export interface BetterAuthInfrastructureSummary {
 function readApiKey(value: string | undefined): string {
   const apiKey = value?.trim();
   if (!apiKey) {
-    throw new Error(
-      "BETTER_AUTH_API_KEY is required when Better Auth Infrastructure is enabled",
-    );
+    throw new Error("BETTER_AUTH_API_KEY is required when Better Auth Infrastructure is enabled");
   }
   return apiKey;
 }
 
-export function resolveBetterAuthInfrastructure(
-  options: BetterAuthInfrastructureOptions,
-) {
-  const configuredValue =
-    options.environment.BETTER_AUTH_INFRASTRUCTURE?.trim();
+export function resolveBetterAuthInfrastructure(options: BetterAuthInfrastructureOptions) {
+  const configuredValue = options.environment.BETTER_AUTH_INFRASTRUCTURE?.trim();
 
   if (!configuredValue) {
     return {
@@ -46,9 +41,7 @@ export function resolveBetterAuthInfrastructure(
   }
 
   if (configuredValue !== ENABLED_VALUE) {
-    throw new Error(
-      `BETTER_AUTH_INFRASTRUCTURE must be exactly ${ENABLED_VALUE}`,
-    );
+    throw new Error(`BETTER_AUTH_INFRASTRUCTURE must be exactly ${ENABLED_VALUE}`);
   }
 
   if (!options.organizationAuthorityReady) {

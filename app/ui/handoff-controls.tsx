@@ -23,10 +23,7 @@ export type HandoffControlData = {
   mcpUrl: string;
 };
 
-function readStatus(
-  value: HandoffControlData,
-  handoffId: string,
-): HandoffControlData {
+function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
   if (
     value.version !== 1 ||
     value.handoffId !== handoffId ||
@@ -57,9 +54,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [renewalNotice, setRenewalNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
-  const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">(
-    "ready",
-  );
+  const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
   const [renewing, setRenewing] = useState(false);
   const renewalRequestId = useRef<string | undefined>(undefined);
   const renewalInFlight = useRef(false);
@@ -96,11 +91,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           },
         );
         if (request.signal.aborted || disposed) return;
-        if (
-          response.status === 401 ||
-          response.status === 403 ||
-          response.status === 404
-        ) {
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
           complete = true;
           setAccess(response.status === 401 ? "sign-in" : "unavailable");
           return;
@@ -153,9 +144,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           saved = sessionStorage.getItem(storageKey);
         } catch {}
         renewalRequestId.current =
-          saved && /^[0-9a-f-]{36}$/iu.test(saved)
-            ? saved
-            : crypto.randomUUID();
+          saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
         try {
           sessionStorage.setItem(storageKey, renewalRequestId.current);
         } catch {}
@@ -168,11 +157,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           body: JSON.stringify({ creationRequestId: renewalRequestId.current }),
         },
       );
-      if (
-        response.status === 401 ||
-        response.status === 403 ||
-        response.status === 404
-      ) {
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
         setAccess(response.status === 401 ? "sign-in" : "unavailable");
         return;
       }
@@ -223,9 +208,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 ? "This handoff has expired. Renew it to continue with your saved brief and resources."
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
-      {access !== "ready" ? (
-        <a href={signInUrl}>Sign in with the same account</a>
-      ) : null}
+      {access !== "ready" ? <a href={signInUrl}>Sign in with the same account</a> : null}
       <fieldset disabled={renewing}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (
@@ -292,9 +275,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 await navigator.clipboard.writeText(prompt);
                 setCopyNotice("Prompt copied.");
               } catch {
-                setCopyNotice(
-                  "Copy failed. Select and copy the prompt below manually.",
-                );
+                setCopyNotice("Copy failed. Select and copy the prompt below manually.");
               }
             }}
           >
@@ -316,23 +297,22 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           <details>
             <summary>Set up Autograph in {label}</summary>
             <p>
-              Connect Autograph using the same account and browser profile as
-              this form. A new client may ask you to allow Autograph once. Your
-              saved GitHub and Vercel connections are reused.
+              Connect Autograph using the same account and browser profile as this form. A new
+              client may ask you to allow Autograph once. Your saved GitHub and Vercel connections
+              are reused.
             </p>
             {destination === "codex" ? (
               <>
                 <p>
-                  Required App Builder connection endpoint:{" "}
-                  <code>{data.mcpUrl}</code>. Before sending, confirm your
-                  plugin connection targets this endpoint. The official release
-                  plugin may target Production; local and Preview handoffs need
-                  a matching configured App Builder plugin connection.
+                  Required App Builder connection endpoint: <code>{data.mcpUrl}</code>. Before
+                  sending, confirm your plugin connection targets this endpoint. The official
+                  release plugin may target Production; local and Preview handoffs need a matching
+                  configured App Builder plugin connection.
                 </p>
                 <p>
-                  Install the official App Builder plugin in Codex, enable it,
-                  and connect to Autograph. If prompted to reload, open a fresh
-                  task and resend the prepared prompt.
+                  Install the official App Builder plugin in Codex, enable it, and connect to
+                  Autograph. If prompted to reload, open a fresh task and resend the prepared
+                  prompt.
                 </p>
                 <pre style={{ whiteSpace: "pre-wrap" }}>
                   <code>{codexInstallCommand}</code>
@@ -342,15 +322,13 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
               <>
                 <a href={installUrl}>Add Autograph to Cursor</a>
                 <p>
-                  Approve the connection in Cursor, then return here and open
-                  your prepared prompt.
+                  Approve the connection in Cursor, then return here and open your prepared prompt.
                 </p>
               </>
             ) : (
               <p>
-                Cursor connection setup is not available in this environment
-                yet. If Autograph is already connected, open the prompt above;
-                otherwise use Codex or return later.
+                Cursor connection setup is not available in this environment yet. If Autograph is
+                already connected, open the prompt above; otherwise use Codex or return later.
               </p>
             )}
           </details>

@@ -2,24 +2,15 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  ARRUSTED_TARGET_SHA,
-  ARRUSTED_TARGET_TREE,
-} from "../repository/dependency-cache";
-import {
-  deterministicGzip,
-  deterministicTar,
-} from "../../scripts/portable-release";
+import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
+import { deterministicGzip, deterministicTar } from "../../scripts/portable-release";
 import { loadStarterSource } from "./starter-source";
 
-const sha256 = (value: Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function fixture() {
   const file = new TextEncoder().encode("# Exact starter\n");
-  const archive = deterministicGzip(
-    deterministicTar(new Map([["README.md", file]])),
-  );
+  const archive = deterministicGzip(deterministicTar(new Map([["README.md", file]])));
   const archiveSha256 = sha256(archive);
   const archiveUrl = `https://releases.example.test/${archiveSha256}.tar.gz`;
   const manifestBytes = new TextEncoder().encode(
@@ -76,9 +67,7 @@ describe("immutable Arrusted starter source", () => {
       tree: ARRUSTED_TARGET_TREE,
     });
     expect(source.files).toHaveLength(1);
-    expect(new TextDecoder().decode(source.files[0]?.bytes)).toBe(
-      "# Exact starter\n",
-    );
+    expect(new TextDecoder().decode(source.files[0]?.bytes)).toBe("# Exact starter\n");
   });
 
   it("rejects a mutable URL or mismatched manifest bytes", async () => {

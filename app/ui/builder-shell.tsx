@@ -25,11 +25,7 @@ export function Header() {
   );
 }
 
-export function ProviderNotices({
-  notices,
-}: {
-  notices: ProviderConnectionNotice[];
-}) {
+export function ProviderNotices({ notices }: { notices: ProviderConnectionNotice[] }) {
   if (!notices.length) return null;
   return (
     <div className={styles.providerNotices} aria-live="polite">

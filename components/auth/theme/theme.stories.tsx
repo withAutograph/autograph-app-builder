@@ -45,17 +45,13 @@ export const StockControls: Story = {
     await expect(localStorage.getItem("theme")).toBe("dark");
 
     await userEvent.keyboard("{Escape}");
-    await userEvent.click(
-      canvas.getByRole("radio", { name: /^Light(?:\s|$)/ }),
-    );
+    await userEvent.click(canvas.getByRole("radio", { name: /^Light(?:\s|$)/ }));
 
     await expect(document.documentElement).toHaveClass("light");
     await expect(document.documentElement).not.toHaveClass("dark");
     await expect(localStorage.getItem("theme")).toBe("light");
 
-    await userEvent.click(
-      canvas.getByRole("radio", { name: /^System(?:\s|$)/ }),
-    );
+    await userEvent.click(canvas.getByRole("radio", { name: /^System(?:\s|$)/ }));
     await expect(localStorage.getItem("theme")).toBe("system");
   },
 };

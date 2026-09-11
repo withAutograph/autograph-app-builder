@@ -1,15 +1,9 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  APP_BUILDER_SOURCE_VERSION,
-  sourceWorkflowState,
-} from "@/lib/agent/source-state";
+import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
 import { existingRepositoryAcquisitionReceipt } from "@/lib/agent/existing-app-sequencing";
-import {
-  SOURCE_RECEIPT_VERSION,
-  inspectSourceReceipt,
-} from "@/lib/repository/source-receipt";
+import { SOURCE_RECEIPT_VERSION, inspectSourceReceipt } from "@/lib/repository/source-receipt";
 import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrusted-template";
 
 export default defineTool({
@@ -20,10 +14,7 @@ export default defineTool({
   }),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
-    const existing = existingRepositoryAcquisitionReceipt(
-      current,
-      expectedSourceReceiptDigest,
-    );
+    const existing = existingRepositoryAcquisitionReceipt(current, expectedSourceReceiptDigest);
     if (existing !== undefined) return existing;
     if (current.phase === "empty") throw new Error("No source was reviewed.");
     let currentReceipt = current.receipt;

@@ -6,8 +6,7 @@ export type CssSourceMap = {
   mappings: string;
 };
 
-const base64 =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function decodeVlq(value: string, start: number) {
   let result = 0;
@@ -19,8 +18,7 @@ function decodeVlq(value: string, start: number) {
     index++;
     result += (digit & 31) << shift;
     shift += 5;
-    if (!(digit & 32))
-      return { value: result & 1 ? -(result >> 1) : result >> 1, index };
+    if (!(digit & 32)) return { value: result & 1 ? -(result >> 1) : result >> 1, index };
   }
   return undefined;
 }
@@ -51,9 +49,7 @@ export function originalCssSource(
   for (let line = 0; line <= generatedLine; line++) {
     let generated = 0;
     const segments = lines[line]?.split(",") ?? [];
-    let candidate:
-      | { source: number; originalLine: number; originalColumn: number }
-      | undefined;
+    let candidate: { source: number; originalLine: number; originalColumn: number } | undefined;
     for (const segment of segments) {
       const fields: number[] = [];
       let index = 0;
@@ -61,7 +57,7 @@ export function originalCssSource(
         const decoded = decodeVlq(segment, index);
         if (!decoded) return undefined;
         fields.push(decoded.value);
-    ({ index } = decoded);
+        ({ index } = decoded);
       }
       if (!fields.length) continue;
       generated += fields[0]!;
@@ -69,8 +65,7 @@ export function originalCssSource(
       // the preceding segment's source merely because this lookup is later on
       // the same generated line.
       if (fields.length === 1) {
-        if (line === generatedLine && generated <= generatedColumn)
-          candidate = undefined;
+        if (line === generatedLine && generated <= generatedColumn) candidate = undefined;
         continue;
       }
       if (fields.length !== 4 && fields.length !== 5) return undefined;

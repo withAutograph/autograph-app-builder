@@ -10,30 +10,18 @@ describe("CSS rule evidence", () => {
   ]);
 
   it("attributes an exact active rule despite compiler declaration reordering", () => {
-    const rule = generatedCssRule(
-      generated,
-      [],
-      ".screen",
-      "color",
-      "var(--color-text-primary)",
-      [{ name: "color", value: "var(--color-text-primary)" }],
-    );
+    const rule = generatedCssRule(generated, [], ".screen", "color", "var(--color-text-primary)", [
+      { name: "color", value: "var(--color-text-primary)" },
+    ]);
     expect(rule?.source).toMatchObject({ path: "src/screen.css", line: 1 });
   });
 
   it("rejects synthetic shorthand expansion unless the caller removes it", () => {
     expect(
-      generatedCssRule(
-        generated,
-        [],
-        ".screen",
-        "color",
-        "var(--color-text-primary)",
-        [
-          { name: "color", value: "var(--color-text-primary)" },
-          { name: "color", value: "var(--color-text-primary)" },
-        ],
-      ),
+      generatedCssRule(generated, [], ".screen", "color", "var(--color-text-primary)", [
+        { name: "color", value: "var(--color-text-primary)" },
+        { name: "color", value: "var(--color-text-primary)" },
+      ]),
     ).toBeUndefined();
   });
 
@@ -50,14 +38,9 @@ describe("CSS rule evidence", () => {
       ]),
     ).toBeUndefined();
     expect(
-      generatedCssRule(
-        generated,
-        shared,
-        ".screen",
-        "color",
-        "var(--color-text-primary)",
-        [{ name: "color", value: "var(--color-text-primary)" }],
-      ),
+      generatedCssRule(generated, shared, ".screen", "color", "var(--color-text-primary)", [
+        { name: "color", value: "var(--color-text-primary)" },
+      ]),
     ).toBeUndefined();
   });
 
@@ -67,8 +50,7 @@ describe("CSS rule evidence", () => {
         collectCssRuleEvidence([
           {
             path: "src/conditional.css",
-            content:
-              "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
+            content: "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
           },
         ]),
         [],

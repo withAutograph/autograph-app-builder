@@ -39,9 +39,7 @@ function rejectAmbientGitHubAuthority(
     environment.GITHUB_TOKEN !== undefined ||
     environment.GITHUB_API_URL !== undefined
   ) {
-    throw new Error(
-      "Hosted GitHub publication contains forbidden ambient authority.",
-    );
+    throw new Error("Hosted GitHub publication contains forbidden ambient authority.");
   }
 }
 
@@ -53,17 +51,13 @@ export function readDeploymentGitHubPublicationConfig(
   if (rawEnabled === undefined) return { enabled: false };
   const enabled = enabledSchema.safeParse(rawEnabled);
   if (!enabled.success) {
-    throw new Error(
-      "APP_BUILDER_GITHUB_PUBLICATION_ENABLED must be exactly 0 or 1.",
-    );
+    throw new Error("APP_BUILDER_GITHUB_PUBLICATION_ENABLED must be exactly 0 or 1.");
   }
   if (enabled.data === "0") return { enabled: false };
   readHostedDeploymentEnvironment(environment);
   const forwarderSubject = readHostedForwarderSubject(environment);
   if (forwarderSubject === undefined) {
-    throw new Error(
-      "Hosted GitHub publication requires the exact hosted forwarder binding.",
-    );
+    throw new Error("Hosted GitHub publication requires the exact hosted forwarder binding.");
   }
   const providerCredentials = parseGitHubAppHttpProviderCredentials({
     appId: environment.GITHUB_APP_ID,
@@ -82,9 +76,7 @@ type Database = ReturnType<typeof openHostedPostgresDatabase>;
 export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   environment: Readonly<Record<string, string | undefined>>;
   openDatabase?: (databaseUrl: string) => Database | Promise<Database>;
-  createAdapter?: (
-    config: GitHubAppHttpProviderConfig,
-  ) => GitHubPublicationAdapter;
+  createAdapter?: (config: GitHubAppHttpProviderConfig) => GitHubPublicationAdapter;
   fetchImplementation?: typeof fetch;
   now?: () => number;
   resolverDependencies?: Partial<HostedGitHubPublicationRuntimeResolverDependencies>;

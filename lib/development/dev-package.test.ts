@@ -13,9 +13,7 @@ import {
 
 describe("development Codex package", () => {
   it("creates a stable loopback-only marketplace with exactly five public tools and no app surface", async () => {
-    const root = await realpath(
-      await mkdtemp(join(tmpdir(), "autograph-dev-package-")),
-    );
+    const root = await realpath(await mkdtemp(join(tmpdir(), "autograph-dev-package-")));
     try {
       const result = await createDevelopmentPackage({
         repositoryRoot: resolve("."),
@@ -23,23 +21,13 @@ describe("development Codex package", () => {
         port: 3210,
       });
       const marketplace = JSON.parse(
-        await readFile(
-          join(result.marketplaceRoot, ".agents/plugins/marketplace.json"),
-          "utf8",
-        ),
+        await readFile(join(result.marketplaceRoot, ".agents/plugins/marketplace.json"), "utf8"),
       );
       const manifest = JSON.parse(
-        await readFile(
-          join(result.pluginRoot, ".codex-plugin/plugin.json"),
-          "utf8",
-        ),
+        await readFile(join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf8"),
       );
-      const mcp = JSON.parse(
-        await readFile(join(result.pluginRoot, ".mcp.json"), "utf8"),
-      );
-      const tools = JSON.parse(
-        await readFile(join(result.pluginRoot, "tools-list.json"), "utf8"),
-      );
+      const mcp = JSON.parse(await readFile(join(result.pluginRoot, ".mcp.json"), "utf8"));
+      const tools = JSON.parse(await readFile(join(result.pluginRoot, "tools-list.json"), "utf8"));
       expect(result.marketplaceRoot).toBe(join(root, "marketplace"));
       expect(marketplace).toMatchObject({
         name: "autograph-dev",
@@ -144,13 +132,7 @@ describe("development Codex package", () => {
           allowFailure: true,
         },
         {
-          args: [
-            "plugin",
-            "marketplace",
-            "add",
-            "/private/dev/marketplace",
-            "--json",
-          ],
+          args: ["plugin", "marketplace", "add", "/private/dev/marketplace", "--json"],
           allowFailure: false,
         },
         {

@@ -16,11 +16,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import {
-  assertCanonicalRoot,
-  assertNoSecretMaterial,
-  hashArtifact,
-} from "./lifecycle.ts";
+import { assertCanonicalRoot, assertNoSecretMaterial, hashArtifact } from "./lifecycle.ts";
 
 const fixedGit = "/usr/bin/git";
 
@@ -51,8 +47,7 @@ function ensureNoLinkPath(path: string, label: string): void {
     throw new Error(`${label} cannot be the filesystem root.`);
   let cursor = canonical;
   for (;;) {
-    if (lstatSync(cursor).isSymbolicLink())
-      throw new Error(`${label} contains a symbolic link.`);
+    if (lstatSync(cursor).isSymbolicLink()) throw new Error(`${label} contains a symbolic link.`);
     const parent = dirname(cursor);
     if (parent === cursor) break;
     cursor = parent;
@@ -72,10 +67,7 @@ function containsPath(root: string, candidate: string): boolean {
 function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   const descriptor = openSync(
     path,
-    constants.O_CREAT |
-      constants.O_EXCL |
-      constants.O_WRONLY |
-      constants.O_NOFOLLOW,
+    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
     mode,
   );
   try {
@@ -115,20 +107,15 @@ export function materializeSanitizedGitTree(
   mkdirSync(destinationRoot, { mode: 0o700 });
   try {
     for (const row of listing.split("\0").filter(Boolean)) {
-      const match = /^([0-9]{6}) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(
-        row,
-      );
-      if (match === null)
-        throw new Error("Sanitized context contains an unsupported Git entry.");
+      const match = /^([0-9]{6}) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(row);
+      if (match === null) throw new Error("Sanitized context contains an unsupported Git entry.");
       const [, mode, type, objectId, path] = match;
       if (
         type !== "blob" ||
         path === undefined ||
         path.includes("\\") ||
         path.includes("\ufffd") ||
-        path
-          .split("/")
-          .some((part) => part === "" || part === "." || part === "..") ||
+        path.split("/").some((part) => part === "" || part === "." || part === "..") ||
         path === ".git" ||
         path.startsWith(".git/") ||
         path === ".app-builder-source-manifest.json"
@@ -142,11 +129,10 @@ export function materializeSanitizedGitTree(
       const parent = dirname(absolute);
       mkdirSync(parent, { recursive: true, mode: 0o700 });
       ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
-      const bytes = execFileSync(
-        fixedGit,
-        ["-C", sourceRoot, "cat-file", "blob", objectId],
-        { maxBuffer: 128 * 1024 * 1024, env: sanitizedEnvironment() },
-      );
+      const bytes = execFileSync(fixedGit, ["-C", sourceRoot, "cat-file", "blob", objectId], {
+        maxBuffer: 128 * 1024 * 1024,
+        env: sanitizedEnvironment(),
+      });
       if (mode === "120000") {
         const target = bytes.toString("utf8");
         if (
@@ -180,9 +166,7 @@ export function materializeSanitizedGitTree(
       git(sourceRoot, ["rev-parse", "HEAD"]) !== expectedCommit ||
       git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== expectedTree
     )
-      throw new Error(
-        "Sanitized context source changed during materialization.",
-      );
+      throw new Error("Sanitized context source changed during materialization.");
     return { root: destinationRoot, entriesDigest, entryCount: records.length };
   } catch (error) {
     rmSync(destinationRoot, { recursive: true, force: true });

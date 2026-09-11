@@ -10,10 +10,7 @@ import {
 import { isProductFacing } from "./support/public-conversation";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
-function assertQuality(
-  report: { hardFailures: readonly string[] },
-  label: string,
-) {
+function assertQuality(report: { hardFailures: readonly string[] }, label: string) {
   return satisfies(
     () => report.hardFailures.length === 0,
     `${label}: ${report.hardFailures.join(" ") || "passed"}`,
@@ -27,9 +24,7 @@ export default defineEval({
   async test(t) {
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
-    await t.send(
-      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
-    );
+    await t.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
     t.requireInputRequest({ toolName: "apply_app_creation" });
     await t.respondAll("approve");
     t.succeeded();
@@ -169,9 +164,7 @@ Confirmed.
       ),
     );
 
-    const unavailable = productQualityScenario(
-      "unavailable-product-alternative",
-    );
+    const unavailable = productQualityScenario("unavailable-product-alternative");
     await t.send(unavailable.brief);
     t.check(
       t.reply,

@@ -40,9 +40,7 @@ describe("hosted PostgreSQL connection policy", () => {
         "postgresql://user:secret@ep-preview-pooler.us-east-2.aws.neon.tech/app?sslmode=require",
       ),
     ).toContain("ep-preview-pooler");
-    expect(parseHostedDatabaseUrl("postgresql://localhost/app")).toBe(
-      "postgresql://localhost/app",
-    );
+    expect(parseHostedDatabaseUrl("postgresql://localhost/app")).toBe("postgresql://localhost/app");
     expect(() =>
       parseHostedDatabaseUrl(
         "postgresql://user:secret@ep-preview.us-east-2.aws.neon.tech/app?sslmode=require",
@@ -56,11 +54,7 @@ describe("hosted PostgreSQL connection policy", () => {
   });
 
   it("rejects malformed, non-PostgreSQL, and secret-frame-breaking values", () => {
-    for (const value of [
-      "not-a-url",
-      "mysql://localhost/app",
-      "postgresql://localhost/app\n",
-    ]) {
+    for (const value of ["not-a-url", "mysql://localhost/app", "postgresql://localhost/app\n"]) {
       expect(() => parseHostedDatabaseUrl(value)).toThrow();
     }
   });

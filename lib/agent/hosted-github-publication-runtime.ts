@@ -63,11 +63,14 @@ type PublicationStores = {
 };
 
 export type HostedGitHubPublicationRuntimeResolverDependencies = {
-  readPreparedHandoff: (sessionAuth: unknown) => Promise<(BuilderHandoffIntent & {
-    providers?: {
-        githubInstallationId?: string;
-    };
-}) | undefined>;
+  readPreparedHandoff: (sessionAuth: unknown) => Promise<
+    | (BuilderHandoffIntent & {
+        providers?: {
+          githubInstallationId?: string;
+        };
+      })
+    | undefined
+  >;
   membership: (database: Database) => HostedWorkspaceMembership;
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (
@@ -76,16 +79,15 @@ export type HostedGitHubPublicationRuntimeResolverDependencies = {
   ) => PublicationStores;
 };
 
-const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies =
-  {
-    async readPreparedHandoff(sessionAuth) {
-      const { readPreparedHandoffContext } = await import("./handoff-context");
-      return readPreparedHandoffContext(sessionAuth);
-    },
-    membership: createPostgresWorkspaceMembership,
-    installations: createPostgresHostedGitHubInstallationStore,
-    publicationStores: createPostgresGitHubPublicationStores,
-  };
+const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = {
+  async readPreparedHandoff(sessionAuth) {
+    const { readPreparedHandoffContext } = await import("./handoff-context");
+    return readPreparedHandoffContext(sessionAuth);
+  },
+  membership: createPostgresWorkspaceMembership,
+  installations: createPostgresHostedGitHubInstallationStore,
+  publicationStores: createPostgresGitHubPublicationStores,
+};
 
 /**
  * Resolves a fresh tenant-bound runtime for one Eve session authority. Only the
@@ -124,8 +126,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
         throw new Error("Hosted GitHub publication provider is unconfigured.");
       }
 
-      const { authority, principal } =
-        exactGitHubPublicationAuthority(sessionAuth);
+      const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
       const prepared = await dependencies.readPreparedHandoff(sessionAuth);
       const selectedInstallationId =
         prepared?.providers?.githubInstallationId ??
@@ -151,15 +152,10 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
           : mergeHostedGitHubInstallationBindings(
               (await installations.list?.(authority)) ?? [],
               legacy,
-            ).find(
-              (binding) => binding.installationId === selectedInstallationId,
-            );
-      const installationResult =
-        hostedGitHubInstallationBindingSchema.safeParse(selected);
+            ).find((binding) => binding.installationId === selectedInstallationId);
+      const installationResult = hostedGitHubInstallationBindingSchema.safeParse(selected);
       if (!installationResult.success || !installationResult.data.active) {
-        throw new Error(
-          "Hosted GitHub publication installation is inactive or unavailable.",
-        );
+        throw new Error("Hosted GitHub publication installation is inactive or unavailable.");
       }
       const installation = installationResult.data;
 

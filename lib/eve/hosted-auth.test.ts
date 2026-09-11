@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  authorizeHostedPrincipal,
-  HostedAuthorizationError,
-} from "./hosted-auth";
+import { authorizeHostedPrincipal, HostedAuthorizationError } from "./hosted-auth";
 
 const claims = {
   issuer: "https://identity.example.test",

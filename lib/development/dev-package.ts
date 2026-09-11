@@ -1,21 +1,9 @@
 import { execFile } from "node:child_process";
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import {
-  registeredAutographToolNames,
-  sha256,
-} from "../../scripts/portable-release";
+import { registeredAutographToolNames, sha256 } from "../../scripts/portable-release";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,12 +29,9 @@ async function packageInputDigest(path: string): Promise<string> {
       .sort((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
         const entryPath = join(path, entry.name);
-        if (entry.isDirectory())
-          return [entry.name, await packageInputDigest(entryPath)] as const;
+        if (entry.isDirectory()) return [entry.name, await packageInputDigest(entryPath)] as const;
         if (!entry.isFile())
-          throw new Error(
-            `Development package input was not a regular file: ${entryPath}`,
-          );
+          throw new Error(`Development package input was not a regular file: ${entryPath}`);
         return [entry.name, sha256(await readFile(entryPath))] as const;
       }),
   );
@@ -66,15 +51,9 @@ export async function developmentPackageFingerprint(input: {
   return sha256(
     JSON.stringify({
       skills: await packageInputDigest(join(repositoryRoot, "skills")),
-      icon: sha256(
-        await readFile(join(repositoryRoot, "assets/autograph-icon.png")),
-      ),
-      plugin: sha256(
-        await readFile(join(repositoryRoot, ".codex-plugin/plugin.json")),
-      ),
-      mcpHandler: sha256(
-        await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts")),
-      ),
+      icon: sha256(await readFile(join(repositoryRoot, "assets/autograph-icon.png"))),
+      plugin: sha256(await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"))),
+      mcpHandler: sha256(await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"))),
       port: input.port,
     }),
   );
@@ -88,15 +67,9 @@ export async function createDevelopmentPackage(input: {
   const repositoryRoot = resolve(input.repositoryRoot);
   const outputRoot = resolve(input.outputRoot);
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
-  const temporaryMarketplaceRoot = await mkdtemp(
-    join(outputRoot, ".marketplace-"),
-  );
+  const temporaryMarketplaceRoot = await mkdtemp(join(outputRoot, ".marketplace-"));
   const marketplaceRoot = join(outputRoot, "marketplace");
-  const pluginRoot = join(
-    temporaryMarketplaceRoot,
-    "plugins",
-    DEVELOPMENT_PLUGIN_NAME,
-  );
+  const pluginRoot = join(temporaryMarketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME);
   const endpoint = `http://127.0.0.1:${input.port}/mcp`;
   // Codex retains an MCP transport by server name across tasks.  Make the
   // local-only transport identity include its loopback port so a fresh
@@ -120,8 +93,7 @@ export async function createDevelopmentPackage(input: {
       await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf8"),
     ) as Record<string, unknown>;
     const sourceInterface =
-      typeof sourceManifest.interface === "object" &&
-      sourceManifest.interface !== null
+      typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
         ? (sourceManifest.interface as Record<string, unknown>)
         : {};
     const manifest = {
@@ -146,10 +118,7 @@ export async function createDevelopmentPackage(input: {
         },
       },
     };
-    const handler = await readFile(
-      join(repositoryRoot, "lib/mcp/request-handler.ts"),
-      "utf8",
-    );
+    const handler = await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"), "utf8");
     const tools = [...registeredAutographToolNames(handler)];
     const marketplaceManifestPath = join(
       temporaryMarketplaceRoot,
@@ -178,26 +147,20 @@ export async function createDevelopmentPackage(input: {
       ],
     };
     await Promise.all([
-      writeFile(
-        marketplaceManifestPath,
-        `${JSON.stringify(marketplace, null, 2)}\n`,
-        { mode: 0o600 },
-      ),
+      writeFile(marketplaceManifestPath, `${JSON.stringify(marketplace, null, 2)}\n`, {
+        mode: 0o600,
+      }),
       writeFile(
         join(pluginRoot, ".codex-plugin/plugin.json"),
         `${JSON.stringify(manifest, null, 2)}\n`,
         { mode: 0o600 },
       ),
-      writeFile(
-        join(pluginRoot, ".mcp.json"),
-        `${JSON.stringify(mcp, null, 2)}\n`,
-        { mode: 0o600 },
-      ),
-      writeFile(
-        join(pluginRoot, "tools-list.json"),
-        `${JSON.stringify(tools, null, 2)}\n`,
-        { mode: 0o600 },
-      ),
+      writeFile(join(pluginRoot, ".mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`, {
+        mode: 0o600,
+      }),
+      writeFile(join(pluginRoot, "tools-list.json"), `${JSON.stringify(tools, null, 2)}\n`, {
+        mode: 0o600,
+      }),
     ]);
     const receipt = {
       format: "autograph-development-package-v2",
@@ -268,10 +231,9 @@ export async function registerDevelopmentPackage(input: {
   await runner(["plugin", "remove", DEVELOPMENT_PLUGIN_SELECTOR, "--json"], {
     allowFailure: true,
   });
-  await runner(
-    ["plugin", "marketplace", "remove", DEVELOPMENT_MARKETPLACE_NAME, "--json"],
-    { allowFailure: true },
-  );
+  await runner(["plugin", "marketplace", "remove", DEVELOPMENT_MARKETPLACE_NAME, "--json"], {
+    allowFailure: true,
+  });
   await runner(["plugin", "marketplace", "add", marketplaceRoot, "--json"], {});
   await runner(["plugin", "add", DEVELOPMENT_PLUGIN_SELECTOR, "--json"], {});
   await disableGlobalDevelopmentPackage(codexHome);
@@ -301,8 +263,7 @@ export async function registerDevelopmentPackage(input: {
     installed.version !== input.version ||
     installed.installed !== true ||
     installed.source?.source !== "local" ||
-    installed.source.path !==
-      join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
+    installed.source.path !== join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
   )
@@ -333,9 +294,7 @@ async function disableGlobalDevelopmentPackage(codexHome: string) {
     })
     .join("\n");
   if (!updated) {
-    throw new Error(
-      "Codex did not write the development plugin enablement setting.",
-    );
+    throw new Error("Codex did not write the development plugin enablement setting.");
   }
   await writeFile(configPath, scoped);
 }

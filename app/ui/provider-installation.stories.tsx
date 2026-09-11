@@ -3,10 +3,7 @@ import { FaGithub } from "react-icons/fa";
 import { SiVercel } from "react-icons/si";
 import { expect, within } from "storybook/test";
 
-import {
-  ProviderConnection,
-  ProviderConnectionNotice,
-} from "./provider-connection";
+import { ProviderConnection, ProviderConnectionNotice } from "./provider-connection";
 
 const meta = {
   title: "Components/Connections/Provider Connection",
@@ -73,8 +70,6 @@ export const VercelFailed: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("alert")).toHaveTextContent(
-      "Vercel could not be connected.",
-    );
+    await expect(canvas.getByRole("alert")).toHaveTextContent("Vercel could not be connected.");
   },
 };

@@ -28,9 +28,10 @@ export class McpProviderUnavailableError extends Error {
   }
 }
 
-export function toolResult<
-  const Result extends EveSessionListResult | EveSessionResult,
->(result: Result, text: string) {
+export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
+  result: Result,
+  text: string,
+) {
   const needsInteractiveSessionUi =
     !("kind" in result) &&
     result.status === "input_required" &&
@@ -39,9 +40,7 @@ export function toolResult<
   return {
     content: [{ type: "text" as const, text }],
     structuredContent: result,
-    ...(needsInteractiveSessionUi
-      ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } }
-      : {}),
+    ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
 }
 
@@ -63,21 +62,17 @@ export function safeToolError(error: unknown, sessionId = "") {
       isError: true,
     };
   }
-  const authenticationRequired =
-    error instanceof McpToolAuthenticationRequiredError;
+  const authenticationRequired = error instanceof McpToolAuthenticationRequiredError;
   const notConfigured = error instanceof AdapterNotConfiguredError;
   const handoffUnavailable = error instanceof BuilderHandoffUnavailableError;
-  const notFound =
-    error instanceof HostedSessionNotFoundError || handoffUnavailable;
+  const notFound = error instanceof HostedSessionNotFoundError || handoffUnavailable;
   const forbidden = error instanceof HostedAuthorizationError;
   const conflict = error instanceof HostedIdempotencyConflictError;
   const unknown = error instanceof HostedSubmissionUnknownError;
   const rejected = error instanceof HostedRejectedOperationError;
   const busy = error instanceof HostedSessionBusyError;
-  const recoveryUnavailable =
-    error instanceof HostedSessionRecoveryUnavailableError;
-  const cancellationUnsettled =
-    error instanceof HostedCancellationUnsettledError;
+  const recoveryUnavailable = error instanceof HostedSessionRecoveryUnavailableError;
+  const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   const code = authenticationRequired
     ? "authentication_required"
     : notConfigured
@@ -134,9 +129,7 @@ export function safeToolError(error: unknown, sessionId = "") {
   };
   return {
     ...toolResult(result, message),
-    ...(authenticationRequired
-      ? { _meta: { "mcp/www_authenticate": [error.challenge] } }
-      : {}),
+    ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
     isError: true,
   };
 }

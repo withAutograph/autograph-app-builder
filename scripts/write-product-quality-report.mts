@@ -20,8 +20,7 @@ import {
 import { ARRUSTED_COMPONENT_COMPOSITION_MANIFEST } from "../evals/support/supported-repository";
 
 const reportRoot = resolve(
-  process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ??
-    ".artifacts/product-quality",
+  process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ?? ".artifacts/product-quality",
 );
 const vendorEvidenceRoot = resolve(reportRoot, "vendor-onboarding");
 const vendor = productQualityScenario("vendor-onboarding");
@@ -36,9 +35,7 @@ const policy = bindArrustedComponentCompositionPolicy({
   sourceTree: "b".repeat(40),
 });
 if (policy.status === "unavailable")
-  throw new Error(
-    `Fixture composition policy unavailable: ${policy.reasons.join(" ")}`,
-  );
+  throw new Error(`Fixture composition policy unavailable: ${policy.reasons.join(" ")}`);
 const composition = auditAppliedAppComposition({
   appId: vendor.expected.prototype?.appId ?? "vendor-onboarding",
   binding: policy.binding,
@@ -56,9 +53,7 @@ const report = {
   hardGates: {
     eve: "validated by evals/product-quality.eval.ts",
     prototype: prototype.hardFailures.length === 0 ? "passed" : "failed",
-    appSpec: validateBuildReadyAppSpec(vendorOnboardingCompleteAppSpec).valid
-      ? "passed"
-      : "failed",
+    appSpec: validateBuildReadyAppSpec(vendorOnboardingCompleteAppSpec).valid ? "passed" : "failed",
     componentComposition: composition.status,
   },
   scenarios: PRODUCT_QUALITY_SCENARIOS.map((scenario) => ({
@@ -83,8 +78,7 @@ const report = {
   },
   quality: {
     prototype: prototype.score,
-    conversation:
-      "reported per scenario by the Eve suite; quality scores do not gate CI",
+    conversation: "reported per scenario by the Eve suite; quality scores do not gate CI",
   },
   source: {
     vendorOnboardingAppSpecBytes: Buffer.byteLength(vendorOnboardingAppSpec),
@@ -93,18 +87,9 @@ const report = {
 
 await mkdir(reportRoot, { recursive: true });
 await mkdir(vendorEvidenceRoot, { recursive: true });
-await writeFile(
-  resolve(vendorEvidenceRoot, "index.html"),
-  vendorOnboardingPrototype,
-);
-await writeFile(
-  resolve(vendorEvidenceRoot, "decisions.md"),
-  vendorOnboardingDecisions,
-);
-await writeFile(
-  resolve(vendorEvidenceRoot, "app-spec.md"),
-  vendorOnboardingCompleteAppSpec,
-);
+await writeFile(resolve(vendorEvidenceRoot, "index.html"), vendorOnboardingPrototype);
+await writeFile(resolve(vendorEvidenceRoot, "decisions.md"), vendorOnboardingDecisions);
+await writeFile(resolve(vendorEvidenceRoot, "app-spec.md"), vendorOnboardingCompleteAppSpec);
 await writeFile(
   resolve(vendorEvidenceRoot, "component-policy.json"),
   `${JSON.stringify(

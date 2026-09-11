@@ -1,7 +1,4 @@
-import {
-  eveSessionResultSchema,
-  type EveSessionResult,
-} from "../mcp/contracts";
+import { eveSessionResultSchema, type EveSessionResult } from "../mcp/contracts";
 import type { HostedSessionCheckpoint } from "./hosted-store";
 
 export function resultFromHostedCheckpoint(
@@ -17,20 +14,11 @@ export function resultFromHostedCheckpoint(
   return eveSessionResultSchema.parse({
     sessionId,
     status: checkpoint.status === "working" ? "waiting" : checkpoint.status,
-    cursor: Math.min(
-      effectiveCursor + events.length,
-      offset + checkpoint.events.length,
-    ),
+    cursor: Math.min(effectiveCursor + events.length, offset + checkpoint.events.length),
     events,
-    ...(checkpoint.inputRequests === undefined
-      ? {}
-      : { inputRequests: checkpoint.inputRequests }),
-    ...(checkpoint.prototype === undefined
-      ? {}
-      : { prototype: checkpoint.prototype }),
-    ...(checkpoint.uiPreview === undefined
-      ? {}
-      : { uiPreview: checkpoint.uiPreview }),
+    ...(checkpoint.inputRequests === undefined ? {} : { inputRequests: checkpoint.inputRequests }),
+    ...(checkpoint.prototype === undefined ? {} : { prototype: checkpoint.prototype }),
+    ...(checkpoint.uiPreview === undefined ? {} : { uiPreview: checkpoint.uiPreview }),
     ...(checkpoint.implementationPlan === undefined
       ? {}
       : { implementationPlan: checkpoint.implementationPlan }),

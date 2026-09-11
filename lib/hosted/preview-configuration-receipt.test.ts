@@ -127,9 +127,7 @@ describe("hosted Preview receipt boundaries", () => {
       },
       secrets: { included: false },
     } as const;
-    expect(hostedPreviewActivationReceiptSchema.parse(activation)).toEqual(
-      activation,
-    );
+    expect(hostedPreviewActivationReceiptSchema.parse(activation)).toEqual(activation);
     expect(() =>
       hostedPreviewActivationReceiptSchema.parse({
         ...activation,

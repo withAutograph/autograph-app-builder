@@ -28,9 +28,7 @@ export function PasskeysEmpty({ onAddPress }: PasskeysEmptyProps) {
           <Fingerprint />
         </EmptyMedia>
         <EmptyTitle>{passkeyLocalization.noPasskeys}</EmptyTitle>
-        <EmptyDescription>
-          {passkeyLocalization.passkeysDescription}
-        </EmptyDescription>
+        <EmptyDescription>{passkeyLocalization.passkeysDescription}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <Button size="sm" onClick={onAddPress}>

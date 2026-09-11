@@ -13,14 +13,7 @@ import {
   rename,
   unlink,
 } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import {
   assertCanonicalFreshBootstrapJournal,
@@ -188,9 +181,7 @@ export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
   .update(materializeAdapter)
   .digest("hex");
 
-const minimalEnvironment = (
-  identity?: FreshBootstrapIdentity,
-): NodeJS.ProcessEnv => ({
+const minimalEnvironment = (identity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
   NODE_ENV: "production",
   PATH: "/usr/bin:/bin",
   TMPDIR: "/tmp",
@@ -245,18 +236,14 @@ function git(
   identity?: FreshBootstrapIdentity,
   input?: Uint8Array,
 ): string {
-  return execFileSync(
-    capability.systemGit,
-    [...gitOptions, "-C", root, ...args],
-    {
-      encoding: "utf8",
-      env: minimalEnvironment(identity),
-      input,
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 30_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  return execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
+    encoding: "utf8",
+    env: minimalEnvironment(identity),
+    input,
+    maxBuffer: 16 * 1024 * 1024,
+    timeout: 30_000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 }
 
 function gitBuffer(
@@ -264,25 +251,18 @@ function gitBuffer(
   root: string,
   args: readonly string[],
 ): Buffer {
-  return execFileSync(
-    capability.systemGit,
-    [...gitOptions, "-C", root, ...args],
-    {
-      encoding: "buffer",
-      env: minimalEnvironment(),
-      maxBuffer: 32 * 1024 * 1024,
-      timeout: 30_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  return execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
+    encoding: "buffer",
+    env: minimalEnvironment(),
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: 30_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 function within(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
-  return (
-    path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-  );
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 async function identity(path: string): Promise<PathIdentity> {
@@ -306,10 +286,7 @@ async function assertExactIdentity(
   expected: PathIdentity,
   kind: "directory" | "file",
 ): Promise<void> {
-  if (
-    !isAbsolute(expected.path) ||
-    (await realpath(expected.path)) !== expected.path
-  )
+  if (!isAbsolute(expected.path) || (await realpath(expected.path)) !== expected.path)
     throw new Error("The bootstrap capability path is not canonical.");
   const value = await lstat(expected.path);
   const uid = process.geteuid?.();
@@ -346,9 +323,7 @@ async function executableIdentity(path: string): Promise<ExecutableIdentity> {
   };
 }
 
-export async function canonicalFreshBootstrapHelperPath(
-  path: string,
-): Promise<string> {
+export async function canonicalFreshBootstrapHelperPath(path: string): Promise<string> {
   const canonical = await realpath(path);
   const value = await lstat(canonical);
   if (!value.isFile() || value.isSymbolicLink())
@@ -356,11 +331,8 @@ export async function canonicalFreshBootstrapHelperPath(
   return canonical;
 }
 
-async function assertExactExecutable(
-  expected: ExecutableIdentity,
-): Promise<void> {
-  if (!isAbsolute(expected.path))
-    throw new Error("The bootstrap helper path is not absolute.");
+async function assertExactExecutable(expected: ExecutableIdentity): Promise<void> {
+  if (!isAbsolute(expected.path)) throw new Error("The bootstrap helper path is not absolute.");
   const current = await executableIdentity(expected.path);
   if (
     current.path !== expected.path ||
@@ -378,9 +350,7 @@ async function assertCapability(
   capability: FreshBootstrapCapability | undefined,
 ): Promise<FreshBootstrapCapability> {
   if (capability === undefined)
-    throw new Error(
-      "Fresh local bootstrap production capability is not configured.",
-    );
+    throw new Error("Fresh local bootstrap production capability is not configured.");
   if (
     capability.kind !== "fresh-bootstrap-local-v1" ||
     (capability.authority !== "configured-production" &&
@@ -446,9 +416,7 @@ export async function productionFreshBootstrapCapability(
     selectedSystemPython === undefined ||
     selectedLock === undefined
   )
-    throw new Error(
-      "Fixed fresh-bootstrap helper executables are unavailable.",
-    );
+    throw new Error("Fixed fresh-bootstrap helper executables are unavailable.");
   const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
     canonicalFreshBootstrapHelperPath(selectedSystemGit),
     canonicalFreshBootstrapHelperPath(selectedSystemPython),
@@ -474,10 +442,7 @@ export async function productionFreshBootstrapCapability(
 }
 
 async function syncDirectory(path: string): Promise<void> {
-  const handle = await open(
-    path,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
-  );
+  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     if (!(await handle.stat()).isDirectory())
       throw new Error("The durable bootstrap path is not a directory.");
@@ -493,10 +458,7 @@ async function assertContainedStatePath(
   leaf: "absent-or-file" | "absent-or-directory" | "directory",
 ): Promise<void> {
   await assertExactIdentity(capability.stateRoot, "directory");
-  if (
-    !within(capability.stateRoot.path, candidate) ||
-    candidate === capability.stateRoot.path
-  )
+  if (!within(capability.stateRoot.path, candidate) || candidate === capability.stateRoot.path)
     throw new Error("The bootstrap state path escapes its owner-only root.");
   const segments = relative(capability.stateRoot.path, candidate).split(sep);
   let cursor = capability.stateRoot.path;
@@ -521,19 +483,14 @@ async function assertContainedStatePath(
       (isLeaf && leaf === "directory" && !value.isDirectory()) ||
       (isLeaf &&
         leaf === "absent-or-file" &&
-        (!value.isFile() ||
-          (value.mode & 0o777) !== 0o600 ||
-          value.nlink !== 1)) ||
+        (!value.isFile() || (value.mode & 0o777) !== 0o600 || value.nlink !== 1)) ||
       (await realpath(cursor)) !== cursor
     )
       throw new Error("The bootstrap state path is unsafe.");
   }
 }
 
-async function durableDirectory(
-  capability: FreshBootstrapCapability,
-  path: string,
-): Promise<void> {
+async function durableDirectory(capability: FreshBootstrapCapability, path: string): Promise<void> {
   await assertContainedStatePath(capability, path, "absent-or-directory");
   await mkdir(path, { recursive: true, mode: 0o700 });
   await chmod(path, 0o700);
@@ -553,10 +510,7 @@ async function atomicWrite(
   await assertContainedStatePath(capability, temporary, "absent-or-file");
   const handle = await open(
     temporary,
-    fsConstants.O_CREAT |
-      fsConstants.O_EXCL |
-      fsConstants.O_WRONLY |
-      fsConstants.O_NOFOLLOW,
+    fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
   try {
@@ -589,10 +543,7 @@ async function createInitialJournal(
   const candidate = `${path}.${randomUUID()}.pending`;
   const handle = await open(
     candidate,
-    fsConstants.O_CREAT |
-      fsConstants.O_EXCL |
-      fsConstants.O_WRONLY |
-      fsConstants.O_NOFOLLOW,
+    fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
   try {
@@ -662,10 +613,7 @@ async function acquireLease(
   try {
     const handle = await open(
       path,
-      fsConstants.O_CREAT |
-        fsConstants.O_EXCL |
-        fsConstants.O_WRONLY |
-        fsConstants.O_NOFOLLOW,
+      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
       0o600,
     );
     try {
@@ -712,8 +660,7 @@ async function acquireLease(
     ],
     { env: minimalEnvironment(), stdio: ["pipe", "pipe", "pipe"] },
   );
-  if (holder.pid === undefined)
-    throw new Error("The lease helper did not start.");
+  if (holder.pid === undefined) throw new Error("The lease helper did not start.");
   let terminal: Error | undefined;
   let releasing = false;
   let helperError = "";
@@ -757,10 +704,7 @@ async function acquireLease(
     pid: holder.pid,
     markerDigest: createHash("sha256").update(marker).digest("hex"),
     assertHeld: () => {
-      if (
-        !releasing &&
-        (holder.exitCode !== null || holder.signalCode !== null)
-      )
+      if (!releasing && (holder.exitCode !== null || holder.signalCode !== null))
         terminal ??= new Error("The fresh-bootstrap lease was lost.");
       if (terminal !== undefined) throw terminal;
     },
@@ -798,7 +742,7 @@ async function quiesceAbandonedLease(
   capability: FreshBootstrapCapability,
   path: string,
   expectedActiveDigest: string,
-): Promise<{ markerDigest: string; release: () => Promise<void>; }> {
+): Promise<{ markerDigest: string; release: () => Promise<void> }> {
   await assertContainedStatePath(capability, path, "absent-or-file");
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
@@ -825,8 +769,7 @@ async function quiesceAbandonedLease(
     ],
     { env: minimalEnvironment(), stdio: ["pipe", "pipe", "pipe"] },
   );
-  if (holder.pid === undefined)
-    throw new Error("The quiescence helper did not start.");
+  if (holder.pid === undefined) throw new Error("The quiescence helper did not start.");
   let stderr = "";
   holder.stderr.setEncoding("utf8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
@@ -849,9 +792,7 @@ async function quiesceAbandonedLease(
     void exited.then(() => {
       clearTimeout(timeout);
       rejectReady(
-        new Error(
-          `Lease quiescence failed${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`,
-        ),
+        new Error(`Lease quiescence failed${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`),
       );
     });
   });
@@ -863,8 +804,7 @@ async function quiesceAbandonedLease(
       released = true;
       holder.stdin.end();
       await exited;
-      if (holder.exitCode !== 0)
-        throw new Error("The quiescence helper exited abnormally.");
+      if (holder.exitCode !== 0) throw new Error("The quiescence helper exited abnormally.");
     },
   };
 }
@@ -889,10 +829,9 @@ function exactSourceTree(
   ]);
   const files: ExactFile[] = [];
   for (const record of output.toString("utf8").split("\0").filter(Boolean)) {
-    const match =
-      /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(
-        record,
-      );
+    const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(
+      record,
+    );
     if (
       match === null ||
       match[1] === "120000" ||
@@ -901,18 +840,12 @@ function exactSourceTree(
       !safeSourcePath(match[4]) ||
       match[4]
         .split("/")
-        .some((part) =>
-          [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()),
-        )
+        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
     )
       throw new Error(
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
       );
-    const bytes = gitBuffer(capability, sourcePath, [
-      "cat-file",
-      "blob",
-      match[3],
-    ]);
+    const bytes = gitBuffer(capability, sourcePath, ["cat-file", "blob", match[3]]);
     files.push({
       path: match[4],
       mode: match[1] as FreshBootstrapFile["mode"],
@@ -920,9 +853,7 @@ function exactSourceTree(
       bytes,
     });
   }
-  return files.toSorted((left, right) =>
-    Buffer.from(left.path).compare(Buffer.from(right.path)),
-  );
+  return files.toSorted((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
 }
 
 async function exactPreparedSourceTree(
@@ -940,21 +871,13 @@ async function exactPreparedSourceTree(
       paths.has(file.path) ||
       file.path
         .split("/")
-        .some((part) =>
-          [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()),
-        )
+        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
     )
       throw new Error("The prepared fresh-template manifest is invalid.");
     paths.add(file.path);
     const bytes = await sourceWorkspace.readSourceFile(file.path);
-    if (
-      bytes === null ||
-      contentDigest(bytes) !== file.sha256 ||
-      blobId(bytes) !== file.objectId
-    )
-      throw new Error(
-        `The prepared fresh-template source drifted at ${file.path}.`,
-      );
+    if (bytes === null || contentDigest(bytes) !== file.sha256 || blobId(bytes) !== file.objectId)
+      throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     files.push({
       path: file.path,
       mode: file.mode,
@@ -962,12 +885,9 @@ async function exactPreparedSourceTree(
       bytes: Buffer.from(bytes),
     });
   }
-  if (files.length === 0)
-    throw new Error("The prepared fresh-template source is empty.");
+  if (files.length === 0) throw new Error("The prepared fresh-template source is empty.");
   await sourceWorkspace.reverify();
-  return files.toSorted((left, right) =>
-    Buffer.from(left.path).compare(Buffer.from(right.path)),
-  );
+  return files.toSorted((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
 }
 
 async function exactResultTree(input: {
@@ -986,20 +906,13 @@ async function exactResultTree(input: {
     input.review.eligibilityDigest !== receipt.eligibilityDigest ||
     input.review.repositoryContractDigest !== receipt.contractDigest
   )
-    throw new Error(
-      "The reviewed change set no longer matches its source receipt.",
-    );
+    throw new Error("The reviewed change set no longer matches its source receipt.");
   if (receipt.version !== SOURCE_RECEIPT_VERSION) {
-    const current = await inspectSourceReceipt(
-      receipt.sourceKind,
-      receipt.sourcePath,
-    );
+    const current = await inspectSourceReceipt(receipt.sourceKind, receipt.sourcePath);
     if (current.digest !== receipt.digest)
       throw new Error("The fresh-template source changed after review.");
   } else if (input.sourceWorkspace === undefined) {
-    throw new Error(
-      "The canonical fresh-template workspace is required for bootstrap.",
-    );
+    throw new Error("The canonical fresh-template workspace is required for bootstrap.");
   }
   const files = new Map(
     (receipt.version === SOURCE_RECEIPT_VERSION
@@ -1011,9 +924,7 @@ async function exactResultTree(input: {
     if (
       change.path
         .split("/")
-        .some((part) =>
-          [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()),
-        )
+        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
     )
       throw new Error("The reviewed bootstrap change uses a reserved path.");
     const before = files.get(change.path);
@@ -1024,18 +935,14 @@ async function exactResultTree(input: {
           before.mode !== `100${change.before.mode}` ||
           contentDigest(before.bytes) !== change.before.digest
     )
-      throw new Error(
-        `The reviewed bootstrap preimage is stale at ${change.path}.`,
-      );
+      throw new Error(`The reviewed bootstrap preimage is stale at ${change.path}.`);
     if (change.after === undefined) {
       files.delete(change.path);
       continue;
     }
     const bytes = await input.readOverlayFile(change.path);
     if (bytes === null || contentDigest(bytes) !== change.after.digest)
-      throw new Error(
-        `The reviewed bootstrap overlay is stale at ${change.path}.`,
-      );
+      throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     const buffer = Buffer.from(bytes);
     files.set(change.path, {
       path: change.path,
@@ -1049,10 +956,7 @@ async function exactResultTree(input: {
   );
 }
 
-async function assertNoLinkRoute(
-  root: PathIdentity,
-  destination: string,
-): Promise<void> {
+async function assertNoLinkRoute(root: PathIdentity, destination: string): Promise<void> {
   if (!within(root.path, destination) || destination === root.path)
     throw new Error("The bootstrap destination is outside its allowed root.");
   let cursor = root.path;
@@ -1158,9 +1062,7 @@ export async function deriveFreshBootstrapProposal(input: {
         pathsOverlap(capability.allowedRoot.path, path),
     )
   )
-    throw new Error(
-      "Bootstrap state and destination roots overlap builder or source authority.",
-    );
+    throw new Error("Bootstrap state and destination roots overlap builder or source authority.");
   const destinationPrestate = await inspectDestinationPrestate({
     capability,
     destinationPath: input.destinationPath,
@@ -1186,11 +1088,7 @@ export async function deriveFreshBootstrapProposal(input: {
     atomicAdapterDigest: FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST,
     materializeAdapterDigest: FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
     journalPath: placeholder,
-    lockPath: resolve(
-      capability.stateRoot.path,
-      "locks",
-      `${destinationLockDigest}.lock`,
-    ),
+    lockPath: resolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
     destinationPrestate,
     sourceReceipt: input.sourceReceipt,
     review: input.review,
@@ -1211,11 +1109,7 @@ export async function deriveFreshBootstrapProposal(input: {
       "journals",
       `${preliminary.publicationIdentityDigest}.json`,
     ),
-    lockPath: resolve(
-      capability.stateRoot.path,
-      "locks",
-      `${destinationLockDigest}.lock`,
-    ),
+    lockPath: resolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
     destinationPrestate,
     sourceReceipt: input.sourceReceipt,
     review: input.review,
@@ -1237,10 +1131,8 @@ async function assertExactInputs(input: {
 }): Promise<ExactFile[]> {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
-    input.proposal.atomicAdapterDigest !==
-      FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST ||
-    input.proposal.materializeAdapterDigest !==
-      FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST ||
+    input.proposal.atomicAdapterDigest !== FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST ||
+    input.proposal.materializeAdapterDigest !== FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST ||
     input.proposal.sourceReceiptDigest !== input.sourceReceipt.digest ||
     input.proposal.sourceSha !== input.sourceReceipt.sourceSha ||
     input.proposal.sourceTree !== input.sourceReceipt.sourceTree ||
@@ -1285,20 +1177,13 @@ async function assertSourceUnchanged(
   const receipt = parseSourceReceipt(sourceReceipt);
   if (receipt.version === SOURCE_RECEIPT_VERSION) {
     if (sourceWorkspace === undefined)
-      throw new Error(
-        "The canonical fresh-template workspace is required for bootstrap.",
-      );
+      throw new Error("The canonical fresh-template workspace is required for bootstrap.");
     await sourceWorkspace.reverify();
     return;
   }
-  const current = await inspectSourceReceipt(
-    receipt.sourceKind,
-    receipt.sourcePath,
-  );
+  const current = await inspectSourceReceipt(receipt.sourceKind, receipt.sourcePath);
   if (current.digest !== receipt.digest)
-    throw new Error(
-      "The fresh-template source changed across bootstrap mutation.",
-    );
+    throw new Error("The fresh-template source changed across bootstrap mutation.");
 }
 
 async function assertPrestate(
@@ -1308,10 +1193,7 @@ async function assertPrestate(
   await assertExactIdentity(capability.allowedRoot, "directory");
   await assertNoLinkRoute(capability.allowedRoot, proposal.destinationPath);
   const parent = await identity(dirname(proposal.destinationPath));
-  if (
-    JSON.stringify(parent) !==
-    JSON.stringify(proposal.destinationPrestate.parent)
-  )
+  if (JSON.stringify(parent) !== JSON.stringify(proposal.destinationPrestate.parent))
     throw new Error("The destination parent changed after approval.");
   let destination;
   try {
@@ -1337,12 +1219,8 @@ async function assertPrestate(
     throw new Error("The approved empty destination changed.");
 }
 
-async function markerContent(
-  proposal: FreshBootstrapProposal,
-): Promise<Buffer> {
-  return Buffer.from(
-    `APP_BUILDER_REPOSITORY_BOOTSTRAP_CLAIM_V1:${proposal.digest}\n`,
-  );
+async function markerContent(proposal: FreshBootstrapProposal): Promise<Buffer> {
+  return Buffer.from(`APP_BUILDER_REPOSITORY_BOOTSTRAP_CLAIM_V1:${proposal.digest}\n`);
 }
 
 async function createStage(
@@ -1371,10 +1249,7 @@ async function createStage(
   const marker = resolve(proposal.stagingPath, proposal.claimMarkerName);
   const handle = await open(
     marker,
-    fsConstants.O_CREAT |
-      fsConstants.O_EXCL |
-      fsConstants.O_WRONLY |
-      fsConstants.O_NOFOLLOW,
+    fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
   try {
@@ -1404,10 +1279,7 @@ async function materializeFile(
   stageIdentity: PathIdentity,
 ): Promise<void> {
   await assertExactExecutable(capability.systemPythonIdentity);
-  const stage = await open(
-    proposal.stagingPath,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
-  );
+  const stage = await open(proposal.stagingPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const opened = await stage.stat();
     if (
@@ -1417,20 +1289,10 @@ async function materializeFile(
       String(opened.uid) !== stageIdentity.uid ||
       (opened.mode & 0o777).toString(8) !== stageIdentity.mode
     )
-      throw new Error(
-        "The fd-bound bootstrap stage changed after its durable layout receipt.",
-      );
+      throw new Error("The fd-bound bootstrap stage changed after its durable layout receipt.");
     const result = spawnSync(
       capability.systemPython,
-      [
-        "-I",
-        "-c",
-        materializeAdapter,
-        file.path,
-        file.mode,
-        file.blob,
-        recovery ? "1" : "0",
-      ],
+      ["-I", "-c", materializeAdapter, file.path, file.mode, file.blob, recovery ? "1" : "0"],
       {
         env: minimalEnvironment(),
         input: file.bytes,
@@ -1440,8 +1302,7 @@ async function materializeFile(
         stdio: ["pipe", "pipe", "pipe", stage.fd],
       },
     );
-    if (result.status !== 0)
-      throw new Error(`Fd-bound materialization failed at ${file.path}.`);
+    if (result.status !== 0) throw new Error(`Fd-bound materialization failed at ${file.path}.`);
   } finally {
     await stage.close();
   }
@@ -1496,10 +1357,8 @@ async function initializeGit(input: {
   )
     throw new Error("The fresh repository did not use SHA-1 object format.");
   if (
-    git(input.capability, input.proposal.stagingPath, [
-      "rev-parse",
-      "--show-ref-format",
-    ]).trim() !== "files"
+    git(input.capability, input.proposal.stagingPath, ["rev-parse", "--show-ref-format"]).trim() !==
+    "files"
   )
     throw new Error("The fresh repository did not use files ref format.");
   await input.hooks?.beforeGitAdd?.();
@@ -1512,8 +1371,7 @@ async function initializeGit(input: {
       undefined,
       file.bytes,
     ).trim();
-    if (observed !== file.blob)
-      throw new Error(`Git blob identity changed at ${file.path}.`);
+    if (observed !== file.blob) throw new Error(`Git blob identity changed at ${file.path}.`);
     indexRecords.push(Buffer.from(`${file.mode} ${file.blob}\t${file.path}\0`));
   }
   git(
@@ -1524,9 +1382,7 @@ async function initializeGit(input: {
     Buffer.concat(indexRecords),
   );
   await input.hooks?.afterGitAdd?.();
-  const tree = git(input.capability, input.proposal.stagingPath, [
-    "write-tree",
-  ]).trim();
+  const tree = git(input.capability, input.proposal.stagingPath, ["write-tree"]).trim();
   if (tree !== input.proposal.expectedGitTree)
     throw new Error("Git wrote a different bootstrap tree.");
   await input.hooks?.beforeGitCommit?.();
@@ -1555,19 +1411,10 @@ async function initializeGit(input: {
     currentRef = "";
   }
   if (currentRef === "")
-    git(input.capability, input.proposal.stagingPath, [
-      "update-ref",
-      ref,
-      commit,
-      "0".repeat(40),
-    ]);
+    git(input.capability, input.proposal.stagingPath, ["update-ref", ref, commit, "0".repeat(40)]);
   else if (!input.recovery || currentRef !== commit)
     throw new Error("Recovery found a conflicting initial branch.");
-  git(input.capability, input.proposal.stagingPath, [
-    "symbolic-ref",
-    "HEAD",
-    ref,
-  ]);
+  git(input.capability, input.proposal.stagingPath, ["symbolic-ref", "HEAD", ref]);
   await input.hooks?.afterGitCommit?.();
 }
 
@@ -1590,14 +1437,11 @@ async function assertRawGitAuthority(
     (gitState.mode & 0o022) !== 0 ||
     (await realpath(root)) !== root ||
     (await realpath(gitDirectory)) !== gitDirectory ||
-    (await readFile(resolve(gitDirectory, "config"), "utf8")) !==
-      exactGitConfig ||
+    (await readFile(resolve(gitDirectory, "config"), "utf8")) !== exactGitConfig ||
     (await readFile(resolve(gitDirectory, "HEAD"), "utf8")) !==
       `ref: refs/heads/${proposal.repositoryIdentity.initialBranch}\n`
   )
-    throw new Error(
-      "The fresh repository Git authority is not local and exact.",
-    );
+    throw new Error("The fresh repository Git authority is not local and exact.");
   for (const forbidden of [
     resolve(gitDirectory, "commondir"),
     resolve(gitDirectory, "gitdir"),
@@ -1629,8 +1473,7 @@ async function rawWorktreeManifest(
     const directory = relativePath === "" ? root : resolve(root, relativePath);
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
-      const path =
-        relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
+      const path = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
       if (path === ".git") continue;
       if (allowClaimMarker && path === proposal.claimMarkerName) continue;
       if (!safeSourcePath(path))
@@ -1646,9 +1489,7 @@ async function rawWorktreeManifest(
         throw new Error("The fresh repository raw tree is unsafe.");
       if (state.isDirectory()) {
         if ((state.mode & 0o777) !== 0o755)
-          throw new Error(
-            "The fresh repository contains a directory with an unexpected mode.",
-          );
+          throw new Error("The fresh repository contains a directory with an unexpected mode.");
         directories.add(path);
         await walk(path);
         continue;
@@ -1658,9 +1499,7 @@ async function rawWorktreeManifest(
       const bytes = await readFile(absolute);
       const exactMode = (state.mode & 0o777).toString(8);
       if (exactMode !== "644" && exactMode !== "755")
-        throw new Error(
-          "The fresh repository contains a file with an unexpected mode.",
-        );
+        throw new Error("The fresh repository contains a file with an unexpected mode.");
       output.push({
         path,
         mode: (state.mode & 0o111) === 0 ? "100644" : "100755",
@@ -1679,12 +1518,8 @@ async function rawWorktreeManifest(
     JSON.stringify([...directories].toSorted()) !==
     JSON.stringify([...expectedDirectories].toSorted())
   )
-    throw new Error(
-      "The fresh repository contains an unexpected raw directory.",
-    );
-  return output.toSorted((left, right) =>
-    Buffer.from(left.path).compare(Buffer.from(right.path)),
-  );
+    throw new Error("The fresh repository contains an unexpected raw directory.");
+  return output.toSorted((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
 }
 
 async function assertExactRepository(
@@ -1703,45 +1538,19 @@ async function assertExactRepository(
   const destinationIdentity = await identity(root);
   const gitDirectoryIdentity = await identity(gitDirectory);
   const ref = `refs/heads/${proposal.repositoryIdentity.initialBranch}`;
-  const rawManifest = await rawWorktreeManifest(
-    root,
-    proposal,
-    options.allowClaimMarker === true,
-  );
+  const rawManifest = await rawWorktreeManifest(root, proposal, options.allowClaimMarker === true);
   const absoluteGitDirectory = await realpath(
-    git(capability, root, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-dir",
-    ]).trim(),
+    git(capability, root, ["rev-parse", "--path-format=absolute", "--git-dir"]).trim(),
   );
   const absoluteCommonDirectory = await realpath(
-    git(capability, root, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ]).trim(),
+    git(capability, root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim(),
   );
   const remotes = git(capability, root, ["remote"]).split("\n").filter(Boolean);
-  const refs = git(capability, root, [
-    "for-each-ref",
-    "--format=%(refname)%00%(objectname)",
-  ])
+  const refs = git(capability, root, ["for-each-ref", "--format=%(refname)%00%(objectname)"])
     .split("\n")
     .filter(Boolean);
-  const parents = git(capability, root, [
-    "rev-list",
-    "--parents",
-    "--max-count=1",
-    "HEAD",
-  ]).trim();
-  const paths = gitBuffer(capability, root, [
-    "ls-tree",
-    "-r",
-    "-z",
-    "--full-tree",
-    "HEAD",
-  ]);
+  const parents = git(capability, root, ["rev-list", "--parents", "--max-count=1", "HEAD"]).trim();
+  const paths = gitBuffer(capability, root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
   const observed = paths
     .toString("utf8")
     .split("\0")
@@ -1766,47 +1575,32 @@ async function assertExactRepository(
         !entry.isDirectory() ||
         (await readdir(resolve(objectDirectory, entry.name))).length !== 0
       )
-        throw new Error(
-          "The fresh repository contains unexpected packed or object authority.",
-        );
+        throw new Error("The fresh repository contains unexpected packed or object authority.");
       continue;
     }
     if (!entry.isDirectory() || !/^[0-9a-f]{2}$/u.test(entry.name))
-      throw new Error(
-        "The fresh repository contains malformed object storage.",
-      );
+      throw new Error("The fresh repository contains malformed object storage.");
     for (const object of await readdir(resolve(objectDirectory, entry.name))) {
       if (!/^[0-9a-f]{38}$/u.test(object))
-        throw new Error(
-          "The fresh repository contains malformed loose objects.",
-        );
+        throw new Error("The fresh repository contains malformed loose objects.");
       looseObjects.add(`${entry.name}${object}`);
     }
   }
   if (
-    git(capability, root, ["rev-parse", "--show-object-format"]).trim() !==
-      "sha1" ||
+    git(capability, root, ["rev-parse", "--show-object-format"]).trim() !== "sha1" ||
     absoluteGitDirectory !== gitDirectory ||
     absoluteCommonDirectory !== gitDirectory ||
-    git(capability, root, ["rev-parse", "--show-ref-format"]).trim() !==
-      "files" ||
+    git(capability, root, ["rev-parse", "--show-ref-format"]).trim() !== "files" ||
     git(capability, root, ["symbolic-ref", "HEAD"]).trim() !== ref ||
-    git(capability, root, ["rev-parse", "HEAD"]).trim() !==
-      proposal.expectedInitialCommit ||
-    git(capability, root, ["rev-parse", "HEAD^{tree}"]).trim() !==
-      proposal.expectedGitTree ||
+    git(capability, root, ["rev-parse", "HEAD"]).trim() !== proposal.expectedInitialCommit ||
+    git(capability, root, ["rev-parse", "HEAD^{tree}"]).trim() !== proposal.expectedGitTree ||
     parents !== proposal.expectedInitialCommit ||
     git(capability, root, ["rev-list", "--count", "HEAD"]).trim() !== "1" ||
     remotes.length !== 0 ||
-    JSON.stringify(refs) !==
-      JSON.stringify([`${ref}\0${proposal.expectedInitialCommit}`]) ||
+    JSON.stringify(refs) !== JSON.stringify([`${ref}\0${proposal.expectedInitialCommit}`]) ||
     JSON.stringify([...looseObjects].toSorted()) !==
       JSON.stringify([...reachableObjects].toSorted()) ||
-    git(capability, root, [
-      "status",
-      "--porcelain=v1",
-      "--untracked-files=all",
-    ]).trim() !==
+    git(capability, root, ["status", "--porcelain=v1", "--untracked-files=all"]).trim() !==
       (options.allowClaimMarker ? `?? ${proposal.claimMarkerName}` : "") ||
     JSON.stringify(observed) !== JSON.stringify(proposal.exactTree) ||
     JSON.stringify(rawManifest) !== JSON.stringify(proposal.exactTree)
@@ -1839,10 +1633,7 @@ async function atomicPublish(
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<void> {
   const parentPath = dirname(proposal.destinationPath);
-  const parent = await open(
-    parentPath,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
-  );
+  const parent = await open(parentPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const parentState = await parent.stat();
     const expectedParentNlink = String(
@@ -1856,27 +1647,19 @@ async function atomicPublish(
       String(parentState.dev) !== proposal.destinationPrestate.parent.device ||
       String(parentState.ino) !== proposal.destinationPrestate.parent.inode ||
       String(parentState.uid) !== proposal.destinationPrestate.parent.uid ||
-      (parentState.mode & 0o777).toString(8) !==
-        proposal.destinationPrestate.parent.mode ||
+      (parentState.mode & 0o777).toString(8) !== proposal.destinationPrestate.parent.mode ||
       String(parentState.nlink) !== expectedParentNlink
     )
-      throw new Error(
-        "The destination parent changed before atomic publication.",
-      );
+      throw new Error("The destination parent changed before atomic publication.");
     const stageState = await lstat(proposal.stagingPath);
     if (
       stageState.isSymbolicLink() ||
       !stageState.isDirectory() ||
-      JSON.stringify(await identity(proposal.stagingPath)) !==
-        JSON.stringify(stageIdentity)
+      JSON.stringify(await identity(proposal.stagingPath)) !== JSON.stringify(stageIdentity)
     )
-      throw new Error(
-        "The reviewed bootstrap stage changed before atomic publication.",
-      );
+      throw new Error("The reviewed bootstrap stage changed before atomic publication.");
     const originalEmpty =
-      approvedEmpty === undefined
-        ? undefined
-        : await lstat(proposal.destinationPath);
+      approvedEmpty === undefined ? undefined : await lstat(proposal.destinationPath);
     if (
       originalEmpty !== undefined &&
       (originalEmpty.isSymbolicLink() ||
@@ -1885,9 +1668,7 @@ async function atomicPublish(
           JSON.stringify(approvedEmpty) ||
         (await readdir(proposal.destinationPath)).length !== 0)
     )
-      throw new Error(
-        "The approved exact-empty destination changed before atomic publication.",
-      );
+      throw new Error("The approved exact-empty destination changed before atomic publication.");
     await assertExactExecutable(capability.systemPythonIdentity);
     const result = spawnSync(
       capability.systemPython,
@@ -1934,9 +1715,7 @@ async function atomicPublish(
       String(destination.dev) !== stageIdentity.device ||
       String(destination.ino) !== stageIdentity.inode
     )
-      throw new Error(
-        "Atomic publication did not install the exact stage inode.",
-      );
+      throw new Error("Atomic publication did not install the exact stage inode.");
     await hooks?.afterAtomicSwap?.();
     if (
       originalEmpty !== undefined &&
@@ -1952,9 +1731,7 @@ async function atomicPublish(
           ) ||
         (await readdir(proposal.stagingPath)).length !== 0)
     )
-      throw new Error(
-        "Atomic exchange did not retain the exact old empty inode as a tombstone.",
-      );
+      throw new Error("Atomic exchange did not retain the exact old empty inode as a tombstone.");
   } finally {
     await parent.close();
   }
@@ -1967,8 +1744,7 @@ async function removeVerifiedSwappedEmptyDirectory(
   if (proposal.destinationPrestate.kind !== "empty-directory") return;
   const state = await pathState(proposal.stagingPath);
   if (state === "absent") return;
-  if (state !== "directory")
-    throw new Error("Recovery found an invalid swapped-out destination.");
+  if (state !== "directory") throw new Error("Recovery found an invalid swapped-out destination.");
   if (
     JSON.stringify(await identity(proposal.stagingPath)) !==
       JSON.stringify({
@@ -1996,9 +1772,7 @@ function pendingReceipt(
     publishedByCallId,
     leaseMarkerDigest,
     ...(recoveryOfDigest === undefined ? {} : { recoveryOfDigest }),
-    ...(previousLeaseMarkerDigest === undefined
-      ? {}
-      : { previousLeaseMarkerDigest }),
+    ...(previousLeaseMarkerDigest === undefined ? {} : { previousLeaseMarkerDigest }),
     layout,
     stageCreated: layout.phase !== "intent",
     destinationPublished: layout.phase === "published",
@@ -2025,9 +1799,7 @@ function failureReceipt(input: {
     status: "failed" as const,
     publishedByCallId: input.publishedByCallId,
     leaseMarkerDigest: input.leaseMarkerDigest,
-    ...(input.recoveryOfDigest === undefined
-      ? {}
-      : { recoveryOfDigest: input.recoveryOfDigest }),
+    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
     ...(input.previousLeaseMarkerDigest === undefined
       ? {}
       : { previousLeaseMarkerDigest: input.previousLeaseMarkerDigest }),
@@ -2057,9 +1829,7 @@ function successReceipt(input: {
     status: "succeeded" as const,
     publishedByCallId: input.publishedByCallId,
     leaseMarkerDigest: input.leaseMarkerDigest,
-    ...(input.recoveryOfDigest === undefined
-      ? {}
-      : { recoveryOfDigest: input.recoveryOfDigest }),
+    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
     ...(input.previousLeaseMarkerDigest === undefined
       ? {}
       : { previousLeaseMarkerDigest: input.previousLeaseMarkerDigest }),
@@ -2079,14 +1849,10 @@ function successReceipt(input: {
   return { ...unsigned, digest: freshBootstrapJournalDigest(unsigned) };
 }
 
-async function pathState(
-  path: string,
-): Promise<"absent" | "directory" | "other"> {
+async function pathState(path: string): Promise<"absent" | "directory" | "other"> {
   try {
     const value = await lstat(path);
-    return value.isDirectory() && !value.isSymbolicLink()
-      ? "directory"
-      : "other";
+    return value.isDirectory() && !value.isSymbolicLink() ? "directory" : "other";
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
     throw error;
@@ -2108,11 +1874,7 @@ export async function readFreshBootstrapJournal(input: {
     )
   )
     throw new Error("The fresh-bootstrap journal path is not identity-bound.");
-  await assertContainedStatePath(
-    capability,
-    input.proposal.journalPath,
-    "absent-or-file",
-  );
+  await assertContainedStatePath(capability, input.proposal.journalPath, "absent-or-file");
   let bytes;
   try {
     bytes = await readFile(input.proposal.journalPath, "utf8");
@@ -2122,12 +1884,7 @@ export async function readFreshBootstrapJournal(input: {
   }
   const parsed = JSON.parse(bytes) as FreshBootstrapJournal;
   assertCanonicalFreshBootstrapJournal(parsed);
-  if (
-    !exactFreshBootstrapProposalMatch(
-      proposalFromFreshBootstrapJournal(parsed),
-      input.proposal,
-    )
-  )
+  if (!exactFreshBootstrapProposalMatch(proposalFromFreshBootstrapJournal(parsed), input.proposal))
     throw new Error("The bootstrap journal belongs to another proposal.");
   return parsed;
 }
@@ -2156,12 +1913,9 @@ async function executeBootstrap(input: {
     throw new Error("Fresh bootstrap already has a durable journal.");
   if (
     input.recoveryOfDigest !== undefined &&
-    (existingJournal === undefined ||
-      existingJournal.digest !== input.recoveryOfDigest)
+    (existingJournal === undefined || existingJournal.digest !== input.recoveryOfDigest)
   )
-    throw new Error(
-      "Fresh-bootstrap recovery requires the exact journal digest.",
-    );
+    throw new Error("Fresh-bootstrap recovery requires the exact journal digest.");
   const priorLeaseMarkerDigest = existingJournal?.leaseMarkerDigest;
   const lease = await acquireLease(
     capability,
@@ -2174,34 +1928,22 @@ async function executeBootstrap(input: {
   });
   if (lockedJournal?.digest !== existingJournal?.digest) {
     await lease.release();
-    throw new Error(
-      "The fresh-bootstrap journal changed while acquiring the destination lease.",
-    );
+    throw new Error("The fresh-bootstrap journal changed while acquiring the destination lease.");
   }
   existingJournal = lockedJournal;
   try {
-    if (
-      existingJournal !== undefined &&
-      existingJournal.status !== "succeeded"
-    ) {
-      const {layout} = existingJournal;
+    if (existingJournal !== undefined && existingJournal.status !== "succeeded") {
+      const { layout } = existingJournal;
       if (layout.phase === "intent") {
         if ((await pathState(input.proposal.stagingPath)) !== "absent")
-          throw new Error(
-            "The intent journal no longer matches the bootstrap stage.",
-          );
-      } else if (
-        layout.phase === "stage-owned" ||
-        layout.phase === "stage-ready"
-      ) {
+          throw new Error("The intent journal no longer matches the bootstrap stage.");
+      } else if (layout.phase === "stage-owned" || layout.phase === "stage-ready") {
         if (
           (await pathState(input.proposal.stagingPath)) !== "directory" ||
           JSON.stringify(await identity(input.proposal.stagingPath)) !==
             JSON.stringify(layout.stageIdentity)
         )
-          throw new Error(
-            "The bootstrap stage no longer matches its durable layout receipt.",
-          );
+          throw new Error("The bootstrap stage no longer matches its durable layout receipt.");
       } else {
         if (
           (await pathState(input.proposal.destinationPath)) !== "directory" ||
@@ -2226,14 +1968,11 @@ async function executeBootstrap(input: {
     await lease.release();
     throw error;
   }
-  let stageCreated =
-    (await pathState(input.proposal.stagingPath)) === "directory";
+  let stageCreated = (await pathState(input.proposal.stagingPath)) === "directory";
   let stageReady =
-    existingJournal?.status !== "succeeded" &&
-    existingJournal?.layout.phase === "stage-ready";
+    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === "stage-ready";
   let stageReadyIdentity =
-    existingJournal?.status !== "succeeded" &&
-    existingJournal?.layout.phase === "stage-ready"
+    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === "stage-ready"
       ? existingJournal.layout.stageIdentity
       : undefined;
   let destinationPublished = false;
@@ -2249,11 +1988,7 @@ async function executeBootstrap(input: {
         undefined,
         { phase: "intent" },
       );
-      await createInitialJournal(
-        capability,
-        input.proposal.journalPath,
-        pending,
-      );
+      await createInitialJournal(capability, input.proposal.journalPath, pending);
       await input.hooks?.afterPendingJournal?.();
     } else {
       const recoveryPending = pendingReceipt(
@@ -2278,8 +2013,7 @@ async function executeBootstrap(input: {
     lease.assertHeld();
     const destinationState = await pathState(input.proposal.destinationPath);
     if (destinationState === "directory") {
-      let verification:
-        Awaited<ReturnType<typeof assertExactRepository>> | undefined;
+      let verification: Awaited<ReturnType<typeof assertExactRepository>> | undefined;
       try {
         verification = await assertExactRepository(
           capability,
@@ -2305,11 +2039,7 @@ async function executeBootstrap(input: {
               }
             : {}),
         });
-        await atomicWrite(
-          capability,
-          input.proposal.journalPath,
-          `${JSON.stringify(success)}\n`,
-        );
+        await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
         return { ok: true, receipt: success };
       } else {
         if (input.proposal.destinationPrestate.kind !== "empty-directory")
@@ -2335,11 +2065,7 @@ async function executeBootstrap(input: {
           stageIdentity: await identity(input.proposal.stagingPath),
         },
       );
-      await atomicWrite(
-        capability,
-        input.proposal.journalPath,
-        `${JSON.stringify(claimed)}\n`,
-      );
+      await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(claimed)}\n`);
     } else if (input.recoveryOfDigest === undefined) {
       throw new Error("The deterministic bootstrap stage already exists.");
     }
@@ -2364,23 +2090,15 @@ async function executeBootstrap(input: {
       recovery: input.recoveryOfDigest !== undefined,
     });
     lease.assertHeld();
-    const marker = resolve(
-      input.proposal.stagingPath,
-      input.proposal.claimMarkerName,
-    );
+    const marker = resolve(input.proposal.stagingPath, input.proposal.claimMarkerName);
     const markerState = await pathState(marker);
     if (markerState === "other") {
       const markerBytes = await readFile(marker);
-      if (
-        Buffer.compare(markerBytes, await markerContent(input.proposal)) !== 0
-      )
+      if (Buffer.compare(markerBytes, await markerContent(input.proposal)) !== 0)
         throw new Error("The bootstrap stage ownership marker changed.");
-      await assertExactRepository(
-        capability,
-        input.proposal,
-        input.proposal.stagingPath,
-        { allowClaimMarker: true },
-      );
+      await assertExactRepository(capability, input.proposal, input.proposal.stagingPath, {
+        allowClaimMarker: true,
+      });
       const claimedReadyIdentity = await identity(input.proposal.stagingPath);
       const ready = pendingReceipt(
         input.proposal,
@@ -2393,11 +2111,7 @@ async function executeBootstrap(input: {
           stageIdentity: claimedReadyIdentity,
         },
       );
-      await atomicWrite(
-        capability,
-        input.proposal.journalPath,
-        `${JSON.stringify(ready)}\n`,
-      );
+      await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(ready)}\n`);
       stageReady = true;
       await unlink(marker);
       await syncDirectory(input.proposal.stagingPath);
@@ -2421,22 +2135,13 @@ async function executeBootstrap(input: {
     } else if (!stageReady || markerState !== "absent") {
       throw new Error("Recovery lacks exact stage-ready ownership evidence.");
     }
-    await assertExactRepository(
-      capability,
-      input.proposal,
-      input.proposal.stagingPath,
-    );
+    await assertExactRepository(capability, input.proposal, input.proposal.stagingPath);
     lease.assertHeld();
     await input.hooks?.beforeAtomicPublication?.();
     await assertSourceUnchanged(input.sourceReceipt, input.sourceWorkspace);
     if (stageReadyIdentity === undefined)
       throw new Error("Fresh bootstrap lacks durable stage-ready identity.");
-    await atomicPublish(
-      capability,
-      input.proposal,
-      stageReadyIdentity,
-      input.hooks,
-    );
+    await atomicPublish(capability, input.proposal, stageReadyIdentity, input.hooks);
     destinationPublished = true;
     lease.assertHeld();
     await input.hooks?.afterAtomicPublication?.();
@@ -2459,21 +2164,13 @@ async function executeBootstrap(input: {
         ? { swappedOldIdentity: await identity(input.proposal.stagingPath) }
         : {}),
     });
-    await atomicWrite(
-      capability,
-      input.proposal.journalPath,
-      `${JSON.stringify(success)}\n`,
-    );
+    await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
     lease.assertHeld();
     return { ok: true, receipt: success };
   } catch (error) {
     if (!destinationPublished) {
       try {
-        await assertExactRepository(
-          capability,
-          input.proposal,
-          input.proposal.destinationPath,
-        );
+        await assertExactRepository(capability, input.proposal, input.proposal.destinationPath);
         destinationPublished = true;
       } catch {
         destinationPublished = false;
@@ -2490,17 +2187,14 @@ async function executeBootstrap(input: {
         : stageCreated
           ? "materialization-partial"
           : "precondition-failed",
-      failureMessage:
-        error instanceof Error ? error.message : "Fresh bootstrap failed.",
+      failureMessage: error instanceof Error ? error.message : "Fresh bootstrap failed.",
       layout: destinationPublished
         ? {
             phase: "published",
             destinationIdentity: await identity(input.proposal.destinationPath),
             ...((await pathState(input.proposal.stagingPath)) === "directory"
               ? {
-                  swappedOldIdentity: await identity(
-                    input.proposal.stagingPath,
-                  ),
+                  swappedOldIdentity: await identity(input.proposal.stagingPath),
                 }
               : {}),
           }
@@ -2520,11 +2214,7 @@ async function executeBootstrap(input: {
       leaseHeld = false;
     }
     if (leaseHeld && !input.hooks?.preserveNonterminalJournal)
-      await atomicWrite(
-        capability,
-        input.proposal.journalPath,
-        `${JSON.stringify(failure)}\n`,
-      );
+      await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(failure)}\n`);
     if (!leaseHeld) {
       const quiesced = await quiesceAbandonedLease(
         capability,
@@ -2554,11 +2244,7 @@ async function executeBootstrap(input: {
           stageCreated: failure.stageCreated,
           destinationPublished: failure.destinationPublished,
         });
-        await atomicWrite(
-          capability,
-          input.proposal.journalPath,
-          `${JSON.stringify(failure)}\n`,
-        );
+        await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(failure)}\n`);
       } finally {
         await quiesced.release();
       }

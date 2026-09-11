@@ -30,31 +30,21 @@ function caseDirectory(id: string, root?: string) {
   return join(designCasesRoot(root), caseId.parse(id));
 }
 
-export async function listDesignCases(
-  root?: string,
-): Promise<ListedDesignCase[]> {
+export async function listDesignCases(root?: string): Promise<ListedDesignCase[]> {
   const base = designCasesRoot(root);
-  const entries = await readdir(base, { withFileTypes: true }).catch(
-    (error) => {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    },
-  );
+  const entries = await readdir(base, { withFileTypes: true }).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  });
   const cases = await Promise.all(
     entries
-      .filter(
-        (entry) => entry.isDirectory() && caseId.safeParse(entry.name).success,
-      )
+      .filter((entry) => entry.isDirectory() && caseId.safeParse(entry.name).success)
       .map(async (entry) => {
         const metadata = designCaseSchema.parse(
-          JSON.parse(
-            await readFile(join(base, entry.name, "case.json"), "utf8"),
-          ),
+          JSON.parse(await readFile(join(base, entry.name, "case.json"), "utf8")),
         );
         if (metadata.id !== entry.name)
-          throw new Error(
-            `Case directory and metadata id differ: ${entry.name}`,
-          );
+          throw new Error(`Case directory and metadata id differ: ${entry.name}`);
         return {
           id: metadata.id,
           title: metadata.title,
@@ -70,8 +60,7 @@ export async function readDesignCase(id: string, root?: string) {
   const metadata = designCaseSchema.parse(
     JSON.parse(await readFile(join(directory, "case.json"), "utf8")),
   );
-  if (metadata.id !== id)
-    throw new Error(`Case directory and metadata id differ: ${id}`);
+  if (metadata.id !== id) throw new Error(`Case directory and metadata id differ: ${id}`);
   return {
     ...metadata,
     directory,

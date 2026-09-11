@@ -2,10 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
-import {
-  appBuilderWorkflowState,
-  updateExactWorkflow,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import { sourceReceiptEvidence } from "@/lib/repository/source-receipt";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -21,9 +18,7 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined)
-      throw new Error(
-        "No reviewed workflow with an immutable GitHub source is available.",
-      );
+      throw new Error("No reviewed workflow with an immutable GitHub source is available.");
     if (
       state.githubSource.digest !== input.expectedGitHubSourceDigest ||
       state.reviewReceipt.digest !== input.expectedReviewDigest
@@ -51,9 +46,7 @@ export default defineTool({
       operation: "draft pull-request proposal sealing",
       transition: (latest) => {
         if (latest.phase !== "reviewed" || latest.githubSource === undefined)
-          throw new Error(
-            "The reviewed GitHub workflow changed before proposal sealing.",
-          );
+          throw new Error("The reviewed GitHub workflow changed before proposal sealing.");
         return {
           ...latest,
           githubDraftProposal: {

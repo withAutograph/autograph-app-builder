@@ -18,8 +18,7 @@ import { promisify } from "node:util";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const execFileAsync = promisify(execFile);
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 const dependencyInputs = [
   ".config/mise/config.toml",
@@ -59,8 +58,7 @@ export type DevelopmentSnapshot = Readonly<{
 
 function argumentValue(args: readonly string[], index: number, name: string) {
   const value = args[index + 1];
-  if (value === undefined || value.startsWith("--"))
-    throw new Error(`Missing value for ${name}.`);
+  if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
 }
 
@@ -71,9 +69,7 @@ function port(value: string, name: string) {
   return parsed;
 }
 
-export function parseDevelopmentArguments(
-  args: readonly string[],
-): DevelopmentArguments {
+export function parseDevelopmentArguments(args: readonly string[]): DevelopmentArguments {
   const parsed: {
     arrustedRoot?: string;
     stateRoot?: string;
@@ -107,17 +103,11 @@ export function parseDevelopmentArguments(
     }
   }
   if (parsed.arrustedRoot === undefined)
-    throw new Error(
-      "Usage: mise run dev -- --arrusted-root /absolute/path/to/arrusted",
-    );
-  if (!isAbsolute(parsed.arrustedRoot))
-    throw new Error("--arrusted-root must be absolute.");
+    throw new Error("Usage: mise run dev -- --arrusted-root /absolute/path/to/arrusted");
+  if (!isAbsolute(parsed.arrustedRoot)) throw new Error("--arrusted-root must be absolute.");
   if (parsed.stateRoot !== undefined && !isAbsolute(parsed.stateRoot))
     throw new Error("--state-root must be absolute.");
-  if (
-    parsed.destinationRoot !== undefined &&
-    !isAbsolute(parsed.destinationRoot)
-  )
+  if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot))
     throw new Error("--destination-root must be absolute.");
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };
 }
@@ -141,11 +131,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 
 async function canonicalOwnedDirectory(path: string, label: string) {
   const requested = resolve(path);
-  if (
-    !isAbsolute(path) ||
-    requested !== path ||
-    (await realpath(path)) !== path
-  )
+  if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path)
     throw new Error(`${label} must be an absolute canonical directory.`);
   const info = await lstat(path);
   if (
@@ -165,9 +151,7 @@ function safeRelativePath(path: string) {
     path !== "" &&
     !isAbsolute(path) &&
     !path.includes("\\") &&
-    path
-      .split("/")
-      .every((part) => part !== "" && part !== "." && part !== "..")
+    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
   );
 }
 
@@ -206,9 +190,7 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
           // An uninitialized gitlink has no checkout bytes to snapshot. An
           // initialized submodule contributes its live, nonignored files.
           await lstat(join(absolute, ".git"));
-          paths.push(
-            ...(await sourcePaths(absolute)).map((child) => `${path}/${child}`),
-          );
+          paths.push(...(await sourcePaths(absolute)).map((child) => `${path}/${child}`));
           continue;
         }
       } catch (error) {
@@ -228,13 +210,10 @@ async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
   for (;;) {
     const info = await lstat(ancestor);
     if (!info.isDirectory() || info.isSymbolicLink())
-      throw new Error(
-        `Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`,
-      );
+      throw new Error(`Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`);
     if (ancestor === sourceRoot) break;
     const parent = dirname(ancestor);
-    if (parent === ancestor)
-      throw new Error("Development source path escaped its checkout.");
+    if (parent === ancestor) throw new Error("Development source path escaped its checkout.");
     ancestor = parent;
   }
 }
@@ -245,27 +224,16 @@ async function sourceEntry(sourceRoot: string, path: string) {
     await assertSafeSourceAncestors(sourceRoot, absolute);
     const info = await lstat(absolute);
     if (info.isFile()) {
-      const descriptor = await open(
-        absolute,
-        constants.O_RDONLY | constants.O_NOFOLLOW,
-      );
+      const descriptor = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const opened = await descriptor.stat();
-        if (
-          !opened.isFile() ||
-          opened.dev !== info.dev ||
-          opened.ino !== info.ino
-        )
-          throw new Error(
-            `Development source file changed during read: ${path}`,
-          );
+        if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino)
+          throw new Error(`Development source file changed during read: ${path}`);
         const content = await descriptor.readFile();
         await assertSafeSourceAncestors(sourceRoot, absolute);
         const final = await descriptor.stat();
         if (final.dev !== opened.dev || final.ino !== opened.ino)
-          throw new Error(
-            `Development source file changed during read: ${path}`,
-          );
+          throw new Error(`Development source file changed during read: ${path}`);
         return {
           path,
           kind: "file" as const,
@@ -278,18 +246,11 @@ async function sourceEntry(sourceRoot: string, path: string) {
     }
     if (info.isSymbolicLink()) {
       const target = await readlink(absolute);
-      if (isAbsolute(target))
-        throw new Error(`Development source link must be relative: ${path}`);
+      if (isAbsolute(target)) throw new Error(`Development source link must be relative: ${path}`);
       const resolved = resolve(dirname(absolute), target);
       const escaped = relative(sourceRoot, resolved);
-      if (
-        escaped === ".." ||
-        escaped.startsWith(`..${sep}`) ||
-        isAbsolute(escaped)
-      )
-        throw new Error(
-          `Development source link escapes the checkout: ${path}`,
-        );
+      if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped))
+        throw new Error(`Development source link escapes the checkout: ${path}`);
       return {
         path,
         kind: "link" as const,
@@ -312,17 +273,13 @@ async function developmentEntries(sourceRoot: string) {
   for (let offset = 0; offset < paths.length; offset += 32)
     entries.push(
       ...(await Promise.all(
-        paths
-          .slice(offset, offset + 32)
-          .map((path) => sourceEntry(sourceRoot, path)),
+        paths.slice(offset, offset + 32).map((path) => sourceEntry(sourceRoot, path)),
       )),
     );
   return entries.filter((entry) => entry !== undefined);
 }
 
-function fingerprintEntries(
-  entries: readonly Awaited<ReturnType<typeof sourceEntry>>[],
-) {
+function fingerprintEntries(entries: readonly Awaited<ReturnType<typeof sourceEntry>>[]) {
   const hash = createHash("sha256");
   for (const entry of entries) {
     if (entry === undefined) continue;
@@ -374,10 +331,7 @@ export function waitForDevelopmentSourceChange(input: {
       }
       checking = true;
       try {
-        if (
-          (await fingerprintDevelopmentSource(input.sourceRoot)) !==
-          input.expectedFingerprint
-        ) {
+        if ((await fingerprintDevelopmentSource(input.sourceRoot)) !== input.expectedFingerprint) {
           finish(true);
           return;
         }
@@ -420,14 +374,8 @@ export async function createDevelopmentSnapshot(input: {
   sourceRoot: string;
   runRoot: string;
 }): Promise<DevelopmentSnapshot> {
-  const sourceRoot = await canonicalOwnedDirectory(
-    input.sourceRoot,
-    "Arrusted checkout",
-  );
-  const runRoot = await canonicalOwnedDirectory(
-    input.runRoot,
-    "Development run root",
-  );
+  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
+  const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
   const root = join(runRoot, "source");
   await mkdir(root, { mode: 0o700 });
   try {
@@ -442,16 +390,11 @@ export async function createDevelopmentSnapshot(input: {
         await symlink(entry.content.toString("utf8"), join(root, entry.path));
       else {
         await writeFile(join(root, entry.path), entry.content, { mode: 0o600 });
-        await chmod(
-          join(root, entry.path),
-          entry.mode === "100755" ? 0o700 : 0o600,
-        );
+        await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
       }
     }
     if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint)
-      throw new Error(
-        "Arrusted source changed while its development snapshot was created.",
-      );
+      throw new Error("Arrusted source changed while its development snapshot was created.");
     execFileSync("/usr/bin/git", ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
@@ -521,8 +464,7 @@ export async function removeDevelopmentSnapshot(root: string) {
     if (info.isSymbolicLink()) return;
     if (info.isDirectory()) {
       await chmod(path, 0o700);
-      for (const entry of await readdir(path))
-        await makeWritable(join(path, entry));
+      for (const entry of await readdir(path)) await makeWritable(join(path, entry));
     } else await chmod(path, 0o600);
   }
   try {
@@ -550,10 +492,7 @@ export async function developmentDependencyKey(input: {
   platform: string;
   tools: DevelopmentTools;
 }) {
-  const sourceRoot = await canonicalOwnedDirectory(
-    input.sourceRoot,
-    "Arrusted checkout",
-  );
+  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
   if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform))
     throw new Error("Development dependency platform is unsupported.");
   const lockfiles = Object.fromEntries(

@@ -46,8 +46,7 @@ export function projectHostedSnapshot(
   const events = projected.slice(cursor, cursor + limit);
   const inputRequests = outstandingInternalEveRequests(
     snapshot.events.filter(
-      (event): event is InternalEveEvent =>
-        event !== null && typeof event === "object",
+      (event): event is InternalEveEvent => event !== null && typeof event === "object",
     ),
   );
   return eveSessionResultSchema.parse({
@@ -56,12 +55,8 @@ export function projectHostedSnapshot(
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined
-      ? {}
-      : { prototype: snapshot.prototype }),
-    ...(snapshot.uiPreview === undefined
-      ? {}
-      : { uiPreview: snapshot.uiPreview }),
+    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
+    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
     ...(snapshot.implementationPlan === undefined
       ? {}
       : { implementationPlan: snapshot.implementationPlan }),

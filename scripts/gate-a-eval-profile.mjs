@@ -22,8 +22,7 @@ export const gateAEnvironmentFields = Object.freeze([
   "WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS",
 ]);
 
-const imagePattern =
-  /^[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$/u;
+const imagePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$/u;
 
 function fail(field) {
   throw new Error(`The trusted Gate A eval ${field} was invalid.`);
@@ -39,10 +38,7 @@ function exactKeys(value, keys) {
 
 function within(root, candidate) {
   const path = relative(root, candidate);
-  return (
-    path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-  );
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 function observeRoot(path, repositoryRoot) {
@@ -115,8 +111,7 @@ function validateReadOnlyRootIdentity(value, repositoryRoot) {
 }
 
 function validateRootIdentity(value, repositoryRoot) {
-  if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"]))
-    fail("root identity");
+  if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"])) fail("root identity");
   const observed = observeRoot(value.path, repositoryRoot);
   for (const key of ["path", "device", "inode", "uid", "mode", "nlink"])
     if (value[key] !== observed[key]) fail("root identity");
@@ -124,15 +119,9 @@ function validateRootIdentity(value, repositoryRoot) {
 }
 
 export function createGateAEvalProfile(input, repositoryRoot) {
-  if (
-    !isAbsolute(repositoryRoot) ||
-    realpathSync(repositoryRoot) !== repositoryRoot
-  )
+  if (!isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot)
     fail("repository root");
-  if (
-    exactKeys(input, ["profile", "localPublication"]) &&
-    input.profile === "general"
-  ) {
+  if (exactKeys(input, ["profile", "localPublication"]) && input.profile === "general") {
     if (input.localPublication !== "1" && input.localPublication !== "0")
       fail("local publication profile");
     return Object.freeze({
@@ -145,14 +134,10 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     exactKeys(input, ["profile", "stateRoot", "allowedRoot", "fault"]) &&
     input.profile === "fresh"
   ) {
-    if (input.fault !== null && input.fault !== "after-stage")
-      fail("fresh fault");
+    if (input.fault !== null && input.fault !== "after-stage") fail("fresh fault");
     const stateRoot = observeRoot(input.stateRoot, repositoryRoot);
     const allowedRoot = observeRoot(input.allowedRoot, repositoryRoot);
-    if (
-      within(stateRoot.path, allowedRoot.path) ||
-      within(allowedRoot.path, stateRoot.path)
-    )
+    if (within(stateRoot.path, allowedRoot.path) || within(allowedRoot.path, stateRoot.path))
       fail("fresh roots");
     return Object.freeze({
       version: 1,
@@ -183,35 +168,21 @@ export function createGateAEvalProfile(input, repositoryRoot) {
 }
 
 export function validateGateAEvalProfile(value, repositoryRoot) {
-  if (typeof value !== "object" || value === null || value.version !== 1)
-    fail("profile envelope");
-  if (
-    value.profile === "general" &&
-    exactKeys(value, ["version", "profile", "localPublication"])
-  )
+  if (typeof value !== "object" || value === null || value.version !== 1) fail("profile envelope");
+  if (value.profile === "general" && exactKeys(value, ["version", "profile", "localPublication"]))
     return createGateAEvalProfile(
       { profile: "general", localPublication: value.localPublication },
       repositoryRoot,
     );
   if (
     value.profile === "fresh" &&
-    exactKeys(value, [
-      "version",
-      "profile",
-      "stateRoot",
-      "allowedRoot",
-      "fault",
-    ])
+    exactKeys(value, ["version", "profile", "stateRoot", "allowedRoot", "fault"])
   ) {
     const stateRoot = validateRootIdentity(value.stateRoot, repositoryRoot);
     const allowedRoot = validateRootIdentity(value.allowedRoot, repositoryRoot);
-    if (
-      within(stateRoot.path, allowedRoot.path) ||
-      within(allowedRoot.path, stateRoot.path)
-    )
+    if (within(stateRoot.path, allowedRoot.path) || within(allowedRoot.path, stateRoot.path))
       fail("fresh roots");
-    if (value.fault !== null && value.fault !== "after-stage")
-      fail("fresh fault");
+    if (value.fault !== null && value.fault !== "after-stage") fail("fresh fault");
     return Object.freeze({
       version: 1,
       profile: "fresh",
@@ -233,10 +204,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
       version: 1,
       profile: value.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       image: value.image,
-      sourceRoot: validateReadOnlyRootIdentity(
-        value.sourceRoot,
-        repositoryRoot,
-      ),
+      sourceRoot: validateReadOnlyRootIdentity(value.sourceRoot, repositoryRoot),
     });
   }
   fail("profile envelope");
@@ -253,20 +221,15 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION = "1";
     environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED = "1";
     environment.APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT = profile.stateRoot.path;
-    environment.APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT =
-      profile.allowedRoot.path;
-    if (profile.fault !== null)
-      environment.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT = profile.fault;
+    environment.APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT = profile.allowedRoot.path;
+    if (profile.fault !== null) environment.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT = profile.fault;
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
-    if (profile.profile === "hosted-artifact")
-      environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
-    if (profile.image !== null)
-      environment.APP_BUILDER_SANDBOX_IMAGE = profile.image;
-    if (profile.sourceRoot !== null)
-      environment.REPOSITORY_LOCAL_ROOTS = profile.sourceRoot.path;
+    if (profile.profile === "hosted-artifact") environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
+    if (profile.image !== null) environment.APP_BUILDER_SANDBOX_IMAGE = profile.image;
+    if (profile.sourceRoot !== null) environment.REPOSITORY_LOCAL_ROOTS = profile.sourceRoot.path;
   }
   return profile;
 }

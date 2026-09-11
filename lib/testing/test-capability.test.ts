@@ -29,9 +29,7 @@ describe("testCapabilityEnabled", () => {
       APP_BUILDER_TEST_MODEL: "1",
       APP_BUILDER_TEST_CAPABILITY_ID: id,
     };
-    expect(
-      testCapabilityEnabled("simulated-target", environment, injected),
-    ).toBe(true);
+    expect(testCapabilityEnabled("simulated-target", environment, injected)).toBe(true);
     expect(
       testCapabilityEnabled(
         "simulated-target",
@@ -71,24 +69,14 @@ describe("testCapabilityEnabled", () => {
       APP_BUILDER_TEST_CAPABILITY_ID: id,
       APP_BUILDER_REAL_SANDBOX: "1",
     };
-    expect(testCapabilityEnabled("mock-model", environment, injected)).toBe(
-      true,
-    );
-    expect(
-      testCapabilityEnabled("simulated-target", environment, injected),
-    ).toBe(false);
-    expect(
-      testCapabilityEnabled("simulated-publication", environment, injected),
-    ).toBe(false);
+    expect(testCapabilityEnabled("mock-model", environment, injected)).toBe(true);
+    expect(testCapabilityEnabled("simulated-target", environment, injected)).toBe(false);
+    expect(testCapabilityEnabled("simulated-publication", environment, injected)).toBe(false);
   });
 
   it("does not enable the mock model without its explicit request flag", () => {
     expect(
-      testCapabilityEnabled(
-        "mock-model",
-        { APP_BUILDER_TEST_CAPABILITY_ID: id },
-        injected,
-      ),
+      testCapabilityEnabled("mock-model", { APP_BUILDER_TEST_CAPABILITY_ID: id }, injected),
     ).toBe(false);
   });
 });

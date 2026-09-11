@@ -1,10 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import {
-  EmulationApproval,
-  emulationApprovalStyles,
-} from "./emulation-approval";
+import { EmulationApproval, emulationApprovalStyles } from "./emulation-approval";
 
 describe("EmulationApproval", () => {
   it.each([

@@ -2,10 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  captureEveWorkerEnvelope,
-  installEveWorkerEnvelope,
-} from "./eve-worker-environment.mjs";
+import { captureEveWorkerEnvelope, installEveWorkerEnvelope } from "./eve-worker-environment.mjs";
 
 const appRoot = "/owned/app";
 
@@ -64,9 +61,9 @@ describe("closed Eve worker environment", () => {
     ["body timeout", { WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "30000" }],
     ["headers timeout", { WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "30000" }],
   ])("rejects %s drift", (_name, overrides) => {
-    expect(() =>
-      captureEveWorkerEnvelope(trustedSource(overrides), appRoot),
-    ).toThrow(/trusted Eve worker/u);
+    expect(() => captureEveWorkerEnvelope(trustedSource(overrides), appRoot)).toThrow(
+      /trusted Eve worker/u,
+    );
   });
 
   it("rejects malformed transport secrets without disclosing them", () => {
@@ -80,9 +77,7 @@ describe("closed Eve worker environment", () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(message).toBe(
-      "The trusted Eve worker transport secret was invalid.",
-    );
+    expect(message).toBe("The trusted Eve worker transport secret was invalid.");
     expect(message).not.toContain(hostileSecret);
   });
 

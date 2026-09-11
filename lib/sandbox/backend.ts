@@ -45,10 +45,7 @@ export function sandboxBackendPlan(input: {
       };
     }
     return {
-      kind:
-        deploymentEnvironment === "preview"
-          ? "vercel-preview"
-          : "vercel-production",
+      kind: deploymentEnvironment === "preview" ? "vercel-preview" : "vercel-production",
       blockers: [],
     };
   }
@@ -66,12 +63,9 @@ export function sandboxBackendPlan(input: {
   if (developmentBinding.some((value) => value !== undefined && value !== ""))
     return {
       kind: "unsupported-development",
-      blockers: [
-        "Development execution requires the exact local Vercel Sandbox binding.",
-      ],
+      blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
     };
-  if (input.localImageConfigured)
-    return { kind: "local-microsandbox", blockers: [] };
+  if (input.localImageConfigured) return { kind: "local-microsandbox", blockers: [] };
   return {
     kind: "local-just-bash",
     blockers: ["No immutable local sandbox image is configured."],
@@ -88,9 +82,7 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
   },
 ): Hosted | Local | NonExecuting {
   if (kind === "unsupported-development" || kind === "unsupported-vercel")
-    throw new Error(
-      "The App Builder sandbox environment binding is unsupported.",
-    );
+    throw new Error("The App Builder sandbox environment binding is unsupported.");
   if (isVercelSandboxBackend(kind)) return factories.vercelHosted();
   if (kind === "local-microsandbox") return factories.localMicrosandbox();
   return factories.nonExecuting();
@@ -99,11 +91,7 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
 export function isVercelSandboxBackend(
   kind: SandboxBackendKind,
 ): kind is "vercel-development" | "vercel-preview" | "vercel-production" {
-  return (
-    kind === "vercel-development" ||
-    kind === "vercel-preview" ||
-    kind === "vercel-production"
-  );
+  return kind === "vercel-development" || kind === "vercel-preview" || kind === "vercel-production";
 }
 
 export function isHostedVercelSandboxBackend(

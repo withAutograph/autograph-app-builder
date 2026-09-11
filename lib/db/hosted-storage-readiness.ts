@@ -4,8 +4,7 @@ import { resolve } from "node:path";
 
 import { z } from "zod";
 
-const sha256 = (value: string) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 export const hostedStorageMigrationTags = [
   "0001_hosted_eve_bridge",
@@ -122,12 +121,7 @@ export const hostedStorageExpectedColumns = [
   ["builder_handoff", "session_id", "text", false],
   ["builder_handoff", "workspace_id", "text", true],
   ["builder_provisioning_journal", "audience", "text", true],
-  [
-    "builder_provisioning_journal",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["builder_provisioning_journal", "created_at", "timestamp with time zone", true],
   ["builder_provisioning_journal", "issuer", "text", true],
   ["builder_provisioning_journal", "owner_user_id", "text", true],
   ["builder_provisioning_journal", "record", "jsonb", true],
@@ -135,12 +129,7 @@ export const hostedStorageExpectedColumns = [
   ["builder_provisioning_journal", "request_id", "text", true],
   ["builder_provisioning_journal", "revision", "integer", true],
   ["builder_provisioning_journal", "state", "text", true],
-  [
-    "builder_provisioning_journal",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["builder_provisioning_journal", "updated_at", "timestamp with time zone", true],
   ["builder_provisioning_journal", "workspace_id", "text", true],
   ["emulate_preview_state", "created_at", "timestamp with time zone", true],
   ["emulate_preview_state", "namespace", "text", true],
@@ -148,101 +137,41 @@ export const hostedStorageExpectedColumns = [
   ["emulate_preview_state", "updated_at", "timestamp with time zone", true],
   ["github_installation_authorization_state", "audience", "text", true],
   ["github_installation_authorization_state", "authority_digest", "text", true],
-  [
-    "github_installation_authorization_state",
-    "consumed_at",
-    "timestamp with time zone",
-    false,
-  ],
-  [
-    "github_installation_authorization_state",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
-  [
-    "github_installation_authorization_state",
-    "expires_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["github_installation_authorization_state", "consumed_at", "timestamp with time zone", false],
+  ["github_installation_authorization_state", "created_at", "timestamp with time zone", true],
+  ["github_installation_authorization_state", "expires_at", "timestamp with time zone", true],
   ["github_installation_authorization_state", "issuer", "text", true],
   ["github_installation_authorization_state", "owner_user_id", "text", true],
   ["github_installation_authorization_state", "resume_key", "text", false],
   ["github_installation_authorization_state", "return_to", "text", true],
   ["github_installation_authorization_state", "state_digest", "text", true],
   ["github_installation_authorization_state", "workspace_id", "text", true],
-  [
-    "github_publication_journal",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["github_publication_journal", "created_at", "timestamp with time zone", true],
   ["github_publication_journal", "idempotency_key", "text", true],
   ["github_publication_journal", "kind", "text", true],
   ["github_publication_journal", "proposal_digest", "text", true],
   ["github_publication_journal", "receipt_digest", "text", true],
   ["github_publication_journal", "record", "jsonb", true],
   ["github_publication_journal", "status", "text", true],
-  [
-    "github_publication_journal",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
-  [
-    "github_publication_proposal",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["github_publication_journal", "updated_at", "timestamp with time zone", true],
+  ["github_publication_proposal", "created_at", "timestamp with time zone", true],
   ["github_publication_proposal", "idempotency_key", "text", true],
   ["github_publication_proposal", "kind", "text", true],
   ["github_publication_proposal", "proposal", "jsonb", true],
   ["github_publication_proposal", "proposal_digest", "text", true],
   ["github_repository_access_continuation", "audience", "text", true],
-  [
-    "github_repository_access_continuation",
-    "authorized_at",
-    "timestamp with time zone",
-    false,
-  ],
+  ["github_repository_access_continuation", "authorized_at", "timestamp with time zone", false],
   ["github_repository_access_continuation", "callback_url", "text", true],
-  [
-    "github_repository_access_continuation",
-    "consumed_at",
-    "timestamp with time zone",
-    false,
-  ],
-  [
-    "github_repository_access_continuation",
-    "continuation_digest",
-    "text",
-    true,
-  ],
-  [
-    "github_repository_access_continuation",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
-  [
-    "github_repository_access_continuation",
-    "expires_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["github_repository_access_continuation", "consumed_at", "timestamp with time zone", false],
+  ["github_repository_access_continuation", "continuation_digest", "text", true],
+  ["github_repository_access_continuation", "created_at", "timestamp with time zone", true],
+  ["github_repository_access_continuation", "expires_at", "timestamp with time zone", true],
   ["github_repository_access_continuation", "issuer", "text", true],
   ["github_repository_access_continuation", "owner_user_id", "text", true],
   ["github_repository_access_continuation", "repository_name", "text", true],
   ["github_repository_access_continuation", "repository_owner", "text", true],
   ["github_repository_access_continuation", "request_id", "text", true],
-  [
-    "github_repository_access_continuation",
-    "selected_installation_id",
-    "text",
-    false,
-  ],
+  ["github_repository_access_continuation", "selected_installation_id", "text", false],
   ["github_repository_access_continuation", "session_id", "text", true],
   ["github_repository_access_continuation", "workspace_id", "text", true],
   ["hosted_github_installation", "account_id", "text", true],
@@ -253,12 +182,7 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_installation", "installation_id", "text", true],
   ["hosted_github_installation", "issuer", "text", true],
   ["hosted_github_installation", "owner_user_id", "text", true],
-  [
-    "hosted_github_installation",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_installation", "updated_at", "timestamp with time zone", true],
   ["hosted_github_installation", "workspace_id", "text", true],
   ["hosted_github_installation_binding", "account_id", "text", true],
   ["hosted_github_installation_binding", "account_login", "text", true],
@@ -268,20 +192,10 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_installation_binding", "installation_id", "text", true],
   ["hosted_github_installation_binding", "issuer", "text", true],
   ["hosted_github_installation_binding", "owner_user_id", "text", true],
-  [
-    "hosted_github_installation_binding",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_installation_binding", "updated_at", "timestamp with time zone", true],
   ["hosted_github_installation_binding", "workspace_id", "text", true],
   ["hosted_github_publication_journal", "audience", "text", true],
-  [
-    "hosted_github_publication_journal",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_publication_journal", "created_at", "timestamp with time zone", true],
   ["hosted_github_publication_journal", "idempotency_key", "text", true],
   ["hosted_github_publication_journal", "issuer", "text", true],
   ["hosted_github_publication_journal", "kind", "text", true],
@@ -290,20 +204,10 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_publication_journal", "receipt_digest", "text", true],
   ["hosted_github_publication_journal", "record", "jsonb", true],
   ["hosted_github_publication_journal", "status", "text", true],
-  [
-    "hosted_github_publication_journal",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_publication_journal", "updated_at", "timestamp with time zone", true],
   ["hosted_github_publication_journal", "workspace_id", "text", true],
   ["hosted_github_publication_proposal", "audience", "text", true],
-  [
-    "hosted_github_publication_proposal",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_publication_proposal", "created_at", "timestamp with time zone", true],
   ["hosted_github_publication_proposal", "idempotency_key", "text", true],
   ["hosted_github_publication_proposal", "issuer", "text", true],
   ["hosted_github_publication_proposal", "kind", "text", true],
@@ -322,12 +226,7 @@ export const hostedStorageExpectedColumns = [
   ["hosted_github_user_credential", "provider_login", "text", true],
   ["hosted_github_user_credential", "provider_user_id", "text", true],
   ["hosted_github_user_credential", "revision", "integer", true],
-  [
-    "hosted_github_user_credential",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_github_user_credential", "updated_at", "timestamp with time zone", true],
   ["hosted_github_user_credential", "workspace_id", "text", true],
   ["hosted_vercel_installation", "active", "boolean", true],
   ["hosted_vercel_installation", "audience", "text", true],
@@ -343,23 +242,13 @@ export const hostedStorageExpectedColumns = [
   ["hosted_vercel_installation", "token_iv", "text", true],
   ["hosted_vercel_installation", "token_key_version", "text", true],
   ["hosted_vercel_installation", "token_tag", "text", true],
-  [
-    "hosted_vercel_installation",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_vercel_installation", "updated_at", "timestamp with time zone", true],
   ["hosted_vercel_installation", "workspace_id", "text", true],
   ["hosted_workspace_membership", "active", "boolean", true],
   ["hosted_workspace_membership", "audience", "text", true],
   ["hosted_workspace_membership", "issuer", "text", true],
   ["hosted_workspace_membership", "owner_user_id", "text", true],
-  [
-    "hosted_workspace_membership",
-    "updated_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["hosted_workspace_membership", "updated_at", "timestamp with time zone", true],
   ["hosted_workspace_membership", "workspace_id", "text", true],
   ["jwks", "alg", "text", false],
   ["jwks", "created_at", "timestamp with time zone", true],
@@ -447,12 +336,7 @@ export const hostedStorageExpectedColumns = [
   ["oauth_refresh_token", "resources", "text[]", false],
   ["oauth_refresh_token", "revoked", "timestamp with time zone", false],
   ["oauth_refresh_token", "rotated_at", "timestamp with time zone", false],
-  [
-    "oauth_refresh_token",
-    "rotation_replay_expires_at",
-    "timestamp with time zone",
-    false,
-  ],
+  ["oauth_refresh_token", "rotation_replay_expires_at", "timestamp with time zone", false],
   ["oauth_refresh_token", "rotation_replay_response", "text", false],
   ["oauth_refresh_token", "scopes", "text[]", true],
   ["oauth_refresh_token", "session_id", "text", false],
@@ -532,24 +416,9 @@ export const hostedStorageExpectedColumns = [
   ["user", "updated_at", "timestamp with time zone", true],
   ["vercel_installation_authorization_state", "audience", "text", true],
   ["vercel_installation_authorization_state", "authority_digest", "text", true],
-  [
-    "vercel_installation_authorization_state",
-    "consumed_at",
-    "timestamp with time zone",
-    false,
-  ],
-  [
-    "vercel_installation_authorization_state",
-    "created_at",
-    "timestamp with time zone",
-    true,
-  ],
-  [
-    "vercel_installation_authorization_state",
-    "expires_at",
-    "timestamp with time zone",
-    true,
-  ],
+  ["vercel_installation_authorization_state", "consumed_at", "timestamp with time zone", false],
+  ["vercel_installation_authorization_state", "created_at", "timestamp with time zone", true],
+  ["vercel_installation_authorization_state", "expires_at", "timestamp with time zone", true],
   ["vercel_installation_authorization_state", "issuer", "text", true],
   ["vercel_installation_authorization_state", "owner_user_id", "text", true],
   ["vercel_installation_authorization_state", "resume_key", "text", false],
@@ -583,62 +452,26 @@ export const hostedStorageExpectedIndexes = [
   ["builder_handoff", "builder_handoff_expiry_idx"],
   ["builder_handoff", "builder_handoff_pkey"],
   ["builder_provisioning_journal", "builder_provisioning_journal_pk"],
-  [
-    "builder_provisioning_journal",
-    "builder_provisioning_journal_retention_idx",
-  ],
+  ["builder_provisioning_journal", "builder_provisioning_journal_retention_idx"],
   ["emulate_preview_state", "emulate_preview_state_pkey"],
-  [
-    "github_installation_authorization_state",
-    "github_installation_authorization_state_expiry_idx",
-  ],
-  [
-    "github_installation_authorization_state",
-    "github_installation_authorization_state_pkey",
-  ],
+  ["github_installation_authorization_state", "github_installation_authorization_state_expiry_idx"],
+  ["github_installation_authorization_state", "github_installation_authorization_state_pkey"],
   ["github_publication_journal", "github_publication_journal_idempotency_idx"],
   ["github_publication_journal", "github_publication_journal_pk"],
   ["github_publication_journal", "github_publication_journal_status_idx"],
-  [
-    "github_publication_proposal",
-    "github_publication_proposal_idempotency_idx",
-  ],
+  ["github_publication_proposal", "github_publication_proposal_idempotency_idx"],
   ["github_publication_proposal", "github_publication_proposal_pk"],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_expiry_idx",
-  ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_pkey",
-  ],
+  ["github_repository_access_continuation", "github_repository_access_continuation_expiry_idx"],
+  ["github_repository_access_continuation", "github_repository_access_continuation_pkey"],
   ["hosted_github_installation", "hosted_github_installation_id_tenant_uidx"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_id_tenant_uidx",
-  ],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_pk",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_idempotency_uidx",
-  ],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_id_tenant_uidx"],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_pk"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_idempotency_uidx"],
   ["hosted_github_publication_journal", "hosted_github_publication_journal_pk"],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_status_idx",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_idempotency_uidx",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_pk",
-  ],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_status_idx"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_idempotency_uidx"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_pk"],
   ["hosted_github_user_credential", "hosted_github_user_credential_pk"],
   ["hosted_vercel_installation", "hosted_vercel_installation_id_uidx"],
   ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
@@ -689,14 +522,8 @@ export const hostedStorageExpectedIndexes = [
   ["user", "user_email_lower_uidx"],
   ["user", "user_email_uidx"],
   ["user", "user_pkey"],
-  [
-    "vercel_installation_authorization_state",
-    "vercel_installation_authorization_state_expiry_idx",
-  ],
-  [
-    "vercel_installation_authorization_state",
-    "vercel_installation_authorization_state_pkey",
-  ],
+  ["vercel_installation_authorization_state", "vercel_installation_authorization_state_expiry_idx"],
+  ["vercel_installation_authorization_state", "vercel_installation_authorization_state_pkey"],
   ["verification", "verification_identifier_idx"],
   ["verification", "verification_pkey"],
 ] as const;
@@ -725,18 +552,9 @@ export const hostedStorageExpectedConstraints = [
   ["builder_handoff", "builder_handoff_time_check"],
   ["builder_provisioning_journal", "builder_provisioning_journal_pk"],
   ["builder_provisioning_journal", "builder_provisioning_journal_record_check"],
-  [
-    "builder_provisioning_journal",
-    "builder_provisioning_journal_request_digest_check",
-  ],
-  [
-    "builder_provisioning_journal",
-    "builder_provisioning_journal_request_id_check",
-  ],
-  [
-    "builder_provisioning_journal",
-    "builder_provisioning_journal_revision_check",
-  ],
+  ["builder_provisioning_journal", "builder_provisioning_journal_request_digest_check"],
+  ["builder_provisioning_journal", "builder_provisioning_journal_request_id_check"],
+  ["builder_provisioning_journal", "builder_provisioning_journal_revision_check"],
   ["builder_provisioning_journal", "builder_provisioning_journal_state_check"],
   ["emulate_preview_state", "emulate_preview_state_namespace_check"],
   ["emulate_preview_state", "emulate_preview_state_pkey"],
@@ -754,36 +572,18 @@ export const hostedStorageExpectedConstraints = [
     "github_installation_authorization_state",
     "github_installation_authorization_state_digest_check",
   ],
-  [
-    "github_installation_authorization_state",
-    "github_installation_authorization_state_pkey",
-  ],
-  [
-    "github_installation_authorization_state",
-    "github_installation_authorization_state_time_check",
-  ],
-  [
-    "github_publication_journal",
-    "github_publication_journal_idempotency_key_check",
-  ],
+  ["github_installation_authorization_state", "github_installation_authorization_state_pkey"],
+  ["github_installation_authorization_state", "github_installation_authorization_state_time_check"],
+  ["github_publication_journal", "github_publication_journal_idempotency_key_check"],
   ["github_publication_journal", "github_publication_journal_kind_check"],
   ["github_publication_journal", "github_publication_journal_pk"],
-  [
-    "github_publication_journal",
-    "github_publication_journal_proposal_digest_check",
-  ],
-  [
-    "github_publication_journal",
-    "github_publication_journal_receipt_digest_check",
-  ],
+  ["github_publication_journal", "github_publication_journal_proposal_digest_check"],
+  ["github_publication_journal", "github_publication_journal_receipt_digest_check"],
   ["github_publication_journal", "github_publication_journal_record_check"],
   ["github_publication_journal", "github_publication_journal_status_check"],
   ["github_publication_journal", "github_publication_journal_timestamp_check"],
   ["github_publication_proposal", "github_publication_proposal_digest_check"],
-  [
-    "github_publication_proposal",
-    "github_publication_proposal_idempotency_key_check",
-  ],
+  ["github_publication_proposal", "github_publication_proposal_idempotency_key_check"],
   ["github_publication_proposal", "github_publication_proposal_kind_check"],
   ["github_publication_proposal", "github_publication_proposal_pk"],
   ["github_publication_proposal", "github_publication_proposal_record_check"],
@@ -791,119 +591,44 @@ export const hostedStorageExpectedConstraints = [
     "github_repository_access_continuation",
     "github_repository_access_continuation_authorized_check",
   ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_consumed_check",
-  ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_digest_check",
-  ],
+  ["github_repository_access_continuation", "github_repository_access_continuation_consumed_check"],
+  ["github_repository_access_continuation", "github_repository_access_continuation_digest_check"],
   [
     "github_repository_access_continuation",
     "github_repository_access_continuation_installation_check",
   ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_pkey",
-  ],
+  ["github_repository_access_continuation", "github_repository_access_continuation_pkey"],
   [
     "github_repository_access_continuation",
     "github_repository_access_continuation_repository_check",
   ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_request_check",
-  ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_session_check",
-  ],
-  [
-    "github_repository_access_continuation",
-    "github_repository_access_continuation_time_check",
-  ],
+  ["github_repository_access_continuation", "github_repository_access_continuation_request_check"],
+  ["github_repository_access_continuation", "github_repository_access_continuation_session_check"],
+  ["github_repository_access_continuation", "github_repository_access_continuation_time_check"],
   ["hosted_github_installation", "hosted_github_installation_account_id_check"],
-  [
-    "hosted_github_installation",
-    "hosted_github_installation_account_type_check",
-  ],
+  ["hosted_github_installation", "hosted_github_installation_account_type_check"],
   ["hosted_github_installation", "hosted_github_installation_id_check"],
   ["hosted_github_installation", "hosted_github_installation_pk"],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_account_id_check",
-  ],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_account_type_check",
-  ],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_id_check",
-  ],
-  [
-    "hosted_github_installation_binding",
-    "hosted_github_installation_binding_pk",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_idempotency_check",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_kind_check",
-  ],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_account_id_check"],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_account_type_check"],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_id_check"],
+  ["hosted_github_installation_binding", "hosted_github_installation_binding_pk"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_idempotency_check"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_kind_check"],
   ["hosted_github_publication_journal", "hosted_github_publication_journal_pk"],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_proposal_digest_check",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_receipt_digest_check",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_record_check",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_status_check",
-  ],
-  [
-    "hosted_github_publication_journal",
-    "hosted_github_publication_journal_timestamp_check",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_digest_check",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_idempotency_check",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_kind_check",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_pk",
-  ],
-  [
-    "hosted_github_publication_proposal",
-    "hosted_github_publication_proposal_record_check",
-  ],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_proposal_digest_check"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_receipt_digest_check"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_record_check"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_status_check"],
+  ["hosted_github_publication_journal", "hosted_github_publication_journal_timestamp_check"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_digest_check"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_idempotency_check"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_kind_check"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_pk"],
+  ["hosted_github_publication_proposal", "hosted_github_publication_proposal_record_check"],
   ["hosted_github_user_credential", "hosted_github_user_credential_pk"],
-  [
-    "hosted_github_user_credential",
-    "hosted_github_user_credential_provider_user_id_check",
-  ],
-  [
-    "hosted_github_user_credential",
-    "hosted_github_user_credential_revision_check",
-  ],
+  ["hosted_github_user_credential", "hosted_github_user_credential_provider_user_id_check"],
+  ["hosted_github_user_credential", "hosted_github_user_credential_revision_check"],
   ["hosted_vercel_installation", "hosted_vercel_installation_pk"],
   ["hosted_vercel_installation", "hosted_vercel_installation_scope_type_check"],
   ["hosted_workspace_membership", "hosted_workspace_membership_pk"],
@@ -955,14 +680,8 @@ export const hostedStorageExpectedConstraints = [
     "vercel_installation_authorization_state",
     "vercel_installation_authorization_state_digest_check",
   ],
-  [
-    "vercel_installation_authorization_state",
-    "vercel_installation_authorization_state_pkey",
-  ],
-  [
-    "vercel_installation_authorization_state",
-    "vercel_installation_authorization_state_time_check",
-  ],
+  ["vercel_installation_authorization_state", "vercel_installation_authorization_state_pkey"],
+  ["vercel_installation_authorization_state", "vercel_installation_authorization_state_time_check"],
   ["verification", "verification_pkey"],
 ] as const;
 
@@ -980,9 +699,7 @@ const columnRowSchema = z
     notNull: z.boolean(),
   })
   .strict();
-const namedObjectRowSchema = z
-  .object({ table: z.string(), name: z.string() })
-  .strict();
+const namedObjectRowSchema = z.object({ table: z.string(), name: z.string() }).strict();
 
 export const hostedStorageReadBackSchema = z
   .object({
@@ -1001,10 +718,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     Promise.all(
       hostedStorageMigrationTags.map(async (tag) => ({
         tag,
-        content: await readFile(
-          resolve(repositoryRoot, "drizzle", `${tag}.sql`),
-          "utf8",
-        ),
+        content: await readFile(resolve(repositoryRoot, "drizzle", `${tag}.sql`), "utf8"),
       })),
     ),
     readFile(resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf8"),
@@ -1033,8 +747,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     JSON.stringify(journal.entries.map(({ tag }) => tag)) !==
       JSON.stringify(hostedStorageMigrationTags) ||
     journal.entries.some(
-      (entry, index) =>
-        index > 0 && entry.when <= journal.entries[index - 1]!.when,
+      (entry, index) => index > 0 && entry.when <= journal.entries[index - 1]!.when,
     )
   ) {
     throw new Error("Hosted storage migration journal is not exact.");
@@ -1100,20 +813,12 @@ export async function verifyHostedStorageReadBack(input: {
   }
   if (
     JSON.stringify(readBack.migrations) !==
-    JSON.stringify(
-      contract.migrations.map(({ hash, createdAt }) => ({ hash, createdAt })),
-    )
+    JSON.stringify(contract.migrations.map(({ hash, createdAt }) => ({ hash, createdAt })))
   ) {
     throw new Error("Hosted storage migration order or digest drifted.");
   }
-  const migrationTimes = readBack.migrations.map(({ createdAt }) =>
-    BigInt(createdAt),
-  );
-  if (
-    migrationTimes.some(
-      (value, index) => index > 0 && value <= migrationTimes[index - 1]!,
-    )
-  ) {
+  const migrationTimes = readBack.migrations.map(({ createdAt }) => BigInt(createdAt));
+  if (migrationTimes.some((value, index) => index > 0 && value <= migrationTimes[index - 1]!)) {
     throw new Error("Hosted storage migration journal order is invalid.");
   }
   if (

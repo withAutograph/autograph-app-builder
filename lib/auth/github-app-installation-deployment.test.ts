@@ -14,15 +14,13 @@ const authority = {
 afterEach(() => vi.restoreAllMocks());
 
 function handlers(
-  authorityForRequest: () => Promise<typeof authority | undefined> = async () =>
-    authority,
+  authorityForRequest: () => Promise<typeof authority | undefined> = async () => authority,
 ) {
   const begin = vi.fn(async () => ({
     version: 1 as const,
     action: "github-app.installation.begin" as const,
     status: "redirect" as const,
-    redirectUrl:
-      "https://github.com/apps/autograph-app-builder/installations/new?state=opaque",
+    redirectUrl: "https://github.com/apps/autograph-app-builder/installations/new?state=opaque",
     stateDigest: "a".repeat(64),
     authorityDigest: "b".repeat(64),
     expiresAt: "2026-08-28T12:10:00.000Z",
@@ -127,22 +125,15 @@ describe("GitHub App installation routes", () => {
       "https://builder.example/github/installations/callback?code=one&installation_id=2&setup_action=install&state=opaque";
     const response = await route.callback(new Request(callback));
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(
-      "https://builder.example/?github=connected",
-    );
+    expect(response.headers.get("location")).toBe("https://builder.example/?github=connected");
     expect(complete).toHaveBeenCalledWith(callback, authority);
   });
 
   it("logs a sanitized token-exchange stage without exposing callback data", async () => {
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { route, complete } = handlers();
     complete.mockRejectedValueOnce(
-      new GitHubInstallationAuthorizationError(
-        "token-exchange-non-2xx",
-        "redirect_uri_mismatch",
-      ),
+      new GitHubInstallationAuthorizationError("token-exchange-non-2xx", "redirect_uri_mismatch"),
     );
     const response = await route.callback(
       new Request(
@@ -190,9 +181,7 @@ describe("GitHub App installation routes", () => {
       returnState: { returnTo: "/", resumeKey },
     });
     const callback = await route.callback(
-      new Request(
-        "https://builder.example/github/installations/callback?state=opaque",
-      ),
+      new Request("https://builder.example/github/installations/callback?state=opaque"),
     );
     expect(callback.headers.get("location")).toBe(
       `https://builder.example/?github=connected&resume=${resumeKey}`,
@@ -231,9 +220,7 @@ describe("GitHub App installation routes", () => {
       onConnected,
     });
     const response = await route.callback(
-      new Request(
-        "https://builder.example/github/installations/callback?state=opaque",
-      ),
+      new Request("https://builder.example/github/installations/callback?state=opaque"),
     );
     expect(response.headers.get("location")).toContain(
       "/eve/v1/connections/github-repository-access/callback/",

@@ -60,9 +60,7 @@ describe("prepared session context", () => {
     const record = await fixture();
     const read = vi.fn(async () => record);
     const isActiveMember = vi.fn(async () => true);
-    const result = await createPreparedHandoffReader({ read, isActiveMember })(
-      sessionAuth,
-    );
+    const result = await createPreparedHandoffReader({ read, isActiveMember })(sessionAuth);
     expect(result).toEqual(record.intent);
     expect(read).toHaveBeenCalledWith({ authority, handoffId });
     expect(isActiveMember).toHaveBeenCalledWith(authority);
@@ -71,9 +69,7 @@ describe("prepared session context", () => {
     const record = await fixture();
     const read = vi.fn(async () => record);
     await expect(
-      createPreparedHandoffReader({ read, isActiveMember: async () => false })(
-        sessionAuth,
-      ),
+      createPreparedHandoffReader({ read, isActiveMember: async () => false })(sessionAuth),
     ).rejects.toThrow("handoff is unavailable");
     expect(read).not.toHaveBeenCalled();
     await expect(

@@ -3,11 +3,7 @@ import { describe, expect, it } from "vitest";
 import codexManifest from "../../.codex-plugin/plugin.json";
 import packageManifest from "../../package.json";
 import portableManifest from "../../plugin.json";
-import {
-  APP_VERSION,
-  MCP_APP_RESOURCE_MIME_TYPE,
-  sessionUiHtml,
-} from "./session-ui";
+import { APP_VERSION, MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
 
 describe("Autograph App Builder contextual MCP App", () => {
   it("uses the MCP Apps resource profile and protocol handshake", () => {

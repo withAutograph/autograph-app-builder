@@ -1,15 +1,7 @@
-import {
-  createHash,
-  createHmac,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import type { BetterAuthPlugin } from "@better-auth/core";
-import {
-  createAuthEndpoint,
-  createAuthMiddleware,
-} from "@better-auth/core/api";
+import { createAuthEndpoint, createAuthMiddleware } from "@better-auth/core/api";
 import { getCurrentAdapter } from "@better-auth/core/context";
 import { passkey } from "@better-auth/passkey";
 import { APIError, getSessionFromCtx } from "better-auth/api";
@@ -75,10 +67,8 @@ export function readPasskeyOnboardingConfig(
     environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined;
-  const origin = exactOrigin(
-    environment.BETTER_AUTH_URL ?? derivedPreviewIssuer,
-  );
-  const {hostname} = new URL(origin);
+  const origin = exactOrigin(environment.BETTER_AUTH_URL ?? derivedPreviewIssuer);
+  const { hostname } = new URL(origin);
   if (environment.VERCEL_ENV === "production") {
     throw new Error("Passkey onboarding is unavailable in Production.");
   }
@@ -97,15 +87,11 @@ export function readPasskeyOnboardingConfig(
       !deploymentHostname ||
       !origin.startsWith("https://")
     ) {
-      throw new Error(
-        "Preview passkey onboarding requires exact Vercel deployment metadata.",
-      );
+      throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
     }
     if (options.previewCanonicalOrigin === undefined) {
       if (deploymentHostname !== hostname) {
-        throw new Error(
-          "Preview passkey onboarding requires exact Vercel deployment metadata.",
-        );
+        throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
       }
     } else {
       const canonical = new URL(options.previewCanonicalOrigin);
@@ -120,9 +106,7 @@ export function readPasskeyOnboardingConfig(
         canonical.origin !== origin ||
         environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname
       ) {
-        throw new Error(
-          "Preview passkey onboarding requires the exact validated branch origin.",
-        );
+        throw new Error("Preview passkey onboarding requires the exact validated branch origin.");
       }
     }
     return {
@@ -139,14 +123,10 @@ export function readPasskeyOnboardingConfig(
     environment.VERCEL_ENV !== undefined ||
     !isLoopback(hostname)
   ) {
-    throw new Error(
-      "Local passkey onboarding requires a non-Production loopback origin.",
-    );
+    throw new Error("Local passkey onboarding requires a non-Production loopback origin.");
   }
-  const localProviderEmulation =
-    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "1";
-  const localAuthEmulation =
-    environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
+  const localProviderEmulation = environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "1";
+  const localAuthEmulation = environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
   const localPort = environment.APP_BUILDER_LOCAL_PORT ?? "3001";
   const isHttps = origin.startsWith("https://");
   if (
@@ -195,10 +175,7 @@ function personalWorkspaceSlug(userId: string, deploymentId: string) {
   return `personal-${digest.slice(0, 24)}`;
 }
 
-export function createPasskeyOnboardingToken(
-  config: PasskeyOnboardingConfig,
-  now = new Date(),
-) {
+export function createPasskeyOnboardingToken(config: PasskeyOnboardingConfig, now = new Date()) {
   const payload = tokenPayloadSchema.parse({
     version: TOKEN_VERSION,
     nonce: randomUUID(),
@@ -334,9 +311,7 @@ export function createPasskeyOnboardingPlugin(input: {
                 ) {
                   if (ctx?.path !== "/passkey/verify-registration") return;
                   const adapter = await getCurrentAdapter(
-                    ctx.context.adapter as Parameters<
-                      typeof getCurrentAdapter
-                    >[0],
+                    ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
                   );
                   const memberships = await adapter.findMany<{
                     organizationId: string;
@@ -373,7 +348,7 @@ export function createPasskeyOnboardingPlugin(input: {
           metadata: { noStore: true },
         },
         async (ctx) => {
-          const {config} = input;
+          const { config } = input;
           if (!config) throw onboardingUnavailable();
           if (ctx.headers?.get("origin") !== config.origin) {
             throw invalidOnboardingAuthority();
@@ -451,13 +426,11 @@ export function createPasskeyPlugin(input: {
 }) {
   const now = input.now ?? (() => new Date());
   return passkey({
-    ...(input.config
-      ? { origin: input.config.origin, rpID: input.config.rpId }
-      : {}),
+    ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
     registration: {
       requireSession: false,
       async resolveUser({ context }) {
-        const {config} = input;
+        const { config } = input;
         if (!config) throw onboardingUnavailable();
         const verified = verifyPasskeyOnboardingToken(context, config, now());
         if (!verified) throw invalidOnboardingAuthority();
@@ -474,7 +447,7 @@ export function createPasskeyPlugin(input: {
           context,
         );
         if (authenticatedRegistration) return authenticatedRegistration;
-        const {config} = input;
+        const { config } = input;
         if (!config) throw onboardingUnavailable();
         const verified = verifyPasskeyOnboardingToken(context, config, now());
         if (!verified) throw invalidOnboardingAuthority();

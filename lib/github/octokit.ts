@@ -32,10 +32,7 @@ function requestUrl(resource: RequestInfo | URL): URL {
 
 async function boundedResponse(response: Response): Promise<Response> {
   const declared = response.headers.get("content-length");
-  if (
-    declared !== null &&
-    (!/^\d+$/u.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)
-  ) {
+  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)) {
     await response.body?.cancel();
     throw new Error("github-response-too-large");
   }
@@ -78,13 +75,10 @@ export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
       throw new Error("github-origin-invalid");
     }
 
-    const resourceSignal =
-      resource instanceof Request ? resource.signal : undefined;
+    const resourceSignal = resource instanceof Request ? resource.signal : undefined;
     const callerSignal = init?.signal ?? resourceSignal;
     const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    const signal = callerSignal
-      ? AbortSignal.any([callerSignal, timeoutSignal])
-      : timeoutSignal;
+    const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
     const response = await request(resource, {
       ...init,
       redirect: "error",
@@ -122,8 +116,7 @@ export function createGitHubOAuthApp(input: {
       url.origin === GITHUB_ORIGIN &&
       url.pathname === "/login/oauth/access_token"
     ) {
-      if (typeof init?.body !== "string")
-        throw new Error("github-oauth-request-invalid");
+      if (typeof init?.body !== "string") throw new Error("github-oauth-request-invalid");
       let body: string;
       try {
         const parsed = JSON.parse(init.body) as unknown;
@@ -160,11 +153,7 @@ export function createGitHubOAuthApp(input: {
   });
 }
 
-export function createGitHubApp(input: {
-  appId: string;
-  privateKey: string;
-  fetch?: Fetch;
-}) {
+export function createGitHubApp(input: { appId: string; privateKey: string; fetch?: Fetch }) {
   return new App({
     appId: input.appId,
     privateKey: input.privateKey,
@@ -178,10 +167,7 @@ export function createGitHubApp(input: {
   });
 }
 
-export function createGitHubTokenOctokit(input: {
-  token: string;
-  fetch?: Fetch;
-}) {
+export function createGitHubTokenOctokit(input: { token: string; fetch?: Fetch }) {
   const GitHubOctokit = octokitClass(input.fetch ?? fetch);
   return new GitHubOctokit({ auth: input.token });
 }

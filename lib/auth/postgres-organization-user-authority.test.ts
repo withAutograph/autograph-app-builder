@@ -25,9 +25,8 @@ function createDatabase(results: unknown[]) {
     if (results.length === 0) throw new Error("Unexpected database query.");
     return Promise.resolve(results.shift());
   });
-  const transaction = vi.fn(
-    async (callback: (database: { execute: typeof execute }) => unknown) =>
-      callback({ execute }),
+  const transaction = vi.fn(async (callback: (database: { execute: typeof execute }) => unknown) =>
+    callback({ execute }),
   );
   return {
     database: { execute, transaction } as never,
@@ -38,15 +37,8 @@ function createDatabase(results: unknown[]) {
 
 describe("PostgreSQL Better Auth organization authority", () => {
   it("reuses one exact active organization", async () => {
-    const state = createDatabase([
-      [user],
-      [{ provider_id: "github" }],
-      [organization],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
+    const state = createDatabase([[user], [{ provider_id: "github" }], [organization]]);
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding);
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -81,17 +73,13 @@ describe("PostgreSQL Better Auth organization authority", () => {
         },
       ],
     ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-      {
-        generateId: vi
-          .fn()
-          .mockReturnValueOnce("organization_one")
-          .mockReturnValueOnce("workspace_one")
-          .mockReturnValueOnce("member_one"),
-      },
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
+      generateId: vi
+        .fn()
+        .mockReturnValueOnce("organization_one")
+        .mockReturnValueOnce("workspace_one")
+        .mockReturnValueOnce("member_one"),
+    });
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -114,18 +102,14 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [],
       [organization],
     ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-      {
-        isSelfServiceSignupEnabled: vi.fn(async () => true),
-        generateId: vi
-          .fn()
-          .mockReturnValueOnce("organization_one")
-          .mockReturnValueOnce("workspace_one")
-          .mockReturnValueOnce("member_one"),
-      },
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
+      isSelfServiceSignupEnabled: vi.fn(async () => true),
+      generateId: vi
+        .fn()
+        .mockReturnValueOnce("organization_one")
+        .mockReturnValueOnce("workspace_one")
+        .mockReturnValueOnce("member_one"),
+    });
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -155,18 +139,14 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [],
       [organization],
     ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-      {
-        isSelfServiceSignupEnabled: vi.fn(async () => true),
-        generateId: vi
-          .fn()
-          .mockReturnValueOnce("organization_one")
-          .mockReturnValueOnce("workspace_one")
-          .mockReturnValueOnce("member_one"),
-      },
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
+      isSelfServiceSignupEnabled: vi.fn(async () => true),
+      generateId: vi
+        .fn()
+        .mockReturnValueOnce("organization_one")
+        .mockReturnValueOnce("workspace_one")
+        .mockReturnValueOnce("member_one"),
+    });
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -192,10 +172,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [],
       [],
     ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding);
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -204,17 +181,8 @@ describe("PostgreSQL Better Auth organization authority", () => {
   });
 
   it("keeps personal creation disabled while preserving existing and invited access", async () => {
-    const state = createDatabase([
-      [user],
-      [{ provider_id: "github" }],
-      [],
-      [],
-      [],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
+    const state = createDatabase([[user], [{ provider_id: "github" }], [], [], []]);
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding);
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -223,22 +191,12 @@ describe("PostgreSQL Better Auth organization authority", () => {
   });
 
   it("fails closed when self-service signup cannot be evaluated", async () => {
-    const state = createDatabase([
-      [user],
-      [{ provider_id: "github" }],
-      [],
-      [],
-      [],
-    ]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-      {
-        isSelfServiceSignupEnabled: vi.fn(async () => {
-          throw new Error("feature flags unavailable");
-        }),
-      },
-    );
+    const state = createDatabase([[user], [{ provider_id: "github" }], [], [], []]);
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
+      isSelfServiceSignupEnabled: vi.fn(async () => {
+        throw new Error("feature flags unavailable");
+      }),
+    });
 
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
@@ -267,10 +225,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
       results: [
         [user],
         [{ provider_id: "github" }],
-        [
-          organization,
-          { ...organization, organization_id: "organization_two" },
-        ],
+        [organization, { ...organization, organization_id: "organization_two" }],
       ],
       reason: "workspace-ambiguous",
     },
@@ -310,10 +265,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
     },
   ] as const)("fails closed for $name", async ({ results, reason }) => {
     const state = createDatabase([...results]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding);
     await expect(
       authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason });
@@ -321,10 +273,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
 
   it("binds OAuth membership to the configured issuer and audience", async () => {
     const state = createDatabase([[organization], [organization]]);
-    const authority = createPostgresPreviewOrganizationAuthority(
-      state.database,
-      binding,
-    );
+    const authority = createPostgresPreviewOrganizationAuthority(state.database, binding);
 
     await expect(
       authority.activeWorkspaceForUser({

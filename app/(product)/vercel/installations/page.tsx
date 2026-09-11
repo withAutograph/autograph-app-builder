@@ -3,10 +3,7 @@ import {
   providerConnectionFailureMessage,
 } from "@/lib/integrations/provider-connection-status";
 import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
-import {
-  ProviderConnection,
-  ProviderConnectionNotice,
-} from "@/app/ui/provider-connection";
+import { ProviderConnection, ProviderConnectionNotice } from "@/app/ui/provider-connection";
 import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { Suspense } from "react";
 import { SiVercel } from "react-icons/si";

@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T13:12:50.013Z ·
@@ -74,18 +73,14 @@
     <section>
       <h2>Position request drafting</h2>
       <p>
-        Synthetic drafting scenario grounded in implemented position fields and
-        AG2&#39;s implemented requisition actions; the position-specific
-        salary/date correction and draft-confirmation composition is an advisory
-        extension.
+        Synthetic drafting scenario grounded in implemented position fields and AG2&#39;s
+        implemented requisition actions; the position-specific salary/date correction and
+        draft-confirmation composition is an advisory extension.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
-          <li>
-            arrusted: <code>domain-libs/position/src/model-position.ts</code> —
-            implemented
-          </li>
+          <li>arrusted: <code>domain-libs/position/src/model-position.ts</code> — implemented</li>
           <li>
             ag2:
             <code>frontend/src/app-templates/templates/hiring/manifest.ts</code>
@@ -95,23 +90,22 @@
         <h3>Review questions</h3>
         <ul>
           <li>
-            Can a manager understand salary and date fields and correct errors
-            without losing other values?
+            Can a manager understand salary and date fields and correct errors without losing other
+            values?
           </li>
           <li>
-            Does the draft confirmation clearly show the saved fixture values
-            and distinguish them from a real submission?
+            Does the draft confirmation clearly show the saved fixture values and distinguish them
+            from a real submission?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
           <li>
-            A user can save a corrected position request as a draft with salary
-            and timing context.
+            A user can save a corrected position request as a draft with salary and timing context.
           </li>
           <li>
-            The resulting confirmation identifies the saved fixture request and
-            supports returning to edit it.
+            The resulting confirmation identifies the saved fixture request and supports returning
+            to edit it.
           </li>
         </ul>
       </details>
@@ -120,23 +114,20 @@
       <summary>Capture context and limitations</summary>
       <ul>
         <li>
-          The first capture attempt used an expired URL and returned 404; it is
-          not a design result.
+          The first capture attempt used an expired URL and returned 404; it is not a design result.
         </li>
         <li>
-          The initial judge received a tightened brief requiring a specific job
-          title, budget and approval context absent from the generation request.
-          Its 60/100 result is preserved separately as
-          superseded-brief-report.json and is not comparable. This review
-          corrects that input to the actual manager drafting task without
-          regenerating, recapturing, or changing the rubric.
+          The initial judge received a tightened brief requiring a specific job title, budget and
+          approval context absent from the generation request. Its 60/100 result is preserved
+          separately as superseded-brief-report.json and is not comparable. This review corrects
+          that input to the actual manager drafting task without regenerating, recapturing, or
+          changing the rubric.
         </li>
       </ul>
     </details>
     <h2>Arrusted adherence: 100/100 · partial</h2>
     <p>
-      Evidence coverage: 1.77%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 1.77%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -177,36 +168,32 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
       <li>
-        No generated CSS source files were supplied; compiled stylesheet source
-        maps cannot establish generated declaration provenance.
+        No generated CSS source files were supplied; compiled stylesheet source maps cannot
+        establish generated declaration provenance.
       </li>
     </ul>
     <details open>
@@ -222,13 +209,10 @@
       <article id="finding-11">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-11">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-11">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-11">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -241,13 +225,10 @@
       <article id="finding-14">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-14">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-14">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-14">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -260,13 +241,10 @@
       <article id="finding-16">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-16">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-16">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-16">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -279,13 +257,10 @@
       <article id="finding-23">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-23">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-23">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-23">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -298,13 +273,10 @@
       <article id="finding-24">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-24">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-24">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-24">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -317,13 +289,10 @@
       <article id="finding-25">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-25">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-25">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-25">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -336,13 +305,10 @@
       <article id="finding-26">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-26">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-26">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-26">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -355,13 +321,9 @@
       <article id="finding-27">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-27">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-27">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-27">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -374,10 +336,7 @@
       <article id="finding-42">
         <strong>unresolved-component · unassessed</strong>
         <p>Fact&#39;s implementation cannot be resolved statically.</p>
-        <small
-          >static evidence ·
-          <a href="#source-42">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-42">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-42">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -390,10 +349,7 @@
       <article id="finding-43">
         <strong>unresolved-component · unassessed</strong>
         <p>Fact&#39;s implementation cannot be resolved statically.</p>
-        <small
-          >static evidence ·
-          <a href="#source-43">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-43">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-43">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -406,10 +362,7 @@
       <article id="finding-44">
         <strong>unresolved-component · unassessed</strong>
         <p>Fact&#39;s implementation cannot be resolved statically.</p>
-        <small
-          >static evidence ·
-          <a href="#source-44">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-44">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-44">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -422,10 +375,7 @@
       <article id="finding-45">
         <strong>unresolved-component · unassessed</strong>
         <p>Fact&#39;s implementation cannot be resolved statically.</p>
-        <small
-          >static evidence ·
-          <a href="#source-45">src/PositionRequestScreen.tsx:9</a></small
-        >
+        <small>static evidence · <a href="#source-45">src/PositionRequestScreen.tsx:9</a></small>
         <details id="source-45">
           <summary>Source location: src/PositionRequestScreen.tsx:9</summary>
           <pre>
@@ -486,16 +436,12 @@
       <article id="finding-63">
         <strong>unknown · unassessed</strong>
         <p>column-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-64">
         <strong>unknown · unassessed</strong>
         <p>row-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-65">
         <strong>unknown · unassessed</strong>
@@ -536,9 +482,7 @@
       <article id="finding-68">
         <strong>unknown · unassessed</strong>
         <p>box-shadow: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-69">
         <strong>unknown · unassessed</strong>
@@ -591,16 +535,12 @@
       <article id="finding-73">
         <strong>unknown · unassessed</strong>
         <p>column-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-74">
         <strong>unknown · unassessed</strong>
         <p>row-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-75">
         <strong>unknown · unassessed</strong>
@@ -628,24 +568,21 @@
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 85/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -660,21 +597,19 @@
           <th>hierarchy</th>
           <td>4/4</td>
           <td>
-            The page title, status pill, bordered form section, field labels,
-            inline errors, and primary action create a clear scan path in
-            desktop-0 through desktop-window-4. The confirmation state gives
-            “Draft saved in this preview” strong prominence and follows it with
-            saved values and edit actions.
+            The page title, status pill, bordered form section, field labels, inline errors, and
+            primary action create a clear scan path in desktop-0 through desktop-window-4. The
+            confirmation state gives “Draft saved in this preview” strong prominence and follows it
+            with saved values and edit actions.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            The three-column form is consistently aligned, comfortably spaced,
-            and remains unclipped at 1024, 1440, and 1920 pixels. The main
-            weakness is in desktop-3, where the Draft status pill sits directly
-            beneath salary, making status appear subordinate to that value
+            The three-column form is consistently aligned, comfortably spaced, and remains unclipped
+            at 1024, 1440, and 1920 pixels. The main weakness is in desktop-3, where the Draft
+            status pill sits directly beneath salary, making status appear subordinate to that value
             rather than a separate saved field.
           </td>
         </tr>
@@ -682,35 +617,32 @@
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Headings, labels, values, helpers, and errors use a consistent
-            typographic hierarchy, and the confirmation values are easy to
-            compare. However, automated evidence repeatedly identifies low
-            contrast in small muted labels, error messages, and status text;
-            these compact styles are especially important in desktop-1 and
-            desktop-3.
+            Headings, labels, values, helpers, and errors use a consistent typographic hierarchy,
+            and the confirmation values are easy to compare. However, automated evidence repeatedly
+            identifies low contrast in small muted labels, error messages, and status text; these
+            compact styles are especially important in desktop-1 and desktop-3.
           </td>
         </tr>
         <tr>
           <th>responsive</th>
           <td>4/4</td>
           <td>
-            Across the provided 1024, 1440, and 1920 desktop captures, the form
-            and confirmation remain centered, fully visible, aligned, and free
-            of horizontal or document overflow. Controls remain usable at every
-            tested desktop width, although narrower panels were not supplied.
+            Across the provided 1024, 1440, and 1920 desktop captures, the form and confirmation
+            remain centered, fully visible, aligned, and free of horizontal or document overflow.
+            Controls remain usable at every tested desktop width, although narrower panels were not
+            supplied.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            Required fields are explicitly summarized and marked, salary is
-            identified as annual USD, date purpose is explained, and
-            field-specific salary/date errors preserve the other entered values.
-            The confirmation clearly says no external system was updated and
-            presents the saved fixture values, but the header’s claim that the
-            details are for “People Operations” conflicts with a department
-            selector that supports several departments.
+            Required fields are explicitly summarized and marked, salary is identified as annual
+            USD, date purpose is explained, and field-specific salary/date errors preserve the other
+            entered values. The confirmation clearly says no external system was updated and
+            presents the saved fixture values, but the header’s claim that the details are for
+            “People Operations” conflicts with a department selector that supports several
+            departments.
           </td>
         </tr>
       </tbody>
@@ -718,94 +650,84 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        The required-field summary and per-label asterisks make completion
-        expectations easy to understand.
+        The required-field summary and per-label asterisks make completion expectations easy to
+        understand.
       </li>
       <li>
-        Salary validation is specific (“greater than $0”), while the other
-        populated values remain visible for correction in desktop-2.
+        Salary validation is specific (“greater than $0”), while the other populated values remain
+        visible for correction in desktop-2.
       </li>
       <li>
-        Date-order validation is attached to the end date and explains the
-        required relationship without clearing the form.
+        Date-order validation is attached to the end date and explains the required relationship
+        without clearing the form.
       </li>
       <li>
-        The confirmation shows title, department, formatted salary, status, and
-        a human-readable date range.
+        The confirmation shows title, department, formatted salary, status, and a human-readable
+        date range.
       </li>
       <li>
-        “Draft saved in this preview” and “No external system was updated”
-        clearly distinguish fixture persistence from a real submission.
+        “Draft saved in this preview” and “No external system was updated” clearly distinguish
+        fixture persistence from a real submission.
       </li>
+      <li>Edit draft and Start another request provide distinct next steps after confirmation.</li>
       <li>
-        Edit draft and Start another request provide distinct next steps after
-        confirmation.
-      </li>
-      <li>
-        The composition remains stable and unclipped across all three supplied
-        desktop widths.
+        The composition remains stable and unclipped across all three supplied desktop widths.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The introductory sentence says the request captures details “People
-        Operations needs,” even though Department is an editable choice with
-        Finance, Engineering, Sales, and other options. This can make the
-        workflow appear department-specific or make a manager question whether
+        The introductory sentence says the request captures details “People Operations needs,” even
+        though Department is an editable choice with Finance, Engineering, Sales, and other options.
+        This can make the workflow appear department-specific or make a manager question whether
         changing the department is appropriate.
       </p>
       <p>
-        <strong>Improve:</strong> Use department-neutral introductory copy, such
-        as “Capture the core hiring details needed for this position request.”
+        <strong>Improve:</strong> Use department-neutral introductory copy, such as “Capture the
+        core hiring details needed for this position request.”
       </p>
       <small>Screenshot region: x 240, y 85, width 790, height 38</small>
     </article>
     <article id="design-1">
       <h4>medium · <a href="#desktop-3">desktop-3</a></h4>
       <p>
-        Draft status is shown as an unlabeled pill immediately below Annual base
-        salary. Although all fixture values are present, this placement visually
-        associates status with salary and makes one required model field harder
-        to verify independently.
+        Draft status is shown as an unlabeled pill immediately below Annual base salary. Although
+        all fixture values are present, this placement visually associates status with salary and
+        makes one required model field harder to verify independently.
       </p>
       <p>
-        <strong>Improve:</strong> Present Status as its own labeled confirmation
-        field alongside Position title, Department, Annual base salary, and
-        Position term; keep the pill as the field value if desired.
+        <strong>Improve:</strong> Present Status as its own labeled confirmation field alongside
+        Position title, Department, Annual base salary, and Position term; keep the pill as the
+        field value if desired.
       </p>
       <small>Screenshot region: x 281, y 244, width 590, height 117</small>
     </article>
     <article id="design-2">
       <h4>medium · <a href="#desktop-1">desktop-1</a></h4>
       <p>
-        The salary error is specific and correctly placed, but automated
-        evidence reports insufficient contrast for the small danger-colored
-        error text. Similar small error text appears across the required fields,
-        which can weaken correction guidance.
+        The salary error is specific and correctly placed, but automated evidence reports
+        insufficient contrast for the small danger-colored error text. Similar small error text
+        appears across the required fields, which can weaken correction guidance.
       </p>
       <p>
-        <strong>Improve:</strong> Retain the authoritative palette but use a
-        supported error presentation with an error icon and/or regular
-        body-sized text so the message is not conveyed by compact color
-        treatment alone.
+        <strong>Improve:</strong> Retain the authoritative palette but use a supported error
+        presentation with an error icon and/or regular body-sized text so the message is not
+        conveyed by compact color treatment alone.
       </p>
       <small>Screenshot region: x 281, y 425, width 282, height 19</small>
     </article>
     <article id="design-3">
       <h4>low · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The label and helper establish annual USD, but the editable value is
-        shown as an ungrouped “115000.” It is understandable, yet less
-        immediately scannable than the formatted “$120,000” used in
-        confirmation.
+        The label and helper establish annual USD, but the editable value is shown as an ungrouped
+        “115000.” It is understandable, yet less immediately scannable than the formatted “$120,000”
+        used in confirmation.
       </p>
       <p>
-        <strong>Improve:</strong> Add a concise input example or supported
-        currency affordance while preserving numeric editing, and continue
-        formatting the saved value with a dollar sign and separators in
-        confirmation.
+        <strong>Improve:</strong> Add a concise input example or supported currency affordance while
+        preserving numeric editing, and continue formatting the saved value with a dollar sign and
+        separators in confirmation.
       </p>
       <small>Screenshot region: x 281, y 382, width 282, height 61</small>
     </article>
@@ -1329,10 +1251,7 @@
     <section id="desktop-1">
       <h2>desktop-1 — empty form explains required fields</h2>
       <div class="capture">
-        <img
-          src="desktop-1.png"
-          alt="desktop-1 empty form explains required fields screenshot"
-        /><a
+        <img src="desktop-1.png" alt="desktop-1 empty form explains required fields screenshot" /><a
           class="region"
           href="#design-2"
           title="The salary error is specific and correctly placed, but automated evidence reports insufficient contrast for the small danger-colored error text. Similar small error text appears across the required fields, which can weaken correction guidance."
@@ -1515,10 +1434,7 @@
     <section id="desktop-2">
       <h2>desktop-2 — invalid salary is explained</h2>
       <div class="capture">
-        <img
-          src="desktop-2.png"
-          alt="desktop-2 invalid salary is explained screenshot"
-        />
+        <img src="desktop-2.png" alt="desktop-2 invalid salary is explained screenshot" />
       </div>
       <a href="desktop-2.png">Original, unmodified screenshot</a>
       <details>
@@ -1678,10 +1594,7 @@
     <section id="desktop-3">
       <h2>desktop-3 — correct salary and confirm draft</h2>
       <div class="capture">
-        <img
-          src="desktop-3.png"
-          alt="desktop-3 correct salary and confirm draft screenshot"
-        /><a
+        <img src="desktop-3.png" alt="desktop-3 correct salary and confirm draft screenshot" /><a
           class="region"
           href="#design-1"
           title="Draft status is shown as an unlabeled pill immediately below Annual base salary. Although all fixture values are present, this placement visually associates status with salary and makes one required model field harder to verify independently."
@@ -1792,10 +1705,7 @@
     <section id="desktop-4">
       <h2>desktop-4 — date order is explained</h2>
       <div class="capture">
-        <img
-          src="desktop-4.png"
-          alt="desktop-4 date order is explained screenshot"
-        />
+        <img src="desktop-4.png" alt="desktop-4 date order is explained screenshot" />
       </div>
       <a href="desktop-4.png">Original, unmodified screenshot</a>
       <details>
@@ -2403,10 +2313,7 @@
     <section id="desktop-wide-2">
       <h2>desktop-wide-2 — invalid salary is explained</h2>
       <div class="capture">
-        <img
-          src="desktop-wide-2.png"
-          alt="desktop-wide-2 invalid salary is explained screenshot"
-        />
+        <img src="desktop-wide-2.png" alt="desktop-wide-2 invalid salary is explained screenshot" />
       </div>
       <a href="desktop-wide-2.png">Original, unmodified screenshot</a>
       <details>
@@ -2669,10 +2576,7 @@
     <section id="desktop-wide-4">
       <h2>desktop-wide-4 — date order is explained</h2>
       <div class="capture">
-        <img
-          src="desktop-wide-4.png"
-          alt="desktop-wide-4 date order is explained screenshot"
-        />
+        <img src="desktop-wide-4.png" alt="desktop-wide-4 date order is explained screenshot" />
       </div>
       <a href="desktop-wide-4.png">Original, unmodified screenshot</a>
       <details>
@@ -2832,10 +2736,7 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        />
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" />
       </div>
       <a href="desktop-window-0.png">Original, unmodified screenshot</a>
       <details>
@@ -3549,10 +3450,7 @@
     <section id="desktop-window-4">
       <h2>desktop-window-4 — date order is explained</h2>
       <div class="capture">
-        <img
-          src="desktop-window-4.png"
-          alt="desktop-window-4 date order is explained screenshot"
-        />
+        <img src="desktop-window-4.png" alt="desktop-window-4 date order is explained screenshot" />
       </div>
       <a href="desktop-window-4.png">Original, unmodified screenshot</a>
       <details>

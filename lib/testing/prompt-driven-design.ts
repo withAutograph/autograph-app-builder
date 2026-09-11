@@ -50,9 +50,7 @@ export default function RenewalReview() {
       { name: "PageTabs", source: "@autograph/components" },
       { name: "StatusPill", source: "@autograph/components" },
     ],
-    productionCompositions: [
-      { name: "DataTableComposition", source: "@autograph/compositions" },
-    ],
+    productionCompositions: [{ name: "DataTableComposition", source: "@autograph/compositions" }],
     productionIcons: [],
     fixtureFacts: [
       {
@@ -65,8 +63,7 @@ export default function RenewalReview() {
     assumptions: [
       {
         id: "queue-first",
-        statement:
-          "Customer-success managers start from a prioritized renewal queue.",
+        statement: "Customer-success managers start from a prioritized renewal queue.",
         routes: ["/"],
       },
     ],

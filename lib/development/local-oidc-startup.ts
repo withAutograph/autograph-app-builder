@@ -19,9 +19,7 @@ export type LocalOidcStartupInvocation = {
   operation: "development-env-pull" | "owner-bind";
 };
 
-export type LocalOidcStartupCommandRunner = (
-  invocation: LocalOidcStartupInvocation,
-) => void;
+export type LocalOidcStartupCommandRunner = (invocation: LocalOidcStartupInvocation) => void;
 
 export class LocalOidcRefreshFailedError extends Error {
   constructor() {
@@ -29,10 +27,7 @@ export class LocalOidcRefreshFailedError extends Error {
   }
 }
 
-function requiredEnvironmentValue(
-  environment: NodeJS.ProcessEnv,
-  name: "HOME" | "PATH",
-): string {
+function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" | "PATH"): string {
   const value = environment[name];
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`Required ${name} was unavailable.`);
@@ -58,9 +53,7 @@ function assertNoStaticCredential(environment: NodeJS.ProcessEnv): void {
     Object.hasOwn(environment, "VERCEL_TOKEN") ||
     Object.hasOwn(environment, "AI_GATEWAY_API_KEY")
   ) {
-    throw new Error(
-      "Development OIDC startup refuses static provider credentials.",
-    );
+    throw new Error("Development OIDC startup refuses static provider credentials.");
   }
 }
 
@@ -94,10 +87,9 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(
-      resolve(input.repositoryRoot, ".env.local"),
-      { confidential: true },
-    );
+    environment = readOwnerBoundLocalFile(resolve(input.repositoryRoot, ".env.local"), {
+      confidential: true,
+    });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
     const credentialPath = resolve(input.repositoryRoot, ".env.local");
@@ -125,9 +117,7 @@ function installedOidcNeedsRefresh(input: {
     nowEpochSeconds: input.nowEpochSeconds,
     allowExpired: true,
   });
-  return (
-    claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS
-  );
+  return claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS;
 }
 
 function validateInstalledOidc(input: {
@@ -140,9 +130,7 @@ function validateInstalledOidc(input: {
   }
 }
 
-export function runLocalOidcStartupCommand(
-  invocation: LocalOidcStartupInvocation,
-): void {
+export function runLocalOidcStartupCommand(invocation: LocalOidcStartupInvocation): void {
   const result = spawnSync(invocation.executable, [...invocation.args], {
     cwd: invocation.cwd,
     env: invocation.environment,
@@ -171,8 +159,7 @@ export function ensureLocalDevelopmentOidc(input: {
     throw new Error("Repository root was not canonical.");
   }
   const expectedProject = readLinkedProject(repositoryRoot);
-  const nowEpochSeconds =
-    input.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+  const nowEpochSeconds = input.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
 
   if (
     !installedOidcNeedsRefresh({

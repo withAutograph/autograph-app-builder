@@ -24,8 +24,6 @@ export const SelectCursor: Story = {
   play: async ({ canvasElement, args }) => {
     await userEvent.click(within(canvasElement).getByText("Cursor"));
     await expect(args.onChange).toHaveBeenCalledWith("cursor");
-    await expect(
-      within(canvasElement).getByRole("radio", { name: /Web Chat/ }),
-    ).toBeDisabled();
+    await expect(within(canvasElement).getByRole("radio", { name: /Web Chat/ })).toBeDisabled();
   },
 };

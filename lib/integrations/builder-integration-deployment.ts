@@ -6,10 +6,7 @@ import {
 } from "../repository/postgres-github-installation-store";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { loadGatewayModels } from "./ai-gateway-models";
-import {
-  builderIntegrationStateSchema,
-  type BuilderIntegrationState,
-} from "./builder-state";
+import { builderIntegrationStateSchema, type BuilderIntegrationState } from "./builder-state";
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
 import { providerEmulationEnvironment } from "./local-provider-emulation";
@@ -28,10 +25,7 @@ type BuilderIntegrationRequest = {
     }
 );
 
-const databases = new Map<
-  string,
-  ReturnType<typeof openHostedPostgresDatabase>
->();
+const databases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
 
 function databaseFor(databaseUrl: string) {
   const existing = databases.get(databaseUrl);
@@ -83,9 +77,7 @@ export async function loadBuilderIntegrationState(
     ownerUserId: input.userId,
   };
 
-  let github: BuilderIntegrationState["github"] = unavailable(
-    "configuration-unavailable",
-  );
+  let github: BuilderIntegrationState["github"] = unavailable("configuration-unavailable");
   try {
     readGitHubAppInstallationEnvironment(environment);
     const githubStore = createPostgresHostedGitHubInstallationStore(database);
@@ -102,9 +94,7 @@ export async function loadBuilderIntegrationState(
     github = { status: scopes.length ? "connected" : "disconnected", scopes };
   } catch {}
 
-  let vercel: BuilderIntegrationState["vercel"] = unavailable(
-    "configuration-unavailable",
-  );
+  let vercel: BuilderIntegrationState["vercel"] = unavailable("configuration-unavailable");
   try {
     const config = readVercelIntegrationEnvironment(environment);
     const bindings = await createPostgresVercelInstallationStore({

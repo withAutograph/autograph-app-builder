@@ -11,9 +11,7 @@ import {
   type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
-function createAuthority(input?: {
-  failure?: OrganizationProvisioningFailure;
-}) {
+function createAuthority(input?: { failure?: OrganizationProvisioningFailure }) {
   const authority: PreviewOrganizationUserAuthority = {
     ensureOrganizationForVerifiedUser: vi.fn(async () => {
       if (input?.failure) {
@@ -36,8 +34,7 @@ const verifiedUser = {
 
 describe("Preview Better Auth user management", () => {
   it("keeps the workspace field aligned with the Drizzle model key", () => {
-    const [organizationPlugin] =
-      previewUserManagementPlugins(createAuthority());
+    const [organizationPlugin] = previewUserManagementPlugins(createAuthority());
     const schema = organizationPlugin?.schema as {
       organization?: {
         fields?: Record<string, { fieldName?: string }>;
@@ -55,9 +52,7 @@ describe("Preview Better Auth user management", () => {
     async (path) => {
       const lifecycle = createPreviewUserManagementLifecycle(createAuthority());
 
-      await expect(
-        lifecycle.beforeUserCreate(verifiedUser, { path }),
-      ).resolves.toMatchObject({
+      await expect(lifecycle.beforeUserCreate(verifiedUser, { path })).resolves.toMatchObject({
         data: { email: "person@example.com", emailVerified: true },
       });
     },
@@ -141,36 +136,24 @@ describe("Preview Better Auth user management", () => {
     });
 
     expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledOnce();
-    expect(
-      database.prepare('select "activeOrganizationId" from "session"').get(),
-    ).toEqual({ activeOrganizationId: "organization_one" });
+    expect(database.prepare('select "activeOrganizationId" from "session"').get()).toEqual({
+      activeOrganizationId: "organization_one",
+    });
   });
 
   it.each([
     ["access-revoked", "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED", "FORBIDDEN"],
     ["signup-disabled", "AUTOGRAPH_SIGNUP_UNAVAILABLE", "FORBIDDEN"],
-    [
-      "verified-identity-required",
-      "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED",
-      "FORBIDDEN",
-    ],
+    ["verified-identity-required", "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED", "FORBIDDEN"],
     ["workspace-ambiguous", "AUTOGRAPH_WORKSPACE_AMBIGUOUS", "CONFLICT"],
-    [
-      "workspace-setup-failed",
-      "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
-      "SERVICE_UNAVAILABLE",
-    ],
-  ] as const)(
-    "maps %s to the product-facing %s error",
-    async (failure, code, status) => {
-      const lifecycle = createPreviewUserManagementLifecycle(
-        createAuthority({ failure }),
-      );
-      await expect(
-        lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
-      ).rejects.toMatchObject({ status, body: { code } });
-    },
-  );
+    ["workspace-setup-failed", "AUTOGRAPH_WORKSPACE_SETUP_FAILED", "SERVICE_UNAVAILABLE"],
+  ] as const)("maps %s to the product-facing %s error", async (failure, code, status) => {
+    const lifecycle = createPreviewUserManagementLifecycle(createAuthority({ failure }));
+    await expect(lifecycle.beforeSessionCreate({ userId: verifiedUser.id })).rejects.toMatchObject({
+      status,
+      body: { code },
+    });
+  });
 
   it("masks unexpected persistence failures and remains retry-safe", async () => {
     const authority: PreviewOrganizationUserAuthority = {
@@ -184,15 +167,13 @@ describe("Preview Better Auth user management", () => {
     };
     const lifecycle = createPreviewUserManagementLifecycle(authority);
 
-    await expect(
-      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
-    ).rejects.toMatchObject({
+    await expect(lifecycle.beforeSessionCreate({ userId: verifiedUser.id })).rejects.toMatchObject({
       body: { code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED" },
     });
-    await expect(
-      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
-    ).resolves.toMatchObject({
-      data: { activeOrganizationId: "organization_one" },
-    });
+    await expect(lifecycle.beforeSessionCreate({ userId: verifiedUser.id })).resolves.toMatchObject(
+      {
+        data: { activeOrganizationId: "organization_one" },
+      },
+    );
   });
 });

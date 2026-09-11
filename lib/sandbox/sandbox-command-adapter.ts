@@ -1,8 +1,4 @@
-import type {
-  SandboxBackend,
-  SandboxBackendHandle,
-  SandboxSession,
-} from "eve/sandbox";
+import type { SandboxBackend, SandboxBackendHandle, SandboxSession } from "eve/sandbox";
 
 export function createAuthorizedSandboxSession(input: {
   session: SandboxSession;
@@ -72,7 +68,7 @@ export function createAuthorizedSandboxBackend<BO, SO>(input: {
       });
     },
     prewarm(prewarmInput) {
-      const {bootstrap} = prewarmInput;
+      const { bootstrap } = prewarmInput;
       return input.backend.prewarm({
         ...prewarmInput,
         bootstrap:

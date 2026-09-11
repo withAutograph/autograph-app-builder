@@ -12,13 +12,9 @@ describe("destination-specific handoff setup", () => {
     expect(prompt).toContain("subject to native client approval requirements");
     expect(prompt).toContain("connection or tool-loading problem");
     expect(prompt).toContain("Do not ask the user to run installation");
-    expect(prompt).toContain(
-      "Never claim the handoff has started until autograph_start succeeds",
-    );
+    expect(prompt).toContain("Never claim the handoff has started until autograph_start succeeds");
     expect(prompt).toContain(`"clientRequestId":"web-handoff:${handoffId}"`);
-    expect(prompt).toContain(
-      "does not approve building, publishing, or deploying",
-    );
+    expect(prompt).toContain("does not approve building, publishing, or deploying");
   });
 
   it("keeps Codex setup commands out of Cursor and retains the same start identity", () => {
@@ -27,8 +23,6 @@ describe("destination-specific handoff setup", () => {
     expect(prompt).not.toContain("install, enable, or update it automatically");
     expect(prompt).toContain("Add Autograph to Cursor");
     expect(prompt).toContain(`"clientRequestId":"web-handoff:${handoffId}"`);
-    expect(prompt).toContain(
-      "Do not request provider tokens or separate provider logins",
-    );
+    expect(prompt).toContain("Do not request provider tokens or separate provider logins");
   });
 });

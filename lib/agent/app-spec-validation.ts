@@ -69,7 +69,8 @@ export type AppSpecValidationIssue = {
 };
 
 export type AppSpecValidationResult =
-  { valid: true } | { valid: false; issues: AppSpecValidationIssue[] };
+  | { valid: true }
+  | { valid: false; issues: AppSpecValidationIssue[] };
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -81,10 +82,7 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
   if (!Array.isArray(value)) return [];
   return [
     ...new Set(
-      value.filter(
-        (item): item is string =>
-          typeof item === "string" && pattern.test(item),
-      ),
+      value.filter((item): item is string => typeof item === "string" && pattern.test(item)),
     ),
   ].sort();
 }
@@ -121,34 +119,21 @@ export function normalizeBuildReadyAppSpec(content: string): string {
     schema: {
       kind: schema.kind === "none" ? ("none" as const) : ("kernel" as const),
     },
-    additionalPublicRoutes: normalizedStrings(
-      input.additionalPublicRoutes,
-      publicRoutePattern,
-    ),
+    additionalPublicRoutes: normalizedStrings(input.additionalPublicRoutes, publicRoutePattern),
     optionalCapabilities: {
-      integrations: normalizedStrings(
-        capabilities.integrations,
-        capabilityIdPattern,
-      ),
-      hostedResources: normalizedStrings(
-        capabilities.hostedResources,
-        capabilityIdPattern,
-      ),
+      integrations: normalizedStrings(capabilities.integrations, capabilityIdPattern),
+      hostedResources: normalizedStrings(capabilities.hostedResources, capabilityIdPattern),
     },
   };
   const prefix = normalizedContent.slice(0, heading.index).trimEnd();
   return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
 }
 
-export function validateBuildReadyAppSpec(
-  content: string,
-): AppSpecValidationResult {
+export function validateBuildReadyAppSpec(content: string): AppSpecValidationResult {
   const normalizedContent = content.replace(/\r\n?/gu, "\n");
   const issues: AppSpecValidationIssue[] = [];
   for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
-    const count =
-      normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ??
-      0;
+    const count = normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ?? 0;
     if (count === 0)
       issues.push({
         code: "missing_heading",
@@ -163,21 +148,15 @@ export function validateBuildReadyAppSpec(
       });
   }
 
-  const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(
-    normalizedContent,
-  );
+  const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(normalizedContent);
   const handoffSection =
     handoffHeading === null
       ? undefined
-      : normalizedContent
-          .slice(handoffHeading.index + handoffHeading[0].length)
-          .trim();
+      : normalizedContent.slice(handoffHeading.index + handoffHeading[0].length).trim();
   const block =
     handoffSection === undefined
       ? null
-      : /^[ \t]*```json[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(
-          handoffSection,
-        );
+      : /^[ \t]*```json[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(handoffSection);
   if (block?.[1] === undefined) {
     issues.push({
       code: "build_handoff_format",
@@ -219,9 +198,7 @@ export function appSpecRepairDiagnostic(
     instruction:
       "Repair and replace the complete Markdown artifact, then retry accept_app_spec without asking the user.",
     issues: result.issues,
-    requiredHeadings: REQUIRED_APP_SPEC_HEADINGS.map(
-      (heading) => `## ${heading}`,
-    ),
+    requiredHeadings: REQUIRED_APP_SPEC_HEADINGS.map((heading) => `## ${heading}`),
     buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
   });
 }

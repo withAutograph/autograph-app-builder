@@ -34,9 +34,7 @@ describe("local provider emulation", () => {
     expect(readLocalProviderEmulation(environment)).toMatchObject({
       vercelOrigin: "http://localhost:4000",
     });
-    expect(() =>
-      readLocalProviderEmulation({ ...environment, VERCEL_ENV: "preview" }),
-    ).toThrow();
+    expect(() => readLocalProviderEmulation({ ...environment, VERCEL_ENV: "preview" })).toThrow();
     expect(() =>
       readLocalProviderEmulation({
         ...environment,
@@ -65,10 +63,8 @@ describe("local provider emulation", () => {
     expect(preview).toMatchObject({
       mode: "preview",
       canonicalOrigin: "https://app-git-feature-team.vercel.app",
-      githubOrigin:
-        "https://app-git-feature-team.vercel.app/api/emulate/github",
-      namespace:
-        "autograph-app-builder:prj_preview:feature/provider-emulation:seed-v2",
+      githubOrigin: "https://app-git-feature-team.vercel.app/api/emulate/github",
+      namespace: "autograph-app-builder:prj_preview:feature/provider-emulation:seed-v2",
     });
     expect(
       providerEmulationEnvironment({
@@ -86,8 +82,7 @@ describe("local provider emulation", () => {
       MCP_RESOURCE_URL: "https://app-commit-team.vercel.app/mcp",
       GITHUB_APP_ID: "12345",
       GITHUB_APP_SLUG: "autograph-app-builder",
-      GITHUB_APP_INSTALL_STATE_SECRET:
-        previewSecrets.EMULATE_PREVIEW_RELAY_SECRET,
+      GITHUB_APP_INSTALL_STATE_SECRET: previewSecrets.EMULATE_PREVIEW_RELAY_SECRET,
       VERCEL_INTEGRATION_SLUG: "autograph-app-builder",
       VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "preview-emulation-v1",
     });

@@ -25,9 +25,7 @@ export const sandboxExecutionPolicySchema = z
   })
   .strict();
 
-export type SandboxExecutionPolicy = z.infer<
-  typeof sandboxExecutionPolicySchema
->;
+export type SandboxExecutionPolicy = z.infer<typeof sandboxExecutionPolicySchema>;
 
 export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
   version: 1,
@@ -54,7 +52,5 @@ export function sandboxExecutionPolicyDigest(
   policy: SandboxExecutionPolicy = SANDBOX_EXECUTION_POLICY,
 ): string {
   const parsed = sandboxExecutionPolicySchema.parse(policy);
-  return `sha256:${createHash("sha256")
-    .update(JSON.stringify(parsed))
-    .digest("hex")}`;
+  return `sha256:${createHash("sha256").update(JSON.stringify(parsed)).digest("hex")}`;
 }

@@ -17,19 +17,12 @@ async function privateRoot(path: string) {
     info.uid !== process.getuid?.() ||
     (info.mode & 0o077) !== 0
   )
-    throw new Error(
-      `Development root must be canonical, owner-only, and mode 0700: ${path}`,
-    );
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);
   return canonical;
 }
 
-if (
-  process.env.VERCEL_TOKEN !== undefined ||
-  process.env.AI_GATEWAY_API_KEY !== undefined
-)
-  throw new Error(
-    "Development mode rejects static Vercel and AI Gateway credentials.",
-  );
+if (process.env.VERCEL_TOKEN !== undefined || process.env.AI_GATEWAY_API_KEY !== undefined)
+  throw new Error("Development mode rejects static Vercel and AI Gateway credentials.");
 
 const args = parseDevelopmentArguments(process.argv.slice(2));
 const artifactRoot = await privateRoot(

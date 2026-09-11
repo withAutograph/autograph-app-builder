@@ -13315,10 +13315,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-21-color",
         "dimension": "styling",
@@ -14084,10 +14081,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-22-color",
         "dimension": "styling",
@@ -31936,10 +31930,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-111-color",
         "dimension": "styling",
@@ -34558,10 +34549,7 @@
         "category": "color",
         "computed": "rgb(154, 74, 9)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-primary)",
-          "var(--color-status-warning-ink)"
-        ],
+        "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
         "origin": "unknown",
         "id": "desktop-0-style-121-color",
         "dimension": "styling",
@@ -37331,10 +37319,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-137-color",
         "dimension": "styling",
@@ -37697,10 +37682,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-138-color",
         "dimension": "styling",
@@ -39119,11 +39101,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-140-color",
         "dimension": "styling",
@@ -47613,10 +47591,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-21-color",
         "dimension": "styling",
@@ -48382,10 +48357,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-22-color",
         "dimension": "styling",
@@ -66234,10 +66206,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-111-color",
         "dimension": "styling",
@@ -68856,10 +68825,7 @@
         "category": "color",
         "computed": "rgb(154, 74, 9)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-primary)",
-          "var(--color-status-warning-ink)"
-        ],
+        "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-121-color",
         "dimension": "styling",
@@ -71629,10 +71595,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-137-color",
         "dimension": "styling",
@@ -71995,10 +71958,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-138-color",
         "dimension": "styling",
@@ -73417,11 +73377,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-140-color",
         "dimension": "styling",
@@ -81917,10 +81873,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-21-color",
         "dimension": "styling",
@@ -82735,10 +82688,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-22-color",
         "dimension": "styling",
@@ -100874,10 +100824,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-111-color",
         "dimension": "styling",
@@ -103154,10 +103101,7 @@
         "category": "color",
         "computed": "rgb(154, 74, 9)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-primary)",
-          "var(--color-status-warning-ink)"
-        ],
+        "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-121-color",
         "dimension": "styling",
@@ -105927,10 +105871,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-137-color",
         "dimension": "styling",
@@ -106293,10 +106234,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-138-color",
         "dimension": "styling",
@@ -107715,11 +107653,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-140-color",
         "dimension": "styling",
@@ -108449,11 +108383,7 @@
   "reference": {
     "name": "repo",
     "commit": "ba2808f0e1664ef299868abac999859fbfc6a974",
-    "publicModules": [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons"
-    ],
+    "publicModules": ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     "catalogAvailable": true
   },
   "case": {
@@ -108533,9 +108463,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -116471,10 +116399,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-21-color",
             "dimension": "styling",
@@ -117240,10 +117165,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-22-color",
             "dimension": "styling",
@@ -135092,10 +135014,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-111-color",
             "dimension": "styling",
@@ -137714,10 +137633,7 @@
             "category": "color",
             "computed": "rgb(154, 74, 9)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-primary)",
-              "var(--color-status-warning-ink)"
-            ],
+            "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
             "origin": "unknown",
             "id": "desktop-0-style-121-color",
             "dimension": "styling",
@@ -140487,10 +140403,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-137-color",
             "dimension": "styling",
@@ -140853,10 +140766,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-138-color",
             "dimension": "styling",
@@ -142275,11 +142185,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-140-color",
             "dimension": "styling",
@@ -143059,9 +142965,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -143167,9 +143071,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -143275,9 +143177,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -151213,10 +151113,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-21-color",
             "dimension": "styling",
@@ -151982,10 +151879,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-22-color",
             "dimension": "styling",
@@ -169834,10 +169728,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-111-color",
             "dimension": "styling",
@@ -172456,10 +172347,7 @@
             "category": "color",
             "computed": "rgb(154, 74, 9)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-primary)",
-              "var(--color-status-warning-ink)"
-            ],
+            "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-121-color",
             "dimension": "styling",
@@ -175229,10 +175117,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-137-color",
             "dimension": "styling",
@@ -175595,10 +175480,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-138-color",
             "dimension": "styling",
@@ -177017,11 +176899,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-140-color",
             "dimension": "styling",
@@ -177801,9 +177679,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -177909,9 +177785,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -178017,9 +177891,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -185961,10 +185833,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-21-color",
             "dimension": "styling",
@@ -186779,10 +186648,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-22-color",
             "dimension": "styling",
@@ -204918,10 +204784,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-111-color",
             "dimension": "styling",
@@ -207198,10 +207061,7 @@
             "category": "color",
             "computed": "rgb(154, 74, 9)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-primary)",
-              "var(--color-status-warning-ink)"
-            ],
+            "declarations": ["var(--color-text-primary)", "var(--color-status-warning-ink)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-121-color",
             "dimension": "styling",
@@ -209971,10 +209831,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-137-color",
             "dimension": "styling",
@@ -210337,10 +210194,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-138-color",
             "dimension": "styling",
@@ -211759,11 +211613,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-140-color",
             "dimension": "styling",
@@ -212543,9 +212393,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -212651,9 +212499,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.54 (foreground color: #eb8526, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"
-                  ],
+                  "target": [".break-words.min-w-\\[var\\(--space-0\\)\\]:nth-child(3)"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.32 (foreground color: #747778, background color: #fafaf9, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {

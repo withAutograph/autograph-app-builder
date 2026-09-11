@@ -1,10 +1,7 @@
 import { lstat, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import {
-  hostedProofScenarioSchema,
-  runHostedProof,
-} from "./hosted-portable-proof";
+import { hostedProofScenarioSchema, runHostedProof } from "./hosted-portable-proof";
 import { verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { sha256 } from "./portable-release";
 
@@ -12,8 +9,7 @@ const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--"))
-    throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
 };
 
@@ -31,8 +27,7 @@ async function secretFile(pathValue: string) {
   if ((info.mode & 0o077) !== 0 || info.uid !== process.getuid?.())
     throw new Error("OAuth token input must be owner-bound with mode 0600.");
   const canonical = await realpath(requested);
-  if (canonical !== requested)
-    throw new Error("OAuth token input path must be canonical.");
+  if (canonical !== requested) throw new Error("OAuth token input path must be canonical.");
   const token = (await readFile(canonical, "utf8")).trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
     throw new Error("OAuth token input was malformed.");
@@ -55,13 +50,9 @@ const release = verifiedArtifact.receipt;
 const receiptPath = join(releaseRoot, "release-receipt.json");
 
 const scenarioBytes = await readFile(scenarioPath);
-const scenario = hostedProofScenarioSchema.parse(
-  JSON.parse(scenarioBytes.toString("utf8")),
-);
+const scenario = hostedProofScenarioSchema.parse(JSON.parse(scenarioBytes.toString("utf8")));
 const token = await secretFile(required("--token-file"));
-const crossTenantToken = await secretFile(
-  required("--cross-tenant-token-file"),
-);
+const crossTenantToken = await secretFile(required("--cross-tenant-token-file"));
 if (token === crossTenantToken)
   throw new Error("Cross-tenant proof requires a distinct principal token.");
 const output = resolve(required("--receipt"));
@@ -119,8 +110,7 @@ const proof = {
     mutualWorkspaceDenial: result.mutualWorkspaceDenial,
     cancellationProved: result.cancellationProved,
     publicResponsesScanned: result.publicResponsesScanned,
-    publicResponseDisclosureScanDigest:
-      result.publicResponseDisclosureScanDigest,
+    publicResponseDisclosureScanDigest: result.publicResponseDisclosureScanDigest,
     sessionEvidenceDigest: result.sessionEvidenceDigest,
   },
   secretsPersisted: false,

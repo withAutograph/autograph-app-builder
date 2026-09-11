@@ -64,8 +64,7 @@ export const builderHandoffIntentSchema = z
       context.addIssue({
         code: "custom",
         path: ["provisioningRequestId"],
-        message:
-          "A provisioning request ID and digest must be recorded together.",
+        message: "A provisioning request ID and digest must be recorded together.",
       });
     if (
       intent.provisioning !== undefined &&
@@ -75,13 +74,9 @@ export const builderHandoffIntentSchema = z
       context.addIssue({
         code: "custom",
         path: ["provisioning"],
-        message:
-          "A provisioning outcome must match its exact server-owned request.",
+        message: "A provisioning outcome must match its exact server-owned request.",
       });
-    if (
-      intent.provisioning === undefined &&
-      intent.provisioningRequestId !== undefined
-    )
+    if (intent.provisioning === undefined && intent.provisioningRequestId !== undefined)
       context.addIssue({
         code: "custom",
         path: ["provisioning"],
@@ -120,8 +115,7 @@ export const builderHandoffRecordSchema = z
       });
     if (
       record.redeemedAt !== undefined &&
-      (record.redeemedAt < record.createdAt ||
-        record.redeemedAt > record.expiresAt)
+      (record.redeemedAt < record.createdAt || record.redeemedAt > record.expiresAt)
     )
       context.addIssue({
         code: "custom",

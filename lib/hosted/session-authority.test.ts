@@ -29,15 +29,11 @@ describe("exact forwarded session authority", () => {
         "autograph:source-handoff-id": handoffId,
       },
     });
-    expect(
-      sourceHandoffIdForSessionAuth({ current: prepared, initiator: prepared }),
-    ).toBe(handoffId);
-    expect(
-      sourceHandoffIdForSessionAuth({ current: auth(), initiator: auth() }),
-    ).toBeUndefined();
-    expect(
-      sourceHandoffIdForSessionAuth({ current: null, initiator: null }),
-    ).toBeUndefined();
+    expect(sourceHandoffIdForSessionAuth({ current: prepared, initiator: prepared })).toBe(
+      handoffId,
+    );
+    expect(sourceHandoffIdForSessionAuth({ current: auth(), initiator: auth() })).toBeUndefined();
+    expect(sourceHandoffIdForSessionAuth({ current: null, initiator: null })).toBeUndefined();
     for (const candidate of [
       { current: auth(), initiator: prepared },
       { current: prepared, initiator: auth() },
@@ -47,14 +43,10 @@ describe("exact forwarded session authority", () => {
       },
       { current: prepared, initiator: null },
     ])
-      expect(() => sourceHandoffIdForSessionAuth(candidate)).toThrow(
-        HostedSessionAuthorityError,
-      );
+      expect(() => sourceHandoffIdForSessionAuth(candidate)).toThrow(HostedSessionAuthorityError);
   });
   it("returns one exact current and initiating tenant authority", () => {
-    expect(
-      exactForwardedSessionAuthority({ current: auth(), initiator: auth() }),
-    ).toEqual({
+    expect(exactForwardedSessionAuthority({ current: auth(), initiator: auth() })).toEqual({
       authority: {
         issuer: "https://builder.example.test/api/auth",
         audience: "https://builder.example.test/mcp",
@@ -85,9 +77,7 @@ describe("exact forwarded session authority", () => {
         }),
       },
     ]) {
-      expect(() => exactForwardedSessionAuthority(candidate)).toThrow(
-        HostedSessionAuthorityError,
-      );
+      expect(() => exactForwardedSessionAuthority(candidate)).toThrow(HostedSessionAuthorityError);
     }
   });
 });

@@ -17,30 +17,29 @@ import {
 import type { ObservedDependencyCache } from "../repository/dependency-cache";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
-const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> =
-  {
-    version: 2 as const,
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    sourceReceiptDigest: "f".repeat(64),
-    eligibilityDigest: "d".repeat(64),
-    workspaceDigest: "c".repeat(64),
-    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-    appSpecDigest: "e".repeat(64),
-    artifactRevision: "a".repeat(64),
-    targetSha: "a".repeat(40),
-    targetTree: "b".repeat(40),
-    cacheManifestDigest: "2".repeat(64),
-    cacheContentDigest: "3".repeat(64),
-    dependencyLayout: {
-      version: 1 as const,
-      kind: "fixture" as const,
-      roots: [],
-      workspaceLinks: [],
-    },
-    preparedByCallId: "dependency-call",
-  };
+const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> = {
+  version: 2 as const,
+  sourceSha: "a".repeat(40),
+  sourceTree: "b".repeat(40),
+  sourceReceiptDigest: "f".repeat(64),
+  eligibilityDigest: "d".repeat(64),
+  workspaceDigest: "c".repeat(64),
+  imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+  dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+  appSpecDigest: "e".repeat(64),
+  artifactRevision: "a".repeat(64),
+  targetSha: "a".repeat(40),
+  targetTree: "b".repeat(40),
+  cacheManifestDigest: "2".repeat(64),
+  cacheContentDigest: "3".repeat(64),
+  dependencyLayout: {
+    version: 1 as const,
+    kind: "fixture" as const,
+    roots: [],
+    workspaceLinks: [],
+  },
+  preparedByCallId: "dependency-call",
+};
 
 const state = {
   version: APP_BUILDER_WORKFLOW_VERSION,
@@ -90,9 +89,7 @@ const state = {
   },
   dependencyReceipt: {
     ...dependencyReceiptUnsigned,
-    digest: createHash("sha256")
-      .update(JSON.stringify(dependencyReceiptUnsigned))
-      .digest("hex"),
+    digest: createHash("sha256").update(JSON.stringify(dependencyReceiptUnsigned)).digest("hex"),
   },
   identityReceipt: {
     version: 1,
@@ -151,9 +148,7 @@ describe("target command readiness", () => {
       EVE_HOSTED_ADAPTER: "1",
       EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
     };
-    expect(
-      resolveTargetExecutionEnvironment({ environment, fixture: false }),
-    ).toMatchObject({
+    expect(resolveTargetExecutionEnvironment({ environment, fixture: false })).toMatchObject({
       backend: { kind: "vercel-preview", blockers: [] },
       cacheInspectable: true,
       imageDigest: undefined,
@@ -201,15 +196,9 @@ describe("target command readiness", () => {
   });
 
   it("requires the exact planned proposal receipt", () => {
-    expect(plannedProposalForExecution(state, state.proposal.digest)).toBe(
-      state.proposal,
-    );
-    expect(() => plannedProposalForExecution(state, "0".repeat(64))).toThrow(
-      "proposal changed",
-    );
-    expect(() => assertProposalExecutionBindings(state)).toThrow(
-      "durable execution bindings",
-    );
+    expect(plannedProposalForExecution(state, state.proposal.digest)).toBe(state.proposal);
+    expect(() => plannedProposalForExecution(state, "0".repeat(64))).toThrow("proposal changed");
+    expect(() => assertProposalExecutionBindings(state)).toThrow("durable execution bindings");
   });
 
   it("denies target commands when the immutable toolchain proof is absent", () => {
@@ -222,9 +211,7 @@ describe("target command readiness", () => {
       "No immutable sandbox image is configured.",
       "The sandbox execution environment or a required command is unavailable.",
     ]);
-    expect(
-      targetExecutionBlockers({ imageConfigured: true, toolchainReady: true }),
-    ).toEqual([]);
+    expect(targetExecutionBlockers({ imageConfigured: true, toolchainReady: true })).toEqual([]);
     expect(
       targetExecutionBlockers({
         imageConfigured: false,

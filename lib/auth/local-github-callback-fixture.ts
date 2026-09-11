@@ -33,10 +33,7 @@ function cookieValue(request: Request, name: string) {
   }
 }
 
-export function applyLocalGitHubCallbackFixture(
-  request: Request,
-  environment: NodeJS.ProcessEnv,
-) {
+export function applyLocalGitHubCallbackFixture(request: Request, environment: NodeJS.ProcessEnv) {
   if (
     environment.NODE_ENV === "production" ||
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1"

@@ -3,13 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type ProviderConnectionProps = {
@@ -38,11 +32,7 @@ export function ProviderConnection({
       <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
         <Link
           className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          href={
-            resumeKey
-              ? { pathname: returnTo, query: { resume: resumeKey } }
-              : returnTo
-          }
+          href={resumeKey ? { pathname: returnTo, query: { resume: resumeKey } } : returnTo}
         >
           <ArrowLeft size={17} aria-hidden="true" /> Back
         </Link>
@@ -64,9 +54,7 @@ export function ProviderConnection({
           {children}
           <form className="flex flex-col gap-4" method="post" action={action}>
             <input name="returnTo" type="hidden" value={returnTo} />
-            {resumeKey ? (
-              <input name="resumeKey" type="hidden" value={resumeKey} />
-            ) : null}
+            {resumeKey ? <input name="resumeKey" type="hidden" value={resumeKey} /> : null}
             <Button className="w-full" type="submit">
               {buttonLabel}
             </Button>

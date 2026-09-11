@@ -64,8 +64,7 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>
       2026-09-09T13:13:05.302Z ·
@@ -74,62 +73,48 @@
     <section>
       <h2>Compensation planning review</h2>
       <p>
-        Synthetic planning case grounded in implemented compensation policy,
-        template, and derived-fact substrate; the roadmap&#39;s broader
-        compensation-planning workflow is planned.
+        Synthetic planning case grounded in implemented compensation policy, template, and
+        derived-fact substrate; the roadmap&#39;s broader compensation-planning workflow is planned.
       </p>
       <details>
         <summary>Case evidence and review questions</summary>
         <ul>
           <li>
             arrusted:
-            <code>domain-libs/compensation/src/model-compensation.ts</code> —
-            implemented
+            <code>domain-libs/compensation/src/model-compensation.ts</code> — implemented
           </li>
           <li>
             ag2:
-            <code
-              >frontend/src/app-templates/templates/compensation/manifest.ts</code
-            >
+            <code>frontend/src/app-templates/templates/compensation/manifest.ts</code>
             — implemented
           </li>
           <li>
             ag2:
-            <code>backend/src/services/compensation/derivedFacts.ts</code> —
-            implemented
+            <code>backend/src/services/compensation/derivedFacts.ts</code> — implemented
           </li>
-          <li>
-            ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned
-          </li>
+          <li>ag2: <code>docs/plans/product/mini-app-roadmap.md</code> — planned</li>
         </ul>
         <h3>Review questions</h3>
         <ul>
           <li>
-            Can a reviewer assess proposed compensation with base, bonus,
-            benefits, and employer-tax context?
+            Can a reviewer assess proposed compensation with base, bonus, benefits, and employer-tax
+            context?
           </li>
           <li>
-            Does the design show uncertainty and policy assumptions instead of
-            presenting a draft as payroll truth?
+            Does the design show uncertainty and policy assumptions instead of presenting a draft as
+            payroll truth?
           </li>
         </ul>
         <h3>Intended outcomes, not asserted results</h3>
         <ul>
-          <li>
-            A reviewer can identify out-of-band proposals and their cost
-            drivers.
-          </li>
-          <li>
-            A reviewer can request changes or prepare a decision-ready
-            compensation summary.
-          </li>
+          <li>A reviewer can identify out-of-band proposals and their cost drivers.</li>
+          <li>A reviewer can request changes or prepare a decision-ready compensation summary.</li>
         </ul>
       </details>
     </section>
     <h2>Arrusted adherence: 100/100 · partial</h2>
     <p>
-      Evidence coverage: 2.22%. Evaluator 3. This measures inspected evidence,
-      not all rendered UI.
+      Evidence coverage: 2.22%. Evaluator 3. This measures inspected evidence, not all rendered UI.
     </p>
     <table>
       <thead>
@@ -170,36 +155,32 @@
       </tbody>
     </table>
     <p>
-      Equal average of available dimension percentages; each is conforming /
-      assessed. Shared-library observations are excluded. Unknown provenance is
-      unassessed. Static JSX is not proof of rendering. Coverage describes
-      inspected evidence, not the entire app.
+      Equal average of available dimension percentages; each is conforming / assessed.
+      Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not
+      proof of rendering. Coverage describes inspected evidence, not the entire app.
     </p>
     <ul>
       <li>
-        Conservative matched-style evidence, not a full CSS cascade or React
-        component provenance proof.
+        Conservative matched-style evidence, not a full CSS cascade or React component provenance
+        proof.
       </li>
       <li>
-        Conflicting declarations, unknown variables and shorthand-only
-        properties remain unassessed. Sampling is capped at 120 eligible
-        elements and diversified by rendered region.
+        Conflicting declarations, unknown variables and shorthand-only properties remain unassessed.
+        Sampling is capped at 120 eligible elements and diversified by rendered region.
       </li>
       <li>
-        A shared bundle is never treated as positive generated adherence.
-        Anonymous rules require a unique exact generated selector/property/value
-        and complete matched-rule declaration set; conditional or ambiguous
-        source rules remain unknown.
+        A shared bundle is never treated as positive generated adherence. Anonymous rules require a
+        unique exact generated selector/property/value and complete matched-rule declaration set;
+        conditional or ambiguous source rules remain unknown.
       </li>
       <li>
-        Intrinsic tag/class matches are reviewer-facing generated-origin
-        candidates only. Shared components can assemble identical classes
-        dynamically, so they remain unknown and unassessed without direct
-        stylesheet provenance.
+        Intrinsic tag/class matches are reviewer-facing generated-origin candidates only. Shared
+        components can assemble identical classes dynamically, so they remain unknown and unassessed
+        without direct stylesheet provenance.
       </li>
       <li>
-        No generated CSS source files were supplied; compiled stylesheet source
-        maps cannot establish generated declaration provenance.
+        No generated CSS source files were supplied; compiled stylesheet source maps cannot
+        establish generated declaration provenance.
       </li>
     </ul>
     <details open>
@@ -215,13 +196,10 @@
       <article id="finding-12">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-12">src/CompensationReview.tsx:35</a></small
-        >
+        <small>static evidence · <a href="#source-12">src/CompensationReview.tsx:35</a></small>
         <details id="source-12">
           <summary>Source location: src/CompensationReview.tsx:35</summary>
           <pre>
@@ -234,13 +212,10 @@
       <article id="finding-33">
         <strong>prop · unassessed</strong>
         <p>
-          The expected prop type has no independently reliable branch for this
-          static JSX expression.
+          The expected prop type has no independently reliable branch for this static JSX
+          expression.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-33">src/CompensationReview.tsx:62</a></small
-        >
+        <small>static evidence · <a href="#source-33">src/CompensationReview.tsx:62</a></small>
         <details id="source-33">
           <summary>Source location: src/CompensationReview.tsx:62</summary>
           <pre>
@@ -253,13 +228,10 @@
       <article id="finding-40">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-40">src/CompensationReview.tsx:85</a></small
-        >
+        <small>static evidence · <a href="#source-40">src/CompensationReview.tsx:85</a></small>
         <details id="source-40">
           <summary>Source location: src/CompensationReview.tsx:85</summary>
           <pre>
@@ -272,13 +244,10 @@
       <article id="finding-42">
         <strong>prop · unassessed</strong>
         <p>
-          The JSX expression or expected prop type is dynamic, unresolved, any,
-          unknown, recursive, or callback-shaped.
+          The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive,
+          or callback-shaped.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-42">src/CompensationReview.tsx:86</a></small
-        >
+        <small>static evidence · <a href="#source-42">src/CompensationReview.tsx:86</a></small>
         <details id="source-42">
           <summary>Source location: src/CompensationReview.tsx:86</summary>
           <pre>
@@ -291,13 +260,10 @@
       <article id="finding-47">
         <strong>prop · unassessed</strong>
         <p>
-          Disclosure.defaultOpen is dynamic or spread-derived; its public
-          variant cannot be verified statically.
+          Disclosure.defaultOpen is dynamic or spread-derived; its public variant cannot be verified
+          statically.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-47">src/CompensationReview.tsx:93</a></small
-        >
+        <small>static evidence · <a href="#source-47">src/CompensationReview.tsx:93</a></small>
         <details id="source-47">
           <summary>Source location: src/CompensationReview.tsx:93</summary>
           <pre>
@@ -310,13 +276,9 @@
       <article id="finding-60">
         <strong>dynamic-reachability · unassessed</strong>
         <p>
-          A JSX branch has dynamic reachability; static source cannot establish
-          that it renders.
+          A JSX branch has dynamic reachability; static source cannot establish that it renders.
         </p>
-        <small
-          >static evidence ·
-          <a href="#source-60">src/CompensationReview.tsx:28</a></small
-        >
+        <small>static evidence · <a href="#source-60">src/CompensationReview.tsx:28</a></small>
         <details id="source-60">
           <summary>Source location: src/CompensationReview.tsx:28</summary>
           <pre>
@@ -330,8 +292,7 @@
         <strong>unknown · unassessed</strong>
         <p>color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-108">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-108">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-108">
@@ -343,8 +304,7 @@
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-109">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-109">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-109">
@@ -356,8 +316,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-110">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-110">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-110">
@@ -369,8 +328,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-111">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-111">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-111">
@@ -382,8 +340,7 @@
         <strong>unknown · unassessed</strong>
         <p>font-weight: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-112">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-112">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-112">
@@ -395,8 +352,7 @@
         <strong>unknown · unassessed</strong>
         <p>line-height: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-113">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-113">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-113">
@@ -408,8 +364,7 @@
         <strong>unknown · unassessed</strong>
         <p>letter-spacing: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-114">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-114">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-114">
@@ -457,8 +412,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-left-radius: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-117">/compensation-planning:266</a> ·
+          >browser evidence · <a href="#source-117">/compensation-planning:266</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-117">
@@ -470,8 +424,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-width: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-118">/compensation-planning:184</a> ·
+          >browser evidence · <a href="#source-118">/compensation-planning:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-118">
@@ -483,8 +436,7 @@
         <strong>unknown · unassessed</strong>
         <p>border-top-color: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-119">/compensation-planning:184</a> ·
+          >browser evidence · <a href="#source-119">/compensation-planning:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-119">
@@ -496,8 +448,7 @@
         <strong>unknown · unassessed</strong>
         <p>box-shadow: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-120">/compensation-planning:1514</a> ·
+          >browser evidence · <a href="#source-120">/compensation-planning:1514</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-120">
@@ -509,8 +460,7 @@
         <strong>semantic-token-reference · unassessed</strong>
         <p>color: semantic-token-reference</p>
         <small
-          >browser evidence ·
-          <a href="#source-121">/compensation-planning:1946</a> ·
+          >browser evidence · <a href="#source-121">/compensation-planning:1946</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-121">
@@ -521,16 +471,13 @@
       <article id="finding-122">
         <strong>unknown · unassessed</strong>
         <p>background-color: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-123">
         <strong>unknown · unassessed</strong>
         <p>font-family: unknown</p>
         <small
-          >browser evidence ·
-          <a href="#source-123">/compensation-planning:190</a> ·
+          >browser evidence · <a href="#source-123">/compensation-planning:190</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-123">
@@ -541,23 +488,18 @@
       <article id="finding-124">
         <strong>unknown · unassessed</strong>
         <p>font-size: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-125">
         <strong>unknown · unassessed</strong>
         <p>font-weight: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-126">
         <strong>matching-literal · unassessed</strong>
         <p>line-height: matching-literal</p>
         <small
-          >browser evidence ·
-          <a href="#source-126">/compensation-planning:190</a> ·
+          >browser evidence · <a href="#source-126">/compensation-planning:190</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-126">
@@ -568,37 +510,28 @@
       <article id="finding-127">
         <strong>unknown · unassessed</strong>
         <p>letter-spacing: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-128">
         <strong>unknown · unassessed</strong>
         <p>column-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-129">
         <strong>unknown · unassessed</strong>
         <p>row-gap: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-130">
         <strong>unknown · unassessed</strong>
         <p>border-top-left-radius: unknown</p>
-        <small
-          >browser evidence · <a href="#desktop-0">Screenshot region</a></small
-        >
+        <small>browser evidence · <a href="#desktop-0">Screenshot region</a></small>
       </article>
       <article id="finding-131">
         <strong>matching-literal · unassessed</strong>
         <p>border-top-color: matching-literal</p>
         <small
-          >browser evidence ·
-          <a href="#source-131">/compensation-planning:184</a> ·
+          >browser evidence · <a href="#source-131">/compensation-planning:184</a> ·
           <a href="#desktop-0">Screenshot region</a></small
         >
         <details id="source-131">
@@ -608,24 +541,21 @@
       </article>
       <p>
         Showing 30 representative unknowns.
-        <a href="report.json">Download every observation and source location</a
-        >.
+        <a href="report.json">Download every observation and source location</a>.
       </p>
     </details>
     <details>
       <summary>All adherence observations</summary>
       <p>
         <a href="report.json" download
-          >Download all counts, declarations, locations, and observations as
-          JSON</a
+          >Download all counts, declarations, locations, and observations as JSON</a
         >.
       </p>
     </details>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 75/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -640,23 +570,20 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The title, three summary cards, employee record, decision panel, and
-            assumptions form a clear scan path, with the planned-base comparison
-            receiving useful prominence. However, the most explicit warning to
-            confirm band policy sits near the bottom of the record while the
-            decision controls appear much earlier, and a completed hold
-            simulation leaves the opposite recommendation action visually
-            dominant.
+            The title, three summary cards, employee record, decision panel, and assumptions form a
+            clear scan path, with the planned-base comparison receiving useful prominence. However,
+            the most explicit warning to confirm band policy sits near the bottom of the record
+            while the decision controls appear much earlier, and a completed hold simulation leaves
+            the opposite recommendation action visually dominant.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Alignment and spacing are consistent across the KPI row, main
-            record, and sidebar, and the centered maximum-width composition
-            remains orderly at 1024, 1440, and 1920 pixels. The wide record uses
-            considerable horizontal and vertical space for short label-value
+            Alignment and spacing are consistent across the KPI row, main record, and sidebar, and
+            the centered maximum-width composition remains orderly at 1024, 1440, and 1920 pixels.
+            The wide record uses considerable horizontal and vertical space for short label-value
             lists, but this does not prevent use or comprehension.
           </td>
         </tr>
@@ -664,40 +591,34 @@
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Headings, monetary values, labels, and explanatory copy are visually
-            consistent and generally easy to read. Very small proposal metadata,
-            status text, and supporting captions are comparatively faint and
-            harder to scan; automated evidence also flags several muted 10–14 px
-            text instances as marginal contrast, so increasing supported type
-            size or emphasis would help without changing the authoritative
-            palette.
+            Headings, monetary values, labels, and explanatory copy are visually consistent and
+            generally easy to read. Very small proposal metadata, status text, and supporting
+            captions are comparatively faint and harder to scan; automated evidence also flags
+            several muted 10–14 px text instances as marginal contrast, so increasing supported type
+            size or emphasis would help without changing the authoritative palette.
           </td>
         </tr>
         <tr>
           <th>responsive</th>
           <td>4/4</td>
           <td>
-            Across the supplied 1024, 1440, and 1920 desktop captures, the three
-            summaries and two-column review composition remain aligned, text
-            wraps cleanly, buttons remain fully usable, and no clipping or
-            horizontal overflow is reported. The longer simulated states add
-            normal document scrolling rather than introducing an unusable
-            internal scroll area.
+            Across the supplied 1024, 1440, and 1920 desktop captures, the three summaries and
+            two-column review composition remain aligned, text wraps cleanly, buttons remain fully
+            usable, and no clipping or horizontal overflow is reported. The longer simulated states
+            add normal document scrolling rather than introducing an unusable internal scroll area.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>2/4</td>
           <td>
-            The interface clearly identifies the content as a synthetic draft,
-            exposes base, bonus, benefits, employer tax, band midpoint,
-            assumptions, and a non-approval planning choice. A notable ambiguity
-            remains: the $204,428 annual package appears based on the current
-            $152,000 base, while the proposed +9% base is shown separately
-            without a corresponding planned employer-tax or total-package
-            estimate, making the complete proposed package difficult to assess.
-            Completed simulations are explained, but the local decision controls
-            do not show which choice is currently recorded.
+            The interface clearly identifies the content as a synthetic draft, exposes base, bonus,
+            benefits, employer tax, band midpoint, assumptions, and a non-approval planning choice.
+            A notable ambiguity remains: the $204,428 annual package appears based on the current
+            $152,000 base, while the proposed +9% base is shown separately without a corresponding
+            planned employer-tax or total-package estimate, making the complete proposed package
+            difficult to assess. Completed simulations are explained, but the local decision
+            controls do not show which choice is currently recorded.
           </td>
         </tr>
       </tbody>
@@ -705,64 +626,56 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        Repeated language such as “synthetic draft,” “explanatory estimates,”
-        “planning only,” and “no approval or payroll workflow” appropriately
-        avoids presenting the proposal as payroll truth.
+        Repeated language such as “synthetic draft,” “explanatory estimates,” “planning only,” and
+        “no approval or payroll workflow” appropriately avoids presenting the proposal as payroll
+        truth.
       </li>
       <li>
-        The package section includes base salary, target bonus with percentage
-        context, annual benefits, employer tax with rate, and an estimated
-        total.
+        The package section includes base salary, target bonus with percentage context, annual
+        benefits, employer tax with rate, and an estimated total.
       </li>
       <li>
-        Band comparison shows both dollars and percentage of midpoint for
-        current and planned positions, making the central compensation concern
-        readily understandable.
+        Band comparison shows both dollars and percentage of midpoint for current and planned
+        positions, making the central compensation concern readily understandable.
       </li>
       <li>
-        Policy assumptions explicitly state what changes, what remains
-        unchanged, how employer tax is estimated, and that midpoint is a
-        comparison point rather than a policy limit.
+        Policy assumptions explicitly state what changes, what remains unchanged, how employer tax
+        is estimated, and that midpoint is a comparison point rather than a policy limit.
       </li>
       <li>
-        Simulation banners provide immediate feedback and explicitly state that
-        the interaction does not contact an approver or write to payroll.
+        Simulation banners provide immediate feedback and explicitly state that the interaction does
+        not contact an approver or write to payroll.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article id="design-0">
       <h4>high · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The KPI row juxtaposes an “Annual package estimate” of $204,428 with a
-        planned base of $165,680, but does not identify the package estimate as
-        current or provide the planned employer-tax and total-package context.
-        Because $204,428 matches the current base breakdown, a reviewer could
-        mistake it for the proposed package total.
+        The KPI row juxtaposes an “Annual package estimate” of $204,428 with a planned base of
+        $165,680, but does not identify the package estimate as current or provide the planned
+        employer-tax and total-package context. Because $204,428 matches the current base breakdown,
+        a reviewer could mistake it for the proposed package total.
       </p>
       <p>
-        <strong>Improve:</strong> Label the existing figure explicitly as
-        “Current annual package estimate” and add a clearly qualified
-        planned-package estimate or breakdown showing planned base, unchanged
-        bonus and benefits, revised estimated employer tax, and resulting
-        estimated total. Continue labeling all figures as planning estimates
-        rather than payroll calculations.
+        <strong>Improve:</strong> Label the existing figure explicitly as “Current annual package
+        estimate” and add a clearly qualified planned-package estimate or breakdown showing planned
+        base, unchanged bonus and benefits, revised estimated employer tax, and resulting estimated
+        total. Continue labeling all figures as planning estimates rather than payroll calculations.
       </p>
       <small>Screenshot region: x 130, y 120, width 1180, height 154</small>
     </article>
     <article id="design-1">
       <h4>medium · <a href="#desktop-2">desktop-2</a></h4>
       <p>
-        After “Draft kept for further review” is recorded, the decision panel
-        still gives “Recommend for planning” the strongest visual emphasis and
-        provides no local selected-state indication. The banner resolves the
-        state only if the reviewer looks back to the top, while the action area
-        visually suggests the opposite outcome.
+        After “Draft kept for further review” is recorded, the decision panel still gives “Recommend
+        for planning” the strongest visual emphasis and provides no local selected-state indication.
+        The banner resolves the state only if the reviewer looks back to the top, while the action
+        area visually suggests the opposite outcome.
       </p>
       <p>
-        <strong>Improve:</strong> Reflect the simulated choice inside the
-        decision panel using a selected decision option, status label, or
-        disabled/relabelled controls. Ensure the recorded hold choice—not the
-        opposite recommendation—has the clearest local state until the
+        <strong>Improve:</strong> Reflect the simulated choice inside the decision panel using a
+        selected decision option, status label, or disabled/relabelled controls. Ensure the recorded
+        hold choice—not the opposite recommendation—has the clearest local state until the
         simulation is cleared.
       </p>
       <small>Screenshot region: x 950, y 400, width 359, height 304</small>
@@ -770,17 +683,15 @@
     <article id="design-2">
       <h4>medium · <a href="#desktop-window-0">desktop-window-0</a></h4>
       <p>
-        The strongest instruction—confirm the applicable band policy before
-        advancing—is placed near the bottom of the document, below decision
-        controls that begin around y=298 and outside the 768 px initial
-        viewport. A reviewer can reach the decision before encountering this
-        explicit qualification.
+        The strongest instruction—confirm the applicable band policy before advancing—is placed near
+        the bottom of the document, below decision controls that begin around y=298 and outside the
+        768 px initial viewport. A reviewer can reach the decision before encountering this explicit
+        qualification.
       </p>
       <p>
-        <strong>Improve:</strong> Move or summarize this critical decision
-        evidence next to the planned-base summary or within the “Next decision”
-        card. The detailed evidence can remain in the record, but the
-        policy-confirmation requirement should precede the actions in the
+        <strong>Improve:</strong> Move or summarize this critical decision evidence next to the
+        planned-base summary or within the “Next decision” card. The detailed evidence can remain in
+        the record, but the policy-confirmation requirement should precede the actions in the
         primary scan path.
       </p>
       <small>Screenshot region: x 48, y 947, width 544, height 75</small>
@@ -788,15 +699,13 @@
     <article id="design-3">
       <h4>low · <a href="#desktop-window-0">desktop-window-0</a></h4>
       <p>
-        Proposal and review-window metadata are rendered at a very small size
-        relative to nearby body text, making useful record context easy to
-        overlook. Similar small muted captions are also flagged by the supplied
-        accessibility evidence as marginally readable.
+        Proposal and review-window metadata are rendered at a very small size relative to nearby
+        body text, making useful record context easy to overlook. Similar small muted captions are
+        also flagged by the supplied accessibility evidence as marginally readable.
       </p>
       <p>
-        <strong>Improve:</strong> Use a supported larger caption or compact body
-        treatment, with clearer label-value grouping or weight, while retaining
-        the existing semantic palette.
+        <strong>Improve:</strong> Use a supported larger caption or compact body treatment, with
+        clearer label-value grouping or weight, while retaining the existing semantic palette.
       </p>
       <small>Screenshot region: x 48, y 390, width 275, height 18</small>
     </article>
@@ -1278,10 +1187,7 @@
     <section id="desktop-1">
       <h2>desktop-1 — recommend the draft for planning</h2>
       <div class="capture">
-        <img
-          src="desktop-1.png"
-          alt="desktop-1 recommend the draft for planning screenshot"
-        />
+        <img src="desktop-1.png" alt="desktop-1 recommend the draft for planning screenshot" />
       </div>
       <a href="desktop-1.png">Original, unmodified screenshot</a>
       <details>
@@ -1429,10 +1335,7 @@
     <section id="desktop-2">
       <h2>desktop-2 — hold the draft for further review</h2>
       <div class="capture">
-        <img
-          src="desktop-2.png"
-          alt="desktop-2 hold the draft for further review screenshot"
-        /><a
+        <img src="desktop-2.png" alt="desktop-2 hold the draft for further review screenshot" /><a
           class="region"
           href="#design-1"
           title="After “Draft kept for further review” is recorded, the decision panel still gives “Recommend for planning” the strongest visual emphasis and provides no local selected-state indication. The banner resolves the state only if the reviewer looks back to the top, while the action area visually suggests the opposite outcome."
@@ -2144,20 +2047,12 @@
     <section id="desktop-window-0">
       <h2>desktop-window-0 — initial</h2>
       <div class="capture">
-        <img
-          src="desktop-window-0.png"
-          alt="desktop-window-0 initial screenshot"
-        /><a
+        <img src="desktop-window-0.png" alt="desktop-window-0 initial screenshot" /><a
           class="region"
           href="#design-2"
           title="The strongest instruction—confirm the applicable band policy before advancing—is placed near the bottom of the document, below decision controls that begin around y=298 and outside the 768 px initial viewport. A reviewer can reach the decision before encountering this explicit qualification."
           aria-label="The strongest instruction—confirm the applicable band policy before advancing—is placed near the bottom of the document, below decision controls that begin around y=298 and outside the 768 px initial viewport. A reviewer can reach the decision before encountering this explicit qualification."
-          style="
-            left: 4.6875%;
-            top: 88.01115241635688%;
-            width: 53.125%;
-            height: 6.970260223048327%;
-          "
+          style="left: 4.6875%; top: 88.01115241635688%; width: 53.125%; height: 6.970260223048327%"
         ></a
         ><a
           class="region"

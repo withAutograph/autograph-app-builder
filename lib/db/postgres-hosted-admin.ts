@@ -117,10 +117,7 @@ async function deleteExpired(
     .delete(githubInstallationAuthorizationStates)
     .where(
       and(
-        integrationTenantPredicate(
-          githubInstallationAuthorizationStates,
-          input.authority,
-        ),
+        integrationTenantPredicate(githubInstallationAuthorizationStates, input.authority),
         lt(githubInstallationAuthorizationStates.expiresAt, input.deleteBefore),
       ),
     )
@@ -131,10 +128,7 @@ async function deleteExpired(
     .delete(vercelInstallationAuthorizationStates)
     .where(
       and(
-        integrationTenantPredicate(
-          vercelInstallationAuthorizationStates,
-          input.authority,
-        ),
+        integrationTenantPredicate(vercelInstallationAuthorizationStates, input.authority),
         lt(vercelInstallationAuthorizationStates.expiresAt, input.deleteBefore),
       ),
     )
@@ -145,10 +139,7 @@ async function deleteExpired(
     .delete(builderProvisioningJournals)
     .where(
       and(
-        integrationTenantPredicate(
-          builderProvisioningJournals,
-          input.authority,
-        ),
+        integrationTenantPredicate(builderProvisioningJournals, input.authority),
         eq(builderProvisioningJournals.state, "settled"),
         lt(builderProvisioningJournals.updatedAt, input.deleteBefore),
       ),
@@ -158,10 +149,7 @@ async function deleteExpired(
     .delete(hostedGitHubUserCredentials)
     .where(
       and(
-        integrationTenantPredicate(
-          hostedGitHubUserCredentials,
-          input.authority,
-        ),
+        integrationTenantPredicate(hostedGitHubUserCredentials, input.authority),
         eq(hostedGitHubUserCredentials.active, false),
         lt(hostedGitHubUserCredentials.updatedAt, input.deleteBefore),
       ),
@@ -171,15 +159,12 @@ async function deleteExpired(
   return {
     operationRowsDeleted: operations.length,
     sessionRowsDeleted: sessions.length,
-    integrationRowsDeleted:
-      provisioningJournals.length + githubCredentials.length,
+    integrationRowsDeleted: provisioningJournals.length + githubCredentials.length,
     authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
   };
 }
 
-export function createPostgresHostedAdminStore(
-  database: Database,
-): HostedAdminStore {
+export function createPostgresHostedAdminStore(database: Database): HostedAdminStore {
   return {
     async seedMembership({ authority, now }) {
       const rows = await database
@@ -205,20 +190,13 @@ export function createPostgresHostedAdminStore(
       const rows = await database
         .update(hostedWorkspaceMemberships)
         .set({ active: false, updatedAt: now })
-        .where(
-          and(
-            membershipPredicate(authority),
-            eq(hostedWorkspaceMemberships.active, true),
-          ),
-        )
+        .where(and(membershipPredicate(authority), eq(hostedWorkspaceMemberships.active, true)))
         .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
       return { membershipRowsAffected: rows.length };
     },
 
     applyRetention(input) {
-      return database.transaction((transaction) =>
-        deleteExpired(transaction, input),
-      );
+      return database.transaction((transaction) => deleteExpired(transaction, input));
     },
 
     async deleteTenant({ authority, membershipRevokedBefore }) {
@@ -230,18 +208,13 @@ export function createPostgresHostedAdminStore(
             and(
               membershipPredicate(authority),
               eq(hostedWorkspaceMemberships.active, false),
-              lte(
-                hostedWorkspaceMemberships.updatedAt,
-                membershipRevokedBefore,
-              ),
+              lte(hostedWorkspaceMemberships.updatedAt, membershipRevokedBefore),
             ),
           )
           .limit(1)
           .for("update");
         if (inactiveMembership.length !== 1) {
-          throw new Error(
-            "Hosted tenant deletion requires a drained inactive membership.",
-          );
+          throw new Error("Hosted tenant deletion requires a drained inactive membership.");
         }
 
         const operations = await transaction
@@ -254,64 +227,41 @@ export function createPostgresHostedAdminStore(
           .returning({ sessionId: agentSessions.sessionId });
         const githubInstallations = await transaction
           .delete(hostedGitHubInstallations)
-          .where(
-            integrationTenantPredicate(hostedGitHubInstallations, authority),
-          )
+          .where(integrationTenantPredicate(hostedGitHubInstallations, authority))
           .returning({
             installationId: hostedGitHubInstallations.installationId,
           });
         const githubBindings = await transaction
           .delete(hostedGitHubInstallationBindings)
-          .where(
-            integrationTenantPredicate(
-              hostedGitHubInstallationBindings,
-              authority,
-            ),
-          )
+          .where(integrationTenantPredicate(hostedGitHubInstallationBindings, authority))
           .returning({
             installationId: hostedGitHubInstallationBindings.installationId,
           });
         const githubCredentials = await transaction
           .delete(hostedGitHubUserCredentials)
-          .where(
-            integrationTenantPredicate(hostedGitHubUserCredentials, authority),
-          )
+          .where(integrationTenantPredicate(hostedGitHubUserCredentials, authority))
           .returning({
             providerUserId: hostedGitHubUserCredentials.providerUserId,
           });
         const provisioningJournals = await transaction
           .delete(builderProvisioningJournals)
-          .where(
-            integrationTenantPredicate(builderProvisioningJournals, authority),
-          )
+          .where(integrationTenantPredicate(builderProvisioningJournals, authority))
           .returning({ requestId: builderProvisioningJournals.requestId });
         const vercelInstallations = await transaction
           .delete(hostedVercelInstallations)
-          .where(
-            integrationTenantPredicate(hostedVercelInstallations, authority),
-          )
+          .where(integrationTenantPredicate(hostedVercelInstallations, authority))
           .returning({
             installationId: hostedVercelInstallations.installationId,
           });
         const githubStates = await transaction
           .delete(githubInstallationAuthorizationStates)
-          .where(
-            integrationTenantPredicate(
-              githubInstallationAuthorizationStates,
-              authority,
-            ),
-          )
+          .where(integrationTenantPredicate(githubInstallationAuthorizationStates, authority))
           .returning({
             stateDigest: githubInstallationAuthorizationStates.stateDigest,
           });
         const vercelStates = await transaction
           .delete(vercelInstallationAuthorizationStates)
-          .where(
-            integrationTenantPredicate(
-              vercelInstallationAuthorizationStates,
-              authority,
-            ),
-          )
+          .where(integrationTenantPredicate(vercelInstallationAuthorizationStates, authority))
           .returning({
             stateDigest: vercelInstallationAuthorizationStates.stateDigest,
           });
@@ -332,8 +282,7 @@ export function createPostgresHostedAdminStore(
             githubCredentials.length +
             provisioningJournals.length +
             vercelInstallations.length,
-          authorizationStateRowsDeleted:
-            githubStates.length + vercelStates.length,
+          authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
         };
       });
     },

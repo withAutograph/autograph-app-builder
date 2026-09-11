@@ -11,16 +11,11 @@ import type {
   SandboxExecutionLeaseStore,
   SandboxLeaseReleaseReason,
 } from "./execution-lease";
-import {
-  SANDBOX_EXECUTION_POLICY,
-  sandboxExecutionPolicyDigest,
-} from "./execution-policy";
+import { SANDBOX_EXECUTION_POLICY, sandboxExecutionPolicyDigest } from "./execution-policy";
 import { createPostgresSandboxExecutionLeaseStore } from "./postgres-execution-lease-store";
 
 export const HOSTED_SANDBOX_EXECUTION_ACTIVATION = "enabled-v1";
-const cleanupEvidenceKey = Symbol.for(
-  "autograph.app-builder.sandbox-cleanup-evidence.v1",
-);
+const cleanupEvidenceKey = Symbol.for("autograph.app-builder.sandbox-cleanup-evidence.v1");
 
 export type SandboxCleanupEvidence = {
   attempted: true;
@@ -40,7 +35,7 @@ type RuntimeDependencies = {
     principal: HostedPrincipal;
     workspaceId: string;
     environment: Readonly<Record<string, string | undefined>>;
-}) => Promise<boolean>;
+  }) => Promise<boolean>;
 };
 
 const commandAuthorities = new Map<string, CommandAuthority>();
@@ -51,25 +46,18 @@ export function isHostedSandboxExecutionEnabled(
 ) {
   return (
     environment.EVE_HOSTED_ADAPTER === "1" &&
-    environment.EVE_HOSTED_SANDBOX_EXECUTION ===
-      HOSTED_SANDBOX_EXECUTION_ACTIVATION
+    environment.EVE_HOSTED_SANDBOX_EXECUTION === HOSTED_SANDBOX_EXECUTION_ACTIVATION
   );
 }
 
-function hostedLeaseEnabled(
-  environment: Readonly<Record<string, string | undefined>>,
-) {
+function hostedLeaseEnabled(environment: Readonly<Record<string, string | undefined>>) {
   if (!isHostedSandboxExecutionEnabled(environment)) return false;
   readHostedDeploymentEnvironment(environment);
   return true;
 }
 
-function hostedLeaseDatabase(
-  environment: Readonly<Record<string, string | undefined>>,
-) {
-  database ??= openHostedPostgresDatabase(
-    parseHostedDatabaseUrl(environment.DATABASE_URL),
-  );
+function hostedLeaseDatabase(environment: Readonly<Record<string, string | undefined>>) {
+  database ??= openHostedPostgresDatabase(parseHostedDatabaseUrl(environment.DATABASE_URL));
   return database;
 }
 
@@ -78,18 +66,16 @@ const defaultDependencies: RuntimeDependencies = {
   store: (environment) =>
     createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
   async isMember({ principal, workspaceId, environment }) {
-    return createPostgresWorkspaceMembership(
-      hostedLeaseDatabase(environment),
-    ).isMember({ principal, workspaceId });
+    return createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
+      principal,
+      workspaceId,
+    });
   },
 };
 
 let dependencies = defaultDependencies;
 
-function errorWithCleanupEvidence(
-  error: unknown,
-  evidence: SandboxCleanupEvidence,
-) {
+function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
   const preserved =
     error instanceof Error
       ? error
@@ -106,9 +92,9 @@ function errorWithCleanupEvidence(
 
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
-    ? ((error as unknown as Record<PropertyKey, unknown>)[
-        cleanupEvidenceKey
-      ] as SandboxCleanupEvidence | undefined)
+    ? ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
+        | SandboxCleanupEvidence
+        | undefined)
     : undefined;
 }
 
@@ -156,9 +142,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
   }
   if (!enabled) return undefined;
   try {
-    const { authority, principal } = exactForwardedSessionAuthority(
-      input.sessionAuth,
-    );
+    const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
     if (
       !(await dependencies.isMember({
         principal,
@@ -211,10 +195,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
     policyDigest: active.lease.policyDigest,
     nowEpochMs,
   });
-  if (
-    nowEpochMs - lease.heartbeatAtEpochMs >=
-    SANDBOX_EXECUTION_POLICY.lease.heartbeatMs
-  ) {
+  if (nowEpochMs - lease.heartbeatAtEpochMs >= SANDBOX_EXECUTION_POLICY.lease.heartbeatMs) {
     lease = await active.store.heartbeat({
       principal: lease.principal,
       adapterSessionId: lease.adapterSessionId,

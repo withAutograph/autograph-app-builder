@@ -21,10 +21,7 @@ afterEach(() => {
 describe("Preview Better Auth UI", () => {
   it("serializes complete and repeated auth-page search parameters", () => {
     const search = serializeAuthPageSearchParams({
-      callbackURL: [
-        "/workspace?source=one#first",
-        "/workspace?source=two#second",
-      ],
+      callbackURL: ["/workspace?source=one#first", "/workspace?source=two#second"],
       redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
       passkey: "unavailable",
       omitted: undefined,
@@ -48,19 +45,12 @@ describe("Preview Better Auth UI", () => {
     });
 
     expect(
-      resolvePasskeyRedirectTo(
-        DEFAULT_AUTH_REDIRECT_TO,
-        search,
-        "https://builder.example.test",
-      ),
-    ).toBe(
-      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dsigned-in%23complete",
-    );
+      resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, "https://builder.example.test"),
+    ).toBe("/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dsigned-in%23complete");
   });
 
   it("uses the first repeated redirect and rejects it when it is external", () => {
-    const safeRedirect =
-      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dfirst";
+    const safeRedirect = "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dfirst";
     const externalRedirect = "https://external.example/steal";
 
     expect(
@@ -87,34 +77,22 @@ describe("Preview Better Auth UI", () => {
     expect(resolveAuthCallbackURL("https://builder.example.test/", "")).toBe(
       "https://builder.example.test/",
     );
-    expect(
-      resolveAuthCallbackURL(
-        "https://builder.example.test/",
-        "?callbackURL=%2F",
-      ),
-    ).toBe("/");
+    expect(resolveAuthCallbackURL("https://builder.example.test/", "?callbackURL=%2F")).toBe("/");
   });
 
-  it.each([
-    "https://external.example/steal",
-    "//external.example/steal",
-    "not a valid callback",
-  ])("rejects unsafe callback %s", (callbackURL) => {
-    expect(
-      resolveAuthCallbackURL(
+  it.each(["https://external.example/steal", "//external.example/steal", "not a valid callback"])(
+    "rejects unsafe callback %s",
+    (callbackURL) => {
+      expect(resolveAuthCallbackURL("/", `?callbackURL=${encodeURIComponent(callbackURL)}`)).toBe(
         "/",
-        `?callbackURL=${encodeURIComponent(callbackURL)}`,
-      ),
-    ).toBe("/");
-  });
+      );
+    },
+  );
 
   it("preserves callback query strings and fragments", () => {
-    expect(
-      resolveAuthCallbackURL(
-        "/",
-        "?callbackURL=%2F%3Fsource%3Doauth%23complete",
-      ),
-    ).toBe("/?source=oauth#complete");
+    expect(resolveAuthCallbackURL("/", "?callbackURL=%2F%3Fsource%3Doauth%23complete")).toBe(
+      "/?source=oauth#complete",
+    );
   });
 
   it("preserves absolute callbacks for the current origin", () => {
@@ -134,9 +112,7 @@ describe("Preview Better Auth UI", () => {
         "/?source=oauth",
         "https://builder.example.test",
       ).toString(),
-    ).toBe(
-      "https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth",
-    );
+    ).toBe("https://builder.example.test/auth/setting-up?callbackURL=%2F%3Fsource%3Doauth");
   });
 
   it("builds the passkey redirect from a safe callback override", () => {
@@ -146,9 +122,7 @@ describe("Preview Better Auth UI", () => {
         "?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
         "https://builder.example.test",
       ),
-    ).toBe(
-      "/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete",
-    );
+    ).toBe("/auth/setting-up?callbackURL=%2Fworkspace%3Fsource%3Dbrief%23complete");
   });
 
   it("preserves an inherited redirect when no callback override is present", () => {

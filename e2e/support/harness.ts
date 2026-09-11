@@ -57,9 +57,7 @@ export async function resetApplicationState() {
   try {
     // Recover cleanly if the rollback E2E was interrupted after installing its
     // task-owned failure trigger but before its local finally block ran.
-    await sql.unsafe(
-      'DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"',
-    );
+    await sql.unsafe('DROP TRIGGER IF EXISTS "fail_passkey_session_insert" ON "session"');
     await sql.unsafe("DROP FUNCTION IF EXISTS fail_passkey_session_insert()");
     await sql.unsafe(`
       TRUNCATE TABLE
@@ -130,25 +128,16 @@ export async function signOut(page: Page) {
 }
 
 export async function waitForSocialSignInReady(page: Page) {
-  await expect(
-    page.locator('[data-auth-social-ready="true"]').first()
-  ).toBeAttached();
+  await expect(page.locator('[data-auth-social-ready="true"]').first()).toBeAttached();
 }
 
-export async function finishOAuth(
-  page: Page,
-  provider: EmulatedProvider,
-  callbackURL = "/",
-) {
-  await page.goto(
-    `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
-  );
+export async function finishOAuth(page: Page, provider: EmulatedProvider, callbackURL = "/") {
+  await page.goto(`/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`);
   await waitForSocialSignInReady(page);
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
-  await expect(page).toHaveURL(
-    new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`),
-    { timeout: 30_000 },
-  );
+  await expect(page).toHaveURL(new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`), {
+    timeout: 30_000,
+  });
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })
@@ -173,20 +162,14 @@ export async function waitForHandoffContent(page: Page, appName: string) {
   // The handoff route streams its shell while request-fresh session and journal
   // data resolve on the server. Match the route navigation budget instead of
   // treating Playwright's five-second assertion default as data readiness.
-  await expect(
-    page.getByRole("heading", { name: appName, exact: true }),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: appName, exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
-export async function registerPasskey(
-  context: BrowserContext,
-  page: Page,
-  callbackURL = "/",
-) {
+export async function registerPasskey(context: BrowserContext, page: Page, callbackURL = "/") {
   const authenticator = await VirtualAuthenticator.create(context, page);
-  await page.goto(
-    `/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`,
-  );
+  await page.goto(`/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })
@@ -194,10 +177,7 @@ export async function registerPasskey(
   return authenticator;
 }
 
-export async function openProviderConnection(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function openProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
   await page
@@ -205,44 +185,29 @@ export async function openProviderConnection(
       name: provider === "GitHub" ? "Connect GitHub" : `Connect to ${provider}`,
     })
     .click();
-  await expect(page).toHaveURL(
-    new RegExp(`/${descriptor.slug}/installations`, "u"),
-    { timeout: 30_000 },
-  );
+  await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"), {
+    timeout: 30_000,
+  });
 }
 
-export async function advanceProviderConnectionToApproval(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function advanceProviderConnectionToApproval(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
-  await page
-    .getByRole("button", { name: descriptor.installationButton })
-    .click();
-  await expect(page).toHaveURL(
-    new RegExp(`/local-connections/${descriptor.slug}`, "u"),
-  );
+  await page.getByRole("button", { name: descriptor.installationButton }).click();
+  await expect(page).toHaveURL(new RegExp(`/local-connections/${descriptor.slug}`, "u"));
   for (const scope of descriptor.seededScopes)
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
 }
 
-export async function selectProviderIdentity(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function selectProviderIdentity(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
   for (const scope of descriptor.seededScopes)
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: descriptor.approvalButton }).click();
   if (provider === "GitHub") {
-    await expect(page).toHaveURL(
-      /\/local-connections\/github\?.*phase=authorize/u,
-    );
+    await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
     await expect(page.getByText("Authorize GitHub connection")).toBeVisible();
-    await page
-      .getByRole("button", { name: "Authorize emulated GitHub" })
-      .click();
+    await page.getByRole("button", { name: "Authorize emulated GitHub" }).click();
   }
   await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
     timeout: 30_000,
@@ -250,15 +215,10 @@ export async function selectProviderIdentity(
   await waitForBuilderReady(page);
 }
 
-export async function approveProviderConnection(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function approveProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await selectProviderIdentity(page, provider);
-  await expect(
-    page.getByText(`${provider} connected successfully.`),
-  ).toBeVisible();
+  await expect(page.getByText(`${provider} connected successfully.`)).toBeVisible();
   await expect(page.getByLabel(descriptor.selectedControl)).toBeFocused();
 }
 
@@ -268,32 +228,21 @@ export async function installProvider(page: Page, provider: EmulatedProvider) {
   await approveProviderConnection(page, provider);
 }
 
-export async function reopenProviderConnection(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function reopenProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   const reconnect = page.getByRole("button", {
     name: descriptor.reconnectButton,
   });
-  if (!(await reconnect.isVisible()))
-    await page.getByLabel(descriptor.selectedControl).click();
+  if (!(await reconnect.isVisible())) await page.getByLabel(descriptor.selectedControl).click();
   await reconnect.click();
-  await expect(page).toHaveURL(
-    new RegExp(`/${descriptor.slug}/installations`, "u"),
-  );
+  await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"));
 }
 
-export async function expectProviderSelection(
-  page: Page,
-  provider: EmulatedProvider,
-) {
+export async function expectProviderSelection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await waitForBuilderReady(page);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
-  await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(
-    descriptor.selectedValue,
-  );
+  await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(descriptor.selectedValue);
 }
 
 export async function installBrowserBoundaries(

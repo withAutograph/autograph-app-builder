@@ -51,8 +51,7 @@ import {
 const executeFile = promisify(execFile);
 
 const archiveDigest = "a".repeat(64);
-const hostedArchiveDigest =
-  "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
+const hostedArchiveDigest = "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
 const hostedExecutionManifest = {
   version: 1,
   scope: "builder-execution",
@@ -60,20 +59,13 @@ const hostedExecutionManifest = {
   target: {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
-    miseConfigSha256:
-      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
-    miseLockSha256:
-      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
-    bunLockSha256:
-      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
-    appIdentitySha256:
-      "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
-    appContractSha256:
-      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
-    repositoryPreflightSha256:
-      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
-    repositoryExecSha256:
-      "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
+    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
+    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
   runtime: { bun: "1.3.14" },
   closure: {
@@ -91,25 +83,17 @@ const manifest = {
   target: {
     sha: ARRUSTED_TARGET_SHA,
     tree: ARRUSTED_TARGET_TREE,
-    miseConfigSha256:
-      "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
-    miseLockSha256:
-      "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
-    bunLockSha256:
-      "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
-    cargoLockSha256:
-      "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
-    appIdentitySha256:
-      "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
-    appContractSha256:
-      "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
+    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    cargoLockSha256: "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
+    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
     appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
     createAppSha256: ARRUSTED_CREATE_APP_SHA256,
     appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
-    repositoryPreflightSha256:
-      "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
-    repositoryExecSha256:
-      "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
+    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
   },
   runtime: { bun: "1.3.14", rust: ARRUSTED_RUST_VERSION },
   closure: {
@@ -149,10 +133,7 @@ const developmentManifest = {
   },
 } as const;
 
-function liveDependencySourceFixture(input?: {
-  packageJson?: string;
-  ordinarySource?: string;
-}) {
+function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySource?: string }) {
   const contents = new Map([
     [".config/mise/config.toml", "[tools]\nnode = '24.18.0'\n"],
     [".config/mise/mise.lock", "mise-lock\n"],
@@ -162,10 +143,7 @@ function liveDependencySourceFixture(input?: {
     ["Cargo.lock", "cargo-lock\n"],
     ["apps/vendor/package.json", '{"name":"@autograph/vendor"}\n'],
     ["crates/vendor/Cargo.toml", '[package]\nname = "vendor"\n'],
-    [
-      "apps/vendor/app/page.tsx",
-      input?.ordinarySource ?? "export default function Page() {}\n",
-    ],
+    ["apps/vendor/app/page.tsx", input?.ordinarySource ?? "export default function Page() {}\n"],
   ]);
   const sourceFiles = [...contents].map(([path, content]) => ({
     mode: "100644" as const,
@@ -196,31 +174,23 @@ const liveCargoHomeDigest = "b".repeat(64);
 
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
-  let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" =
-    "clean";
+  let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
   const stored = new Map<string, string>();
   const setNetworkPolicy = vi.fn(async () => undefined);
   const observation = (tampered: "cargo" | "node" | undefined = undefined) =>
     JSON.stringify({
       platform: "linux/x86_64",
-      nodeModulesDigest:
-        tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
+      nodeModulesDigest: tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
       workspaceNodeModules: [],
       workspaceLinks: [],
-      cargoHomeDigest:
-        tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
+      cargoHomeDigest: tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
       microfrontendsVersion: "2.4.0",
     });
   const run = vi.fn(async ({ command }: { command: string }) => {
-    if (command.includes("uname -s"))
-      return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
-    if (command.includes("bun install"))
-      return { exitCode: 0, stdout: observation(), stderr: "" };
-    if (
-      command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")
-    ) {
-      if (closureState === "missing")
-        return { exitCode: 1, stdout: "", stderr: "missing closure" };
+    if (command.includes("uname -s")) return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
+    if (command.includes("bun install")) return { exitCode: 0, stdout: observation(), stderr: "" };
+    if (command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")) {
+      if (closureState === "missing") return { exitCode: 1, stdout: "", stderr: "missing closure" };
       return {
         exitCode: 0,
         stdout: observation(
@@ -235,11 +205,9 @@ function liveTemplateCacheFixture() {
     }
     return { exitCode: 0, stdout: "", stderr: "" };
   });
-  const writeTextFile = vi.fn(
-    async ({ path, content }: { path: string; content: string }) => {
-      stored.set(path, content);
-    },
-  );
+  const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
+    stored.set(path, content);
+  });
   const sandbox = {
     readTextFile: vi.fn(async ({ path }: { path: string }) =>
       path === ".app-builder/source-files.json"
@@ -297,9 +265,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   return { run, sandbox, writeTextFile };
 }
 
-function hostedExecutionSandbox(
-  inputManifest: unknown = hostedExecutionManifest,
-) {
+function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest) {
   const run = vi
     .fn()
     .mockResolvedValueOnce({
@@ -332,35 +298,19 @@ async function writeDependencyTopologyFixture(root: string) {
     mkdir(cargo, { recursive: true }),
   ]);
   await Promise.all([
-    writeFile(
-      join(source, "package.json"),
-      '{"workspaces":["apps/*","packages/*"]}\n',
-    ),
-    writeFile(
-      join(source, "apps", "vendor", "package.json"),
-      '{"name":"vendor"}\n',
-    ),
-    writeFile(
-      join(source, "packages", "ui", "index.js"),
-      'export const source = "cache";\n',
-    ),
+    writeFile(join(source, "package.json"), '{"workspaces":["apps/*","packages/*"]}\n'),
+    writeFile(join(source, "apps", "vendor", "package.json"), '{"name":"vendor"}\n'),
+    writeFile(join(source, "packages", "ui", "index.js"), 'export const source = "cache";\n'),
     writeFile(
       join(rootModules, "@vercel", "microfrontends", "package.json"),
       '{"version":"2.4.0"}\n',
     ),
-    writeFile(
-      join(rootModules, "react", "package.json"),
-      '{"version":"19.2.4"}\n',
-    ),
+    writeFile(join(rootModules, "react", "package.json"), '{"version":"19.2.4"}\n'),
     writeFile(join(appModules, "zod", "package.json"), '{"version":"4.4.3"}\n'),
     symlink("../../packages/ui", join(rootModules, "@autograph", "ui")),
     symlink("../../../../packages/ui", join(appModules, "@autograph", "ui")),
   ]);
-  const trackedPaths = [
-    "package.json",
-    "apps/vendor/package.json",
-    "packages/ui/index.js",
-  ];
+  const trackedPaths = ["package.json", "apps/vendor/package.json", "packages/ui/index.js"];
   const sourceManifest = trackedPaths.map((path) => ({
     mode: "100644",
     objectId: "1".repeat(40),
@@ -413,9 +363,7 @@ describe("offline dependency cache", () => {
         path,
       ).not.toBe(original);
     }
-    expect(
-      liveTemplateDependencyKey({ ...basis, platform: "linux/arm64" }),
-    ).not.toBe(original);
+    expect(liveTemplateDependencyKey({ ...basis, platform: "linux/arm64" })).not.toBe(original);
     for (const runtime of ["node", "mise", "bun", "rust"] as const) {
       expect(
         liveTemplateDependencyKey({
@@ -425,9 +373,7 @@ describe("offline dependency cache", () => {
         runtime,
       ).not.toBe(original);
     }
-    expect(
-      liveTemplateDependencyKey({ ...basis, bootstrapVersion: 4 }),
-    ).not.toBe(original);
+    expect(liveTemplateDependencyKey({ ...basis, bootstrapVersion: 4 })).not.toBe(original);
   });
 
   it("executes the live closure inspector and rebinds complete workspace topology", async () => {
@@ -490,10 +436,7 @@ describe("offline dependency cache", () => {
           join(overlay, "packages", "ui", "index.js"),
           'export const source = "overlay";\n',
         ),
-        writeFile(
-          join(overlay, "apps", "vendor", "package.json"),
-          '{"name":"vendor"}\n',
-        ),
+        writeFile(join(overlay, "apps", "vendor", "package.json"), '{"name":"vendor"}\n'),
       ]);
       const layout = {
         version: 1,
@@ -518,28 +461,20 @@ describe("offline dependency cache", () => {
         writeFile(layoutPath, JSON.stringify(layout)),
         writeFile(viewScriptPath, executionDependencyViewScript),
       ]);
-      await executeFile(process.execPath, [
-        viewScriptPath,
-        layoutPath,
-        overlay,
-        view,
-        workspace,
-      ]);
+      await executeFile(process.execPath, [viewScriptPath, layoutPath, overlay, view, workspace]);
 
       expect(await realpath(join(overlay, "node_modules", "react"))).toBe(
         await realpath(join(fixture.rootModules, "react")),
       );
+      expect(await realpath(join(overlay, "node_modules", "@autograph", "ui"))).toBe(
+        await realpath(join(overlay, "packages", "ui")),
+      );
       expect(
-        await realpath(join(overlay, "node_modules", "@autograph", "ui")),
+        await realpath(join(overlay, "apps", "vendor", "node_modules", "@autograph", "ui")),
       ).toBe(await realpath(join(overlay, "packages", "ui")));
-      expect(
-        await realpath(
-          join(overlay, "apps", "vendor", "node_modules", "@autograph", "ui"),
-        ),
-      ).toBe(await realpath(join(overlay, "packages", "ui")));
-      expect(
-        await realpath(join(overlay, "apps", "vendor", "node_modules", "zod")),
-      ).toBe(await realpath(join(fixture.appModules, "zod")));
+      expect(await realpath(join(overlay, "apps", "vendor", "node_modules", "zod"))).toBe(
+        await realpath(join(fixture.appModules, "zod")),
+      );
 
       const cachedPackage = join(fixture.rootModules, "react", "package.json");
       const cachedBefore = {
@@ -566,9 +501,7 @@ describe("offline dependency cache", () => {
         ]),
       ).rejects.toThrow();
     } finally {
-      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(
-        () => undefined,
-      );
+      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => undefined);
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -606,31 +539,25 @@ describe("offline dependency cache", () => {
       "vitest",
     ])
       expect(producer).toContain(`"${packageName}"`);
-    expect(producer).toContain(
-      'process.platform !== "linux" || process.arch !== "x64"',
-    );
+    expect(producer).toContain('process.platform !== "linux" || process.arch !== "x64"');
     expect(producer).toContain('["vp", "../vite-plus/bin/vp"]');
     expect(producer).toContain('["turbo", "../turbo/bin/turbo"]');
     expect(producer).toContain('"@autograph",\n    "vite-config"');
     expect(producer).toContain('scope: "builder-execution"');
     expect(producer).toContain('platform: "linux/x86_64"');
-    expect(producer).toContain(
-      "rootVersions.set(dependency, dependencyVersion)",
-    );
+    expect(producer).toContain("rootVersions.set(dependency, dependencyVersion)");
   });
 
   it("resolves the materialized closure root for local and Vercel sandboxes", () => {
     expect(materializedDependencyNodeModulesRoot(archiveDigest, {})).toBe(
       `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
     );
-    expect(
-      materializedDependencyNodeModulesRoot(archiveDigest, { VERCEL: "1" }),
-    ).toBe(
+    expect(materializedDependencyNodeModulesRoot(archiveDigest, { VERCEL: "1" })).toBe(
       `/workspace/.app-builder/hosted-dependencies/${archiveDigest}/node_modules`,
     );
-    expect(() =>
-      materializedDependencyNodeModulesRoot("invalid", { VERCEL: "1" }),
-    ).toThrow(/content digest is invalid/u);
+    expect(() => materializedDependencyNodeModulesRoot("invalid", { VERCEL: "1" })).toThrow(
+      /content digest is invalid/u,
+    );
   });
 
   it("accepts the exact hosted execution closure", async () => {
@@ -669,9 +596,7 @@ describe("offline dependency cache", () => {
   it("accepts the embedded execution-complete cache on Vercel", async () => {
     const { run, sandbox } = hostedExecutionSandbox();
 
-    await expect(
-      inspectDependencyCache(sandbox, { VERCEL: "1" }),
-    ).resolves.toEqual(
+    await expect(inspectDependencyCache(sandbox, { VERCEL: "1" })).resolves.toEqual(
       expect.objectContaining({ contentDigest: hostedArchiveDigest }),
     );
     expect(run).toHaveBeenCalledTimes(2);
@@ -684,9 +609,9 @@ describe("offline dependency cache", () => {
       platform: "linux/portable",
     });
 
-    await expect(
-      inspectDependencyCache(sandbox, { VERCEL: "1" }),
-    ).rejects.toThrow("manifest drifted");
+    await expect(inspectDependencyCache(sandbox, { VERCEL: "1" })).rejects.toThrow(
+      "manifest drifted",
+    );
     expect(run).toHaveBeenCalledTimes(1);
   });
 
@@ -696,11 +621,7 @@ describe("offline dependency cache", () => {
       sourceTree: "4".repeat(40),
       digest: "5".repeat(64),
     };
-    const cache = await inspectDependencyCache(
-      {} as SandboxSession,
-      process.env,
-      target,
-    );
+    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
 
     expect(dependencyTargetForWorkspace(cache, target)).toEqual(
       expect.objectContaining({
@@ -723,11 +644,7 @@ describe("offline dependency cache", () => {
       sourceTree: "4".repeat(40),
       digest: "6".repeat(64),
     };
-    const cache = await inspectDependencyCache(
-      {} as SandboxSession,
-      process.env,
-      target,
-    );
+    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
 
     expect(() =>
       assertExactDependencyTargetBinding({
@@ -793,8 +710,7 @@ describe("offline dependency cache", () => {
           version: "2.4.0",
           contentDigest: archiveDigest,
           nodeModulesPath: `/workspace/.app-builder/dependency-cache/dependencies/${"9".repeat(64)}/node_modules`,
-          cargoConfigPath:
-            "/workspace/.app-builder/dependency-cache/cargo/config.toml",
+          cargoConfigPath: "/workspace/.app-builder/dependency-cache/cargo/config.toml",
         },
       },
       manifestDigest: "a".repeat(64),
@@ -824,9 +740,7 @@ describe("offline dependency cache", () => {
     const sandbox = {
       run,
       readTextFile: vi.fn(async ({ path }: { path: string }) =>
-        path === ".app-builder/source-files.json"
-          ? JSON.stringify(source.sourceFiles)
-          : null,
+        path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
       ),
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
@@ -834,9 +748,9 @@ describe("offline dependency cache", () => {
       }),
     } as unknown as SandboxSession;
 
-    await expect(
-      inspectDependencyCache(sandbox, {}, target, true),
-    ).rejects.toBeInstanceOf(DependencyCacheMissingError);
+    await expect(inspectDependencyCache(sandbox, {}, target, true)).rejects.toBeInstanceOf(
+      DependencyCacheMissingError,
+    );
     expect(run).toHaveBeenCalledTimes(1);
   });
 
@@ -849,8 +763,7 @@ describe("offline dependency cache", () => {
     });
     fixture.setSource(
       liveDependencySourceFixture({
-        ordinarySource:
-          "export default function Page() { return 'Changed'; }\n",
+        ordinarySource: "export default function Page() { return 'Changed'; }\n",
       }),
     );
     const second = await bootstrapLiveTemplateDependencies({
@@ -881,31 +794,22 @@ describe("offline dependency cache", () => {
       call.command.includes("bun install"),
     )?.[0].command;
     expect(bootstrap).toBeDefined();
-    expect(bootstrap).toContain(
-      "git -C /workspace/repository archive --format=tar HEAD",
-    );
-    expect(bootstrap).toContain(
-      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
-    );
+    expect(bootstrap).toContain("git -C /workspace/repository archive --format=tar HEAD");
+    expect(bootstrap).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
     expect(bootstrap).toMatch(
       /CARGO_HOME=\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home cargo fetch --locked/u,
     );
-    expect(bootstrap).toContain(
-      "function digestTree(root, allowTrackedWorkspaceLinks)",
-    );
+    expect(bootstrap).toContain("function digestTree(root, allowTrackedWorkspaceLinks)");
     expect(bootstrap).toContain('test "$(node --version)" = "v24.18.0"');
     expect(bootstrap).toContain('test "$(bun --version)" = "1.3.14"');
-    expect(bootstrap).toContain(
-      'test "$(rustc --version | cut -d\' \' -f2)" = "1.97.1"',
-    );
+    expect(bootstrap).toContain('test "$(rustc --version | cut -d\' \' -f2)" = "1.97.1"');
     expect(bootstrap).not.toContain("cd /workspace/repository\n");
     expect(bootstrap).not.toMatch(/chmod[^\n]*\/workspace\/repository/u);
     expect(bootstrap).not.toContain("mise install");
     fixture.setSource(
       liveDependencySourceFixture({
         packageJson: '{"workspaces":["apps/*","packages/*"]}\n',
-        ordinarySource:
-          "export default function Page() { return 'Changed'; }\n",
+        ordinarySource: "export default function Page() { return 'Changed'; }\n",
       }),
     );
     const changedManifest = await bootstrapLiveTemplateDependencies({
@@ -916,12 +820,8 @@ describe("offline dependency cache", () => {
       changedManifest.manifest.scope !== "live-template-execution"
     )
       throw new Error("expected live template manifests");
-    expect(changedManifest.manifest.dependencyKey).not.toBe(
-      first.manifest.dependencyKey,
-    );
-    expect(changedManifest.manifest.dependencyInputs).toEqual(
-      fixture.source().dependencyInputs,
-    );
+    expect(changedManifest.manifest.dependencyKey).not.toBe(first.manifest.dependencyKey);
+    expect(changedManifest.manifest.dependencyInputs).toEqual(fixture.source().dependencyInputs);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
     expect(fixture.setNetworkPolicy).toHaveBeenNthCalledWith(1, "allow-all");
     expect(fixture.setNetworkPolicy).toHaveBeenLastCalledWith("allow-all");
@@ -935,9 +835,7 @@ describe("offline dependency cache", () => {
       }),
     );
     expect(
-      fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes("bun install"),
-      ),
+      fixture.run.mock.calls.filter(([call]) => call.command.includes("bun install")),
     ).toHaveLength(2);
   });
 
@@ -953,16 +851,12 @@ describe("offline dependency cache", () => {
 
     expect(second).toEqual(first);
     expect(
-      fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes("bun install"),
-      ),
+      fixture.run.mock.calls.filter(([call]) => call.command.includes("bun install")),
     ).toHaveLength(1);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
     expect(
       fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes(
-          "function digestTree(root, allowTrackedWorkspaceLinks)",
-        ),
+        call.command.includes("function digestTree(root, allowTrackedWorkspaceLinks)"),
       ),
     ).toHaveLength(2);
   });
@@ -981,9 +875,7 @@ describe("offline dependency cache", () => {
       ),
     ).rejects.toThrow("dependency cache closure drifted");
     expect(
-      fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes("bun install"),
-      ),
+      fixture.run.mock.calls.filter(([call]) => call.command.includes("bun install")),
     ).toHaveLength(1);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
@@ -1002,9 +894,7 @@ describe("offline dependency cache", () => {
       ),
     ).rejects.toThrow("dependency cache closure drifted");
     expect(
-      fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes("bun install"),
-      ),
+      fixture.run.mock.calls.filter(([call]) => call.command.includes("bun install")),
     ).toHaveLength(1);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
@@ -1023,9 +913,7 @@ describe("offline dependency cache", () => {
       ),
     ).rejects.toThrow("dependency cache closure is missing");
     expect(
-      fixture.run.mock.calls.filter(([call]) =>
-        call.command.includes("bun install"),
-      ),
+      fixture.run.mock.calls.filter(([call]) => call.command.includes("bun install")),
     ).toHaveLength(1);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(1);
   });
@@ -1054,17 +942,13 @@ describe("offline dependency cache", () => {
     });
     const linkCommand = run.mock.calls
       .map(([request]) => request.command as string)
-      .find(
-        (command) => command.includes("test -x") && command.includes(".bin/vp"),
-      );
+      .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(linkCommand).toBeDefined();
     if (linkCommand === undefined) throw new Error("missing closure check");
     expect(linkCommand).not.toContain(
       "test -d /workspace/repository && test ! -L /workspace/repository",
     );
-    expect(linkCommand).toContain(
-      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
-    );
+    expect(linkCommand).toContain(`/opt/app-builder/dependencies/${archiveDigest}/node_modules`);
     expect(linkCommand).toContain("test -d");
     expect(linkCommand).toContain("test ! -L");
     for (const required of [
@@ -1110,22 +994,15 @@ describe("offline dependency cache", () => {
     ).toBe(false);
     const resolutionCommand = run.mock.calls
       .map(([request]) => request.command as string)
-      .find((command) =>
-        command.includes('const {match}=require("path-to-regexp")'),
-      );
+      .find((command) => command.includes('const {match}=require("path-to-regexp")'));
     expect(resolutionCommand).toBeDefined();
-    if (resolutionCommand === undefined)
-      throw new Error("missing topology check");
+    if (resolutionCommand === undefined) throw new Error("missing topology check");
     expect(resolutionCommand).toContain(ARRUSTED_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
-    expect(resolutionCommand).toContain(
-      ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION,
-    );
+    expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
     expect(
-      run.mock.calls.some(([request]) =>
-        (request.command as string).includes("cargo metadata"),
-      ),
+      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
     ).toBe(false);
   });
 
@@ -1140,27 +1017,19 @@ describe("offline dependency cache", () => {
       },
       environment: {
         APP_BUILDER_EXECUTION_MODE: "development",
-        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY:
-          developmentManifest.dependencyKey,
+        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: developmentManifest.dependencyKey,
       },
     });
 
     expect(
-      run.mock.calls.some(([request]) =>
-        (request.command as string).includes("cargo metadata"),
-      ),
+      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
     ).toBe(false);
     const developmentLinkCommand = run.mock.calls
       .map(([request]) => request.command as string)
-      .find(
-        (command) => command.includes("test -x") && command.includes(".bin/vp"),
-      );
+      .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(developmentLinkCommand).toBeDefined();
-    if (developmentLinkCommand === undefined)
-      throw new Error("missing development closure check");
-    expect(developmentLinkCommand).toContain(
-      "test ! -e /workspace/repository/node_modules",
-    );
+    if (developmentLinkCommand === undefined) throw new Error("missing development closure check");
+    expect(developmentLinkCommand).toContain("test ! -e /workspace/repository/node_modules");
     expect(developmentLinkCommand).toContain(
       `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}"`,
     );
@@ -1179,9 +1048,7 @@ describe("offline dependency cache", () => {
       ...manifest,
       target: { ...manifest.target, sha: "0".repeat(40) },
     });
-    await expect(inspectDependencyCache(sandbox, {})).rejects.toThrow(
-      "manifest drifted",
-    );
+    await expect(inspectDependencyCache(sandbox, {})).rejects.toThrow("manifest drifted");
     expect(run).toHaveBeenCalledTimes(1);
   });
 
@@ -1193,17 +1060,13 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(`ARG TARGET_SHA=${ARRUSTED_TARGET_SHA}`);
     expect(dockerfile).toContain(`ARG TARGET_TREE=${ARRUSTED_TARGET_TREE}`);
     expect(dockerfile).toContain("COPY --from=arrusted-target");
-    expect(dockerfile).toContain(
-      "bun install --frozen-lockfile --ignore-scripts --linker=hoisted",
-    );
+    expect(dockerfile).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
     expect(dockerfile).toContain("record_workspace_targets() {");
     expect(dockerfile).toContain(
       'find "${node_root}" -type l -print0 > "${link_list}" || return 1',
     );
     expect(dockerfile).toContain('done < "${link_list}"');
-    expect(dockerfile).toContain(
-      "LC_ALL=C sort -u /tmp/workspace-closure.unsorted",
-    );
+    expect(dockerfile).toContain("LC_ALL=C sort -u /tmp/workspace-closure.unsorted");
     expect(dockerfile).toContain(
       "cmp -s /tmp/workspace-closure.expected /tmp/workspace-closure.list",
     );
@@ -1226,15 +1089,11 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
     expect(dockerfile).toContain("--files-from /tmp/workspace-closure.list");
     expect(dockerfile).toContain("--exclude='packages/*/node_modules'");
-    expect(dockerfile).toContain(
-      'case "${workspace_target}" in "${dependency_root}"/*)',
-    );
+    expect(dockerfile).toContain('case "${workspace_target}" in "${dependency_root}"/*)');
     expect(dockerfile).toContain(
       'require("\'"${dependency_root}"\'/node_modules/@autograph/vite-config/package.json").name',
     );
-    expect(dockerfile).toContain(
-      `ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`,
-    );
+    expect(dockerfile).toContain(`ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`);
     expect(dockerfile).toContain(
       "cargo vendor --locked --versioned-dirs /opt/app-builder/cargo-closure/vendor",
     );
@@ -1252,15 +1111,11 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
-    expect(dockerfile).toContain(
-      "/opt/app-builder/dependencies/${archive_sha}",
-    );
+    expect(dockerfile).toContain("/opt/app-builder/dependencies/${archive_sha}");
     expect(dockerfile).toContain(
       "tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz",
     );
-    expect(dockerfile).toContain(
-      "chmod -R a-w,a+rX /opt/app-builder/dependencies",
-    );
+    expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/dependencies");
     expect(dockerfile).toContain(
       "find /opt/app-builder/dependencies \\( -type f -o -type d \\) -perm /222 -print -quit",
     );
@@ -1271,9 +1126,7 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
     expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/rustup");
     expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/cargo");
-    expect(dockerfile).toContain(
-      `mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`,
-    );
+    expect(dockerfile).toContain(`mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`);
     expect(dockerfile.indexOf("USER vercel-sandbox")).toBeLessThan(
       dockerfile.lastIndexOf("RUN --network=none"),
     );

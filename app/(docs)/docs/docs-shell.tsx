@@ -2,22 +2,11 @@ import { ArrowLeft, ArrowRight, BookOpen } from "@geist-ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import {
-  docs,
-  docsHref,
-  getAdjacentDocuments,
-  type DocsDocument,
-} from "./docs-registry";
+import { docs, docsHref, getAdjacentDocuments, type DocsDocument } from "./docs-registry";
 
 import styles from "./docs.module.css";
 
-export function DocsShell({
-  children,
-  document,
-}: {
-  children: ReactNode;
-  document: DocsDocument;
-}) {
+export function DocsShell({ children, document }: { children: ReactNode; document: DocsDocument }) {
   const { next, previous } = getAdjacentDocuments(document);
 
   return (
@@ -42,9 +31,7 @@ export function DocsShell({
             {docs.map((item) => (
               <li key={item.slug}>
                 <Link
-                  aria-current={
-                    item.slug === document.slug ? "page" : undefined
-                  }
+                  aria-current={item.slug === document.slug ? "page" : undefined}
                   href={docsHref(item)}
                 >
                   {item.title}

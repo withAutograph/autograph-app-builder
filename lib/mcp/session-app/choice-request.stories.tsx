@@ -1,9 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import {
-  choiceRequest,
-  semanticChoiceRequest,
-} from "@/.storybook/create-app/mcp-fixtures";
+import { choiceRequest, semanticChoiceRequest } from "@/.storybook/create-app/mcp-fixtures";
 import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 

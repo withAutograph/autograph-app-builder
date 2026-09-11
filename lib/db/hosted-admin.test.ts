@@ -52,8 +52,7 @@ function store(): HostedAdminStore {
 function confirmed(planRequest: HostedAdminPlanRequest) {
   return {
     ...planRequest,
-    confirmationDigest:
-      planHostedAdminRequest(planRequest).requiredConfirmationDigest,
+    confirmationDigest: planHostedAdminRequest(planRequest).requiredConfirmationDigest,
   };
 }
 
@@ -122,9 +121,7 @@ describe("hosted database administration contract", () => {
         },
       }),
     ).toThrow("share one origin");
-    expect(() =>
-      hostedAdminApplyRequestSchema.parse({ ...input, ambientRole: "admin" }),
-    ).toThrow();
+    expect(() => hostedAdminApplyRequestSchema.parse({ ...input, ambientRole: "admin" })).toThrow();
   });
 
   it("keeps retention cutoffs historical and reports only bounded counts", async () => {

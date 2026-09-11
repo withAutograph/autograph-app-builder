@@ -21,11 +21,9 @@ const dependencyInputs = [
   "Cargo.lock",
 ] as const;
 
-export const DEVELOPMENT_SOURCE_ARCHIVE_PATH =
-  ".app-builder/development-source.tar.gz";
+export const DEVELOPMENT_SOURCE_ARCHIVE_PATH = ".app-builder/development-source.tar.gz";
 /** Development cache state belongs to the local builder and remains writable. */
-export const DEVELOPMENT_DEPENDENCY_CACHE_ROOT =
-  "/workspace/.app-builder/dependency-cache";
+export const DEVELOPMENT_DEPENDENCY_CACHE_ROOT = "/workspace/.app-builder/dependency-cache";
 export const DEVELOPMENT_SANDBOX_DOWNLOAD_HOSTS = [
   ...HOSTED_TOOLCHAIN_DOWNLOAD_HOSTS,
   "index.crates.io",
@@ -56,8 +54,7 @@ export type DevelopmentVercelBootstrapInput = Readonly<{
   lockfiles: Readonly<Record<(typeof dependencyInputs)[number], string>>;
 }>;
 
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -92,11 +89,7 @@ function required(environment: Environment, name: string) {
 }
 
 function exactSourceRoot(path: string) {
-  if (
-    !isAbsolute(path) ||
-    resolve(path) !== path ||
-    realpathSync(path) !== path
-  )
+  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
     throw new Error("Development Vercel source root was not canonical.");
   const info = lstatSync(path);
   if (
@@ -217,9 +210,7 @@ for (const { link, replacement } of replacements) {
   fs.symlinkSync(replacement, link);
 }`;
 
-const developmentToolchainCase = (
-  architecture: keyof typeof hostedToolchainArtifacts,
-) => {
+const developmentToolchainCase = (architecture: keyof typeof hostedToolchainArtifacts) => {
   const artifact = hostedToolchainArtifacts[architecture];
   return `${architecture})
     mise_url='${artifact.miseUrl}'
@@ -352,33 +343,21 @@ export function readDevelopmentVercelBootstrapInput(
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
   )
     throw new Error("Development Vercel Sandbox binding was not closed.");
-  const sourceRoot = exactSourceRoot(
-    required(environment, "REPOSITORY_LOCAL_ROOTS"),
-  );
+  const sourceRoot = exactSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
   const result = {
     sourceRoot,
-    sourceFingerprint: required(
-      environment,
-      "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
-    ),
+    sourceFingerprint: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT"),
     sourceSha: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA"),
     sourceTree: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE"),
-    dependencyKey: required(
-      environment,
-      "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY",
-    ),
+    dependencyKey: required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"),
     lockfiles: Object.fromEntries(
-      dependencyInputs.map((path) => [
-        path,
-        digestFileOrAbsent(join(sourceRoot, path)),
-      ]),
+      dependencyInputs.map((path) => [path, digestFileOrAbsent(join(sourceRoot, path))]),
     ) as Record<(typeof dependencyInputs)[number], string>,
   };
   if (
     git(sourceRoot, ["rev-parse", "HEAD"]) !== result.sourceSha ||
     git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== result.sourceTree ||
-    git(sourceRoot, ["status", "--porcelain=v1", "--untracked-files=all"]) !==
-      ""
+    git(sourceRoot, ["status", "--porcelain=v1", "--untracked-files=all"]) !== ""
   )
     throw new Error("Development Vercel source snapshot drifted.");
   const sourceArchive = execFileSync(
@@ -404,9 +383,7 @@ export function readDevelopmentVercelBootstrapInput(
 }
 
 /** Builds the standard development-execution cache once per dependency key. */
-export function developmentVercelDependencyCommand(
-  input: DevelopmentVercelBootstrapInput,
-) {
+export function developmentVercelDependencyCommand(input: DevelopmentVercelBootstrapInput) {
   assertInput(input);
   return `set -euo pipefail
 test "$(uname -m)" = x86_64
@@ -496,9 +473,7 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
  * tree, then installs the same reusable development cache that template
  * bootstrap creates.
  */
-export function developmentVercelDependencyRepairCommand(
-  dependencyKey: string,
-) {
+export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey))
     throw new Error("Development dependency key was invalid.");
   return `set -euo pipefail
@@ -591,27 +566,16 @@ export function developmentVercelRevalidationKey(
   )}`;
 }
 
-export function developmentExecutionArtifactDigest(
-  environment: Environment = process.env,
-) {
+export function developmentExecutionArtifactDigest(environment: Environment = process.env) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
   )
     throw new Error("Development execution binding was not closed.");
-  const sourceFingerprint = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
-  );
-  const dependencyKey = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY",
-  );
-  if (
-    !sha256Pattern.test(sourceFingerprint) ||
-    !sha256Pattern.test(dependencyKey)
-  )
+  const sourceFingerprint = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT");
+  const dependencyKey = required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY");
+  if (!sha256Pattern.test(sourceFingerprint) || !sha256Pattern.test(dependencyKey))
     throw new Error("Development execution identity was invalid.");
   return `vercel-sandbox-development@sha256:${sha256(
     JSON.stringify({ version: 1, sourceFingerprint, dependencyKey }),

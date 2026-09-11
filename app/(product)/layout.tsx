@@ -10,8 +10,7 @@ import "../globals.css";
 
 export const metadata: Metadata = {
   title: "Autograph App Builder",
-  description:
-    "Design, plan, create, and validate supported apps with Autograph App Builder.",
+  description: "Design, plan, create, and validate supported apps with Autograph App Builder.",
 };
 
 function ShellLoading() {
@@ -50,11 +49,7 @@ async function ShellContent({
   );
 }
 
-export default async function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   const showLocalAuthProviders = process.env.NODE_ENV === "development";
   const showPreviewEmulatedAuthProviders =
     process.env.VERCEL_ENV === "preview" &&
@@ -72,14 +67,12 @@ export default async function RootLayout({
             githubAuthEnabled={Boolean(
               showLocalAuthProviders ||
               showPreviewEmulatedAuthProviders ||
-              (process.env.GITHUB_CLIENT_ID &&
-                process.env.GITHUB_CLIENT_SECRET),
+              (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
             )}
             vercelAuthEnabled={Boolean(
               showLocalAuthProviders ||
               showPreviewEmulatedAuthProviders ||
-              (process.env.VERCEL_AUTH_CLIENT_ID &&
-                process.env.VERCEL_AUTH_CLIENT_SECRET),
+              (process.env.VERCEL_AUTH_CLIENT_ID && process.env.VERCEL_AUTH_CLIENT_SECRET),
             )}
           >
             {children}

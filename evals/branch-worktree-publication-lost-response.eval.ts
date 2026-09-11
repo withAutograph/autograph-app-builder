@@ -9,11 +9,7 @@ export default defineEval({
     "A lost response after branch-worktree side effects is read back from durable intent and recovered without creating a second identity.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "branch-publication-lost-response",
-    );
+    await prepareReviewedWorkflow(t, repository, "branch-publication-lost-response");
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",

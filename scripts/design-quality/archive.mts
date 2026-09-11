@@ -1,10 +1,4 @@
-import {
-  copyFile,
-  mkdir,
-  readFile,
-  readdir,
-  writeFile as writeRawFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, writeFile as writeRawFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
@@ -13,10 +7,7 @@ import { readArchivedReport } from "./archive-entry";
 import { formatWithOxfmt } from "../format-with-oxfmt.mts";
 
 async function writeFile(path: string, content: string) {
-  await writeRawFile(
-    path,
-    await formatWithOxfmt(path, content),
-  );
+  await writeRawFile(path, await formatWithOxfmt(path, content));
 }
 
 const { values } = parseArgs({
@@ -27,16 +18,10 @@ const { values } = parseArgs({
   },
 });
 if (values.help) {
-  console.log(
-    "mise run eval:design-archive -- --report-dir PATH --name stock-exceptions",
-  );
+  console.log("mise run eval:design-archive -- --report-dir PATH --name stock-exceptions");
   process.exit(0);
 }
-if (
-  !values["report-dir"] ||
-  !values.name ||
-  !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(values.name)
-)
+if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(values.name))
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
@@ -60,16 +45,10 @@ report.archive = {
   archivedAt: new Date().toISOString(),
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
-await writeFile(
-  join(destination, "report.json"),
-  JSON.stringify(report, null, 2) + "\n",
-);
+await writeFile(join(destination, "report.json"), JSON.stringify(report, null, 2) + "\n");
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replace(
-    /[<>|]/g,
-    (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!,
-  );
+  String(v).replace(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
 const lines = [
   `# ${values.name} — ${timestamp}`,
   "",
@@ -115,8 +94,7 @@ for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
 }
 lines.push("", "## Strengths", "");
-for (const strength of report.judge.strengths ?? [])
-  lines.push(`- ${md(strength)}`);
+for (const strength of report.judge.strengths ?? []) lines.push(`- ${md(strength)}`);
 lines.push("", "## Improvements", "");
 for (const finding of report.judge.findings ?? [])
   lines.push(
@@ -132,9 +110,7 @@ lines.push(
   "| --- | --- | --- | --- |",
 );
 for (const capture of report.captures)
-  for (const [category, summary] of Object.entries(
-    capture.styles?.categories ?? {},
-  )) {
+  for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
     const s = summary as {
       counts: Record<string, number>;
       assessed: number;
@@ -156,10 +132,8 @@ for (const capture of report.captures)
     "",
   );
 lines.push("## Limitations", "");
-for (const limitation of report.judge.limitations ?? [])
-  lines.push(`- ${md(limitation)}`);
-for (const limitation of report.evaluationNotes ?? [])
-  lines.push(`- ${md(limitation)}`);
+for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
+for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
 await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
 const rows: Array<{
   path: string;
@@ -173,9 +147,7 @@ for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
     withFileTypes: true,
   })) {
     if (!run.isDirectory()) continue;
-    const saved = await readArchivedReport(
-      join(archiveRoot, day.name, run.name),
-    );
+    const saved = await readArchivedReport(join(archiveRoot, day.name, run.name));
     if (saved === null) continue;
     rows.push({
       path: `${day.name}/${run.name}`,
@@ -211,9 +183,7 @@ await writeFile(
     "",
     "| Evaluated (UTC) | App | Subjective score / 100 |",
     "| --- | --- | --- |",
-    ...rows.map(
-      (r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${r.score} |`,
-    ),
+    ...rows.map((r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${r.score} |`),
     "",
   ].join("\n"),
 );

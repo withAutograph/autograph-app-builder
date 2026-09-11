@@ -1,14 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,9 +24,7 @@ export function withFreshBootstrapEvalCapability<T>(
   if (capability.authority === "structural-test-injection")
     return withFreshBootstrapTestCapability(capability, operation, hooks);
   if (hooks !== undefined)
-    throw new Error(
-      "Configured-production eval capability cannot inject faults.",
-    );
+    throw new Error("Configured-production eval capability cannot inject faults.");
   return operation();
 }
 
@@ -76,9 +66,7 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       cleanup: async () => undefined,
     };
   }
-  const owner = await realpath(
-    await mkdtemp(join(tmpdir(), "app-builder-fresh-eval-")),
-  );
+  const owner = await realpath(await mkdtemp(join(tmpdir(), "app-builder-fresh-eval-")));
   await chmod(owner, 0o700);
   const stateRoot = join(owner, "state");
   const allowedRoot = join(owner, "destinations");
@@ -88,9 +76,7 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
     ? ({ strategy: "flock", path: "/usr/bin/flock" } as const)
     : ({ strategy: "lockf", path: "/usr/bin/lockf" } as const);
   const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
-    canonicalFreshBootstrapHelperPath(
-      existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
-    ),
+    canonicalFreshBootstrapHelperPath(existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git"),
     canonicalFreshBootstrapHelperPath(
       existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "/bin/python3",
     ),

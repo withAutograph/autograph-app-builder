@@ -38,21 +38,9 @@ const preview: Preview = {
             "Create App",
             [
               "Sections",
-              [
-                "App Details",
-                "Build With",
-                "Connections",
-                "Deploy To",
-                "Store In",
-              ],
+              ["App Details", "Build With", "Connections", "Deploy To", "Store In"],
               "Primitives",
-              [
-                "Brand",
-                "Choice Card",
-                "Search Combobox",
-                "Section Shell",
-                "Tooltip",
-              ],
+              ["Brand", "Choice Card", "Search Combobox", "Section Shell", "Tooltip"],
             ],
             "Connections",
             ["Connection Drawer", "Provider Connection"],
@@ -109,9 +97,7 @@ const preview: Preview = {
   afterEach: ({ canvasElement, title }) => {
     if (!usesCreateAppShell(title)) return;
 
-    expect(
-      canvasElement.querySelector("[data-create-app-story-environment]"),
-    ).toBeInTheDocument();
+    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
   },
 };
 

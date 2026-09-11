@@ -17,13 +17,11 @@ const navigation = vi.hoisted(() => ({
 }));
 const builderActions = vi.hoisted(() => ({
   continueBuilderHandoff: vi.fn(),
-  saveActiveBuilderDraft: vi.fn(
-    async (input: { draftId: string; expectedRevision: number }) => ({
-      draftId: input.draftId,
-      revision: input.expectedRevision + 1,
-      updatedAt: "2030-01-01T00:00:00.000Z",
-    }),
-  ),
+  saveActiveBuilderDraft: vi.fn(async (input: { draftId: string; expectedRevision: number }) => ({
+    draftId: input.draftId,
+    revision: input.expectedRevision + 1,
+    updatedAt: "2030-01-01T00:00:00.000Z",
+  })),
   loadActiveBuilderDraft: vi.fn(async () => undefined),
   clearBuilderDraft: vi.fn(),
 }));
@@ -51,9 +49,9 @@ async function defaultContinuation(
       github: input.form.githubInstallationId
         ? {
             status: "skipped" as const,
-            code: (input.provisioningEnabled
-              ? "not_selected"
-              : "feature_disabled") as "not_selected" | "feature_disabled",
+            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
+              | "not_selected"
+              | "feature_disabled",
             retryable: false,
           }
         : {
@@ -64,9 +62,9 @@ async function defaultContinuation(
       vercel: input.form.vercelInstallationId
         ? {
             status: "skipped" as const,
-            code: (input.provisioningEnabled
-              ? "not_selected"
-              : "feature_disabled") as "not_selected" | "feature_disabled",
+            code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
+              | "not_selected"
+              | "feature_disabled",
             retryable: false,
           }
         : {
@@ -197,12 +195,7 @@ function AppBuilder(
     user?: { name: string; email: string };
   },
 ) {
-  const {
-    user,
-    connectionsEnabled = true,
-    comingSoonEnabled = true,
-    ...componentProps
-  } = props;
+  const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
   void user;
   return (
     <AppBuilderComponent
@@ -217,9 +210,8 @@ function AppBuilder(
   );
 }
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -232,10 +224,7 @@ async function render(ui: ReactNode) {
   return container;
 }
 
-async function fill(
-  control: HTMLInputElement | HTMLTextAreaElement,
-  value: string,
-) {
+async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype =
     control instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
@@ -290,19 +279,15 @@ describe("Vercel-faithful App Builder flow", () => {
   });
 
   it("renders the anonymous composer with authentication handoff", async () => {
-    const view = await render(
-      <AppBuilder authenticated={false} user={{ name: "", email: "" }} />,
-    );
+    const view = await render(<AppBuilder authenticated={false} user={{ name: "", email: "" }} />);
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).toContain("What should this app do?");
-    expect(
-      view.querySelector('a[href="/auth/sign-in?callbackURL=%2F"]')
-        ?.textContent,
-    ).toBe("Sign In");
-    expect(
-      view.querySelector('a[href="/auth/sign-up?callbackURL=%2F"]')
-        ?.textContent,
-    ).toBe("Sign Up");
+    expect(view.querySelector('a[href="/auth/sign-in?callbackURL=%2F"]')?.textContent).toBe(
+      "Sign In",
+    );
+    expect(view.querySelector('a[href="/auth/sign-up?callbackURL=%2F"]')?.textContent).toBe(
+      "Sign Up",
+    );
     expect(view.querySelector("button")?.hasAttribute("disabled")).toBe(true);
     expect(view.querySelector("header")?.textContent).toContain("Autograph");
 
@@ -311,13 +296,12 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(suggestion).toBeDefined();
     await click(suggestion!);
+    expect(view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value).toBe(
+      "Build a customer feedback portal",
+    );
     expect(
-      view.querySelector<HTMLTextAreaElement>("#anonymous-brief")?.value,
-    ).toBe("Build a customer feedback portal");
-    expect(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue",
-      )?.disabled,
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Continue")
+        ?.disabled,
     ).toBe(false);
   });
 
@@ -349,10 +333,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("keeps the approved field substitutions and Vercel control order", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     expect(view.querySelector("h1")?.textContent).toBe("Build an app");
     expect(view.textContent).not.toContain("Vercel Team (Optional)");
@@ -381,13 +362,7 @@ describe("Vercel-faithful App Builder flow", () => {
         view.querySelectorAll<HTMLElement>("[data-create-app-section]"),
         (section) => section.dataset.createAppSection,
       ),
-    ).toEqual([
-      "app-details",
-      "build-with",
-      "store-in",
-      "deploy-to",
-      "connections",
-    ]);
+    ).toEqual(["app-details", "build-with", "store-in", "deploy-to", "connections"]);
     expect(
       Array.from(
         view.querySelectorAll<HTMLElement>('[role="heading"][aria-level="2"]'),
@@ -395,20 +370,14 @@ describe("Vercel-faithful App Builder flow", () => {
       ),
     ).toEqual(["Build with", "Store in", "Deploy to", "Connections"]);
     expect(view.querySelector('[aria-label="Settings"]')).toBeNull();
-    expect(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder,
-    ).toBe("Describe the app you want to build…");
+    expect(view.querySelector<HTMLTextAreaElement>("#app-brief")?.placeholder).toBe(
+      "Describe the app you want to build…",
+    );
 
     const destinations = [
-      ...view.querySelectorAll<HTMLInputElement>(
-        'input[name="build-destination"]',
-      ),
+      ...view.querySelectorAll<HTMLInputElement>('input[name="build-destination"]'),
     ];
-    expect(destinations.map((input) => input.value)).toEqual([
-      "web",
-      "codex",
-      "cursor",
-    ]);
+    expect(destinations.map((input) => input.value)).toEqual(["web", "codex", "cursor"]);
     expect(destinations[1]?.checked).toBe(true);
     expect(destinations[1]?.required).toBe(true);
     expect(destinations[2]?.checked).toBe(false);
@@ -425,11 +394,7 @@ describe("Vercel-faithful App Builder flow", () => {
         '[role="group"][aria-label="Deployment provider"] input',
       ),
     ];
-    expect(storageOptions.map((option) => option.value)).toEqual([
-      "github",
-      "gitlab",
-      "bitbucket",
-    ]);
+    expect(storageOptions.map((option) => option.value)).toEqual(["github", "gitlab", "bitbucket"]);
     expect(deploymentOptions.map((option) => option.value)).toEqual([
       "vercel",
       "netlify",
@@ -512,13 +477,9 @@ describe("Vercel-faithful App Builder flow", () => {
         'button[aria-label="Only use providers that support Zero Data Retention."]',
       ),
     ).not.toBeNull();
+    expect(view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked).toBe(false);
     expect(
-      view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked,
-    ).toBe(false);
-    expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="web"]',
-      )?.checked,
+      view.querySelector<HTMLInputElement>('input[name="build-destination"][value="web"]')?.checked,
     ).toBe(true);
   });
 
@@ -549,29 +510,23 @@ describe("Vercel-faithful App Builder flow", () => {
 
     expect(view.textContent).toContain("Vercel could not be connected");
     expect(view.textContent).toContain("GitHub connected successfully");
-    expect(view.textContent).not.toContain(
-      "administrator needs to finish provider setup",
-    );
+    expect(view.textContent).not.toContain("administrator needs to finish provider setup");
     expect(view.textContent).not.toContain("active App Builder workspace");
     expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )?.disabled,
+      view.querySelector<HTMLInputElement>('input[name="deployment-provider"][value="vercel"]')
+        ?.disabled,
     ).toBe(true);
     expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )?.checked,
+      view.querySelector<HTMLInputElement>('input[name="deployment-provider"][value="vercel"]')
+        ?.checked,
     ).toBe(false);
     expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="storage-provider"][value="github"]',
-      )?.disabled,
+      view.querySelector<HTMLInputElement>('input[name="storage-provider"][value="github"]')
+        ?.disabled,
     ).toBe(true);
     expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="storage-provider"][value="github"]',
-      )?.checked,
+      view.querySelector<HTMLInputElement>('input[name="storage-provider"][value="github"]')
+        ?.checked,
     ).toBe(false);
     expect(view.querySelector('a[href="/vercel/installations"]')).toBeNull();
     expect(
@@ -592,9 +547,7 @@ describe("Vercel-faithful App Builder flow", () => {
         authenticated
         connectionsEnabled
         integrations={integrationState}
-        providerNotices={[
-          { provider: "github", status: "failed", reason: "callback-invalid" },
-        ]}
+        providerNotices={[{ provider: "github", status: "failed", reason: "callback-invalid" }]}
       />,
     );
 
@@ -623,20 +576,14 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("never blocks unloading after a user changes the builder form", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
     const beforeEditing = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(beforeEditing);
     expect(beforeEditing.defaultPrevented).toBe(false);
 
-    await fill(
-      view.querySelector<HTMLInputElement>("#app-name")!,
-      "Changed App",
-    );
+    await fill(view.querySelector<HTMLInputElement>("#app-name")!, "Changed App");
 
     const afterEditing = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(afterEditing);
@@ -646,10 +593,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not autosave an untouched hydrated builder", async () => {
     vi.useFakeTimers();
     await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
@@ -660,16 +604,10 @@ describe("Vercel-faithful App Builder flow", () => {
   it("autosaves the latest form revision after editing", async () => {
     vi.useFakeTimers();
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Keep this draft.",
-    );
+    await fill(view.querySelector<HTMLTextAreaElement>("#app-brief")!, "Keep this draft.");
     await act(async () => vi.advanceTimersByTimeAsync(500));
 
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
@@ -748,11 +686,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("does not replace newer edits with its own in-flight autosave", async () => {
     vi.useFakeTimers();
-    let resolveSave!: (saved: {
-      draftId: string;
-      revision: number;
-      updatedAt: string;
-    }) => void;
+    let resolveSave!: (saved: { draftId: string; revision: number; updatedAt: string }) => void;
     builderActions.saveActiveBuilderDraft.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -760,10 +694,7 @@ describe("Vercel-faithful App Builder flow", () => {
         }),
     );
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     await fill(brief, "First local edit.");
@@ -796,14 +727,9 @@ describe("Vercel-faithful App Builder flow", () => {
     });
   });
 
-
-
   it("cycles app brief examples without repeating the current example", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     const anotherExample = view.querySelector<HTMLButtonElement>(
@@ -822,11 +748,9 @@ describe("Vercel-faithful App Builder flow", () => {
   });
 
   it("keeps generated names in sync until the user edits each field", async () => {
-    expect(
-      appNameFromBrief(
-        "# Customer Feedback Portal\n\nLet customers vote on ideas.",
-      ),
-    ).toBe("Customer Feedback Portal");
+    expect(appNameFromBrief("# Customer Feedback Portal\n\nLet customers vote on ideas.")).toBe(
+      "Customer Feedback Portal",
+    );
     expect(repositoryNameFromAppName("Café & Orders")).toBe("cafe-and-orders");
     expect(appNameFromBrief("x".repeat(8_100))).toHaveLength(120);
 
@@ -835,16 +759,12 @@ describe("Vercel-faithful App Builder flow", () => {
       "# Vendor Onboarding\n\nCollect and review vendor details.",
     );
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     await act(async () => new Promise(requestAnimationFrame));
 
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
-    const repository =
-      view.querySelector<HTMLInputElement>("#repository-name")!;
+    const repository = view.querySelector<HTMLInputElement>("#repository-name")!;
     expect(appName.value).toBe("Vendor Onboarding");
     expect(repository.value).toBe(repositoryNameFromAppName(appName.value));
 
@@ -880,16 +800,12 @@ describe("Vercel-faithful App Builder flow", () => {
       "# Vendor Onboarding\n\nCollect and review vendor details.",
     );
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     await act(async () => new Promise(requestAnimationFrame));
 
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
-    const repository =
-      view.querySelector<HTMLInputElement>("#repository-name")!;
+    const repository = view.querySelector<HTMLInputElement>("#repository-name")!;
     await fill(repository, "my-existing-repository");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
@@ -913,9 +829,9 @@ describe("Vercel-faithful App Builder flow", () => {
     const appName = view.querySelector<HTMLInputElement>("#app-name")?.value;
     expect(brief).toContain("Build a focused app");
     expect(appName).toBe("Product");
-    expect(
-      view.querySelector<HTMLInputElement>("#repository-name")?.value,
-    ).toBe(repositoryNameFromAppName(appName ?? ""));
+    expect(view.querySelector<HTMLInputElement>("#repository-name")?.value).toBe(
+      repositoryNameFromAppName(appName ?? ""),
+    );
     expect(
       [...view.querySelectorAll<HTMLButtonElement>("button")].find(
         (button) => button.textContent === "Create App",
@@ -925,14 +841,10 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("infers optional identity fields but blocks a missing brief or invalid explicit name", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
-    const repository =
-      view.querySelector<HTMLInputElement>("#repository-name")!;
+    const repository = view.querySelector<HTMLInputElement>("#repository-name")!;
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     const create = [...view.querySelectorAll<HTMLButtonElement>("button")].find(
       (button) => button.textContent === "Create App",
@@ -968,39 +880,24 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("selects and searches seeded teams, GitHub scopes, and models", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
     await click(
-      view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
+      view.querySelector<HTMLInputElement>('input[name="deployment-provider"][value="vercel"]')!,
     );
-    const team = view.querySelector<HTMLInputElement>(
-      '[aria-label="Select a Vercel Team"]',
-    )!;
+    const team = view.querySelector<HTMLInputElement>('[aria-label="Select a Vercel Team"]')!;
     await focus(team);
-    expect(
-      view.querySelector('[data-option-value="vercel-pylee"]'),
-    ).not.toBeNull();
-    expect(
-      view.querySelector('[data-option-value="vercel-autograph"]'),
-    ).not.toBeNull();
-    await click(
-      view.querySelector<HTMLElement>('[data-option-value="vercel-pylee"]')!,
-    );
+    expect(view.querySelector('[data-option-value="vercel-pylee"]')).not.toBeNull();
+    expect(view.querySelector('[data-option-value="vercel-autograph"]')).not.toBeNull();
+    await click(view.querySelector<HTMLElement>('[data-option-value="vercel-pylee"]')!);
     expect(team.value).toBe("pylee");
     await fill(team, "missing");
     expect(view.textContent).toContain("No results found.");
     await press(team, "Escape");
     expect(team.value).toBe("pylee");
 
-    const gitScope = view.querySelector<HTMLInputElement>(
-      '[aria-label="Git Scope"]',
-    )!;
+    const gitScope = view.querySelector<HTMLInputElement>('[aria-label="Git Scope"]')!;
     await focus(gitScope);
     await fill(gitScope, "withAuto");
     expect(view.querySelector('[data-option-value="102"]')).not.toBeNull();
@@ -1010,28 +907,17 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("continues the durable handoff and routes to its server page", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
-    await fill(
-      view.querySelector<HTMLInputElement>("#app-name")!,
-      "support-app",
-    );
-    await fill(
-      view.querySelector<HTMLInputElement>("#repository-name")!,
-      "support-app",
-    );
+    await fill(view.querySelector<HTMLInputElement>("#app-name")!, "support-app");
+    await fill(view.querySelector<HTMLInputElement>("#repository-name")!, "support-app");
     await fill(
       view.querySelector<HTMLTextAreaElement>("#app-brief")!,
       "# Support App\n\nHelp customers resolve support requests.",
     );
     await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Create App")!,
     );
 
     await act(async () => {
@@ -1059,17 +945,9 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).not.toContain("Open in ChatGPT / Codex");
   });
 
-
-
-
-
-
   it("renders the Better Auth account trigger without the legacy menu", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
     expect(view.querySelector('[aria-label="Account"]')).not.toBeNull();
     expect(view.textContent).not.toContain("Feedback");
@@ -1079,10 +957,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("matches the repository privacy and connection-browser interactions", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
     const privacy = view.querySelector<HTMLInputElement>(
@@ -1110,9 +985,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.textContent).not.toContain("NetSuite");
     expect(view.textContent).not.toContain("Xero");
     expect(view.textContent).not.toContain("Sage Intacct");
-    const ramp = view.querySelector<HTMLButtonElement>(
-      '[aria-label="Ramp coming soon"]',
-    )!;
+    const ramp = view.querySelector<HTMLButtonElement>('[aria-label="Ramp coming soon"]')!;
     expect(ramp.disabled).toBe(true);
     expect(ramp.textContent).toContain("Coming soon");
     await click(ramp);
@@ -1130,9 +1003,7 @@ describe("Vercel-faithful App Builder flow", () => {
       expect(button.textContent).toContain("Coming soon");
     }
     expect(view.querySelector('[data-kind="netsuite"] svg')).toBeNull();
-    expect(
-      view.querySelector('input[name="deployment-provider"][value="vercel"]'),
-    ).not.toBeNull();
+    expect(view.querySelector('input[name="deployment-provider"][value="vercel"]')).not.toBeNull();
 
     const connectionSearch = view.querySelector<HTMLInputElement>(
       'input[placeholder="Search connections…"]',
@@ -1144,26 +1015,15 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("runs the connection authorization, configuration, and customization flow", async () => {
     const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
-    await click(
-      view.querySelector<HTMLButtonElement>('[aria-label="Add QuickBooks"]')!,
-    );
+    await click(view.querySelector<HTMLButtonElement>('[aria-label="Add QuickBooks"]')!);
     expect(view.querySelector("#connection-drawer-title")).toBeNull();
+    expect(view.querySelector('[aria-label="Added connections"]')).not.toBeNull();
+    expect(view.querySelector('[aria-label="Remove QuickBooks"]')).not.toBeNull();
     expect(
-      view.querySelector('[aria-label="Added connections"]'),
-    ).not.toBeNull();
-    expect(
-      view.querySelector('[aria-label="Remove QuickBooks"]'),
-    ).not.toBeNull();
-    expect(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Connect",
-      ),
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Connect"),
     ).not.toBeUndefined();
 
     await click(
@@ -1171,9 +1031,7 @@ describe("Vercel-faithful App Builder flow", () => {
         .querySelector<HTMLDivElement>('[aria-label="Added connections"]')!
         .querySelector<HTMLButtonElement>("button")!,
     );
-    expect(view.querySelector("#connection-drawer-title")?.textContent).toBe(
-      "Add Connection",
-    );
+    expect(view.querySelector("#connection-drawer-title")?.textContent).toBe("Add Connection");
     expect(view.textContent).toContain("Connect QuickBooks");
 
     const drawerAccessibility = await axe.run(view, {
@@ -1188,16 +1046,12 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(view.textContent).toContain("Connection successful");
     await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Return",
-      )!,
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Return")!,
     );
     expect(view.textContent).toContain("Connection Name");
 
     await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue",
-      )!,
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Continue")!,
     );
     expect(view.textContent).toContain("Display Name");
     await click(
@@ -1205,19 +1059,11 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Add Connection",
       )!,
     );
-    expect(
-      view.querySelector('[aria-label="Added connections"]'),
-    ).not.toBeNull();
-    expect(
-      view.querySelector('[aria-label="Remove QuickBooks"]'),
-    ).not.toBeNull();
+    expect(view.querySelector('[aria-label="Added connections"]')).not.toBeNull();
+    expect(view.querySelector('[aria-label="Remove QuickBooks"]')).not.toBeNull();
     expect(view.textContent).toContain("Customize");
 
-    await click(
-      view.querySelector<HTMLButtonElement>(
-        '[aria-label="Remove QuickBooks"]',
-      )!,
-    );
+    await click(view.querySelector<HTMLButtonElement>('[aria-label="Remove QuickBooks"]')!);
     expect(view.querySelector('[aria-label="Remove QuickBooks"]')).toBeNull();
     expect(view.querySelector('[aria-label="Add QuickBooks"]')).not.toBeNull();
   });

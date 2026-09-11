@@ -12,17 +12,11 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "publication-overlap");
-    await writeFile(
-      join(repository, "microfrontends.json"),
-      "concurrent overlap\n",
-    );
+    await writeFile(join(repository, "microfrontends.json"), "concurrent overlap\n");
 
     await t.send("Publish reviewed change set locally with dirty overlap.");
     t.succeeded();
-    t.check(
-      t.reply,
-      includes("rejected before approval or destination mutation"),
-    );
+    t.check(t.reply, includes("rejected before approval or destination mutation"));
     t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

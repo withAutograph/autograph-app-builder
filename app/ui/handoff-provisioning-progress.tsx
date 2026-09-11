@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { continueHandoffProvisioning } from "@/app/actions/builder";
@@ -15,9 +9,7 @@ import type {
   BuilderProvisionResponse,
 } from "@/lib/provisioning/contracts";
 
-function readProjection(
-  value: unknown,
-): BuilderProvisionProjection | undefined {
+function readProjection(value: unknown): BuilderProvisionProjection | undefined {
   if (!value || typeof value !== "object") return undefined;
   const projection = value as {
     revision?: unknown;
@@ -48,10 +40,7 @@ export function HandoffProvisioningProgress({
   const latestRevision = useRef(initial.revision);
   const settledRefresh = useRef(false);
   const dispatched = useRef(false);
-  const [actionState, dispatch, pending] = useActionState(
-    continueHandoffProvisioning,
-    undefined,
-  );
+  const [actionState, dispatch, pending] = useActionState(continueHandoffProvisioning, undefined);
 
   useEffect(() => {
     if (initial.revision <= latestRevision.current) return;
@@ -60,25 +49,19 @@ export function HandoffProvisioningProgress({
   }, [initial]);
 
   useEffect(() => {
-    if (snapshot.provisioning.status !== "settled" || settledRefresh.current)
-      return;
+    if (snapshot.provisioning.status !== "settled" || settledRefresh.current) return;
     settledRefresh.current = true;
     router.refresh();
   }, [router, snapshot.provisioning.status]);
 
   useEffect(() => {
-    if (snapshot.provisioning.status === "settled" || dispatched.current)
-      return;
+    if (snapshot.provisioning.status === "settled" || dispatched.current) return;
     dispatched.current = true;
     startTransition(() => dispatch({ handoffId }));
   }, [dispatch, handoffId, snapshot.provisioning.status]);
 
   useEffect(() => {
-    if (
-      typeof EventSource === "undefined" ||
-      snapshot.provisioning.status === "settled"
-    )
-      return;
+    if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") return;
     let closed = false;
     let source: EventSource | undefined;
     const connect = () => {

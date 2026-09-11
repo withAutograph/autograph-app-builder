@@ -4,17 +4,11 @@ import { createGuardedGitHubFetch } from "./octokit";
 
 describe("guarded Octokit GitHub transport", () => {
   it("allows only fixed GitHub origins and forces redirects off", async () => {
-    const request = vi.fn<typeof fetch>(async () =>
-      Response.json({ ok: true }),
-    );
+    const request = vi.fn<typeof fetch>(async () => Response.json({ ok: true }));
     const guarded = createGuardedGitHubFetch(request);
 
-    await expect(guarded("https://example.invalid/user")).rejects.toThrow(
-      "github-origin-invalid",
-    );
-    await expect(
-      guarded("https://api.github.com/user"),
-    ).resolves.toBeInstanceOf(Response);
+    await expect(guarded("https://example.invalid/user")).rejects.toThrow("github-origin-invalid");
+    await expect(guarded("https://api.github.com/user")).resolves.toBeInstanceOf(Response);
     expect(request).toHaveBeenCalledOnce();
     expect(request.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
   });

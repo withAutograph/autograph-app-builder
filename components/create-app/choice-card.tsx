@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 
 export type CreateAppSectionId =
-  "app-details" | "build-with" | "store-in" | "deploy-to" | "connections";
+  | "app-details"
+  | "build-with"
+  | "store-in"
+  | "deploy-to"
+  | "connections";
 
 export function ChoiceCard({
   badge,
@@ -29,11 +33,7 @@ export function ChoiceCard({
   value: string;
 }) {
   return (
-    <label
-      className={className}
-      data-disabled={disabled || undefined}
-      data-provider={dataProvider}
-    >
+    <label className={className} data-disabled={disabled || undefined} data-provider={dataProvider}>
       {icon}
       <span>
         {children}

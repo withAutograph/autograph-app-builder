@@ -1,7 +1,6 @@
 import { isIP } from "node:net";
 
-const normalizedHostname = (hostname: string) =>
-  hostname.toLowerCase().replace(/^\[|\]$/g, "");
+const normalizedHostname = (hostname: string) => hostname.toLowerCase().replace(/^\[|\]$/g, "");
 
 const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
   const octets = host.split(".").map(Number);
@@ -32,7 +31,7 @@ export const isReservedPublicReleaseHostname = (hostname: string) => {
     )
   )
     return true;
-  return [".invalid", ".test", ".example", ".localhost", ".template"].some(
-    (suffix) => host.endsWith(suffix),
+  return [".invalid", ".test", ".example", ".localhost", ".template"].some((suffix) =>
+    host.endsWith(suffix),
   );
 };

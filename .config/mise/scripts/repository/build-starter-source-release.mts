@@ -31,23 +31,14 @@ function argumentsFrom(values: readonly string[]) {
       "usage: hosted:starter-source-build -- --arrusted-root <path> --output <directory> --release-origin <https-origin>",
     );
   const origin = new URL(releaseOrigin);
-  if (
-    origin.protocol !== "https:" ||
-    origin.pathname !== "/" ||
-    origin.search ||
-    origin.hash
-  )
+  if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash)
     throw new Error("Release origin must be an exact HTTPS origin.");
   return { root: realpathSync(root), output: resolve(output), origin };
 }
 
 function git(root: string, args: readonly string[], encoding: "utf8"): string;
 function git(root: string, args: readonly string[], encoding: "buffer"): Buffer;
-function git(
-  root: string,
-  args: readonly string[],
-  encoding: "utf8" | "buffer",
-) {
+function git(root: string, args: readonly string[], encoding: "utf8" | "buffer") {
   return execFileSync(
     "/usr/bin/git",
     [
@@ -68,17 +59,10 @@ function git(
 const input = argumentsFrom(process.argv.slice(2));
 if (git(input.root, ["rev-parse", "HEAD"], "utf8").trim() !== TARGET_SHA)
   throw new Error("Arrusted source SHA is not the pinned supported commit.");
-if (
-  git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf8").trim() !==
-  TARGET_TREE
-)
+if (git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf8").trim() !== TARGET_TREE)
   throw new Error("Arrusted source tree is not the pinned supported tree.");
 
-const entries = git(
-  input.root,
-  ["ls-tree", "-r", "--full-tree", TARGET_SHA],
-  "utf8",
-)
+const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "utf8")
   .trimEnd()
   .split("\n")
   .map((line) => {

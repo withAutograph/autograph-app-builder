@@ -16,12 +16,7 @@ export default defineEval({
     "Eve uses only the approval-bound fresh-bootstrap tools for an absent local destination.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "fresh-eval",
-      "fresh-template",
-    );
+    await prepareReviewedWorkflow(t, repository, "fresh-eval", "fresh-template");
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = join(fixture.allowedRoot, "absent");
@@ -30,9 +25,7 @@ export default defineEval({
       );
       t.requireInputRequest({ toolName: "publish_fresh_repository" });
       t.event("input.requested", { count: 1 });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.respondAll("approve"),
-      );
+      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
       t.check(t.reply, includes("one parentless SHA-1 local repository"));
       t.calledTool("fresh_bootstrap_status", { count: 1 });

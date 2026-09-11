@@ -7,9 +7,7 @@ import {
   type SaveActiveBuilderDraftInput,
 } from "./contracts";
 
-export type BuilderDraftAuthority = ReturnType<
-  typeof hostedTenantAuthoritySchema.parse
->;
+export type BuilderDraftAuthority = ReturnType<typeof hostedTenantAuthoritySchema.parse>;
 
 export type BuilderDraftRow = {
   authority: BuilderDraftAuthority;
@@ -26,10 +24,8 @@ export type BuilderDraftStore = {
   read: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
-}) => Promise<BuilderDraftRow | undefined>;
-  readActive: (input: {
-    authority: BuilderDraftAuthority;
-}) => Promise<BuilderDraftRow | undefined>;
+  }) => Promise<BuilderDraftRow | undefined>;
+  readActive: (input: { authority: BuilderDraftAuthority }) => Promise<BuilderDraftRow | undefined>;
   saveActive: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
@@ -37,30 +33,27 @@ export type BuilderDraftStore = {
     clientMutationId: string;
     record: BuilderDraftRecord;
     now: Date;
-}) => Promise<{
-    row: BuilderDraftRow;
-    idempotent: true;
-    concurrent: false;
-} | {
-    row: BuilderDraftRow;
-    idempotent: false;
-    concurrent: boolean;
-}>;
+  }) => Promise<
+    | {
+        row: BuilderDraftRow;
+        idempotent: true;
+        concurrent: false;
+      }
+    | {
+        row: BuilderDraftRow;
+        idempotent: false;
+        concurrent: boolean;
+      }
+  >;
   archive: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
     now: Date;
-}) => Promise<boolean>;
-  deleteInactiveSince: (input: {
-    now: Date;
-    maxAgeMs?: number;
-}) => Promise<number>;
+  }) => Promise<boolean>;
+  deleteInactiveSince: (input: { now: Date; maxAgeMs?: number }) => Promise<number>;
 };
 
-export function createBuilderDraftService(input: {
-  store: BuilderDraftStore;
-  now?: () => Date;
-}) {
+export function createBuilderDraftService(input: { store: BuilderDraftStore; now?: () => Date }) {
   const now = input.now ?? (() => new Date());
   return {
     async readActive(authorityInput: BuilderDraftAuthority) {

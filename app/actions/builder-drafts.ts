@@ -22,9 +22,7 @@ async function context() {
 }
 
 /** The revisioned mutation used by the autosave island and provider redirects. */
-export async function saveActiveBuilderDraft(
-  input: SaveActiveBuilderDraftInput,
-) {
+export async function saveActiveBuilderDraft(input: SaveActiveBuilderDraftInput) {
   const value = await context();
   const saved = await value.drafts.saveActive(
     value.authority,

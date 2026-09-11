@@ -9,8 +9,7 @@ export const metadata: Metadata = {
     default: "Documentation | Autograph App Builder",
     template: "%s | Autograph App Builder",
   },
-  description:
-    "Get started with Autograph App Builder, from installation to your first app.",
+  description: "Get started with Autograph App Builder, from installation to your first app.",
 };
 
 export default function DocsRootLayout({ children }: { children: ReactNode }) {

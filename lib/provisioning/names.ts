@@ -29,8 +29,6 @@ export function suffixedProviderName(input: {
     .regex(/^[a-z0-9]{6}$/u)
     .parse(input.suffix);
   const maximumLength = z.number().int().min(8).parse(input.maximumLength);
-  const trimmed = input.base
-    .slice(0, maximumLength - suffix.length - 1)
-    .replaceAll(/-+$/gu, "");
+  const trimmed = input.base.slice(0, maximumLength - suffix.length - 1).replaceAll(/-+$/gu, "");
   return `${trimmed}-${suffix}`;
 }

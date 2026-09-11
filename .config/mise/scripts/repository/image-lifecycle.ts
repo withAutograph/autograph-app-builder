@@ -37,11 +37,8 @@ export function parseLifecycleArguments(
     const flag = args[index];
     const value = args[index + 1];
     if (flag === undefined || value === undefined || !flag.startsWith("--"))
-      throw new Error(
-        "Image lifecycle arguments must be exact --name value pairs.",
-      );
-    if (entries.has(flag))
-      throw new Error(`Duplicate image lifecycle argument ${flag}.`);
+      throw new Error("Image lifecycle arguments must be exact --name value pairs.");
+    if (entries.has(flag)) throw new Error(`Duplicate image lifecycle argument ${flag}.`);
     entries.set(flag, value);
   }
   const required = (flag: string) => {
@@ -58,15 +55,10 @@ export function parseLifecycleArguments(
     builderTree: required("--builder-tree"),
     dockerfileSha256: required("--dockerfile-sha256"),
   };
-  const image =
-    action === "preload" || action === "prove"
-      ? required("--image")
-      : undefined;
+  const image = action === "preload" || action === "prove" ? required("--image") : undefined;
   const username = action === "login" ? required("--username") : undefined;
   if (entries.size !== 0)
-    throw new Error(
-      `Unknown image lifecycle arguments: ${[...entries.keys()].join(", ")}.`,
-    );
+    throw new Error(`Unknown image lifecycle arguments: ${[...entries.keys()].join(", ")}.`);
   return {
     approval,
     ...(image === undefined ? {} : { image }),
@@ -90,11 +82,8 @@ export async function runImageLifecycleTask(
   return proveSandboxImage(approval, image!);
 }
 
-  const [, entrypoint] = process.argv;
-if (
-  entrypoint !== undefined &&
-  import.meta.url === pathToFileURL(entrypoint).href
-) {
+const [, entrypoint] = process.argv;
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
   const action = process.argv[2] as ImageLifecycleAction | undefined;
   if (
     action === undefined ||
@@ -113,11 +102,5 @@ if (
     throw new Error(
       "Usage: image-lifecycle.ts <verify-sources|build|inspect-local|login|push|inspect-remote|preload|prepare-proof-runtime|prove> <exact arguments>",
     );
-  console.log(
-    JSON.stringify(
-      await runImageLifecycleTask(action, process.argv.slice(3)),
-      null,
-      2,
-    ),
-  );
+  console.log(JSON.stringify(await runImageLifecycleTask(action, process.argv.slice(3)), null, 2));
 }

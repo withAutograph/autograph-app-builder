@@ -101,9 +101,9 @@ describe("hosted sandbox turn lease lifecycle", () => {
     });
     clearHostedSandboxExecutionLeaseCacheForTest();
     install(store);
-    await expect(
-      assertHostedSandboxCommandAuthority({ sessionId: "session_1" }),
-    ).rejects.toThrow("authority is unavailable");
+    await expect(assertHostedSandboxCommandAuthority({ sessionId: "session_1" })).rejects.toThrow(
+      "authority is unavailable",
+    );
     await expect(
       releaseHostedSandboxExecutionLease({
         sessionId: "session_1",

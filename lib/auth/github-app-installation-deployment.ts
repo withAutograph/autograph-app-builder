@@ -26,10 +26,7 @@ import {
   providerConnectionReturnFromFormData,
   type ProviderConnectionReturn,
 } from "../integrations/provider-connection-return";
-import {
-  signInForWorkspaceRedirect,
-  workspaceOnboardingRedirect,
-} from "./workspace-onboarding";
+import { signInForWorkspaceRedirect, workspaceOnboardingRedirect } from "./workspace-onboarding";
 
 type Authority = {
   issuer: string;
@@ -38,9 +35,7 @@ type Authority = {
   ownerUserId: string;
 };
 
-type InstallationAuthorization = ReturnType<
-  typeof createGitHubAppInstallationAuthorization
->;
+type InstallationAuthorization = ReturnType<typeof createGitHubAppInstallationAuthorization>;
 
 const noStoreHeaders = {
   "Cache-Control": "no-store",
@@ -54,9 +49,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
   onConnected?: (input: {
     authority: Authority;
     returnState: ProviderConnectionReturn;
-}) => Promise<string | undefined>;
+  }) => Promise<string | undefined>;
 }) {
-  const {origin} = new URL(input.origin);
+  const { origin } = new URL(input.origin);
   const redirect = (
     status: "connected" | "failed",
     reason?: ProviderConnectionFailureReason,
@@ -111,10 +106,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           status: 303,
           headers: {
             ...noStoreHeaders,
-            Location: workspaceOnboardingRedirect(
-              origin,
-              "workspace-setup-retry",
-            ),
+            Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
           },
         });
       }
@@ -128,9 +120,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         });
 
       try {
-        const returnState = providerConnectionReturnFromFormData(
-          await request.formData(),
-        );
+        const returnState = providerConnectionReturnFromFormData(await request.formData());
         const result = await input.authorization.begin(authority, returnState);
         return new Response(null, {
           status: 303,
@@ -171,10 +161,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           status: 303,
           headers: {
             ...noStoreHeaders,
-            Location: workspaceOnboardingRedirect(
-              origin,
-              "workspace-setup-retry",
-            ),
+            Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
           },
         });
       }
@@ -188,10 +175,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         });
 
       try {
-        const result = await input.authorization.complete(
-          request.url,
-          authority,
-        );
+        const result = await input.authorization.complete(request.url, authority);
         if (result.status === "redirect") {
           return new Response(null, {
             status: 303,
@@ -213,17 +197,14 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         return fail(
           "callback-invalid",
           githubInstallationAuthorizationDiagnostic(error),
-          error instanceof GitHubInstallationAuthorizationError
-            ? error.returnState
-            : undefined,
+          error instanceof GitHubInstallationAuthorizationError ? error.returnState : undefined,
         );
       }
     },
   };
 }
 
-let deploymentHandlers:
-  ReturnType<typeof createGitHubAppInstallationRouteHandlers> | undefined;
+let deploymentHandlers: ReturnType<typeof createGitHubAppInstallationRouteHandlers> | undefined;
 
 export function getGitHubAppInstallationDeploymentHandlers(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
@@ -233,8 +214,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const config = readGitHubAppInstallationEnvironment(resolvedEnvironment);
   const previewConfig = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
-  let credentialStore:
-    ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
+  let credentialStore: ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
   try {
     credentialStore = createPostgresGitHubUserCredentialStore({
       database,
@@ -248,8 +228,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const emulation = readProviderEmulation(resolvedEnvironment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
-    stateStore:
-      createPostgresGitHubInstallationAuthorizationStateStore(database),
+    stateStore: createPostgresGitHubInstallationAuthorizationStateStore(database),
     membership: {
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
@@ -257,14 +236,12 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? (resource, init) =>
-          providerEmulationFetch(resource as string | URL, init, emulation)
+      ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
   });
-  const repositoryAccessContinuations =
-    createRepositoryAccessContinuationService({
-      store: createPostgresRepositoryAccessContinuationStore(database),
-    });
+  const repositoryAccessContinuations = createRepositoryAccessContinuationService({
+    store: createPostgresRepositoryAccessContinuationStore(database),
+  });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,
     authorization,
@@ -299,9 +276,7 @@ export function createGitHubAppInstallationDeploymentHandler(
   return async (request: Request): Promise<Response> => {
     const startedAt = Date.now();
     try {
-      return await getGitHubAppInstallationDeploymentHandlers(environment)[
-        kind
-      ](request);
+      return await getGitHubAppInstallationDeploymentHandlers(environment)[kind](request);
     } catch {
       logProviderConnectionFailure({
         request,
@@ -314,8 +289,7 @@ export function createGitHubAppInstallationDeploymentHandler(
         status: 303,
         headers: {
           ...noStoreHeaders,
-          Location:
-            "/github/installations?status=failed&reason=configuration-unavailable",
+          Location: "/github/installations?status=failed&reason=configuration-unavailable",
         },
       });
     }

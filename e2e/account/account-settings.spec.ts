@@ -13,17 +13,13 @@ import {
 
 test.beforeEach(async () => resetApplicationState());
 
-test("stock account menu updates the profile and signs out", async ({
-  page,
-}) => {
+test("stock account menu updates the profile and signs out", async ({ page }) => {
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings\/account/u, { timeout: 15_000 });
-  await expect(
-    page.getByRole("heading", { name: "Account settings" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
 
   await page.getByLabel("Name", { exact: true }).fill("Autograph E2E User");
   await page.getByRole("button", { name: "Save changes" }).click();
@@ -41,10 +37,7 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
   page,
 }) => {
   test.setTimeout(60_000);
-  let authenticator: VirtualAuthenticator | undefined = await registerPasskey(
-    context,
-    page,
-  );
+  let authenticator: VirtualAuthenticator | undefined = await registerPasskey(context, page);
   try {
     await page.goto("/settings/account");
     await page.getByRole("button", { name: "Rename passkey" }).click();
@@ -62,39 +55,26 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
     await expect(page.getByText("Backup passkey")).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(2);
 
-    await page
-      .getByRole("button", { name: "Delete passkey Primary passkey" })
-      .click();
+    await page.getByRole("button", { name: "Delete passkey Primary passkey" }).click();
     const deleteDialog = page.getByRole("alertdialog");
     await deleteDialog.getByRole("button", { name: "Delete passkey" }).click();
     await expect(page.getByText("Primary passkey")).toHaveCount(0);
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
 
-    await page
-      .getByRole("button", { name: "Delete passkey Backup passkey" })
-      .click();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete passkey" })
-      .click();
-    await expect(
-      page.getByText("Add another passkey before deleting this one."),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Delete passkey Backup passkey" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete passkey" }).click();
+    await expect(page.getByText("Add another passkey before deleting this one.")).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
   } finally {
     if (!page.isClosed()) await authenticator?.dispose();
   }
 });
 
-test("ambiguous and revoked workspace authority show recovery surfaces", async ({
-  page,
-}) => {
+test("ambiguous and revoked workspace authority show recovery surfaces", async ({ page }) => {
   await finishOAuth(page, "GitHub");
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const [{ id: userId }] = await sql<
-      Array<{ id: string }>
-    >`SELECT id FROM "user"`;
+    const [{ id: userId }] = await sql<Array<{ id: string }>>`SELECT id FROM "user"`;
     await sql`
       INSERT INTO organization
         (id, name, slug, created_at, issuer, audience, workspace_id)

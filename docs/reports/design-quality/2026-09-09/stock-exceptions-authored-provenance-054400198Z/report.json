@@ -10641,11 +10641,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-93-color",
         "dimension": "styling",
@@ -11298,11 +11294,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-94-color",
         "dimension": "styling",
@@ -15602,10 +15594,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-45-color",
         "dimension": "styling",
@@ -17230,11 +17219,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-105-color",
         "dimension": "styling",
@@ -17887,11 +17872,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-106-color",
         "dimension": "styling",
@@ -18836,10 +18817,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-61-color",
         "dimension": "styling",
@@ -23661,11 +23639,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-117-color",
         "dimension": "styling",
@@ -24323,11 +24297,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-118-color",
         "dimension": "styling",
@@ -25910,11 +25880,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-81-color",
         "dimension": "styling",
@@ -26595,11 +26561,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-82-color",
         "dimension": "styling",
@@ -32716,10 +32678,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-138-color",
         "dimension": "styling",
@@ -33408,10 +33367,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-139-color",
         "dimension": "styling",
@@ -49832,11 +49788,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-93-color",
         "dimension": "styling",
@@ -50489,11 +50441,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-94-color",
         "dimension": "styling",
@@ -54793,10 +54741,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-45-color",
         "dimension": "styling",
@@ -56421,11 +56366,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-105-color",
         "dimension": "styling",
@@ -57078,11 +57019,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-106-color",
         "dimension": "styling",
@@ -58027,10 +57964,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-61-color",
         "dimension": "styling",
@@ -62852,11 +62786,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-117-color",
         "dimension": "styling",
@@ -63514,11 +63444,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-118-color",
         "dimension": "styling",
@@ -65101,11 +65027,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-81-color",
         "dimension": "styling",
@@ -65786,11 +65708,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-82-color",
         "dimension": "styling",
@@ -71907,10 +71825,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-138-color",
         "dimension": "styling",
@@ -72599,10 +72514,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-139-color",
         "dimension": "styling",
@@ -89023,11 +88935,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-93-color",
         "dimension": "styling",
@@ -89680,11 +89588,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-94-color",
         "dimension": "styling",
@@ -93984,10 +93888,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-45-color",
         "dimension": "styling",
@@ -95612,11 +95513,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-105-color",
         "dimension": "styling",
@@ -96269,11 +96166,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-106-color",
         "dimension": "styling",
@@ -97218,10 +97111,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-61-color",
         "dimension": "styling",
@@ -102043,11 +101933,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-117-color",
         "dimension": "styling",
@@ -102705,11 +102591,7 @@
         "category": "color",
         "computed": "rgb(235, 133, 38)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-warning)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-118-color",
         "dimension": "styling",
@@ -104292,11 +104174,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-81-color",
         "dimension": "styling",
@@ -104977,11 +104855,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "inherit",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-82-color",
         "dimension": "styling",
@@ -111098,10 +110972,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-138-color",
         "dimension": "styling",
@@ -111790,10 +111661,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-139-color",
         "dimension": "styling",
@@ -129278,11 +129146,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-123-color",
         "dimension": "styling",
@@ -129940,11 +129804,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-126-color",
         "dimension": "styling",
@@ -130628,11 +130488,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-124-color",
         "dimension": "styling",
@@ -136130,10 +135986,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-138-color",
         "dimension": "styling",
@@ -136833,10 +136686,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-139-color",
         "dimension": "styling",
@@ -141269,10 +141119,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-190-color",
         "dimension": "styling",
@@ -147626,11 +147473,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-custom-700x900-0-style-216-color",
         "dimension": "styling",
@@ -147981,11 +147824,7 @@
   "reference": {
     "name": "arrusted-shared-record-list-detail-20260908",
     "commit": "41d81d3d15007e3e13492cd4b62c38d409a2a8c5",
-    "publicModules": [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons"
-    ],
+    "publicModules": ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     "catalogAvailable": true
   },
   "captures": [
@@ -148159,9 +147998,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -156613,11 +156450,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-93-color",
             "dimension": "styling",
@@ -157270,11 +157103,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-94-color",
             "dimension": "styling",
@@ -161574,10 +161403,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-45-color",
             "dimension": "styling",
@@ -163202,11 +163028,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-105-color",
             "dimension": "styling",
@@ -163859,11 +163681,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-106-color",
             "dimension": "styling",
@@ -164808,10 +164626,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-61-color",
             "dimension": "styling",
@@ -169633,11 +169448,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-117-color",
             "dimension": "styling",
@@ -170295,11 +170106,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-118-color",
             "dimension": "styling",
@@ -171882,11 +171689,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-81-color",
             "dimension": "styling",
@@ -172567,11 +172370,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-82-color",
             "dimension": "styling",
@@ -178688,10 +178487,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-138-color",
             "dimension": "styling",
@@ -179380,10 +179176,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-139-color",
             "dimension": "styling",
@@ -187814,9 +187607,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -188024,9 +187815,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -188210,9 +187999,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -196664,11 +196451,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-93-color",
             "dimension": "styling",
@@ -197321,11 +197104,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-94-color",
             "dimension": "styling",
@@ -201625,10 +201404,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-45-color",
             "dimension": "styling",
@@ -203253,11 +203029,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-105-color",
             "dimension": "styling",
@@ -203910,11 +203682,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-106-color",
             "dimension": "styling",
@@ -204859,10 +204627,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-61-color",
             "dimension": "styling",
@@ -209684,11 +209449,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-117-color",
             "dimension": "styling",
@@ -210346,11 +210107,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-118-color",
             "dimension": "styling",
@@ -211933,11 +211690,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-81-color",
             "dimension": "styling",
@@ -212618,11 +212371,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-82-color",
             "dimension": "styling",
@@ -218739,10 +218488,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-138-color",
             "dimension": "styling",
@@ -219431,10 +219177,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-139-color",
             "dimension": "styling",
@@ -227865,9 +227608,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -228075,9 +227816,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -228261,9 +228000,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -236715,11 +236452,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-93-color",
             "dimension": "styling",
@@ -237372,11 +237105,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-94-color",
             "dimension": "styling",
@@ -241676,10 +241405,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-45-color",
             "dimension": "styling",
@@ -243304,11 +243030,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-105-color",
             "dimension": "styling",
@@ -243961,11 +243683,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-106-color",
             "dimension": "styling",
@@ -244910,10 +244628,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-61-color",
             "dimension": "styling",
@@ -249735,11 +249450,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-117-color",
             "dimension": "styling",
@@ -250397,11 +250108,7 @@
             "category": "color",
             "computed": "rgb(235, 133, 38)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-warning)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-warning)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-118-color",
             "dimension": "styling",
@@ -251984,11 +251691,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-81-color",
             "dimension": "styling",
@@ -252669,11 +252372,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "inherit",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "inherit", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-82-color",
             "dimension": "styling",
@@ -258790,10 +258489,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-138-color",
             "dimension": "styling",
@@ -259482,10 +259178,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-139-color",
             "dimension": "styling",
@@ -267916,9 +267609,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -268126,9 +267817,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -268236,9 +267925,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -277754,11 +277441,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-123-color",
             "dimension": "styling",
@@ -278416,11 +278099,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-126-color",
             "dimension": "styling",
@@ -279104,11 +278783,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-124-color",
             "dimension": "styling",
@@ -284606,10 +284281,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-138-color",
             "dimension": "styling",
@@ -285309,10 +284981,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-139-color",
             "dimension": "styling",
@@ -289745,10 +289414,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-190-color",
             "dimension": "styling",
@@ -296102,11 +295768,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-custom-700x900-0-style-216-color",
             "dimension": "styling",
@@ -296643,9 +296305,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -296777,9 +296437,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]

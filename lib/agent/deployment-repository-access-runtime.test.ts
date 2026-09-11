@@ -185,10 +185,7 @@ describe("deployment repository access authorization", () => {
     const runtime = createRepositoryAccessRuntime({
       authority,
       origin: "https://builder.example",
-      installations: installationStore([
-        installation,
-        { ...installation, installationId: "11" },
-      ]),
+      installations: installationStore([installation, { ...installation, installationId: "11" }]),
       providerFactory,
       continuations: runtimeFixture().continuations,
       preparedIntent,
@@ -208,12 +205,8 @@ describe("deployment repository access authorization", () => {
       sessionId: "ses_one",
       requestId: "call_one",
     });
-    expect(
-      await authorization.getToken({ principal, connection }),
-    ).toHaveProperty("token");
-    providerFactory.mockImplementation(
-      mutableProvider({ repositoryAvailable: () => false }),
-    );
+    expect(await authorization.getToken({ principal, connection })).toHaveProperty("token");
+    providerFactory.mockImplementation(mutableProvider({ repositoryAvailable: () => false }));
     const started = await authorization.startAuthorization({
       principal,
       connection,
@@ -230,26 +223,23 @@ describe("deployment repository access authorization", () => {
     [401, {}, "provider-unavailable"],
     [503, {}, "provider-unavailable"],
     [403, { "x-ratelimit-remaining": "0" }, "provider-unavailable"],
-  ])(
-    "classifies installation HTTP %s with headers %j as %s",
-    async (status, headers, expected) => {
-      const runtime = createRepositoryAccessRuntime({
-        authority,
-        origin: "https://builder.example",
-        installations: installationStore([installation]),
-        continuations: runtimeFixture().continuations,
-        providerFactory: () => ({
-          inspectInstallation: async () => {
-            throw { status, response: { headers } };
-          },
-          inspectRepositoryByName: async () => undefined,
-        }),
-      });
-      expect(
-        await runtime.classify({ repository, selectedInstallationId: "10" }),
-      ).toMatchObject({ status: expected });
-    },
-  );
+  ])("classifies installation HTTP %s with headers %j as %s", async (status, headers, expected) => {
+    const runtime = createRepositoryAccessRuntime({
+      authority,
+      origin: "https://builder.example",
+      installations: installationStore([installation]),
+      continuations: runtimeFixture().continuations,
+      providerFactory: () => ({
+        inspectInstallation: async () => {
+          throw { status, response: { headers } };
+        },
+        inspectRepositoryByName: async () => undefined,
+      }),
+    });
+    expect(await runtime.classify({ repository, selectedInstallationId: "10" })).toMatchObject({
+      status: expected,
+    });
+  });
 
   it("emits the closed Store In presentation while retaining server authority", async () => {
     const fixture = runtimeFixture({ bindings: [] });
@@ -281,9 +271,7 @@ describe("deployment repository access authorization", () => {
     });
     expect(started.challenge).not.toHaveProperty("version");
     expect(started.challenge.url).toContain("/github/installations?");
-    expect(JSON.stringify(fixture.continuationStore.records)).not.toContain(
-      continuationId,
-    );
+    expect(JSON.stringify(fixture.continuationStore.records)).not.toContain(continuationId);
   });
 
   it("keeps a missing-repository callback retryable and consumes only provider-proven access", async () => {
@@ -322,9 +310,7 @@ describe("deployment repository access authorization", () => {
     await expect(complete()).resolves.toEqual({
       token: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
-    expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(
-      Date,
-    );
+    expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(Date);
   });
 
   it("re-reads access before Check access wakes a parked Eve callback", async () => {
@@ -341,10 +327,7 @@ describe("deployment repository access authorization", () => {
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const fetchImplementation = vi.fn(
-      async (
-        resource: Parameters<typeof fetch>[0],
-        init?: Parameters<typeof fetch>[1],
-      ) => {
+      async (resource: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         void resource;
         void init;
         return new Response(null, { status: 204 });

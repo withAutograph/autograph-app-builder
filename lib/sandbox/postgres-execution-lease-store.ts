@@ -3,10 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as databaseSchema from "../db/schema";
 import { sandboxExecutionLeases } from "../db/schema";
-import {
-  hostedPrincipalSchema,
-  type HostedPrincipal,
-} from "../eve/hosted-auth";
+import { hostedPrincipalSchema, type HostedPrincipal } from "../eve/hosted-auth";
 import {
   sandboxExecutionLeaseSchema,
   type AcquireSandboxLeaseResult,
@@ -19,14 +16,11 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 async function postgresNowEpochMs(database: Transaction) {
-  const rows = await database.execute(
-    sql`select clock_timestamp() as "database_now"`,
-  );
+  const rows = await database.execute(sql`select clock_timestamp() as "database_now"`);
   const result = rows as unknown as
     | readonly [{ database_now: Date | string }]
     | { rows: readonly [{ database_now: Date | string }] };
-  const value =
-    "rows" in result ? result.rows[0]?.database_now : result[0]?.database_now;
+  const value = "rows" in result ? result.rows[0]?.database_now : result[0]?.database_now;
   const parsed = value instanceof Date ? value : new Date(value ?? "invalid");
   if (!Number.isFinite(parsed.getTime())) {
     throw new Error("PostgreSQL did not return a canonical lease timestamp.");
@@ -34,10 +28,7 @@ async function postgresNowEpochMs(database: Transaction) {
   return parsed.getTime();
 }
 
-function tenantPredicate(
-  principal: HostedPrincipal,
-  adapterSessionId?: string,
-) {
+function tenantPredicate(principal: HostedPrincipal, adapterSessionId?: string) {
   return and(
     eq(sandboxExecutionLeases.issuer, principal.issuer),
     eq(sandboxExecutionLeases.audience, principal.audience),
@@ -64,10 +55,7 @@ function leaseValues(lease: SandboxExecutionLease) {
     acquiredAt: new Date(lease.acquiredAtEpochMs),
     heartbeatAt: new Date(lease.heartbeatAtEpochMs),
     expiresAt: new Date(lease.expiresAtEpochMs),
-    releasedAt:
-      lease.releasedAtEpochMs === undefined
-        ? null
-        : new Date(lease.releasedAtEpochMs),
+    releasedAt: lease.releasedAtEpochMs === undefined ? null : new Date(lease.releasedAtEpochMs),
   };
 }
 
@@ -100,9 +88,7 @@ async function lockExactLease(
   adapterSessionId: string,
 ) {
   const key = sandboxLeaseAdvisoryKey(principal, adapterSessionId);
-  await database.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
-  );
+  await database.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
 }
 
 async function exactLease(
@@ -130,23 +116,13 @@ export function createPostgresSandboxExecutionLeaseStore(
       return database.transaction(async (transaction) => {
         await lockExactLease(transaction, principal, input.adapterSessionId);
         const nowEpochMs = await postgresNowEpochMs(transaction);
-        const existing = await exactLease(
-          transaction,
-          principal,
-          input.adapterSessionId,
-          true,
-        );
-        if (
-          existing?.state === "active" &&
-          existing.expiresAtEpochMs > nowEpochMs
-        ) {
+        const existing = await exactLease(transaction, principal, input.adapterSessionId, true);
+        if (existing?.state === "active" && existing.expiresAtEpochMs > nowEpochMs) {
           if (
             existing.providerSandboxId !== input.providerSandboxId ||
             existing.policyDigest !== policyDigest
           ) {
-            throw new Error(
-              "An active sandbox lease is bound to different inputs.",
-            );
+            throw new Error("An active sandbox lease is bound to different inputs.");
           }
           return { disposition: "existing", lease: existing };
         }
@@ -173,17 +149,13 @@ export function createPostgresSandboxExecutionLeaseStore(
         const values = leaseValues(lease);
         const rows =
           existing === null
-            ? await transaction
-                .insert(sandboxExecutionLeases)
-                .values(values)
-                .returning()
+            ? await transaction.insert(sandboxExecutionLeases).values(values).returning()
             : await transaction
                 .update(sandboxExecutionLeases)
                 .set(values)
                 .where(tenantPredicate(principal, input.adapterSessionId))
                 .returning();
-        if (rows.length !== 1)
-          throw new Error("Sandbox execution lease was not durable.");
+        if (rows.length !== 1) throw new Error("Sandbox execution lease was not durable.");
         return {
           disposition: "acquired",
           lease: parseSandboxExecutionLeaseRow(rows[0]),
@@ -194,11 +166,7 @@ export function createPostgresSandboxExecutionLeaseStore(
     async assertCurrent(input) {
       return database.transaction(async (transaction) => {
         const nowEpochMs = await postgresNowEpochMs(transaction);
-        const lease = await exactLease(
-          transaction,
-          input.principal,
-          input.adapterSessionId,
-        );
+        const lease = await exactLease(transaction, input.principal, input.adapterSessionId);
         if (
           lease === null ||
           lease.state !== "active" ||
@@ -207,9 +175,7 @@ export function createPostgresSandboxExecutionLeaseStore(
           lease.providerSandboxId !== input.providerSandboxId ||
           lease.policyDigest !== input.policyDigest
         ) {
-          throw new Error(
-            "The sandbox execution lease is stale or unavailable.",
-          );
+          throw new Error("The sandbox execution lease is stale or unavailable.");
         }
         return lease;
       });
@@ -230,24 +196,19 @@ export function createPostgresSandboxExecutionLeaseStore(
           current.epoch !== input.epoch ||
           current.expiresAtEpochMs <= nowEpochMs
         ) {
-          throw new Error(
-            "The sandbox execution lease is stale or unavailable.",
-          );
+          throw new Error("The sandbox execution lease is stale or unavailable.");
         }
         const lease = sandboxExecutionLeaseSchema.parse({
           ...current,
           heartbeatAtEpochMs: nowEpochMs,
-          expiresAtEpochMs:
-            nowEpochMs +
-            (current.expiresAtEpochMs - current.heartbeatAtEpochMs),
+          expiresAtEpochMs: nowEpochMs + (current.expiresAtEpochMs - current.heartbeatAtEpochMs),
         });
         const rows = await transaction
           .update(sandboxExecutionLeases)
           .set(leaseValues(lease))
           .where(tenantPredicate(input.principal, input.adapterSessionId))
           .returning();
-        if (rows.length !== 1)
-          throw new Error("Lease heartbeat was not durable.");
+        if (rows.length !== 1) throw new Error("Lease heartbeat was not durable.");
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -281,8 +242,7 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1)
-          throw new Error("Lease release was not durable.");
+        if (rows.length !== 1) throw new Error("Lease release was not durable.");
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -321,8 +281,7 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1)
-          throw new Error("Lease release was not durable.");
+        if (rows.length !== 1) throw new Error("Lease release was not durable.");
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -348,8 +307,7 @@ export function createPostgresSandboxExecutionLeaseStore(
           const lease = sandboxExecutionLeaseSchema.parse({
             ...current,
             state: "orphaned",
-            epoch:
-              current.state === "orphaned" ? current.epoch + 1 : current.epoch,
+            epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
           });
           const updated = await transaction
             .update(sandboxExecutionLeases)
@@ -362,8 +320,7 @@ export function createPostgresSandboxExecutionLeaseStore(
               ),
             )
             .returning();
-          if (updated.length === 1)
-            claimed.push(parseSandboxExecutionLeaseRow(updated[0]));
+          if (updated.length === 1) claimed.push(parseSandboxExecutionLeaseRow(updated[0]));
         }
         return claimed;
       });
@@ -378,11 +335,7 @@ export function createPostgresSandboxExecutionLeaseStore(
           input.lease.adapterSessionId,
           true,
         );
-        if (
-          current === null ||
-          current.state !== "orphaned" ||
-          current.epoch !== input.lease.epoch
-        )
+        if (current === null || current.state !== "orphaned" || current.epoch !== input.lease.epoch)
           return null;
         if (input.providerOutcome === "stop-failed") return current;
         const lease = sandboxExecutionLeaseSchema.parse({
@@ -402,18 +355,14 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1)
-          throw new Error("Orphan recovery settlement was not durable.");
+        if (rows.length !== 1) throw new Error("Orphan recovery settlement was not durable.");
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
   };
 }
 
-export function sandboxLeaseAdvisoryKey(
-  principal: HostedPrincipal,
-  adapterSessionId: string,
-) {
+export function sandboxLeaseAdvisoryKey(principal: HostedPrincipal, adapterSessionId: string) {
   return JSON.stringify([
     "sandbox_execution_lease_v1",
     "session",

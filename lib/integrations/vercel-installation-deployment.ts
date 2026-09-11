@@ -21,10 +21,7 @@ import {
   VercelInstallationAuthorizationError,
   verifyVercelWebhook,
 } from "./vercel-installation";
-import {
-  providerEmulationEnvironment,
-  readProviderEmulation,
-} from "./local-provider-emulation";
+import { providerEmulationEnvironment, readProviderEmulation } from "./local-provider-emulation";
 import { providerEmulationFetch } from "./provider-emulation-fetch";
 import {
   signInForWorkspaceRedirect,
@@ -36,9 +33,7 @@ const noStoreHeaders = {
   "Referrer-Policy": "no-referrer",
 } as const;
 
-function deployment(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-) {
+function deployment(environment: NodeJS.ProcessEnv | Record<string, string | undefined>) {
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const preview = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
   const config = readVercelIntegrationEnvironment(resolvedEnvironment);
@@ -79,8 +74,7 @@ function deployment(
       },
       emulation,
       fetch: emulation
-        ? (resource, init) =>
-            providerEmulationFetch(resource as string | URL, init, emulation)
+        ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
         : undefined,
     }),
   };
@@ -93,7 +87,7 @@ export function createVercelInstallationDeploymentHandler(
   return async (request: Request) => {
     const startedAt = Date.now();
     const resolvedEnvironment = providerEmulationEnvironment(environment);
-    const {origin} = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url);
+    const { origin } = new URL(resolvedEnvironment.APP_ORIGIN ?? request.url);
     const redirect = (
       status: "connected" | "failed",
       reason?: ProviderConnectionFailureReason,
@@ -152,10 +146,7 @@ export function createVercelInstallationDeploymentHandler(
         status: 303,
         headers: {
           ...noStoreHeaders,
-          Location: workspaceOnboardingRedirect(
-            origin,
-            "workspace-setup-retry",
-          ),
+          Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
         },
       });
     }
@@ -170,9 +161,7 @@ export function createVercelInstallationDeploymentHandler(
 
     try {
       if (kind === "start") {
-        const returnState = providerConnectionReturnFromFormData(
-          await request.formData(),
-        );
+        const returnState = providerConnectionReturnFromFormData(await request.formData());
         return new Response(null, {
           status: 303,
           headers: {
@@ -181,10 +170,7 @@ export function createVercelInstallationDeploymentHandler(
           },
         });
       }
-      const result = await runtime.authorization.complete(
-        request.url,
-        authority,
-      );
+      const result = await runtime.authorization.complete(request.url, authority);
       return redirect("connected", undefined, result.returnState);
     } catch (error) {
       if (kind === "callback") {
@@ -206,9 +192,7 @@ export function createVercelInstallationDeploymentHandler(
       }
       return fail(
         kind === "callback" ? "callback-invalid" : "authorization-failed",
-        error instanceof VercelInstallationAuthorizationError
-          ? error.returnState
-          : undefined,
+        error instanceof VercelInstallationAuthorizationError ? error.returnState : undefined,
       );
     }
   };
@@ -246,8 +230,7 @@ export function createVercelWebhookDeploymentHandler(
         return new Response("Invalid signature", { status: 401 });
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
-        const id =
-          event.payload.configuration?.id ?? event.payload.configurationId;
+        const id = event.payload.configuration?.id ?? event.payload.configurationId;
         if (!id) return new Response("Invalid event", { status: 400 });
         await runtime.installations.deactivate(id, new Date());
       }

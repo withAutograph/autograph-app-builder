@@ -3,10 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
-import {
-  createSameOriginEveTransport,
-  type HostedWorkloadIdentity,
-} from "./same-origin-http";
+import { createSameOriginEveTransport, type HostedWorkloadIdentity } from "./same-origin-http";
 import {
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
@@ -42,19 +39,16 @@ function stream(
     },
   ],
 ) {
-  return new Response(
-    `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
-    {
-      status: 200,
-      headers: {
-        "content-type": "application/x-ndjson; charset=utf-8",
-        "x-eve-session-id": "wrun_1",
-        "x-eve-stream-format": "ndjson",
-        "x-eve-stream-tail-index": String(events.length - 1),
-        "x-eve-stream-version": "23",
-      },
+  return new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
+    status: 200,
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "x-eve-session-id": "wrun_1",
+      "x-eve-stream-format": "ndjson",
+      "x-eve-stream-tail-index": String(events.length - 1),
+      "x-eve-stream-version": "23",
     },
-  );
+  });
 }
 
 function pendingApprovalEvents(requestId: string) {
@@ -94,8 +88,7 @@ function plannedEvents() {
       content: "export default function Page() { return 'Ready'; }\n",
     },
   ];
-  const hash = (value: string) =>
-    createHash("sha256").update(value).digest("hex");
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   const target = {
     contract: {
       version: 1,
@@ -248,10 +241,7 @@ describe("same-origin canonical Eve transport", () => {
     }
   });
   it("carries a verified target plan without projecting raw planning output", async () => {
-    const events = [
-      ...plannedEvents(),
-      { type: "session.completed", data: {} },
-    ];
+    const events = [...plannedEvents(), { type: "session.completed", data: {} }];
     const transport = createSameOriginEveTransport({
       config,
       workloadIdentity: identity(),
@@ -271,14 +261,11 @@ describe("same-origin canonical Eve transport", () => {
       readOnly: true,
     });
     expect(JSON.stringify(snapshot.events)).not.toContain("proposalDigest");
-    expect(snapshot.events).toEqual([
-      { index: 0, status: "completed", type: "status" },
-    ]);
+    expect(snapshot.events).toEqual([{ index: 0, status: "completed", type: "status" }]);
   });
 
   it("carries verified prototype HTML without projecting raw action events", async () => {
-    const content =
-      "<!doctype html><html><body><button>Approve vendor</button></body></html>";
+    const content = "<!doctype html><html><body><button>Approve vendor</button></body></html>";
     const path = "prototype/vendor-onboarding/index.html";
     const mediaType = "text/html";
     const digest = createHash("sha256").update(content).digest("hex");
@@ -341,9 +328,7 @@ describe("same-origin canonical Eve transport", () => {
       revision,
     });
     expect(JSON.stringify(snapshot.events)).not.toContain(content);
-    expect(snapshot.events).toEqual([
-      { index: 0, status: "completed", type: "status" },
-    ]);
+    expect(snapshot.events).toEqual([{ index: 0, status: "completed", type: "status" }]);
   });
 
   it("uses fresh project OIDC and canonical create/stream routes", async () => {
@@ -352,9 +337,7 @@ describe("same-origin canonical Eve transport", () => {
       const headers = new Headers(init?.headers);
       expect(init?.redirect).toBe("manual");
       expect(headers.get("authorization")).toBe("Bearer project-oidc-token");
-      expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe(
-        "project-oidc-token",
-      );
+      expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("project-oidc-token");
       if (String(url).includes("/stream?")) return stream();
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
@@ -547,10 +530,7 @@ describe("same-origin canonical Eve transport", () => {
     ];
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
-        ? Response.json(
-            { ok: true, sessionId: "wrun_1", status: "accepted" },
-            { status: 202 },
-          )
+        ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
         : stream(historical),
     );
     await expect(
@@ -748,9 +728,9 @@ describe("same-origin canonical Eve transport", () => {
           }),
       ),
     });
-    await expect(
-      transport.get({ principal, adapterSessionId: "wrun_1" }),
-    ).rejects.toThrow("invalid durable stream tail");
+    await expect(transport.get({ principal, adapterSessionId: "wrun_1" })).rejects.toThrow(
+      "invalid durable stream tail",
+    );
   });
 
   it("rejects a stream that is not bound to the pinned Eve 0.43 protocol", async () => {

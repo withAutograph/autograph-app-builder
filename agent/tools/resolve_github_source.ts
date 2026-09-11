@@ -5,10 +5,7 @@ import { z } from "zod";
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
 import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
-import {
-  APP_BUILDER_SOURCE_VERSION,
-  sourceWorkflowState,
-} from "@/lib/agent/source-state";
+import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -53,17 +50,14 @@ export default defineTool({
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.
       sandbox: () => ctx.getSandbox(),
-      ...(initialSource.phase === "empty" ||
-      initialSource.githubSource === undefined
+      ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
         ? {}
         : { currentGitHubSource: initialSource.githubSource }),
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
     repositoryAccessReceiptState.update((current) => {
       if (current?.digest !== access.receipt.digest)
-        throw new Error(
-          "Repository access changed concurrently during source preparation.",
-        );
+        throw new Error("Repository access changed concurrently during source preparation.");
       return prepared.accessReceipt;
     });
     sourceWorkflowState.update((current) => {
@@ -76,9 +70,7 @@ export default defineTool({
           current.receipt.digest !== prepared.sourceReceipt.digest ||
           current.githubSource?.digest !== prepared.githubSource.digest
         )
-          throw new Error(
-            "This app build already owns a different GitHub source binding.",
-          );
+          throw new Error("This app build already owns a different GitHub source binding.");
         return current;
       }
       return {
@@ -89,21 +81,14 @@ export default defineTool({
       };
     });
     appBuilderWorkflowState.update((current) => {
-      assertExactWorkflowState(
-        current,
-        initialWorkflow,
-        "GitHub source preparation",
-      );
+      assertExactWorkflowState(current, initialWorkflow, "GitHub source preparation");
       if (current.phase !== "empty") {
         if (
-          workflowWorkspace(current)?.workspaceDigest !==
-            prepared.workspace.workspaceDigest ||
+          workflowWorkspace(current)?.workspaceDigest !== prepared.workspace.workspaceDigest ||
           current.sourceReceipt.digest !== prepared.sourceReceipt.digest ||
           current.githubSource?.digest !== prepared.githubSource.digest
         )
-          throw new Error(
-            "This app build already owns a different GitHub source binding.",
-          );
+          throw new Error("This app build already owns a different GitHub source binding.");
         return current;
       }
       return {

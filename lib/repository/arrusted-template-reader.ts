@@ -25,7 +25,7 @@ export type ArrustedTemplateReaderConfig = {
 export type ArrustedTemplateReader = {
   acquire: () => Promise<{
     token: string;
-}>;
+  }>;
 };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -55,11 +55,7 @@ function readOnlyReaderPermissions(value: unknown) {
 }
 
 function exactTemplateRepositoryIds(value: unknown) {
-  return (
-    Array.isArray(value) &&
-    value.length === 1 &&
-    value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID
-  );
+  return Array.isArray(value) && value.length === 1 && value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
 }
 
 type TemplateReaderFailureStage =
@@ -107,9 +103,7 @@ export function createArrustedTemplateReader(input: {
   config: ArrustedTemplateReaderConfig;
   fetch?: typeof fetch;
 }): ArrustedTemplateReader {
-  const installation = installationIdSchema.safeParse(
-    input.config.installationId,
-  );
+  const installation = installationIdSchema.safeParse(input.config.installationId);
   if (!installation.success) unavailable();
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: input.config.appId,

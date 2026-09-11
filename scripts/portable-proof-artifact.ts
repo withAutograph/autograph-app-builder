@@ -28,18 +28,14 @@ export const portableReleaseReceiptSchema = z
     version: z.literal("0.2.12"),
     source: z
       .object({
-        repository: z.literal(
-          "https://github.com/withAutograph/autograph-app-builder",
-        ),
+        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
         sha: sourceHash,
         tree: sourceHash,
       })
       .strict(),
     endpoint: z.string().url().startsWith("https://"),
     archive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
-    codexMarketplaceArchive: z
-      .object({ name: z.string().min(1), sha256: hash })
-      .strict(),
+    codexMarketplaceArchive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
     codexMarketplaceAssets: digestRecord,
     coreFiles: digestRecord,
     auxiliaryFiles: digestRecord,
@@ -53,18 +49,14 @@ export const portableReleaseReceiptSchema = z
   })
   .strict();
 
-export type PortableReleaseReceipt = z.infer<
-  typeof portableReleaseReceiptSchema
->;
+export type PortableReleaseReceipt = z.infer<typeof portableReleaseReceiptSchema>;
 
 function safeRelative(path: string) {
   return (
     path !== "" &&
     !path.startsWith("/") &&
     !path.includes("\\") &&
-    path
-      .split("/")
-      .every((part) => part !== "" && part !== "." && part !== "..")
+    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
   );
 }
 
@@ -80,11 +72,7 @@ export function archiveFiles(archive: Uint8Array) {
       break;
     }
     const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "");
-    const sizeText = header
-      .subarray(124, 136)
-      .toString("ascii")
-      .replace(/\0.*$/u, "")
-      .trim();
+    const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
     const size = Number.parseInt(sizeText, 8);
     const [type] = header.slice(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0)
@@ -140,9 +128,7 @@ export async function verifyPortableProofArtifact(input: {
   const repositoryRoot = await realpath(resolve(input.repositoryRoot));
   const receiptPath = join(releaseRoot, "release-receipt.json");
   const receiptBytes = await regularFile(receiptPath);
-  const receipt = portableReleaseReceiptSchema.parse(
-    JSON.parse(receiptBytes.toString("utf8")),
-  );
+  const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf8")));
   const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
   if (receipt.endpoint !== `${origin}/mcp`)
     throw new Error("Release endpoint must bind the exact /mcp resource.");
@@ -150,18 +136,9 @@ export async function verifyPortableProofArtifact(input: {
     receipt.source.sha !== git(repositoryRoot, "rev-parse", "HEAD") ||
     receipt.source.tree !== git(repositoryRoot, "rev-parse", "HEAD^{tree}")
   )
-    throw new Error(
-      "Release source SHA/tree did not match the proof checkout.",
-    );
-  if (
-    !hasCanonicalFetchRemote(
-      git(repositoryRoot, "remote", "-v"),
-      receipt.source.repository,
-    )
-  )
-    throw new Error(
-      "Release source repository was not a configured fetch remote.",
-    );
+    throw new Error("Release source SHA/tree did not match the proof checkout.");
+  if (!hasCanonicalFetchRemote(git(repositoryRoot, "remote", "-v"), receipt.source.repository))
+    throw new Error("Release source repository was not a configured fetch remote.");
   const archiveName = `${receipt.name}-${receipt.version}.tar.gz`;
   if (
     receipt.archive.name !== archiveName ||
@@ -183,33 +160,27 @@ export async function verifyPortableProofArtifact(input: {
   const marketplaceArchiveName = `${receipt.name}-codex-marketplace-${receipt.version}.tar.gz`;
   if (
     receipt.codexMarketplaceArchive.name !== marketplaceArchiveName ||
-    basename(receipt.codexMarketplaceArchive.name) !==
-      receipt.codexMarketplaceArchive.name
+    basename(receipt.codexMarketplaceArchive.name) !== receipt.codexMarketplaceArchive.name
   )
     throw new Error("Codex marketplace archive basename was invalid.");
   const marketplaceArchive = await regularFile(
     join(releaseRoot, receipt.codexMarketplaceArchive.name),
   );
   if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
-    throw new Error(
-      "Codex marketplace archive digest did not match its receipt.",
-    );
+    throw new Error("Codex marketplace archive digest did not match its receipt.");
   const marketplaceFiles = archiveFiles(marketplaceArchive);
   const marketplacePrefix = `plugins/${receipt.name}/`;
   for (const path of archived.keys()) {
     const relativePath = relative(receipt.name, path);
     if (!marketplaceFiles.has(`${marketplacePrefix}${relativePath}`))
-      throw new Error(
-        `Codex marketplace omitted portable core file ${relativePath}.`,
-      );
+      throw new Error(`Codex marketplace omitted portable core file ${relativePath}.`);
   }
   for (const required of [
     ".agents/plugins/marketplace.json",
     `${marketplacePrefix}.codex-plugin/plugin.json`,
     `${marketplacePrefix}.mcp.json`,
   ])
-    if (!marketplaceFiles.has(required))
-      throw new Error(`Codex marketplace omitted ${required}.`);
+    if (!marketplaceFiles.has(required)) throw new Error(`Codex marketplace omitted ${required}.`);
   const marketplaceAdapterPath = `${marketplacePrefix}.mcp.json`;
   const marketplaceAdapter = JSON.parse(
     Buffer.from(marketplaceFiles.get(marketplaceAdapterPath)!).toString("utf8"),
@@ -226,9 +197,7 @@ export async function verifyPortableProofArtifact(input: {
       },
     })
   )
-    throw new Error(
-      "Codex marketplace adapter must declare exactly one /mcp server.",
-    );
+    throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
   const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
   const codexManifest = JSON.parse(
     Buffer.from(marketplaceFiles.get(codexManifestPath)!).toString("utf8"),
@@ -251,15 +220,10 @@ export async function verifyPortableProofArtifact(input: {
       !reference.startsWith("./") ||
       !safeRelative(reference.slice(2))
     )
-      throw new Error(
-        "Codex marketplace manifest asset reference was not a safe relative path.",
-      );
+      throw new Error("Codex marketplace manifest asset reference was not a safe relative path.");
     const path = `${marketplacePrefix}${reference.slice(2)}`;
     const content = marketplaceFiles.get(path);
-    if (!content)
-      throw new Error(
-        `Codex marketplace omitted referenced asset ${reference}.`,
-      );
+    if (!content) throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
     codexMarketplaceAssetPaths.push(path);
     const sourceDigest = sha256(
       readTrackedTreeBlob({
@@ -268,10 +232,7 @@ export async function verifyPortableProofArtifact(input: {
         path: reference.slice(2),
       }).bytes,
     );
-    if (
-      receipt.codexMarketplaceAssets[path] !== sourceDigest ||
-      sha256(content) !== sourceDigest
-    )
+    if (receipt.codexMarketplaceAssets[path] !== sourceDigest || sha256(content) !== sourceDigest)
       throw new Error(
         `Codex marketplace referenced asset did not match immutable source bytes at ${reference}.`,
       );
@@ -309,10 +270,7 @@ export async function verifyPortableProofArtifact(input: {
       const relativePath = relative(receipt.name, path);
       if (relativePath.startsWith(`..${sep}`) || relativePath === "..")
         throw new Error("Core receipt path escaped the plugin root.");
-      if (
-        sha256(await regularFile(join(installedRoot, relativePath))) !==
-        expectedDigest
-      )
+      if (sha256(await regularFile(join(installedRoot, relativePath))) !== expectedDigest)
         throw new Error(`${client} installed core drifted at ${relativePath}.`);
     }
     const harness = z
@@ -329,19 +287,13 @@ export async function verifyPortableProofArtifact(input: {
           .strict(),
         oauth: z
           .object({
-            protectedResourceMetadata: z.literal(
-              `${origin}/.well-known/oauth-protected-resource`,
-            ),
+            protectedResourceMetadata: z.literal(`${origin}/.well-known/oauth-protected-resource`),
           })
           .strict(),
       })
       .strict()
       .parse(
-        JSON.parse(
-          (await regularFile(join(clientRoot, "client-harness.json"))).toString(
-            "utf8",
-          ),
-        ),
+        JSON.parse((await regularFile(join(clientRoot, "client-harness.json"))).toString("utf8")),
       );
     if (harness.client !== client) throw new Error("Client adapter drifted.");
     const installation = z
@@ -359,13 +311,10 @@ export async function verifyPortableProofArtifact(input: {
       .strict()
       .parse(
         JSON.parse(
-          (
-            await regularFile(join(clientRoot, "installation-receipt.json"))
-          ).toString("utf8"),
+          (await regularFile(join(clientRoot, "installation-receipt.json"))).toString("utf8"),
         ),
       );
-    if (installation.client !== client)
-      throw new Error("Installed client receipt drifted.");
+    if (installation.client !== client) throw new Error("Installed client receipt drifted.");
   }
   if (JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES))
     throw new Error("Release did not bind the exact five Autograph tools.");

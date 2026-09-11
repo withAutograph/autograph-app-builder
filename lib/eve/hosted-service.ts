@@ -33,10 +33,7 @@ import {
   toPublicEvent,
   type InternalEveEvent,
 } from "./public-events";
-import {
-  projectHostedSnapshot,
-  type HostedEngineSnapshot,
-} from "./hosted-projection";
+import { projectHostedSnapshot, type HostedEngineSnapshot } from "./hosted-projection";
 import {
   eveSessionResultSchema,
   publicInputRequestSchema,
@@ -81,44 +78,47 @@ export interface HostedEveTransport {
     operationId: string;
     prompt: string;
     sourceHandoffId?: string;
-}) => Promise<{
+  }) => Promise<{
     adapterSessionId: string;
     snapshot: HostedEngineSnapshot;
-}>;
+  }>;
   get: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
-}) => Promise<HostedEngineSnapshot>;
+  }) => Promise<HostedEngineSnapshot>;
   send: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     message: string;
     sourceHandoffId?: string;
-}) => Promise<HostedEngineSnapshot>;
+  }) => Promise<HostedEngineSnapshot>;
   respond: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     responses: Array<{
-        requestId: string;
-        response: {
+      requestId: string;
+      response:
+        | {
             kind: "approve";
-        } | {
+          }
+        | {
             kind: "deny";
-        } | {
+          }
+        | {
             kind: "answer";
             value: string;
             optionId?: string;
-        };
+          };
     }>;
     sourceHandoffId?: string;
-}) => Promise<HostedEngineSnapshot>;
+  }) => Promise<HostedEngineSnapshot>;
   cancel: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     turnId?: string;
-}) => Promise<HostedEngineSnapshot>;
+  }) => Promise<HostedEngineSnapshot>;
 }
 
 function assertNever(value: never): never {
@@ -131,9 +131,7 @@ function titleFromPrompt(prompt: string): string {
   return firstLine.slice(0, 200) || "Untitled app";
 }
 
-function stageForResult(
-  result: EveSessionResult,
-): z.infer<typeof publicSessionStageSchema> {
+function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionStageSchema> {
   if (result.status === "completed") return "complete";
   if (["failed", "cancelled"].includes(result.status)) return "needs_attention";
   if (result.implementationPlan !== undefined) return "ready";
@@ -187,14 +185,10 @@ function truncateUtf8(value: string, maximumBytes: number): string {
   let upper = value.length;
   while (lower < upper) {
     const midpoint = Math.ceil((lower + upper) / 2);
-    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes)
-      lower = midpoint;
+    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes) lower = midpoint;
     else upper = midpoint - 1;
   }
-  const end =
-    lower > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(lower - 1))
-      ? lower - 1
-      : lower;
+  const end = lower > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(lower - 1)) ? lower - 1 : lower;
   return value.slice(0, end);
 }
 
@@ -202,13 +196,11 @@ function checkpointInputRequest(
   request: PublicInputRequest,
   profile: CheckpointInputProfile,
 ): PublicInputRequest {
-  const options = request.options
-    ?.slice(0, profile.optionCount)
-    .map(({ id, label }) => ({
-      id,
-      label: truncateUtf8(label, profile.optionLabelBytes),
-    }));
-  const {authorization} = request;
+  const options = request.options?.slice(0, profile.optionCount).map(({ id, label }) => ({
+    id,
+    label: truncateUtf8(label, profile.optionLabelBytes),
+  }));
+  const { authorization } = request;
   const repositoryAccess = authorization?.repositoryAccess;
   return publicInputRequestSchema.parse({
     requestId: request.requestId,
@@ -217,26 +209,17 @@ function checkpointInputRequest(
     ...(profile.descriptionBytes === 0 || request.description === undefined
       ? {}
       : {
-          description: truncateUtf8(
-            request.description,
-            profile.descriptionBytes,
-          ),
+          description: truncateUtf8(request.description, profile.descriptionBytes),
         }),
     ...(options === undefined || options.length === 0 ? {} : { options }),
     allowFreeform: request.allowFreeform,
-    ...(request.presentation === undefined
-      ? {}
-      : { presentation: request.presentation }),
+    ...(request.presentation === undefined ? {} : { presentation: request.presentation }),
     ...(authorization === undefined
       ? {}
       : {
           authorization: {
-            ...(authorization.url === undefined
-              ? {}
-              : { url: authorization.url }),
-            ...(authorization.userCode === undefined
-              ? {}
-              : { userCode: authorization.userCode }),
+            ...(authorization.url === undefined ? {} : { url: authorization.url }),
+            ...(authorization.userCode === undefined ? {} : { userCode: authorization.userCode }),
             ...(authorization.expiresAt === undefined
               ? {}
               : { expiresAt: authorization.expiresAt }),
@@ -257,10 +240,7 @@ function checkpointInputRequest(
               : {
                   repositoryAccess: {
                     ...repositoryAccess,
-                    scopes: repositoryAccess.scopes.slice(
-                      0,
-                      profile.repositoryScopeCount,
-                    ),
+                    scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
                   },
                 }),
           },
@@ -318,8 +298,7 @@ function checkpointForSnapshot(
   });
   const outstandingRequests = outstandingInternalEveRequests(
     snapshot.events.filter(
-      (event): event is InternalEveEvent =>
-        event !== null && typeof event === "object",
+      (event): event is InternalEveEvent => event !== null && typeof event === "object",
     ),
   );
 
@@ -328,9 +307,7 @@ function checkpointForSnapshot(
     includePrototype: boolean;
     includeImplementationPlan: boolean;
   }) {
-    const boundedEvents = events.map((event) =>
-      checkpointEvent(event, input.profile),
-    );
+    const boundedEvents = events.map((event) => checkpointEvent(event, input.profile));
     const inputRequests = outstandingRequests
       .slice(0, 32)
       .map((request) => checkpointInputRequest(request, input.profile));
@@ -339,8 +316,7 @@ function checkpointForSnapshot(
     let best: HostedSessionCheckpoint | undefined;
     while (lower <= upper) {
       const retainedCount = Math.floor((lower + upper) / 2);
-      const retainedEvents =
-        retainedCount === 0 ? [] : boundedEvents.slice(-retainedCount);
+      const retainedEvents = retainedCount === 0 ? [] : boundedEvents.slice(-retainedCount);
       const candidate = hostedSessionCheckpointSchema.safeParse({
         version: 1,
         status: snapshot.status,
@@ -356,8 +332,7 @@ function checkpointForSnapshot(
         ...(input.includePrototype && snapshot.prototype !== undefined
           ? { prototype: snapshot.prototype }
           : {}),
-        ...(input.includeImplementationPlan &&
-        snapshot.implementationPlan !== undefined
+        ...(input.includeImplementationPlan && snapshot.implementationPlan !== undefined
           ? { implementationPlan: snapshot.implementationPlan }
           : {}),
         capturedAtEpochMs,
@@ -400,16 +375,12 @@ function checkpointForSnapshot(
     version: 1,
     status: snapshot.status,
     events: [],
-    ...(publicEventCount === 0
-      ? {}
-      : { truncatedBeforeIndex: publicEventCount }),
+    ...(publicEventCount === 0 ? {} : { truncatedBeforeIndex: publicEventCount }),
     capturedAtEpochMs,
   };
 }
 
-function recoveryPrompt(
-  record: z.infer<typeof durableHostedSessionRecordSchema>,
-): string {
+function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>): string {
   const prompt = recoveryPromptForSession(record);
   if (prompt === undefined) throw new HostedSessionRecoveryUnavailableError();
   return prompt;
@@ -477,9 +448,7 @@ export function createHostedEveSessionService(input: {
     return parsed;
   }
 
-  async function requireBoundSucceededStartSession(
-    operation: HostedOperationRecord,
-  ) {
+  async function requireBoundSucceededStartSession(operation: HostedOperationRecord) {
     if (
       operation.kind !== "start" ||
       operation.state !== "succeeded" ||
@@ -488,10 +457,7 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     }
     try {
-      const storedSession = await input.store.getSession(
-        principal,
-        operation.sessionId,
-      );
+      const storedSession = await input.store.getSession(principal, operation.sessionId);
       if (storedSession === null) {
         throw new HostedSubmissionUnknownError();
       }
@@ -499,8 +465,7 @@ export function createHostedEveSessionService(input: {
       if (
         verifiedSession.sessionId !== operation.sessionId ||
         tenantKeyFor(verifiedSession.principal) !== tenantKeyFor(principal) ||
-        hostedSessionCreationDigest(verifiedSession) !==
-          operation.sessionRecordDigest
+        hostedSessionCreationDigest(verifiedSession) !== operation.sessionRecordDigest
       ) {
         throw new HostedSubmissionUnknownError();
       }
@@ -516,9 +481,9 @@ export function createHostedEveSessionService(input: {
     sessionId?: string;
     resumeSessionId?: string;
     dispatch: (operationId: string) => Promise<{
-    result: EveSessionResult;
-    newSession?: z.infer<typeof hostedSessionRecordSchema>;
-}>;
+      result: EveSessionResult;
+      newSession?: z.infer<typeof hostedSessionRecordSchema>;
+    }>;
   }): Promise<EveSessionResult> {
     const requestDigest = digest({
       kind: options.kind,
@@ -526,12 +491,7 @@ export function createHostedEveSessionService(input: {
       sessionId: options.sessionId,
     });
     const operationId = stableId("op", {
-      tenant: [
-        principal.issuer,
-        principal.audience,
-        principal.workspaceId,
-        principal.ownerUserId,
-      ],
+      tenant: [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
       kind: options.kind,
       clientRequestId: options.request.clientRequestId,
     });
@@ -544,9 +504,7 @@ export function createHostedEveSessionService(input: {
       clientRequestId: options.request.clientRequestId,
       requestDigest,
       state: "reserved",
-      ...(options.sessionId === undefined
-        ? {}
-        : { sessionId: options.sessionId }),
+      ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
       ...(options.resumeSessionId === undefined
         ? {}
         : { resumeSessionId: options.resumeSessionId }),
@@ -640,8 +598,7 @@ export function createHostedEveSessionService(input: {
         const expectedState = rejected ? "rejected" : "submission_unknown";
         const expectedCode = rejected ? error.code : "submission_unknown";
         settlementVerified =
-          verified.state === expectedState &&
-          verified.safeErrorCode === expectedCode;
+          verified.state === expectedState && verified.safeErrorCode === expectedCode;
       } catch {
         // The caller cannot know whether the durable transition committed.
         // `reserved` remains non-replayable; a committed terminal record is
@@ -671,9 +628,7 @@ export function createHostedEveSessionService(input: {
         operationId,
         requestDigest,
         result: dispatchedResult,
-        ...(dispatchedSession === undefined
-          ? {}
-          : { session: dispatchedSession }),
+        ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
         nowEpochMs: now(),
       });
       const verified = requireOwnedOperation(settled, {
@@ -698,14 +653,10 @@ export function createHostedEveSessionService(input: {
         if (verifiedResult.sessionId !== dispatchedSession.sessionId) {
           throw new HostedSubmissionUnknownError();
         }
-        if (
-          verified.sessionRecordDigest !==
-          hostedSessionCreationDigest(dispatchedSession)
-        ) {
+        if (verified.sessionRecordDigest !== hostedSessionCreationDigest(dispatchedSession)) {
           throw new HostedSubmissionUnknownError();
         }
-        const verifiedSession =
-          await requireBoundSucceededStartSession(verified);
+        const verifiedSession = await requireBoundSucceededStartSession(verified);
         if (
           hostedSessionRecordDigest(verifiedSession) !==
             hostedSessionRecordDigest(dispatchedSession) ||
@@ -726,11 +677,9 @@ export function createHostedEveSessionService(input: {
   async function observeSnapshot(
     sessionId: string,
     snapshot: HostedEngineSnapshot,
-    resumability: "live" | "terminal" = [
-      "completed",
-      "failed",
-      "cancelled",
-    ].includes(snapshot.status)
+    resumability: "live" | "terminal" = ["completed", "failed", "cancelled"].includes(
+      snapshot.status,
+    )
       ? "terminal"
       : "live",
   ) {
@@ -751,15 +700,9 @@ export function createHostedEveSessionService(input: {
     return completeResult;
   }
 
-  async function readSession(inputValue: {
-    sessionId: string;
-    cursor: number;
-    limit: number;
-  }) {
+  async function readSession(inputValue: { sessionId: string; cursor: number; limit: number }) {
     const { sessionId, cursor, limit } = inputValue;
-    const session = toDurableHostedSessionRecord(
-      await requireSession(sessionId),
-    );
+    const session = toDurableHostedSessionRecord(await requireSession(sessionId));
     await input.beforeRead?.({
       principal,
       sessionId,
@@ -772,17 +715,12 @@ export function createHostedEveSessionService(input: {
         adapterSessionId: session.adapterSessionId,
       });
       const observedAt = now();
-      const observedCheckpoint = checkpointForSnapshot(
-        sessionId,
-        snapshot,
-        observedAt,
-      );
+      const observedCheckpoint = checkpointForSnapshot(sessionId, snapshot, observedAt);
       if (
         snapshot.status === "working" &&
         session.checkpointProgressDigest ===
           hostedSessionCheckpointProgressDigest(observedCheckpoint) &&
-        observedAt >=
-          session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
+        observedAt >= session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
       ) {
         const checkpoint = session.checkpoint ?? observedCheckpoint;
         await input.store.observeSession?.({
@@ -800,8 +738,7 @@ export function createHostedEveSessionService(input: {
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
       if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
-      if (session.checkpoint === undefined)
-        throw new HostedSessionRecoveryUnavailableError();
+      if (session.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
       await input.store.observeSession?.({
         principal,
         sessionId,
@@ -811,12 +748,7 @@ export function createHostedEveSessionService(input: {
         ...(session.appId === undefined ? {} : { appId: session.appId }),
         nowEpochMs: now(),
       });
-      return resultFromHostedCheckpoint(
-        sessionId,
-        session.checkpoint,
-        cursor,
-        limit,
-      );
+      return resultFromHostedCheckpoint(sessionId, session.checkpoint, cursor, limit);
     }
   }
 
@@ -826,33 +758,22 @@ export function createHostedEveSessionService(input: {
       if (request.resumeSessionId !== undefined) {
         const stored = await requireSession(request.resumeSessionId);
         let existing = toDurableHostedSessionRecord(stored);
-        if (
-          stored.version === 1 &&
-          ["completed", "failed", "cancelled"].includes(stored.status)
-        ) {
+        if (stored.version === 1 && ["completed", "failed", "cancelled"].includes(stored.status)) {
           try {
             const snapshot = await input.transport.get({
               principal,
               adapterSessionId: stored.adapterSessionId,
             });
             await observeSnapshot(stored.sessionId, snapshot);
-            existing = toDurableHostedSessionRecord(
-              await requireSession(stored.sessionId),
-            );
+            existing = toDurableHostedSessionRecord(await requireSession(stored.sessionId));
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError))
-              throw error;
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
           }
         }
-        const terminal = ["completed", "failed", "cancelled"].includes(
-          existing.status,
-        );
-        const interrupted =
-          existing.status === "working" &&
-          existing.resumability === "checkpoint";
+        const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
+        const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted) {
-          if (existing.checkpoint === undefined)
-            throw new HostedSessionRecoveryUnavailableError();
+          if (existing.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
           return mutate({
             kind: "start",
             request,
@@ -862,9 +783,7 @@ export function createHostedEveSessionService(input: {
                 principal,
                 operationId,
                 prompt: recoveryPrompt(existing),
-                ...(existing.sourceHandoffId
-                  ? { sourceHandoffId: existing.sourceHandoffId }
-                  : {}),
+                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
               });
               const sessionId = stableId("ses", {
                 operationId,
@@ -872,11 +791,7 @@ export function createHostedEveSessionService(input: {
               });
               const result = projectSnapshot(sessionId, response.snapshot);
               const timestamp = now();
-              const checkpoint = checkpointForSnapshot(
-                sessionId,
-                response.snapshot,
-                timestamp,
-              );
+              const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
               return {
                 result,
                 newSession: durableHostedSessionRecordSchema.parse({
@@ -897,15 +812,12 @@ export function createHostedEveSessionService(input: {
                     : { appId: result.implementationPlan.appId }),
                   stage: stageForResult(result),
                   status: result.status,
-                  resumability: ["completed", "failed", "cancelled"].includes(
-                    result.status,
-                  )
+                  resumability: ["completed", "failed", "cancelled"].includes(result.status)
                     ? "terminal"
                     : "live",
                   checkpoint,
                   checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
-                  checkpointProgressDigest:
-                    hostedSessionCheckpointProgressDigest(checkpoint),
+                  checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
                   parentSessionId: existing.sessionId,
                   lastProgressAtEpochMs: timestamp,
                   createdAtEpochMs: timestamp,
@@ -923,8 +835,7 @@ export function createHostedEveSessionService(input: {
             });
             return await observeSnapshot(existing.sessionId, snapshot);
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError))
-              throw error;
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
           }
         }
         if (
@@ -942,14 +853,9 @@ export function createHostedEveSessionService(input: {
               principal,
               operationId,
               prompt: recoveryPrompt(existing),
-              ...(existing.sourceHandoffId
-                ? { sourceHandoffId: existing.sourceHandoffId }
-                : {}),
+              ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
             });
-            const result = projectSnapshot(
-              existing.sessionId,
-              response.snapshot,
-            );
+            const result = projectSnapshot(existing.sessionId, response.snapshot);
             const timestamp = now();
             const checkpoint = checkpointForSnapshot(
               existing.sessionId,
@@ -965,9 +871,7 @@ export function createHostedEveSessionService(input: {
                 adapterSessionId: response.adapterSessionId,
                 checkpoint,
                 stage: stageForResult(result),
-                resumability: ["completed", "failed", "cancelled"].includes(
-                  result.status,
-                )
+                resumability: ["completed", "failed", "cancelled"].includes(result.status)
                   ? "terminal"
                   : "live",
                 ...(result.implementationPlan?.appId === undefined
@@ -980,8 +884,7 @@ export function createHostedEveSessionService(input: {
             if (
               durable.adapterSessionId !== response.adapterSessionId ||
               durable.adapterGeneration !== existing.adapterGeneration + 1 ||
-              durable.checkpointDigest !==
-                hostedSessionCheckpointDigest(checkpoint)
+              durable.checkpointDigest !== hostedSessionCheckpointDigest(checkpoint)
             )
               throw new HostedSubmissionUnknownError();
             return { result };
@@ -990,7 +893,7 @@ export function createHostedEveSessionService(input: {
       }
       if (request.prompt === undefined)
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
-      const {prompt} = request;
+      const { prompt } = request;
       return mutate({
         kind: "start",
         request,
@@ -999,9 +902,7 @@ export function createHostedEveSessionService(input: {
             principal,
             operationId,
             prompt,
-            ...(request.sourceHandoffId
-              ? { sourceHandoffId: request.sourceHandoffId }
-              : {}),
+            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
           });
           const sessionId = stableId("ses", {
             operationId,
@@ -1009,11 +910,7 @@ export function createHostedEveSessionService(input: {
           });
           const result = projectSnapshot(sessionId, response.snapshot);
           const timestamp = now();
-          const checkpoint = checkpointForSnapshot(
-            sessionId,
-            response.snapshot,
-            timestamp,
-          );
+          const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
           return {
             result,
             newSession: durableHostedSessionRecordSchema.parse({
@@ -1024,23 +921,18 @@ export function createHostedEveSessionService(input: {
               originAdapterSessionId: response.adapterSessionId,
               adapterGeneration: 1,
               title: titleFromPrompt(prompt),
-              ...(request.sourceHandoffId
-                ? { sourceHandoffId: request.sourceHandoffId }
-                : {}),
+              ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
               ...(result.implementationPlan?.appId === undefined
                 ? {}
                 : { appId: result.implementationPlan.appId }),
               stage: stageForResult(result),
               status: result.status,
-              resumability: ["completed", "failed", "cancelled"].includes(
-                result.status,
-              )
+              resumability: ["completed", "failed", "cancelled"].includes(result.status)
                 ? "terminal"
                 : "live",
               checkpoint,
               checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
-              checkpointProgressDigest:
-                hostedSessionCheckpointProgressDigest(checkpoint),
+              checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
               lastProgressAtEpochMs: timestamp,
               createdAtEpochMs: timestamp,
               updatedAtEpochMs: timestamp,
@@ -1107,20 +999,14 @@ export function createHostedEveSessionService(input: {
           });
           const expected = outstandingInternalEveRequests(
             before.events.filter(
-              (event): event is InternalEveEvent =>
-                event !== null && typeof event === "object",
+              (event): event is InternalEveEvent => event !== null && typeof event === "object",
             ),
           ).map(({ requestId }) => requestId);
           if (
             expected.length !== request.responses.length ||
-            expected.some(
-              (requestId, index) =>
-                request.responses[index]?.requestId !== requestId,
-            )
+            expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
           )
-            throw new SubmissionRejectedBeforeDispatchError(
-              "input_batch_changed",
-            );
+            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
           const snapshot = await input.transport.respond({
             principal,
             operationId,

@@ -10,9 +10,7 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(
-      `Accept build-ready AppSpec for validation-failure:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await t.send(`Accept build-ready AppSpec for validation-failure:\n${BUILD_READY_APP_SPEC}`);
     await t.send("Prepare offline target dependencies.");
     await t.send("Run target identity and planning.");
     await t.send("Apply the current creation proposal.");

@@ -1,10 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  APP_BUILDER_SOURCE_VERSION,
-  sourceWorkflowState,
-} from "@/lib/agent/source-state";
+import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -21,12 +18,7 @@ import {
 } from "@/lib/repository/supported-template";
 
 const developmentWorkspacePath = "/workspace/repository";
-const sandboxOverviewPaths = [
-  "README.md",
-  "AGENTS.md",
-  "package.json",
-  "docs/README.md",
-] as const;
+const sandboxOverviewPaths = ["README.md", "AGENTS.md", "package.json", "docs/README.md"] as const;
 
 export default defineTool({
   description:
@@ -41,10 +33,7 @@ export default defineTool({
       const files = [];
       const missingPaths = [];
       for (const requestedPath of paths) {
-        const relativePath = requestedPath.replace(
-          /^\/workspace\/repository\//u,
-          "",
-        );
+        const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
         const content = await sandbox.readTextFile({
           path: `/workspace/repository/${relativePath}`,
         });
@@ -92,8 +81,7 @@ export default defineTool({
       }
       return inspectSupportedRepository(receipt.sourcePath);
     }
-    if (canAutoSelectDevelopmentSource())
-      return inspectSupportedRepository(path);
+    if (canAutoSelectDevelopmentSource()) return inspectSupportedRepository(path);
 
     const sandbox = await ctx.getSandbox();
     const availablePaths: string[] = [];

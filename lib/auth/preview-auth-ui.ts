@@ -1,13 +1,8 @@
 export const DEFAULT_AUTH_REDIRECT_TO = "/auth/setting-up?callbackURL=%2F";
 
-export type AuthPageSearchParams = Record<
-  string,
-  string | string[] | undefined
->;
+export type AuthPageSearchParams = Record<string, string | string[] | undefined>;
 
-export function serializeAuthPageSearchParams(
-  searchParams: AuthPageSearchParams,
-) {
+export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams) {
   const serialized = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (Array.isArray(value)) {
@@ -20,20 +15,14 @@ export function serializeAuthPageSearchParams(
   return search ? `?${search}` : "";
 }
 
-export function resolveAuthCallbackURL(
-  defaultURL: string,
-  search: string,
-  sameOrigin?: string,
-) {
+export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
   const callbackURL = new URLSearchParams(search).get("callbackURL");
   if (!callbackURL) return defaultURL;
 
   try {
     const parsed = new URL(callbackURL, "https://autograph.invalid");
-    const isRootRelative =
-      callbackURL.startsWith("/") && !callbackURL.startsWith("//");
-    const isSameOriginAbsolute =
-      sameOrigin !== undefined && parsed.origin === sameOrigin;
+    const isRootRelative = callbackURL.startsWith("/") && !callbackURL.startsWith("//");
+    const isSameOriginAbsolute = sameOrigin !== undefined && parsed.origin === sameOrigin;
     if (!isRootRelative && !isSameOriginAbsolute) return defaultURL;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
@@ -51,11 +40,7 @@ export function resolveProviderCallbackURL(
   return providerCallbackURL;
 }
 
-export function resolvePasskeyRedirectTo(
-  redirectTo: string,
-  search: string,
-  origin: string,
-) {
+export function resolvePasskeyRedirectTo(redirectTo: string, search: string, origin: string) {
   const searchParams = new URLSearchParams(search);
   const inheritedRedirect = searchParams.get("redirectTo");
   if (inheritedRedirect) {

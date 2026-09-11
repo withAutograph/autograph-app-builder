@@ -27,26 +27,18 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   } catch {
     notFound();
   }
-  if (
-    !emulation ||
-    !["vercel", "github"].includes(provider) ||
-    typeof query.state !== "string"
-  )
+  if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string")
     notFound();
   const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";
   const providerName = provider === "vercel" ? "Vercel" : "GitHub";
-  const title = authorizing
-    ? "Authorize GitHub connection"
-    : `Connect to ${providerName}`;
+  const title = authorizing ? "Authorize GitHub connection" : `Connect to ${providerName}`;
   const actionLabel = authorizing
     ? "Authorize emulated GitHub"
     : `Connect emulated ${providerName}`;
   const environment =
-    emulation.mode === "preview"
-      ? ("Preview deployment" as const)
-      : ("Local development" as const);
+    emulation.mode === "preview" ? ("Preview deployment" as const) : ("Local development" as const);
   const details =
     provider === "github"
       ? [
@@ -57,14 +49,11 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
           { label: "Team", value: "Autograph Local" },
           {
             label: "Team slug",
-            value:
-              process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
+            value: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
           },
           {
             label: "Configuration",
-            value:
-              process.env.EMULATE_VERCEL_CONFIGURATION_ID ??
-              EMULATED_VERCEL_CONFIGURATION_ID,
+            value: process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
           },
         ];
   const forwarded = authorizing
@@ -89,9 +78,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       action={
         <form method="post" action={`/local-connections/${provider}/complete`}>
           <input type="hidden" name="state" value={query.state} />
-          {authorizing ? (
-            <input type="hidden" name="phase" value="authorize" />
-          ) : null}
+          {authorizing ? <input type="hidden" name="phase" value="authorize" /> : null}
           {forwarded.map((name) =>
             typeof query[name] === "string" ? (
               <input key={name} type="hidden" name={name} value={query[name]} />

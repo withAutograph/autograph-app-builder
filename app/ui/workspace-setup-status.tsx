@@ -14,9 +14,7 @@ export function WorkspaceSetupStatus({
       <main className={styles.page}>
         <section className={styles.statusCard}>
           <h1>Workspace setup failed</h1>
-          <p>
-            We couldn’t finish setting up your workspace. Please sign in again.
-          </p>
+          <p>We couldn’t finish setting up your workspace. Please sign in again.</p>
           <a
             className={styles.primaryAction}
             href={`/auth/sign-in?callbackURL=${encodeURIComponent(callbackUrl)}`}

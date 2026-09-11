@@ -8,7 +8,7 @@ function passkeyResultError(result: unknown): PasskeyClientError | null {
     return null;
   }
 
-  const {error} = (result as { error?: PasskeyClientError | null });
+  const { error } = result as { error?: PasskeyClientError | null };
   return error && typeof error === "object" ? error : null;
 }
 

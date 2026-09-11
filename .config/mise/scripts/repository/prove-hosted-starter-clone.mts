@@ -29,11 +29,8 @@ const requiredEnvironmentKeys = [
 ] as const;
 
 function parseQuotedEnvironmentValue(source: string, name: string): string {
-  const matches = source
-    .split(/\r?\n/u)
-    .filter((line) => line.startsWith(`${name}=`));
-  if (matches.length !== 1)
-    throw new Error(`The Development environment is missing ${name}.`);
+  const matches = source.split(/\r?\n/u).filter((line) => line.startsWith(`${name}=`));
+  if (matches.length !== 1) throw new Error(`The Development environment is missing ${name}.`);
   const encoded = matches[0]!.slice(name.length + 1);
   let value: unknown;
   try {
@@ -51,20 +48,16 @@ const linkedProject = parseLinkedVercelProject(
     confidential: false,
   }),
 );
-const localEnvironment = readOwnerBoundLocalFile(
-  resolve(repositoryRoot, ".env.local"),
-  { confidential: true },
-);
+const localEnvironment = readOwnerBoundLocalFile(resolve(repositoryRoot, ".env.local"), {
+  confidential: true,
+});
 const token = validateLocalVercelOidcToken({
   token: parseLocalVercelOidcToken(localEnvironment),
   project: linkedProject,
   nowEpochSeconds: Math.floor(Date.now() / 1_000),
 });
 
-if (
-  Object.hasOwn(process.env, "VERCEL_TOKEN") ||
-  Object.hasOwn(process.env, "AI_GATEWAY_API_KEY")
-)
+if (Object.hasOwn(process.env, "VERCEL_TOKEN") || Object.hasOwn(process.env, "AI_GATEWAY_API_KEY"))
   throw new Error("Static provider credentials are unsupported.");
 
 process.env.VERCEL_OIDC_TOKEN = token;

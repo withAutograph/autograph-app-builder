@@ -58,22 +58,14 @@ export const UnsupportedLink: Story = { args: { canOpen: false } };
 export const OpenAndRefresh: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText("Update GitHub access", { selector: "strong" }),
-    ).toBeVisible();
-    await expect(
-      canvas.getByText("withAutograph/app-builder-dogfood"),
-    ).toBeVisible();
+    await expect(canvas.getByText("Update GitHub access", { selector: "strong" })).toBeVisible();
+    await expect(canvas.getByText("withAutograph/app-builder-dogfood")).toBeVisible();
     await expect(canvas.getByText("Connected to withAutograph")).toBeVisible();
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Update GitHub access" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Update GitHub access" }));
     await expect(args.onOpenLink).toHaveBeenCalledWith(
       "https://builder.example.test/github/installations?continuation=opaque",
     );
-    await userEvent.click(
-      await canvas.findByRole("button", { name: "Check access" }),
-    );
+    await userEvent.click(await canvas.findByRole("button", { name: "Check access" }));
     await expect(args.onRefresh).toHaveBeenCalledOnce();
   },
 };
@@ -85,13 +77,9 @@ export const ActionableFailure: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Update GitHub access" }),
-    );
+    await userEvent.click(canvas.getByRole("button", { name: "Update GitHub access" }));
     await expect(
-      await canvas.findByText(
-        "The authorization page could not be opened. Continue in chat.",
-      ),
+      await canvas.findByText("The authorization page could not be opened. Continue in chat."),
     ).toBeVisible();
   },
 };

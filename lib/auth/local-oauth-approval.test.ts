@@ -64,7 +64,7 @@ describe("local OAuth approval", () => {
   });
 
   it("signs a short-lived approval bound to provider and origin", () => {
-    const {authorization} = parseLocalOAuthAuthorization(base);
+    const { authorization } = parseLocalOAuthAuthorization(base);
     const approval = signLocalOAuthApproval(
       {
         provider: "github",
@@ -74,19 +74,17 @@ describe("local OAuth approval", () => {
       },
       emulation.relaySecret,
     );
-    expect(
-      verifyLocalOAuthApproval(approval, emulation.relaySecret, 1_000),
-    ).toEqual({
+    expect(verifyLocalOAuthApproval(approval, emulation.relaySecret, 1_000)).toEqual({
       provider: "github",
       origin: emulation.canonicalOrigin,
       authorization,
       expiresAt: 2_000,
     });
-    expect(() =>
-      verifyLocalOAuthApproval(`${approval}x`, emulation.relaySecret, 1_000),
-    ).toThrow("invalid-approval");
-    expect(() =>
-      verifyLocalOAuthApproval(approval, emulation.relaySecret, 2_000),
-    ).toThrow("expired-approval");
+    expect(() => verifyLocalOAuthApproval(`${approval}x`, emulation.relaySecret, 1_000)).toThrow(
+      "invalid-approval",
+    );
+    expect(() => verifyLocalOAuthApproval(approval, emulation.relaySecret, 2_000)).toThrow(
+      "expired-approval",
+    );
   });
 });

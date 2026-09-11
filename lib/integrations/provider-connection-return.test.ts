@@ -57,8 +57,6 @@ describe("provider return routing", () => {
         reason: "callback-invalid",
         returnState: { returnTo: handoff },
       }),
-    ).toBe(
-      `https://builder.example${handoff}?vercel=failed&vercelReason=callback-invalid`,
-    );
+    ).toBe(`https://builder.example${handoff}?vercel=failed&vercelReason=callback-invalid`);
   });
 });

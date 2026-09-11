@@ -53,15 +53,13 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>2026-09-08T16:00:06.674Z</p>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 75/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -76,33 +74,29 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The page title, three-step progress indicator, form heading,
-            required fields, and primary “Review request” action establish a
-            clear sequence. On mobile, however, the large progress card pushes
-            the actual request task well down the page, weakening first-screen
-            priority.
+            The page title, three-step progress indicator, form heading, required fields, and
+            primary “Review request” action establish a clear sequence. On mobile, however, the
+            large progress card pushes the actual request task well down the page, weakening
+            first-screen priority.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Desktop uses a balanced sidebar-and-form composition with aligned
-            375px field columns, while tablet and mobile collapse fields cleanly
-            without horizontal overflow. Spacing is consistent, though the
-            progress panel consumes disproportionate vertical space on mobile
-            and the tablet composition leaves substantial unused space beneath
-            the sidebar.
+            Desktop uses a balanced sidebar-and-form composition with aligned 375px field columns,
+            while tablet and mobile collapse fields cleanly without horizontal overflow. Spacing is
+            consistent, though the progress panel consumes disproportionate vertical space on mobile
+            and the tablet composition leaves substantial unused space beneath the sidebar.
           </td>
         </tr>
         <tr>
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Heading sizes, labels, helper text, and button text are visually
-            consistent and generally readable. Several muted gray and
-            light-purple text treatments are borderline or below minimum
-            contrast according to the supplied measurements, especially
+            Heading sizes, labels, helper text, and button text are visually consistent and
+            generally readable. Several muted gray and light-purple text treatments are borderline
+            or below minimum contrast according to the supplied measurements, especially
             helper/status copy.
           </td>
         </tr>
@@ -110,25 +104,21 @@
           <th>responsive</th>
           <td>3/4</td>
           <td>
-            The composition adapts from a two-column desktop form to a
-            single-column form at tablet width and a stacked layout at 390px,
-            with 29px mobile margins and 332px-wide fields. Mobile controls fit
-            without clipping, but 40px-high actions are slightly small for
-            comfortable touch use and the full progress panel delays access to
-            the form.
+            The composition adapts from a two-column desktop form to a single-column form at tablet
+            width and a stacked layout at 390px, with 29px mobile margins and 332px-wide fields.
+            Mobile controls fit without clipping, but 40px-high actions are slightly small for
+            comfortable touch use and the full progress panel delays access to the form.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            The initial state clearly communicates that employees should enter
-            identity, department, equipment, date, and justification before
-            reviewing a mock submission. Required markers, date guidance,
-            minimum-character feedback, progress states, and distinct
-            review/clear actions are understandable; review, validation-error,
-            submission-success, and implementation-plan states are not evidenced
-            here.
+            The initial state clearly communicates that employees should enter identity, department,
+            equipment, date, and justification before reviewing a mock submission. Required markers,
+            date guidance, minimum-character feedback, progress states, and distinct review/clear
+            actions are understandable; review, validation-error, submission-success, and
+            implementation-plan states are not evidenced here.
           </td>
         </tr>
       </tbody>
@@ -136,89 +126,79 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        The three-step progress model makes the intended request, review, and
-        confirmation flow easy to understand.
+        The three-step progress model makes the intended request, review, and confirmation flow easy
+        to understand.
       </li>
       <li>
-        All fields named in the brief are present, with useful examples and
-        contextual guidance rather than relying only on terse labels.
+        All fields named in the brief are present, with useful examples and contextual guidance
+        rather than relying only on terse labels.
       </li>
       <li>
-        The primary and secondary actions are clearly distinguished, and “Review
-        request” accurately describes the next step rather than implying
-        immediate submission.
+        The primary and secondary actions are clearly distinguished, and “Review request” accurately
+        describes the next step rather than implying immediate submission.
       </li>
       <li>
-        Desktop fields align to a consistent two-column grid, while tablet and
-        mobile use an uncomplicated single-column sequence.
+        Desktop fields align to a consistent two-column grid, while tablet and mobile use an
+        uncomplicated single-column sequence.
       </li>
       <li>
-        Required-field markers, the future-date note, and the reason character
-        requirement set expectations before interaction.
+        Required-field markers, the future-date note, and the reason character requirement set
+        expectations before interaction.
       </li>
       <li>
-        Cards, restrained borders, and consistent spacing produce a calm
-        workplace-tool aesthetic across all three sizes.
+        Cards, restrained borders, and consistent spacing produce a calm workplace-tool aesthetic
+        across all three sizes.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article>
       <h4>medium · <a href="#mobile-0">mobile-0</a></h4>
       <p>
-        The expanded progress card occupies roughly the first 360px after the
-        introduction. In the measured 844px viewport, the form does not begin
-        until about y=547, so progress information receives nearly as much
-        first-screen attention as the task itself.
+        The expanded progress card occupies roughly the first 360px after the introduction. In the
+        measured 844px viewport, the form does not begin until about y=547, so progress information
+        receives nearly as much first-screen attention as the task itself.
       </p>
       <p>
-        <strong>Improve:</strong> Use a compact horizontal stepper, a short
-        “Step 1 of 3” treatment, or collapsed future steps on phones; keep the
-        complete progress panel at wider breakpoints.
+        <strong>Improve:</strong> Use a compact horizontal stepper, a short “Step 1 of 3” treatment,
+        or collapsed future steps on phones; keep the complete progress panel at wider breakpoints.
       </p>
       <small>Screenshot region: x 12, y 162, width 365, height 360</small>
     </article>
     <article>
       <h4>medium · <a href="#mobile-0">mobile-0</a></h4>
       <p>
-        Both mobile actions are only 40px high, which is usable but less
-        comfortable for touch than the commonly targeted 44–48px range requested
-        by the phone-comfort brief.
+        Both mobile actions are only 40px high, which is usable but less comfortable for touch than
+        the commonly targeted 44–48px range requested by the phone-comfort brief.
       </p>
       <p>
-        <strong>Improve:</strong> Increase mobile button height to at least
-        44px, preserve clear spacing between actions, and consider full-width or
-        evenly divided buttons if labels grow.
+        <strong>Improve:</strong> Increase mobile button height to at least 44px, preserve clear
+        spacing between actions, and consider full-width or evenly divided buttons if labels grow.
       </p>
-      <small
-        >Screenshot region: x 29, y 1173.5, width 243.734375, height 40</small
-      >
+      <small>Screenshot region: x 29, y 1173.5, width 243.734375, height 40</small>
     </article>
     <article>
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The light-purple “Current” status text has weak contrast against its
-        selected background; the supplied audit reports a 2.57:1 treatment in
-        this selected progress area. This makes an important state harder to
-        perceive for low-vision users.
+        The light-purple “Current” status text has weak contrast against its selected background;
+        the supplied audit reports a 2.57:1 treatment in this selected progress area. This makes an
+        important state harder to perceive for low-vision users.
       </p>
       <p>
-        <strong>Improve:</strong> Use a substantially darker purple for status
-        text and icon, or adjust the badge background, targeting at least 4.5:1
-        for text while retaining the selected-state distinction.
+        <strong>Improve:</strong> Use a substantially darker purple for status text and icon, or
+        adjust the badge background, targeting at least 4.5:1 for text while retaining the
+        selected-state distinction.
       </p>
       <small>Screenshot region: x 332, y 277, width 77, height 25</small>
     </article>
     <article>
       <h4>low · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The introductory gray text is visually subdued and the supplied audit
-        reports a 4.32:1 contrast ratio for a 14px muted-text treatment,
-        narrowly below the 4.5:1 target.
+        The introductory gray text is visually subdued and the supplied audit reports a 4.32:1
+        contrast ratio for a 14px muted-text treatment, narrowly below the 4.5:1 target.
       </p>
       <p>
-        <strong>Improve:</strong> Darken the shared muted text color slightly so
-        introductory and helper copy consistently reaches at least 4.5:1 on the
-        page and card backgrounds.
+        <strong>Improve:</strong> Darken the shared muted text color slightly so introductory and
+        helper copy consistently reaches at least 4.5:1 on the page and card backgrounds.
       </p>
       <small>Screenshot region: x 160, y 101, width 607, height 20</small>
     </article>
@@ -346,9 +326,7 @@
 }</pre>
     <section id="desktop-0">
       <h2>desktop-0 — initial</h2>
-      <a href="desktop-0.png"
-        ><img src="desktop-0.png" alt="desktop-0 initial screenshot"
-      /></a>
+      <a href="desktop-0.png"><img src="desktop-0.png" alt="desktop-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>
@@ -19027,9 +19005,7 @@
     </section>
     <section id="tablet-0">
       <h2>tablet-0 — initial</h2>
-      <a href="tablet-0.png"
-        ><img src="tablet-0.png" alt="tablet-0 initial screenshot"
-      /></a>
+      <a href="tablet-0.png"><img src="tablet-0.png" alt="tablet-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>
@@ -37708,9 +37684,7 @@
     </section>
     <section id="mobile-0">
       <h2>mobile-0 — initial</h2>
-      <a href="mobile-0.png"
-        ><img src="mobile-0.png" alt="mobile-0 initial screenshot"
-      /></a>
+      <a href="mobile-0.png"><img src="mobile-0.png" alt="mobile-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>

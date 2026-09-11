@@ -28,8 +28,7 @@ export function readVercelSessionGitSource(sessionId: string) {
   const matches = [...pendingSources.entries()].filter(
     ([candidate]) =>
       candidate !== sessionId &&
-      (sessionId.includes(`-${candidate}-`) ||
-        sessionId.endsWith(`-${candidate}`)),
+      (sessionId.includes(`-${candidate}-`) || sessionId.endsWith(`-${candidate}`)),
   );
   return matches.length === 1 ? matches[0]?.[1] : undefined;
 }

@@ -49,9 +49,7 @@ export function RenamePasskeyDialog({
             <DialogTitle>{labels.renamePasskey}</DialogTitle>
           </DialogHeader>
           <Field>
-            <FieldLabel htmlFor={`passkey-name-${passkey.id}`}>
-              {labels.name}
-            </FieldLabel>
+            <FieldLabel htmlFor={`passkey-name-${passkey.id}`}>{labels.name}</FieldLabel>
             <Input
               id={`passkey-name-${passkey.id}`}
               autoFocus
@@ -61,16 +59,10 @@ export function RenamePasskeyDialog({
             />
           </Field>
           <DialogFooter>
-            <DialogClose
-              className={buttonVariants({ variant: "outline" })}
-              type="button"
-            >
+            <DialogClose className={buttonVariants({ variant: "outline" })} type="button">
               {localization.settings.cancel}
             </DialogClose>
-            <Button
-              disabled={!name.trim() || updatePasskey.isPending}
-              type="submit"
-            >
+            <Button disabled={!name.trim() || updatePasskey.isPending} type="submit">
               {updatePasskey.isPending && <Spinner />}
               {localization.settings.saveChanges}
             </Button>

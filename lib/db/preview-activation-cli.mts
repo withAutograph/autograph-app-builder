@@ -22,16 +22,10 @@ import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 async function readPrivateRequest(path: string): Promise<unknown> {
-  if (!isAbsolute(path))
-    throw new Error("Activation request path must be absolute.");
-  const [link, canonicalPath] = await Promise.all([
-    lstat(path),
-    realpath(path),
-  ]);
+  if (!isAbsolute(path)) throw new Error("Activation request path must be absolute.");
+  const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path) {
-    throw new Error(
-      "Activation request path must be canonical and unsymlinked.",
-    );
+    throw new Error("Activation request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
   if (
@@ -41,9 +35,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     metadata.size === 0 ||
     metadata.size > MAX_REQUEST_BYTES
   ) {
-    throw new Error(
-      "Activation request must be an owner-only nonempty regular file.",
-    );
+    throw new Error("Activation request must be an owner-only nonempty regular file.");
   }
   return JSON.parse(await readFile(path, "utf8"));
 }
@@ -63,11 +55,7 @@ async function configureLoginRole(
     select format(${template}::text, ${roleName}::text, ${password}::text) as statement
   `;
   const statement = rows[0]?.statement;
-  if (
-    statement === undefined ||
-    statement.length > 2_048 ||
-    /[\0\r\n]/u.test(statement)
-  ) {
+  if (statement === undefined || statement.length > 2_048 || /[\0\r\n]/u.test(statement)) {
     throw new Error("Runtime database role statement was invalid.");
   }
   try {
@@ -89,10 +77,7 @@ function createStore(sql: Sql): PreviewActivationStore {
             email_verified: boolean;
           }[]
         >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`;
-        const accountId = stableId(
-          "account",
-          `github:${input.githubAccountId}`,
-        );
+        const accountId = stableId("account", `github:${input.githubAccountId}`);
         const accounts = await transaction<
           {
             id: string;
@@ -122,16 +107,14 @@ function createStore(sql: Sql): PreviewActivationStore {
           users[0]?.name !== input.githubLogin ||
           users[0]?.email_verified !== true
         ) {
-          throw new Error(
-            "Invited user identity conflicts with an existing row.",
-          );
+          throw new Error("Invited user identity conflicts with an existing row.");
         }
         if (accounts.length === 0) {
           const now = new Date(input.requestedAt);
           await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
           accountRowsAffected = 1;
         } else {
-    const [account] = accounts;
+          const [account] = accounts;
           if (
             accounts.length !== 1 ||
             account?.id !== accountId ||
@@ -141,22 +124,15 @@ function createStore(sql: Sql): PreviewActivationStore {
             account.user_id !== input.userId ||
             account.password !== null
           ) {
-            throw new Error(
-              "Invited GitHub identity conflicts with an existing row.",
-            );
+            throw new Error("Invited GitHub identity conflicts with an existing row.");
           }
         }
         if (memberships.length === 0) {
           const now = new Date(input.requestedAt);
           await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
           membershipRowsAffected = 1;
-        } else if (
-          memberships.length !== 1 ||
-          memberships[0]?.active !== true
-        ) {
-          throw new Error(
-            "Invited user membership conflicts with an existing row.",
-          );
+        } else if (memberships.length !== 1 || memberships[0]?.active !== true) {
+          throw new Error("Invited user membership conflicts with an existing row.");
         }
         return {
           userRowsAffected,
@@ -180,18 +156,13 @@ function createStore(sql: Sql): PreviewActivationStore {
         existing[0]?.rolcanlogin !== true ||
         existing[0]?.membership_count !== 0
       ) {
-        throw new Error(
-          "Runtime database role exists with incompatible authority or membership.",
-        );
+        throw new Error("Runtime database role exists with incompatible authority or membership.");
       } else {
         await configureLoginRole(sql, "alter", input.roleName, input.password);
       }
-      const database = await sql<
-        { name: string }[]
-      >`select current_database() as name`;
+      const database = await sql<{ name: string }[]>`select current_database() as name`;
       const databaseName = database[0]?.name;
-      if (databaseName === undefined)
-        throw new Error("Database identity was unavailable.");
+      if (databaseName === undefined) throw new Error("Database identity was unavailable.");
       await sql`revoke all privileges on database ${sql(databaseName)} from ${sql(input.roleName)}`;
       await sql`revoke all privileges on schema public from ${sql(input.roleName)}`;
       await sql`revoke all privileges on all tables in schema public from ${sql(input.roleName)}`;
@@ -200,12 +171,9 @@ function createStore(sql: Sql): PreviewActivationStore {
       await sql`grant usage on schema public to ${sql(input.roleName)}`;
       await sql`grant select, insert, update, delete on all tables in schema public to ${sql(input.roleName)}`;
       await sql`grant usage, select on all sequences in schema public to ${sql(input.roleName)}`;
-      const owner = await sql<
-        { owner: string }[]
-      >`select current_user as owner`;
+      const owner = await sql<{ owner: string }[]>`select current_user as owner`;
       const ownerName = owner[0]?.owner;
-      if (ownerName === undefined)
-        throw new Error("Migration owner was unavailable.");
+      if (ownerName === undefined) throw new Error("Migration owner was unavailable.");
       await sql`alter default privileges for role ${sql(ownerName)} in schema public revoke all privileges on tables from ${sql(input.roleName)}`;
       await sql`alter default privileges for role ${sql(ownerName)} in schema public revoke all privileges on sequences from ${sql(input.roleName)}`;
       await sql`alter default privileges for role ${sql(ownerName)} in schema public grant select, insert, update, delete on tables to ${sql(input.roleName)}`;
@@ -257,7 +225,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           r.rolreplication, r.rolbypassrls,
           (select count(*)::integer from pg_auth_members m where m.member = r.oid) as membership_count
         from pg_roles r where r.rolname = ${input.roleName}`;
-  const [readback] = verification;
+      const [readback] = verification;
       if (readback === undefined) {
         throw new Error("Runtime database role readback was unavailable.");
       }
@@ -278,9 +246,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           membershipCount: readback.membership_count,
         });
       } catch {
-        throw new Error(
-          "Runtime database role readback was not least privilege.",
-        );
+        throw new Error("Runtime database role readback was not least privilege.");
       }
       return {
         runtimeRoleCreated,
@@ -341,13 +307,9 @@ function createStore(sql: Sql): PreviewActivationStore {
       const afterResource = await sql<
         { count: number }[]
       >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
-      const afterJwks = await sql<
-        { count: number }[]
-      >`select count(*)::integer as count from jwks`;
+      const afterJwks = await sql<{ count: number }[]>`select count(*)::integer as count from jwks`;
       if (afterResource[0]?.count !== 1 || (afterJwks[0]?.count ?? 0) < 1) {
-        throw new Error(
-          "OAuth resource or JWKS initialization readback failed.",
-        );
+        throw new Error("OAuth resource or JWKS initialization readback failed.");
       }
       return {
         resourceRowsBefore: beforeResource[0]?.count ?? 0,
@@ -364,9 +326,7 @@ if (argv[0] === "plan") {
   if (argv.length !== 3 || argv[1] !== "--request-file") {
     throw new Error("hosted:activation-plan requires --request-file PATH.");
   }
-  const request = previewActivationPlanRequestSchema.parse(
-    await readPrivateRequest(argv[2]),
-  );
+  const request = previewActivationPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planPreviewActivation(request))}\n`);
 } else if (argv[0] === "apply") {
   if (
@@ -378,13 +338,9 @@ if (argv[0] === "plan") {
   ) {
     throw new Error("Preview activation apply arguments were invalid.");
   }
-  const request = previewActivationApplyRequestSchema.parse(
-    await readPrivateRequest(argv[6]),
-  );
+  const request = previewActivationApplyRequestSchema.parse(await readPrivateRequest(argv[6]));
   if (request.action !== argv[2]) {
-    throw new Error(
-      "Preview activation request did not match the task action.",
-    );
+    throw new Error("Preview activation request did not match the task action.");
   }
   const databaseUrl = readPrivateDatabaseUrl(0);
   const client = postgres(databaseUrl, hostedTaskPostgresOptions);

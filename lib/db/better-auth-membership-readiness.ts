@@ -11,9 +11,7 @@ const migrationRowSchema = z
   })
   .strict();
 
-const migratedRowSchema = migrationRowSchema
-  .extend({ role: z.literal("owner") })
-  .strict();
+const migratedRowSchema = migrationRowSchema.extend({ role: z.literal("owner") }).strict();
 
 export const betterAuthMembershipReadBackSchema = z
   .object({
@@ -28,19 +26,14 @@ export const betterAuthMembershipReadBackSchema = z
   .strict();
 
 function canonicalRows(rows: Array<z.infer<typeof migrationRowSchema>>) {
-  return [...rows].sort((left, right) =>
-    JSON.stringify(left).localeCompare(JSON.stringify(right)),
-  );
+  return [...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 
 function sha256(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-export function verifyBetterAuthMembershipReadBack(input: {
-  readBack: unknown;
-  observedAt: Date;
-}) {
+export function verifyBetterAuthMembershipReadBack(input: { readBack: unknown; observedAt: Date }) {
   const readBack = betterAuthMembershipReadBackSchema.parse(input.readBack);
   if (!Number.isFinite(input.observedAt.getTime())) {
     throw new Error("Better Auth membership observation time is invalid.");

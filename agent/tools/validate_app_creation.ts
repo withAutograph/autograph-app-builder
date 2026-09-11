@@ -2,10 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { implementationFilesSchema } from "@/lib/agent/apply-implementation-files";
-import {
-  APP_BUILDER_WORKFLOW_VERSION,
-  appBuilderWorkflowState,
-} from "@/lib/agent/workflow-state";
+import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
   createTargetValidationAttempt,
   executeProposalBoundValidation,
@@ -28,9 +25,7 @@ export default defineTool({
       current.phase !== "validation_failed" &&
       current.phase !== "validated"
     )
-      throw new Error(
-        "Apply the requested changes before running the repository checks.",
-      );
+      throw new Error("Apply the requested changes before running the repository checks.");
     if (current.phase === "validated") {
       return {
         status: "validated" as const,
@@ -39,28 +34,20 @@ export default defineTool({
       };
     }
     const sandbox = await ctx.getSandbox();
-    const relativeApplyRoot = current.applyReceipt.applyRoot.replace(
-      /^\/workspace\//u,
-      "",
-    );
+    const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     for (const file of input.implementationFiles)
       await sandbox.writeTextFile({
         path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,
       });
     const fixture = hasTestCapability("simulated-target");
-    const attempt = createTargetValidationAttempt(
-      current.applyReceipt,
-      ctx.callId,
-    );
+    const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const base = {
       version: APP_BUILDER_WORKFLOW_VERSION,
       preparedByCallId: current.preparedByCallId,
       workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
-      ...(current.githubSource === undefined
-        ? {}
-        : { githubSource: current.githubSource }),
+      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
       artifacts: current.artifacts,
       appSpec: current.appSpec,
       dependencyReceipt: current.dependencyReceipt,
@@ -75,9 +62,7 @@ export default defineTool({
     }));
     const result = await executeProposalBoundValidation({
       sandbox,
-      executor: fixture
-        ? fixtureValidationCommandExecutor()
-        : sandboxValidationCommandExecutor(),
+      executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
       apply: current.applyReceipt,
       attempt,
       dependencyLayout: current.dependencyReceipt.dependencyLayout,

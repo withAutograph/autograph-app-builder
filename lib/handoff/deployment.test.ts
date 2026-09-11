@@ -30,8 +30,7 @@ function route(input: { authenticated?: boolean } = {}) {
     store: {
       async reserve(record) {
         const existing = [...rows.values()].find(
-          (candidate) =>
-            candidate.creationRequestId === record.creationRequestId,
+          (candidate) => candidate.creationRequestId === record.creationRequestId,
         );
         if (existing) return { disposition: "existing", record: existing };
         rows.set(record.handoffId, record);
@@ -39,9 +38,7 @@ function route(input: { authenticated?: boolean } = {}) {
       },
       async read({ handoffId: requested, authority: owner }) {
         const row = rows.get(requested);
-        return row && JSON.stringify(row.authority) === JSON.stringify(owner)
-          ? row
-          : undefined;
+        return row && JSON.stringify(row.authority) === JSON.stringify(owner) ? row : undefined;
       },
       async bindSession() {
         return undefined;
@@ -50,8 +47,7 @@ function route(input: { authenticated?: boolean } = {}) {
         const record = rows.get(input.handoffId);
         if (
           !record ||
-          JSON.stringify(record.authority) !==
-            JSON.stringify(input.authority) ||
+          JSON.stringify(record.authority) !== JSON.stringify(input.authority) ||
           record.requestDigest !== input.requestDigest
         )
           return undefined;
@@ -160,9 +156,7 @@ describe("builder handoff deployment", () => {
       providers: provisionRequest.providers,
       provisioning: record.response,
     });
-    expect(
-      rows.get(handoffId)?.intent.repository.resolvedFullName,
-    ).toBeUndefined();
+    expect(rows.get(handoffId)?.intent.repository.resolvedFullName).toBeUndefined();
     expect(journal.reserve).not.toHaveBeenCalled();
     expect(journal.compareAndSet).not.toHaveBeenCalled();
   });
@@ -170,23 +164,14 @@ describe("builder handoff deployment", () => {
   it("does not accept caller-supplied provider selections or another owner's provisioning request", async () => {
     const { handler } = route();
     expect(
-      (
-        await handler(
-          request({ ...validBody, providers: { githubInstallationId: "999" } }),
-        )
-      ).status,
+      (await handler(request({ ...validBody, providers: { githubInstallationId: "999" } }))).status,
     ).toBe(400);
     expect(
-      (
-        await handler(
-          request({ ...validBody, provisioningRequestId: randomUUID() }),
-        )
-      ).status,
+      (await handler(request({ ...validBody, provisioningRequestId: randomUUID() }))).status,
     ).toBe(404);
-    expect(
-      (await handler(request({ ...validBody, destination: "other-client" })))
-        .status,
-    ).toBe(400);
+    expect((await handler(request({ ...validBody, destination: "other-client" }))).status).toBe(
+      400,
+    );
   });
 
   it("extends the same reference and never calls provisioning", async () => {
@@ -196,19 +181,12 @@ describe("builder handoff deployment", () => {
     clock.now = original.expiresAt;
     const renewal = request({ creationRequestId: randomUUID() });
     const first = await renew(renewal, handoffId);
-    const retry = await renew(
-      request({ creationRequestId: randomUUID() }),
-      handoffId,
-    );
+    const retry = await renew(request({ creationRequestId: randomUUID() }), handoffId);
     expect(first.status).toBe(200);
     expect(first.headers.get("cache-control")).toBe("no-store");
     const reference = await first.json();
     expect(reference).toEqual(await retry.json());
-    expect(Object.keys(reference).sort()).toEqual([
-      "expiresAt",
-      "handoffId",
-      "version",
-    ]);
+    expect(Object.keys(reference).sort()).toEqual(["expiresAt", "handoffId", "version"]);
     expect(reference.handoffId).toBe(handoffId);
     expect(rows.size).toBe(1);
     expect(rows.get(handoffId)).toEqual({
@@ -242,10 +220,7 @@ describe("builder handoff deployment", () => {
   it("protects renewal against CSRF, invalid JSON, unexpected fields, and oversized bodies", async () => {
     const { renew, rows } = route();
     const attempts = [
-      request(
-        { creationRequestId: randomUUID() },
-        { origin: "https://evil.test" },
-      ),
+      request({ creationRequestId: randomUUID() }, { origin: "https://evil.test" }),
       request({ creationRequestId: "invalid" }),
       request({ creationRequestId: randomUUID(), intent: validBody }),
       new Request(`${origin}/api/builder/handoffs/${handoffId}/renew`, {
@@ -338,11 +313,7 @@ describe("builder handoff deployment", () => {
     const unauthenticated = route({ authenticated: false }).handler;
     expect((await unauthenticated(request(validBody))).status).toBe(401);
     expect(
-      (
-        await route().handler(
-          request(validBody, { origin: "https://evil.test" }),
-        )
-      ).status,
+      (await route().handler(request(validBody, { origin: "https://evil.test" }))).status,
     ).toBe(400);
     expect(
       (

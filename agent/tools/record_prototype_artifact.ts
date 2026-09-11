@@ -29,9 +29,7 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype artifact recording");
     if (current.phase === "empty")
-      throw new Error(
-        "Prepare a workspace before recording prototype artifacts.",
-      );
+      throw new Error("Prepare a workspace before recording prototype artifacts.");
     if (current.phase === "validation_pending")
       throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
@@ -61,10 +59,7 @@ export default defineTool({
         expected: current,
         operation: "prototype artifact recording",
         transition: () => {
-          if (
-            current.phase === "ui_previewed" ||
-            current.phase === "ui_accepted"
-          )
+          if (current.phase === "ui_previewed" || current.phase === "ui_accepted")
             return { ...current, artifacts: recorded.artifacts };
           return {
             version: APP_BUILDER_WORKFLOW_VERSION,
@@ -72,9 +67,7 @@ export default defineTool({
             preparedByCallId: current.preparedByCallId,
             workspace: current.workspace,
             sourceReceipt: current.sourceReceipt,
-            ...(current.githubSource === undefined
-              ? {}
-              : { githubSource: current.githubSource }),
+            ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
             artifacts: recorded.artifacts,
           };
         },
@@ -100,9 +93,7 @@ export default defineTool({
       ...prototypeArtifactReceipt(recorded.artifact),
       reused: recorded.reused,
       ...(recorded.reused ? {} : { invalidated: current.phase !== "prepared" }),
-      ...(buildReadyAppSpec === undefined
-        ? {}
-        : { implementationPlanReady: true }),
+      ...(buildReadyAppSpec === undefined ? {} : { implementationPlanReady: true }),
     };
   },
 });

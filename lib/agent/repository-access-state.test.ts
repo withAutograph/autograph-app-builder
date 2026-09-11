@@ -110,9 +110,7 @@ describe("session-bound repository access receipt", () => {
         digest: "0".repeat(64),
       }),
     ).toThrow("Repository access receipt digest is invalid.");
-    expect(() =>
-      repositoryAccessReceiptSchema.parse({ ...receipt, token: "secret" }),
-    ).toThrow();
+    expect(() => repositoryAccessReceiptSchema.parse({ ...receipt, token: "secret" })).toThrow();
     expect(() =>
       recordRepositoryAccessReceipt({
         current: { ...receipt, digest: "0".repeat(64) },
@@ -156,9 +154,7 @@ describe("session-bound repository access receipt", () => {
           expectedTree: tree,
           ...changed,
         }),
-      ).toThrow(
-        "The repository access receipt does not match this session and source.",
-      );
+      ).toThrow("The repository access receipt does not match this session and source.");
     }
   });
 
@@ -206,8 +202,6 @@ describe("session-bound repository access receipt", () => {
           repository: { ...source.repository, name: "another-repository" },
         },
       }),
-    ).toThrow(
-      "The live GitHub source does not match the confirmed repository access receipt.",
-    );
+    ).toThrow("The live GitHub source does not match the confirmed repository access receipt.");
   });
 });

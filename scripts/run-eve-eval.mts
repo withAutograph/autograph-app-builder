@@ -13,8 +13,7 @@ const option = (name: string, required = false): string | undefined => {
     return undefined;
   }
   const value = args[index + 1];
-  if (value === undefined || value.startsWith("--"))
-    throw new Error(`Missing value for ${name}.`);
+  if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   args.splice(index, 2);
   if (args.includes(name)) throw new Error(`Duplicate ${name}.`);
   return value;
@@ -56,8 +55,7 @@ const gateAEvalProfile =
         : (() => {
             throw new Error("The Gate A eval profile was invalid.");
           })();
-if (gateAEvalProfile === undefined)
-  throw new Error("The Gate A eval profile was invalid.");
+if (gateAEvalProfile === undefined) throw new Error("The Gate A eval profile was invalid.");
 if (
   gateAEvalProfile.profile !== "fresh" &&
   (stateRoot !== undefined || allowedRoot !== undefined || fault !== undefined)
@@ -101,32 +99,26 @@ const sandboxEvaluations = new Set([
   "sandbox-existing-iteration",
 ]);
 if (
-  (gateAEvalProfile.profile === "sandbox" ||
-    gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
   (args[0] === undefined || !sandboxEvaluations.has(args[0]))
 )
   throw new Error("The sandbox Gate A evaluation was invalid.");
 if (
-  (gateAEvalProfile.profile === "sandbox" ||
-    gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
   args[0] === "sandbox-identity-planning" &&
   (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (
-  (gateAEvalProfile.profile === "sandbox" ||
-    gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
   args[0] === "sandbox-reviewed-change-set" &&
   (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
 )
-  throw new Error(
-    "The sandbox reviewed change-set proof requires exact inputs.",
-  );
+  throw new Error("The sandbox reviewed change-set proof requires exact inputs.");
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =
-  gateAEvalProfile.profile === "sandbox" ||
-  gateAEvalProfile.profile === "hosted-artifact";
+  gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact";
 const capabilities = realSandbox
   ? ["mock-model"]
   : ["mock-model", "simulated-target", "simulated-publication"];

@@ -8,8 +8,7 @@ const meta = {
   component: ApprovalRequest,
   args: {
     title: "Build this app?",
-    description:
-      "Build and validate the preview shown above in the private App Builder workspace.",
+    description: "Build and validate the preview shown above in the private App Builder workspace.",
     onAnswer: fn(),
   },
   decorators: [
@@ -25,12 +24,8 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText("Keep chatting to refine your app."),
-    ).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: "Build app" }),
-    ).toBeVisible();
+    await expect(canvas.getByText("Keep chatting to refine your app.")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Build app" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Make changes" }));
     await expect(args.onAnswer).toHaveBeenCalledWith({ kind: "deny" });
     await userEvent.click(canvas.getByRole("button", { name: "Build app" }));

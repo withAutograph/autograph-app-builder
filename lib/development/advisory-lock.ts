@@ -1,10 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { platform as hostPlatform } from "node:os";
 
-import {
-  developmentChildExit,
-  stopDevelopmentChild,
-} from "./process-supervisor";
+import { developmentChildExit, stopDevelopmentChild } from "./process-supervisor";
 
 type SupportedPlatform = "darwin" | "linux";
 
@@ -69,12 +66,9 @@ export async function runWithDevelopmentLock(input: {
   try {
     const code = await developmentChildExit(child);
     if (code === invocation.busyExitCode)
-      throw new Error(
-        "Another `mise run dev` proof already owns this App Builder state root.",
-      );
+      throw new Error("Another `mise run dev` proof already owns this App Builder state root.");
     return code;
   } finally {
-    for (const { signal, handler } of handlers)
-      process.removeListener(signal, handler);
+    for (const { signal, handler } of handlers) process.removeListener(signal, handler);
   }
 }

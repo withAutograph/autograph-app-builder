@@ -8,9 +8,7 @@ type SignalTarget = Readonly<{
   off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
-export function createDevelopmentShutdown(
-  target: SignalTarget = process,
-): Readonly<{
+export function createDevelopmentShutdown(target: SignalTarget = process): Readonly<{
   signal: AbortSignal;
   exitCode: () => number;
   dispose: () => void;
@@ -37,18 +35,12 @@ export function createDevelopmentShutdown(
   };
 }
 
-export function waitForDevelopmentShutdown(
-  signal: AbortSignal,
-  exitCode: () => number,
-) {
-  if (signal.aborted)
-    return Promise.resolve({ kind: "stop" as const, code: exitCode() });
+export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
+  if (signal.aborted) return Promise.resolve({ kind: "stop" as const, code: exitCode() });
   return new Promise<{ kind: "stop"; code: number }>((resolveStop) => {
-    signal.addEventListener(
-      "abort",
-      () => resolveStop({ kind: "stop", code: exitCode() }),
-      { once: true },
-    );
+    signal.addEventListener("abort", () => resolveStop({ kind: "stop", code: exitCode() }), {
+      once: true,
+    });
   });
 }
 
@@ -73,8 +65,7 @@ export async function stopDevelopmentChild(
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
   if (childExited && !options.processGroup) return;
-  const gracefulTimeoutMs =
-    options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
+  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
     if (child.pid === undefined || process.platform === "win32") {
@@ -87,11 +78,7 @@ export async function stopDevelopmentChild(
       if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
     }
   };
-  if (
-    options.processGroup &&
-    child.pid !== undefined &&
-    process.platform !== "win32"
-  ) {
+  if (options.processGroup && child.pid !== undefined && process.platform !== "win32") {
     // Signal the wrapper only while it is alive. It forwards this signal once
     // to Eve. Signalling the whole group here would also hit Eve directly,
     // making the wrapper's forward a second signal that bypasses Eve's orderly
@@ -147,7 +134,5 @@ export async function waitForDevelopmentPortRelease(
       setTimeout(resolveWait, pollMs);
     });
   }
-  throw new Error(
-    `Development Eve port ${port} was not released after shutdown.`,
-  );
+  throw new Error(`Development Eve port ${port} was not released after shutdown.`);
 }

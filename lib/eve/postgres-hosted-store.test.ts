@@ -3,10 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
-import {
-  parseHostedOperationRow,
-  parseHostedSessionRow,
-} from "./postgres-hosted-store";
+import { parseHostedOperationRow, parseHostedSessionRow } from "./postgres-hosted-store";
 
 const principal: HostedPrincipal = {
   issuer: "https://identity.example.test",
@@ -77,9 +74,9 @@ const sessionRow = {
 describe("PostgreSQL hosted Eve row authority", () => {
   it("accepts only an operation whose indexed authority matches its closed record", () => {
     expect(parseHostedOperationRow(operationRow)).toEqual(operationRecord);
-    expect(() =>
-      parseHostedOperationRow({ ...operationRow, workspaceId: "workspace_2" }),
-    ).toThrow("canonically bound");
+    expect(() => parseHostedOperationRow({ ...operationRow, workspaceId: "workspace_2" })).toThrow(
+      "canonically bound",
+    );
     expect(() =>
       parseHostedOperationRow({
         ...operationRow,
@@ -90,9 +87,9 @@ describe("PostgreSQL hosted Eve row authority", () => {
 
   it("accepts only a session whose tenant and adapter index match its record", () => {
     expect(parseHostedSessionRow(sessionRow)).toEqual(sessionRecord);
-    expect(() =>
-      parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" }),
-    ).toThrow("canonically bound");
+    expect(() => parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" })).toThrow(
+      "canonically bound",
+    );
   });
 
   it("keeps the checked-in migration tenant scoped and idempotency bound", async () => {
@@ -112,10 +109,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
       expect(migration).toContain(required);
     }
     const journal = JSON.parse(
-      await readFile(
-        new URL("../../drizzle/meta/_journal.json", import.meta.url),
-        "utf8",
-      ),
+      await readFile(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8"),
     ) as unknown;
     expect(journal).toEqual({
       version: "7",

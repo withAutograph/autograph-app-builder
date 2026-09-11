@@ -53,15 +53,13 @@
   <main>
     <h1>Generated UI design report</h1>
     <p>
-      Advisory evaluation of an existing preview. Not a release gate or proof of
-      backend behavior.
+      Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.
     </p>
     <p>2026-09-08T15:56:46.883Z</p>
     <h2>AI design review</h2>
     <p><strong>Subjective design score: 75/100</strong></p>
     <p>
-      One model assessment; not an objective rating. Token adherence is reported
-      separately below.
+      One model assessment; not an objective rating. Token adherence is reported separately below.
     </p>
     <table>
       <thead>
@@ -76,33 +74,29 @@
           <th>hierarchy</th>
           <td>3/4</td>
           <td>
-            The page title, progress indicator, form heading, required fields,
-            and primary “Review request” action establish a clear sequence. The
-            selected step and primary button are visually emphasized, though
-            small low-contrast status and helper text weaken secondary-level
-            scanning.
+            The page title, progress indicator, form heading, required fields, and primary “Review
+            request” action establish a clear sequence. The selected step and primary button are
+            visually emphasized, though small low-contrast status and helper text weaken
+            secondary-level scanning.
           </td>
         </tr>
         <tr>
           <th>layout</th>
           <td>3/4</td>
           <td>
-            Desktop uses a balanced sidebar-and-form composition with consistent
-            field alignment and spacing; tablet adapts to a narrower
-            single-column form beside the progress panel. On mobile, controls
-            fit without horizontal overflow, but the expanded progress panel
-            occupies roughly the first 500 px and delays access to the main
-            task.
+            Desktop uses a balanced sidebar-and-form composition with consistent field alignment and
+            spacing; tablet adapts to a narrower single-column form beside the progress panel. On
+            mobile, controls fit without horizontal overflow, but the expanded progress panel
+            occupies roughly the first 500 px and delays access to the main task.
           </td>
         </tr>
         <tr>
           <th>typography</th>
           <td>3/4</td>
           <td>
-            Headings, labels, inputs, and actions are visually consistent and
-            generally readable. Several muted captions, helper lines, and status
-            labels are only 11–14 px and use gray or pale blue with measured
-            contrast ratios just below—or substantially below—accessible
+            Headings, labels, inputs, and actions are visually consistent and generally readable.
+            Several muted captions, helper lines, and status labels are only 11–14 px and use gray
+            or pale blue with measured contrast ratios just below—or substantially below—accessible
             thresholds.
           </td>
         </tr>
@@ -110,25 +104,22 @@
           <th>responsive</th>
           <td>3/4</td>
           <td>
-            The form changes from a two-column desktop grid to one column on
-            tablet and mobile, with fields remaining 332 px wide in the 390 px
-            mobile viewport and no measured horizontal overflow. Mobile retains
-            a long desktop-style progress treatment and 40 px-high actions,
-            making the composition less efficient and touch-friendly than it
-            could be.
+            The form changes from a two-column desktop grid to one column on tablet and mobile, with
+            fields remaining 332 px wide in the 390 px mobile viewport and no measured horizontal
+            overflow. Mobile retains a long desktop-style progress treatment and 40 px-high actions,
+            making the composition less efficient and touch-friendly than it could be.
           </td>
         </tr>
         <tr>
           <th>productClarity</th>
           <td>3/4</td>
           <td>
-            The purpose is immediately understandable, all requested inputs are
-            represented, required fields are marked, the date constraint and
-            reason minimum are explained, and the three-step
-            Request/Review/Submitted model communicates the expected flow. Only
-            initial screens were supplied and interaction testing was not run,
-            so the requested review summary, field-error behavior, mock
-            submission, and success feedback cannot be verified.
+            The purpose is immediately understandable, all requested inputs are represented,
+            required fields are marked, the date constraint and reason minimum are explained, and
+            the three-step Request/Review/Submitted model communicates the expected flow. Only
+            initial screens were supplied and interaction testing was not run, so the requested
+            review summary, field-error behavior, mock submission, and success feedback cannot be
+            verified.
           </td>
         </tr>
       </tbody>
@@ -136,103 +127,96 @@
     <h3>Strengths</h3>
     <ul>
       <li>
-        The title and introductory sentence clearly explain that this is an
-        equipment request followed by review and mock submission.
+        The title and introductory sentence clearly explain that this is an equipment request
+        followed by review and mock submission.
       </li>
       <li>
-        All briefed data points are present: name, department, equipment,
-        desired date, and reason.
+        All briefed data points are present: name, department, equipment, desired date, and reason.
       </li>
       <li>
-        Primary and secondary actions are clearly differentiated, with “Review
-        request” receiving appropriate emphasis.
+        Primary and secondary actions are clearly differentiated, with “Review request” receiving
+        appropriate emphasis.
       </li>
       <li>
-        Field widths, labels, required markers, helper text, and vertical rhythm
-        are consistent across viewports.
+        Field widths, labels, required markers, helper text, and vertical rhythm are consistent
+        across viewports.
       </li>
       <li>
-        Responsive layouts avoid measured horizontal overflow and preserve
-        comfortable side margins on mobile.
+        Responsive layouts avoid measured horizontal overflow and preserve comfortable side margins
+        on mobile.
       </li>
       <li>
-        The progress component gives users a clear mental model of request,
-        review, and confirmation stages.
+        The progress component gives users a clear mental model of request, review, and confirmation
+        stages.
       </li>
     </ul>
     <h3>Recommended improvements</h3>
     <article>
       <h4>medium · <a href="#mobile-0">mobile-0</a></h4>
       <p>
-        The full three-card progress panel consumes a large portion of the
-        initial mobile view, pushing the first form control to approximately
-        y=658. Users must scroll substantially before they can begin the primary
-        task.
+        The full three-card progress panel consumes a large portion of the initial mobile view,
+        pushing the first form control to approximately y=658. Users must scroll substantially
+        before they can begin the primary task.
       </p>
       <p>
-        <strong>Improve:</strong> Use a compact mobile stepper, such as “Step 1
-        of 3 — Request details” with a short progress bar, while retaining the
-        expanded step descriptions on wider screens.
+        <strong>Improve:</strong> Use a compact mobile stepper, such as “Step 1 of 3 — Request
+        details” with a short progress bar, while retaining the expanded step descriptions on wider
+        screens.
       </p>
       <small>Screenshot region: x 12, y 141, width 365, height 357</small>
     </article>
     <article>
       <h4>medium · <a href="#mobile-0">mobile-0</a></h4>
       <p>
-        Both bottom actions are only 40 px high. They remain legible, but offer
-        smaller touch targets than is comfortable for frequent phone use,
-        especially with two actions placed closely together.
+        Both bottom actions are only 40 px high. They remain legible, but offer smaller touch
+        targets than is comfortable for frequent phone use, especially with two actions placed
+        closely together.
       </p>
       <p>
-        <strong>Improve:</strong> Increase mobile action height to at least
-        44–48 px and consider full-width stacking, keeping the primary action
-        first and the destructive/reset-style action visually secondary.
+        <strong>Improve:</strong> Increase mobile action height to at least 44–48 px and consider
+        full-width stacking, keeping the primary action first and the destructive/reset-style action
+        visually secondary.
       </p>
       <small>Screenshot region: x 29, y 1154, width 244, height 40</small>
     </article>
     <article>
       <h4>medium · <a href="#desktop-0">desktop-0</a></h4>
       <p>
-        The current-step description and pale-blue status treatment have weak
-        contrast; supplied measurements report ratios of 4.14:1 for selected
-        descriptive text and 2.57:1 for pale-blue status text. This reduces
-        readability and makes the step state less robust.
+        The current-step description and pale-blue status treatment have weak contrast; supplied
+        measurements report ratios of 4.14:1 for selected descriptive text and 2.57:1 for pale-blue
+        status text. This reduces readability and makes the step state less robust.
       </p>
       <p>
-        <strong>Improve:</strong> Darken muted text and the blue status
-        foreground, or use a stronger selected-state background/border
-        combination that reaches at least 4.5:1 for normal-sized text.
+        <strong>Improve:</strong> Darken muted text and the blue status foreground, or use a
+        stronger selected-state background/border combination that reaches at least 4.5:1 for
+        normal-sized text.
       </p>
       <small>Screenshot region: x 173, y 215, width 274, height 120</small>
     </article>
     <article>
       <h4>low · <a href="#tablet-0">tablet-0</a></h4>
       <p>
-        Multiple helper lines and captions use small, light-gray text.
-        Measurements identify several 12–14 px text elements near 4.47:1,
-        narrowly below the expected contrast threshold, making supporting
-        guidance less comfortable to read.
+        Multiple helper lines and captions use small, light-gray text. Measurements identify several
+        12–14 px text elements near 4.47:1, narrowly below the expected contrast threshold, making
+        supporting guidance less comfortable to read.
       </p>
       <p>
-        <strong>Improve:</strong> Adopt a darker muted-text color with clear
-        contrast headroom rather than targeting the threshold exactly; preserve
-        the visual hierarchy through size and spacing instead of very light
-        color.
+        <strong>Improve:</strong> Adopt a darker muted-text color with clear contrast headroom
+        rather than targeting the threshold exactly; preserve the visual hierarchy through size and
+        spacing instead of very light color.
       </p>
       <small>Screenshot region: x 365, y 215, width 362, height 616</small>
     </article>
     <article>
       <h4>low · <a href="#mobile-0">mobile-0</a></h4>
       <p>
-        The reason field says “0/20 minimum characters,” which conveys the rule
-        but reads like a counter and requirement combined, making the changing
-        state slightly ambiguous.
+        The reason field says “0/20 minimum characters,” which conveys the rule but reads like a
+        counter and requirement combined, making the changing state slightly ambiguous.
       </p>
       <p>
-        <strong>Improve:</strong> Separate the messages: show “Minimum 20
-        characters” as persistent guidance and place a live “0/20” counter at
-        the opposite edge, changing to a standard character count after the
-        minimum is met.
+        <strong>Improve:</strong> Separate the messages: show “Minimum 20 characters” as persistent
+        guidance and place a live “0/20” counter at the opposite edge, changing to a standard
+        character count after the minimum is met.
       </p>
       <small>Screenshot region: x 29, y 1014, width 332, height 121</small>
     </article>
@@ -372,9 +356,7 @@
 }</pre>
     <section id="desktop-0">
       <h2>desktop-0 — initial</h2>
-      <a href="desktop-0.png"
-        ><img src="desktop-0.png" alt="desktop-0 initial screenshot"
-      /></a>
+      <a href="desktop-0.png"><img src="desktop-0.png" alt="desktop-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>
@@ -19037,9 +19019,7 @@
     </section>
     <section id="tablet-0">
       <h2>tablet-0 — initial</h2>
-      <a href="tablet-0.png"
-        ><img src="tablet-0.png" alt="tablet-0 initial screenshot"
-      /></a>
+      <a href="tablet-0.png"><img src="tablet-0.png" alt="tablet-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>
@@ -37702,9 +37682,7 @@
     </section>
     <section id="mobile-0">
       <h2>mobile-0 — initial</h2>
-      <a href="mobile-0.png"
-        ><img src="mobile-0.png" alt="mobile-0 initial screenshot"
-      /></a>
+      <a href="mobile-0.png"><img src="mobile-0.png" alt="mobile-0 initial screenshot" /></a>
       <details>
         <summary>Browser findings and interactions</summary>
         <pre>

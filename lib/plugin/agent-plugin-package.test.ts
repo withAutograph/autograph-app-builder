@@ -1,18 +1,8 @@
-import {
-  cp,
-  mkdtemp,
-  mkdir,
-  readFile,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  buildAgentPluginPackage,
-  validateAgentPluginPackage,
-} from "./agent-plugin-package";
+import { buildAgentPluginPackage, validateAgentPluginPackage } from "./agent-plugin-package";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
@@ -26,13 +16,8 @@ const copyPortablePackage = async () => {
   return root;
 };
 
-const writeMcpHeaders = async (
-  root: string,
-  headers: Record<string, string>,
-) => {
-  const mcp = JSON.parse(
-    await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"),
-  );
+const writeMcpHeaders = async (root: string, headers: Record<string, string>) => {
+  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"));
   mcp.mcpServers["app-builder"].headers = headers;
   await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
@@ -40,33 +25,23 @@ const writeMcpHeaders = async (
 const writeMcp = async (
   root: string,
   mutation: (mcp: {
-    mcpServers: Record<
-      string,
-      { type: string; url: string; headers?: Record<string, string> }
-    >;
+    mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
   }) => void,
 ) => {
-  const mcp = JSON.parse(
-    await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"),
-  );
+  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"));
   mutation(mcp);
   await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
 const writePluginVersion = async (root: string, version: string) => {
-  const plugin = JSON.parse(
-    await readFile(resolve(repositoryRoot, "plugin.json"), "utf8"),
-  );
+  const plugin = JSON.parse(await readFile(resolve(repositoryRoot, "plugin.json"), "utf8"));
   plugin.version = version;
   await writeFile(resolve(root, "plugin.json"), JSON.stringify(plugin));
 };
 
 describe("Agent Plugins package", () => {
   it("builds and validates a client-neutral artifact", async () => {
-    const output = resolve(
-      repositoryRoot,
-      ".artifacts/agent-plugin/app-builder-test",
-    );
+    const output = resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder-test");
     await buildAgentPluginPackage({ repositoryRoot, outputRoot: output });
     await expect(
       validateAgentPluginPackage({
@@ -80,14 +55,10 @@ describe("Agent Plugins package", () => {
       specification: "1.0.0",
       packageKind: "generated-artifact",
     });
-    await expect(
-      readFile(resolve(output, "plugin.json"), "utf8"),
-    ).resolves.toBe(
+    await expect(readFile(resolve(output, "plugin.json"), "utf8")).resolves.toBe(
       await readFile(resolve(repositoryRoot, "plugin.json"), "utf8"),
     );
-    await expect(
-      readFile(resolve(output, ".codex-plugin/plugin.json")),
-    ).rejects.toThrow();
+    await expect(readFile(resolve(output, ".codex-plugin/plugin.json"))).rejects.toThrow();
     await expect(readFile(resolve(output, ".app.json"))).rejects.toThrow();
   });
 
@@ -118,16 +89,13 @@ describe("Agent Plugins package", () => {
     ).rejects.toThrow("deployed HTTPS endpoint");
   });
 
-  it.each(["0.1.0", "0.2.0", "1.0.0"])(
-    "rejects package version %s",
-    async (version) => {
-      const root = await copyPortablePackage();
-      await writePluginVersion(root, version);
-      await expect(
-        validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-      ).rejects.toThrow("version must be exactly 0.2.12");
-    },
-  );
+  it.each(["0.1.0", "0.2.0", "1.0.0"])("rejects package version %s", async (version) => {
+    const root = await copyPortablePackage();
+    await writePluginVersion(root, version);
+    await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
+      "version must be exactly 0.2.12",
+    );
+  });
 
   it.each([
     ["a versioned MCP path", "https://preview.autograph.dev/mcp/v2"],
@@ -146,10 +114,7 @@ describe("Agent Plugins package", () => {
     ["an IPv4-mapped loopback", "https://[::ffff:7f00:1]/mcp"],
     ["a noncanonical IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/mcp"],
     ["a raw dot-segment alias", "https://preview.autograph.dev/a/../mcp"],
-    [
-      "a percent-encoded dot-segment alias",
-      "https://preview.autograph.dev/a/%2e%2e/mcp",
-    ],
+    ["a percent-encoded dot-segment alias", "https://preview.autograph.dev/a/%2e%2e/mcp"],
     ["a mixed-case hostname", "https://PREVIEW.autograph.dev/mcp"],
     ["an explicit default port", "https://preview.autograph.dev:443/mcp"],
   ])("rejects %s", async (_name, endpoint) => {
@@ -174,9 +139,9 @@ describe("Agent Plugins package", () => {
         url: "https://preview.autograph.dev/alternate",
       };
     });
-    await expect(
-      validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).rejects.toThrow("exactly one app-builder MCP server");
+    await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
+      "exactly one app-builder MCP server",
+    );
   });
 
   it("rejects package symlinks", async () => {
@@ -188,17 +153,14 @@ describe("Agent Plugins package", () => {
       resolve(root, "plugin.json"),
       await readFile(resolve(repositoryRoot, "plugin.json")),
     );
-    await writeFile(
-      resolve(root, "mcp.json"),
-      await readFile(resolve(repositoryRoot, "mcp.json")),
-    );
+    await writeFile(resolve(root, "mcp.json"), await readFile(resolve(repositoryRoot, "mcp.json")));
     await symlink(
       resolve(repositoryRoot, "skills/autograph-app-builder/SKILL.md"),
       resolve(root, "skills/autograph-app-builder/SKILL.md"),
     );
-    await expect(
-      validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).rejects.toThrow("regular file");
+    await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
+      "regular file",
+    );
   });
 
   it("parses quoted and multiline Agent Skills frontmatter", async () => {
@@ -260,13 +222,10 @@ allowed-tools: "autograph_start autograph_get"
     ],
   ])("rejects %s", async (_name, skill, message) => {
     const root = await copyPortablePackage();
-    await writeFile(
-      resolve(root, "skills/autograph-app-builder/SKILL.md"),
-      skill,
+    await writeFile(resolve(root, "skills/autograph-app-builder/SKILL.md"), skill);
+    await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
+      message,
     );
-    await expect(
-      validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).rejects.toThrow(message);
   });
 
   it("accepts valid public declarative HTTP headers", async () => {
@@ -281,37 +240,25 @@ allowed-tools: "autograph_start autograph_get"
   });
 
   it.each([
-    [
-      "invalid HTTP field names",
-      { "bad header": "public" },
-      "invalid HTTP header name",
-    ],
+    ["invalid HTTP field names", { "bad header": "public" }, "invalid HTTP header name"],
     [
       "case-insensitive duplicate HTTP field names",
       { "X-Client": "public", "x-client": "public" },
       "with different casing",
     ],
-    [
-      "credential-bearing HTTP field names",
-      { "X-Api-Key": "public" },
-      "not demonstrably public",
-    ],
+    ["credential-bearing HTTP field names", { "X-Api-Key": "public" }, "not demonstrably public"],
     [
       "secret-like HTTP field values",
       { "X-Client": "${CLIENT_SECRET}" },
       "not demonstrably public",
     ],
-    [
-      "invalid HTTP field values",
-      { "X-Client": "line one\nline two" },
-      "invalid value",
-    ],
+    ["invalid HTTP field values", { "X-Client": "line one\nline two" }, "invalid value"],
   ])("rejects %s", async (_name, headers, message) => {
     const root = await copyPortablePackage();
     await writeMcpHeaders(root, headers);
-    await expect(
-      validateAgentPluginPackage({ pluginRoot: root, repositoryRoot }),
-    ).rejects.toThrow(message);
+    await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
+      message,
+    );
   });
 
   it("rejects a linked artifact parent before removing output", async () => {

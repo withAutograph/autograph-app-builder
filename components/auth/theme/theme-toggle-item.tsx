@@ -23,9 +23,7 @@ export function ThemeToggleItem() {
   // inside, letting the user move between themes with Left/Right arrows
   // and activate one with Enter or Space.
   const focusActiveTab = () => {
-    const activeTab = tabsListRef.current?.querySelector<HTMLElement>(
-      '[role="tab"][data-active]',
-    );
+    const activeTab = tabsListRef.current?.querySelector<HTMLElement>('[role="tab"][data-active]');
     activeTab?.focus({ preventScroll: true });
   };
 
@@ -38,19 +36,14 @@ export function ThemeToggleItem() {
     if (target.getAttribute("role") !== "tab") return;
 
     const wrapper = target.closest<HTMLElement>('[role="menuitem"]');
-    const content = wrapper?.closest<HTMLElement>(
-      '[data-slot="dropdown-menu-content"]',
-    );
+    const content = wrapper?.closest<HTMLElement>('[data-slot="dropdown-menu-content"]');
     if (!wrapper || !content) return;
 
     const items = Array.from(
-      content.querySelectorAll<HTMLElement>(
-        '[role="menuitem"]:not([aria-disabled="true"])',
-      ),
+      content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
     );
     const currentIndex = items.indexOf(wrapper);
-    const nextIndex =
-      event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
+    const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
     const next = items[nextIndex];
     if (!next) return;
 
@@ -79,29 +72,17 @@ export function ThemeToggleItem() {
       >
         <TabsList ref={tabsListRef} className="h-6!">
           {themes.includes("system") && (
-            <TabsTrigger
-              value="system"
-              className="size-5 p-0"
-              aria-label={localization.system}
-            >
+            <TabsTrigger value="system" className="size-5 p-0" aria-label={localization.system}>
               <Monitor className="size-3" />
             </TabsTrigger>
           )}
           {themes.includes("light") && (
-            <TabsTrigger
-              value="light"
-              className="size-5 p-0"
-              aria-label={localization.light}
-            >
+            <TabsTrigger value="light" className="size-5 p-0" aria-label={localization.light}>
               <Sun className="size-3" />
             </TabsTrigger>
           )}
           {themes.includes("dark") && (
-            <TabsTrigger
-              value="dark"
-              className="size-5 p-0"
-              aria-label={localization.dark}
-            >
+            <TabsTrigger value="dark" className="size-5 p-0" aria-label={localization.dark}>
               <Moon className="size-3" />
             </TabsTrigger>
           )}

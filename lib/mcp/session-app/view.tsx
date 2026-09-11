@@ -1,9 +1,6 @@
 import { useMemo, useState } from "react";
 
-import {
-  ChoiceCard,
-  SectionShell,
-} from "../../../components/create-app/choice-card";
+import { ChoiceCard, SectionShell } from "../../../components/create-app/choice-card";
 import { githubRepositoryAccessViewModel } from "../../integrations/store-in-view-model";
 import type { EveSessionResult, PublicInputRequest } from "../contracts";
 import { ApprovalRequest } from "./approval-request";
@@ -44,8 +41,7 @@ export function InputControl({
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
         {request.options.map((option) => {
-          const selected =
-            answer?.kind === "answer" && answer.optionId === option.id;
+          const selected = answer?.kind === "answer" && answer.optionId === option.id;
           return (
             <ChoiceCard
               key={option.id}
@@ -81,9 +77,7 @@ export function InputControl({
         aria-label={request.title}
         value={answer?.kind === "answer" ? answer.value : ""}
         placeholder="Enter your answer…"
-        onChange={(event) =>
-          onAnswer({ kind: "answer", value: event.target.value })
-        }
+        onChange={(event) => onAnswer({ kind: "answer", value: event.target.value })}
       />
     );
 
@@ -143,11 +137,7 @@ export function AuthorizationControl({
       </span>
       <div>
         <strong>{provider}</strong>
-        <p>
-          {storeIn?.description ||
-            challenge?.instructions ||
-            request.description}
-        </p>
+        <p>{storeIn?.description || challenge?.instructions || request.description}</p>
         {storeIn?.desiredRepository ? (
           <p className="repository-name">
             <span>Repository</span>
@@ -179,12 +169,7 @@ export function AuthorizationControl({
         </button>
       ) : null}
       {canRefresh ? (
-        <button
-          type="button"
-          className="secondary"
-          onClick={refresh}
-          disabled={refreshing}
-        >
+        <button type="button" className="secondary" onClick={refresh} disabled={refreshing}>
           {refreshing ? "Checking…" : "Check access"}
         </button>
       ) : null}
@@ -217,32 +202,22 @@ export function SessionAppView({
   result?: EveSessionResult;
 }) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
-  const [state, setState] = useState<"idle" | "submitting" | "submitted">(
-    "idle",
-  );
+  const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
   const [error, setError] = useState("");
   const requests = result?.inputRequests ?? [];
-  const respondable = requests.filter(
-    (request) => request.kind !== "authorization",
-  );
+  const respondable = requests.filter((request) => request.kind !== "authorization");
   const complete = useMemo(
     () =>
       respondable.length > 0 &&
       respondable.every((request) => {
         const answer = answers[request.requestId];
-        return (
-          answer !== undefined &&
-          (answer.kind !== "answer" || answer.value.trim().length > 0)
-        );
+        return answer !== undefined && (answer.kind !== "answer" || answer.value.trim().length > 0);
       }),
     [answers, respondable],
   );
   const unansweredCount = respondable.filter((request) => {
     const answer = answers[request.requestId];
-    return (
-      answer === undefined ||
-      (answer.kind === "answer" && answer.value.trim().length === 0)
-    );
+    return answer === undefined || (answer.kind === "answer" && answer.value.trim().length === 0);
   }).length;
   const continueGuidance = !canCallTools
     ? "Answer in chat to continue."
@@ -301,8 +276,7 @@ export function SessionAppView({
       </main>
     );
 
-  const onlyApproval =
-    requests.length === 1 && requests[0]?.kind === "approval";
+  const onlyApproval = requests.length === 1 && requests[0]?.kind === "approval";
 
   return (
     <main className={`mcpApp shell${onlyApproval ? " approval-shell" : ""}`}>
@@ -324,10 +298,7 @@ export function SessionAppView({
               answer={answers[request.requestId]}
               isSubmitting={state === "submitting"}
               onAnswer={(answer) => {
-                if (
-                  onlyApproval &&
-                  (answer.kind === "approve" || answer.kind === "deny")
-                ) {
+                if (onlyApproval && (answer.kind === "approve" || answer.kind === "deny")) {
                   void submitApproval(request, answer);
                   return;
                 }
@@ -379,9 +350,7 @@ export function SessionAppView({
             type="button"
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
-            aria-describedby={
-              continueGuidance ? "continue-guidance" : undefined
-            }
+            aria-describedby={continueGuidance ? "continue-guidance" : undefined}
             onClick={submit}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}

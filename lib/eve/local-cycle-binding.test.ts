@@ -4,23 +4,16 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  readLocalEveCycleBinding,
-  rotateLocalEveCycleBinding,
-} from "./local-cycle-binding";
+import { readLocalEveCycleBinding, rotateLocalEveCycleBinding } from "./local-cycle-binding";
 
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true })),
-  );
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 
 async function privateRoot() {
-  const root = await realpath(
-    await mkdtemp(join(tmpdir(), "autograph-eve-cycle-")),
-  );
+  const root = await realpath(await mkdtemp(join(tmpdir(), "autograph-eve-cycle-")));
   roots.push(root);
   await chmod(root, 0o700);
   return root;

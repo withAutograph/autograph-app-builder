@@ -27,8 +27,7 @@ task.run_auto_install = false
 [deps]
 disable = ["bun"]
 `;
-const sha256 = (value: Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
@@ -100,14 +99,7 @@ try {
   const sourceTar = join(root, "canonical-source.tar");
   execFileSync(
     "/usr/bin/git",
-    [
-      "-C",
-      input.arrustedRoot,
-      "archive",
-      "--format=tar",
-      `--output=${sourceTar}`,
-      TARGET_SHA,
-    ],
+    ["-C", input.arrustedRoot, "archive", "--format=tar", `--output=${sourceTar}`, TARGET_SHA],
     { stdio: "inherit" },
   );
   extract({ cwd: repository, file: sourceTar, sync: true });
@@ -120,12 +112,7 @@ try {
     file: join(seed, "dependency-cache", "node-modules.tar.gz"),
     sync: true,
   });
-  const appSpecPath = join(
-    repository,
-    "prototype",
-    "builder-proof",
-    "app-spec.md",
-  );
+  const appSpecPath = join(repository, "prototype", "builder-proof", "app-spec.md");
   mkdirSync(join(repository, "prototype", "builder-proof"), {
     recursive: true,
   });
@@ -182,9 +169,7 @@ try {
     !Array.isArray(proposal.mutations) ||
     proposal.mutations.length !== 0
   )
-    throw new Error(
-      "The hosted dependency artifact returned an unexpected planning result.",
-    );
+    throw new Error("The hosted dependency artifact returned an unexpected planning result.");
   process.stdout.write(
     `${JSON.stringify({
       version: 2,

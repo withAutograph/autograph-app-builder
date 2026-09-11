@@ -48,20 +48,13 @@ const EXECUTION_ROOT_PACKAGES = [
 ] as const;
 
 const targetDigests = {
-  miseConfigSha256:
-    "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
-  miseLockSha256:
-    "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
-  bunLockSha256:
-    "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
-  appIdentitySha256:
-    "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
-  appContractSha256:
-    "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
-  repositoryPreflightSha256:
-    "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
-  repositoryExecSha256:
-    "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+  miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
+  miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+  bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+  appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+  appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+  repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
+  repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
 } as const;
 
 function sha256(value: string | Uint8Array): string {
@@ -83,9 +76,7 @@ function parseArguments(args: readonly string[]) {
   values.delete("--arrusted-root");
   values.delete("--output");
   if (arrustedRoot === undefined || output === undefined || values.size !== 0)
-    throw new Error(
-      "usage: hosted:artifact-build -- --arrusted-root <path> --output <path>",
-    );
+    throw new Error("usage: hosted:artifact-build -- --arrusted-root <path> --output <path>");
   return { arrustedRoot: realpathSync(arrustedRoot), output: resolve(output) };
 }
 
@@ -110,10 +101,7 @@ function git(root: string, args: readonly string[], encoding: "utf8"): string {
 
 function within(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
-  return (
-    path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !path.startsWith(sep))
-  );
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !path.startsWith(sep));
 }
 
 function packageRoot(
@@ -137,9 +125,9 @@ function packageResolutionRoot(packagePath: string): string {
 }
 
 function packageVersion(packagePath: string): string {
-  const manifest = JSON.parse(
-    readFileSync(join(packagePath, "package.json"), "utf8"),
-  ) as { version?: string };
+  const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf8")) as {
+    version?: string;
+  };
   if (typeof manifest.version !== "string")
     throw new Error("Dependency package version is missing.");
   return manifest.version;
@@ -156,26 +144,19 @@ function dependencyClosure(root: string): Map<string, string> {
   const rootVersions = new Map<string, string>();
   for (const name of EXECUTION_ROOT_PACKAGES) {
     const packagePath = packageRoot(installedRoot, installedRoot, name);
-    if (packagePath === undefined)
-      throw new Error(`Dependency ${name} is missing.`);
+    if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
     rootVersions.set(name, packageVersion(packagePath));
   }
   while (pending.length > 0) {
     const { name, resolutionRoot, destination } = pending.shift()!;
     const packagePath = packageRoot(installedRoot, resolutionRoot, name);
-    if (packagePath === undefined)
-      throw new Error(`Dependency ${name} is missing.`);
-    const manifest = JSON.parse(
-      readFileSync(join(packagePath, "package.json"), "utf8"),
-    ) as {
+    if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
+    const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf8")) as {
       version?: string;
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     };
-    if (
-      name === REQUIRED_PACKAGE &&
-      manifest.version !== REQUIRED_PACKAGE_VERSION
-    )
+    if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION)
       throw new Error("The required microfrontends version drifted.");
     const existing = packages.get(destination);
     if (existing !== undefined) {
@@ -187,16 +168,11 @@ function dependencyClosure(root: string): Map<string, string> {
     if (!rootVersions.has(name)) rootVersions.set(name, manifest.version!);
     const childResolutionRoot = packageResolutionRoot(packagePath);
     const enqueue = (dependency: string) => {
-      const dependencyPath = packageRoot(
-        installedRoot,
-        childResolutionRoot,
-        dependency,
-      );
+      const dependencyPath = packageRoot(installedRoot, childResolutionRoot, dependency);
       if (dependencyPath === undefined) return false;
       const dependencyVersion = packageVersion(dependencyPath);
       const rootVersion = rootVersions.get(dependency);
-      if (rootVersion === undefined)
-        rootVersions.set(dependency, dependencyVersion);
+      if (rootVersion === undefined) rootVersions.set(dependency, dependencyVersion);
       const dependencyDestination =
         rootVersion === undefined || rootVersion === dependencyVersion
           ? dependency
@@ -208,23 +184,14 @@ function dependencyClosure(root: string): Map<string, string> {
       });
       return true;
     };
-    for (const dependency of Object.keys(
-      manifest.dependencies ?? {},
-    ).toSorted())
-      if (!enqueue(dependency))
-        throw new Error(`Dependency ${dependency} is missing.`);
-    for (const dependency of Object.keys(
-      manifest.optionalDependencies ?? {},
-    ).toSorted()) {
+    for (const dependency of Object.keys(manifest.dependencies ?? {}).toSorted())
+      if (!enqueue(dependency)) throw new Error(`Dependency ${dependency} is missing.`);
+    for (const dependency of Object.keys(manifest.optionalDependencies ?? {}).toSorted()) {
       if (dependency.includes("musl")) continue;
       enqueue(dependency);
     }
   }
-  return new Map(
-    [...packages.entries()].toSorted(([left], [right]) =>
-      left.localeCompare(right),
-    ),
-  );
+  return new Map([...packages.entries()].toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
 function normalizeTree(root: string): void {
@@ -235,8 +202,7 @@ function normalizeTree(root: string): void {
       chmodSync(path, 0o755);
     } else if (entry.isSymbolicLink()) {
       const target = realpathSync(path);
-      if (!within(root, target))
-        throw new Error("Artifact symlink escapes its root.");
+      if (!within(root, target)) throw new Error("Artifact symlink escapes its root.");
     } else if (entry.isFile()) {
       chmodSync(path, entry.mode & 0o111 ? 0o755 : 0o644);
     } else {
@@ -247,11 +213,7 @@ function normalizeTree(root: string): void {
   visit(root);
 }
 
-function writeGzipTar(
-  root: string,
-  entries: readonly string[],
-  output: string,
-) {
+function writeGzipTar(root: string, entries: readonly string[], output: string) {
   const uncompressed = `${output}.${process.pid}.tar`;
   createTar(
     {
@@ -275,11 +237,7 @@ if (process.platform !== "linux" || process.arch !== "x64")
   throw new Error("Hosted execution artifacts must be built on Linux x86_64.");
 const scratch = mkdtempSync(join(tmpdir(), "app-builder-hosted-artifact."));
 try {
-  const commit = git(
-    arrustedRoot,
-    ["rev-parse", "HEAD^{commit}"],
-    "utf8",
-  ).trim();
+  const commit = git(arrustedRoot, ["rev-parse", "HEAD^{commit}"], "utf8").trim();
   const tree = git(arrustedRoot, ["rev-parse", "HEAD^{tree}"], "utf8").trim();
   const status = git(arrustedRoot, ["status", "--porcelain=v1"], "utf8").trim();
   if (commit !== TARGET_SHA || tree !== TARGET_TREE || status !== "")
@@ -297,11 +255,7 @@ try {
     mkdirSync(dirname(destination), { recursive: true });
     cpSync(source, destination, { dereference: true, recursive: true });
   }
-  const viteConfigDestination = join(
-    dependencyStage,
-    "@autograph",
-    "vite-config",
-  );
+  const viteConfigDestination = join(dependencyStage, "@autograph", "vite-config");
   mkdirSync(dirname(viteConfigDestination), { recursive: true });
   cpSync(join(arrustedRoot, "packages", "vite-config"), viteConfigDestination, {
     dereference: true,
@@ -316,14 +270,10 @@ try {
   ] as const)
     symlinkSync(target, join(binaryDirectory, name));
   for (const binary of ["next", "turbo", "vp"] as const)
-    execFileSync(
-      process.execPath,
-      [join(binaryDirectory, binary), "--version"],
-      {
-        cwd: dependencyStage,
-        encoding: "utf8",
-      },
-    );
+    execFileSync(process.execPath, [join(binaryDirectory, binary), "--version"], {
+      cwd: dependencyStage,
+      encoding: "utf8",
+    });
   execFileSync(
     process.execPath,
     ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
@@ -331,11 +281,7 @@ try {
   );
   normalizeTree(join(scratch, "dependency-stage"));
   const dependencyArchive = join(dependencyRoot, "node-modules.tar.gz");
-  writeGzipTar(
-    join(scratch, "dependency-stage"),
-    ["node_modules"],
-    dependencyArchive,
-  );
+  writeGzipTar(join(scratch, "dependency-stage"), ["node_modules"], dependencyArchive);
   const archiveBytes = statSync(dependencyArchive).size;
   const archiveSha256 = sha256(readFileSync(dependencyArchive));
   const dependencyManifest = {
@@ -363,9 +309,7 @@ try {
       tree: TARGET_TREE,
     },
     dependency: {
-      manifestSha256: sha256(
-        readFileSync(join(dependencyRoot, "manifest.json")),
-      ),
+      manifestSha256: sha256(readFileSync(join(dependencyRoot, "manifest.json"))),
       archiveSha256,
       archiveBytes,
       packages: [...packages.keys()],

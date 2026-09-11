@@ -199,10 +199,9 @@ describe("publicPrototypeSchema", () => {
 
   it("accepts only the closed bounded HTML delivery shape", () => {
     expect(publicPrototypeSchema.parse(prototype)).toEqual(prototype);
-    expect(
-      publicPrototypeSchema.safeParse({ ...prototype, internalPath: "/tmp" })
-        .success,
-    ).toBe(false);
+    expect(publicPrototypeSchema.safeParse({ ...prototype, internalPath: "/tmp" }).success).toBe(
+      false,
+    );
     expect(
       publicPrototypeSchema.safeParse({
         ...prototype,
@@ -247,9 +246,7 @@ describe("publicPrototypeSchema", () => {
       `https://builder.example.test${path}?token=secret`,
       `https://builder.example.test/other/${"a".repeat(64)}`,
     ]) {
-      expect(
-        publicPrototypeSchema.safeParse({ ...prototype, previewUrl }).success,
-      ).toBe(false);
+      expect(publicPrototypeSchema.safeParse({ ...prototype, previewUrl }).success).toBe(false);
     }
   });
 });

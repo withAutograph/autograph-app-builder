@@ -28,9 +28,7 @@ describe("adherence report", () => {
       createdAt: "today",
       source: {},
       judge: { status: "not-run" },
-      sourceFiles: [
-        { path: "app.tsx", content: '<script>alert("x")</script>' },
-      ],
+      sourceFiles: [{ path: "app.tsx", content: '<script>alert("x")</script>' }],
       adherence: scoreAdherence([
         {
           id: "a",

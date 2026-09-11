@@ -16,18 +16,13 @@ export default defineEval({
       cwd: repository,
       encoding: "utf8",
     });
-    await t.send(
-      "Publish reviewed change set with stale branch preconditions.",
-    );
+    await t.send("Publish reviewed change set with stale branch preconditions.");
     t.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
     await t.respondAll("approve");
     t.succeeded();
-    t.check(
-      t.reply,
-      includes("rejected without creating a branch or worktree"),
-    );
+    t.check(t.reply, includes("rejected without creating a branch or worktree"));
     if (
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,

@@ -4,10 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
 import * as databaseSchema from "../db/schema";
-import {
-  hostedVercelInstallations,
-  vercelInstallationAuthorizationStates,
-} from "../db/schema";
+import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
   encryptVercelToken,
   decryptVercelToken,
@@ -19,10 +16,7 @@ import {
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
-function tenant(
-  table: typeof hostedVercelInstallations,
-  authorityInput: unknown,
-) {
+function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
     eq(table.issuer, authority.issuer),
@@ -51,8 +45,7 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion)
-    return undefined;
+  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) return undefined;
   return {
     binding: {
       installationId: row.installationId,
@@ -98,30 +91,12 @@ export function createPostgresVercelAuthorizationStateStore(
         .set({ consumedAt: input.now })
         .where(
           and(
-            eq(
-              vercelInstallationAuthorizationStates.stateDigest,
-              input.stateDigest,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.authorityDigest,
-              input.authorityDigest,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.issuer,
-              input.authority.issuer,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.audience,
-              input.authority.audience,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.workspaceId,
-              input.authority.workspaceId,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.ownerUserId,
-              input.authority.ownerUserId,
-            ),
+            eq(vercelInstallationAuthorizationStates.stateDigest, input.stateDigest),
+            eq(vercelInstallationAuthorizationStates.authorityDigest, input.authorityDigest),
+            eq(vercelInstallationAuthorizationStates.issuer, input.authority.issuer),
+            eq(vercelInstallationAuthorizationStates.audience, input.authority.audience),
+            eq(vercelInstallationAuthorizationStates.workspaceId, input.authority.workspaceId),
+            eq(vercelInstallationAuthorizationStates.ownerUserId, input.authority.ownerUserId),
             isNull(vercelInstallationAuthorizationStates.consumedAt),
             gt(vercelInstallationAuthorizationStates.expiresAt, input.now),
           ),
@@ -145,30 +120,12 @@ export function createPostgresVercelAuthorizationStateStore(
         .from(vercelInstallationAuthorizationStates)
         .where(
           and(
-            eq(
-              vercelInstallationAuthorizationStates.stateDigest,
-              input.stateDigest,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.authorityDigest,
-              input.authorityDigest,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.issuer,
-              input.authority.issuer,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.audience,
-              input.authority.audience,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.workspaceId,
-              input.authority.workspaceId,
-            ),
-            eq(
-              vercelInstallationAuthorizationStates.ownerUserId,
-              input.authority.ownerUserId,
-            ),
+            eq(vercelInstallationAuthorizationStates.stateDigest, input.stateDigest),
+            eq(vercelInstallationAuthorizationStates.authorityDigest, input.authorityDigest),
+            eq(vercelInstallationAuthorizationStates.issuer, input.authority.issuer),
+            eq(vercelInstallationAuthorizationStates.audience, input.authority.audience),
+            eq(vercelInstallationAuthorizationStates.workspaceId, input.authority.workspaceId),
+            eq(vercelInstallationAuthorizationStates.ownerUserId, input.authority.ownerUserId),
           ),
         )
         .limit(1);
@@ -245,8 +202,7 @@ export function createPostgresVercelInstallationStore(input: {
           active: hostedVercelInstallations.active,
           updatedAt: hostedVercelInstallations.updatedAt,
         });
-      if (rows.length !== 1)
-        throw new Error("Vercel installation was not durable.");
+      if (rows.length !== 1) throw new Error("Vercel installation was not durable.");
       return rows[0] as VercelInstallationBinding;
     },
     async deactivate(installationId, now) {

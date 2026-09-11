@@ -28,14 +28,11 @@ function recordedPrototypeEvents(input?: {
 }): MessageStreamEvent[] {
   const callId = input?.callId ?? "call_prototype";
   const content =
-    input?.content ??
-    "<!doctype html><html><body><button>Review vendor</button></body></html>";
+    input?.content ?? "<!doctype html><html><body><button>Review vendor</button></body></html>";
   const path = "prototype/vendor-onboarding/index.html";
   const mediaType = "text/html";
   const artifactDigest = digest(content);
-  const revision = digest(
-    JSON.stringify({ path, mediaType, digest: artifactDigest }),
-  );
+  const revision = digest(JSON.stringify({ path, mediaType, digest: artifactDigest }));
   return [
     installedEvent({
       type: "actions.requested",
@@ -68,9 +65,7 @@ function recordedPrototypeEvents(input?: {
             recordedByCallId: callId,
             size: Buffer.byteLength(content),
             reused: false,
-            ...(input?.invalidated === undefined
-              ? {}
-              : { invalidated: input.invalidated }),
+            ...(input?.invalidated === undefined ? {} : { invalidated: input.invalidated }),
           },
         },
       },
@@ -94,8 +89,7 @@ function recordedPlanEvents(input?: {
   const callId = input?.callId ?? "call_plan";
   const plannedByCallId = input?.plannedByCallId ?? callId;
   const expectedAppSpecDigest = input?.expectedAppSpecDigest ?? "a".repeat(64);
-  const outputAppSpecDigest =
-    input?.outputAppSpecDigest ?? expectedAppSpecDigest;
+  const outputAppSpecDigest = input?.outputAppSpecDigest ?? expectedAppSpecDigest;
   const targetBase = {
     contract: {
       version: 1 as const,
@@ -131,13 +125,11 @@ function recordedPlanEvents(input?: {
     blockers: input?.blockers ?? [],
     mutations: [] as [],
   };
-  const iterationChanges = input?.existingAppChanges?.map(
-    ({ path, content }) => ({
-      path,
-      before: { mode: "644", digest: digest(`before:${path}`) },
-      after: { mode: "644", digest: digest(content), content },
-    }),
-  );
+  const iterationChanges = input?.existingAppChanges?.map(({ path, content }) => ({
+    path,
+    before: { mode: "644", digest: digest(`before:${path}`) },
+    after: { mode: "644", digest: digest(content), content },
+  }));
   const target = iterationChanges
     ? {
         ...targetBase,
@@ -155,8 +147,7 @@ function recordedPlanEvents(input?: {
     sourceReceiptDigest: "0".repeat(64),
     eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
-    imageDigest:
-      input?.imageDigest ?? `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
+    imageDigest: input?.imageDigest ?? `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
     dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
     appSpecDigest: outputAppSpecDigest,
     artifactRevision: "7".repeat(64),
@@ -220,14 +211,9 @@ describe("toPublicEvent", () => {
     });
   });
 
-  it.each(["reasoning.delta", "tool.result", "system.instructions"])(
-    "drops %s",
-    (type) => {
-      expect(
-        toPublicEvent({ type, index: 1, text: "secret", message: "secret" }),
-      ).toBeNull();
-    },
-  );
+  it.each(["reasoning.delta", "tool.result", "system.instructions"])("drops %s", (type) => {
+    expect(toPublicEvent({ type, index: 1, text: "secret", message: "secret" })).toBeNull();
+  });
 });
 
 describe("installed Eve 0.43 projection", () => {
@@ -312,9 +298,7 @@ describe("installed Eve 0.43 projection", () => {
 
   it("rejects a fresh plan bound to another call", () => {
     expect(
-      latestInstalledImplementationPlan(
-        recordedPlanEvents({ plannedByCallId: "call_plan_other" }),
-      ),
+      latestInstalledImplementationPlan(recordedPlanEvents({ plannedByCallId: "call_plan_other" })),
     ).toBeUndefined();
   });
 
@@ -322,14 +306,10 @@ describe("installed Eve 0.43 projection", () => {
     const valid = recordedPlanEvents();
     expect(latestInstalledImplementationPlan([valid[1]!])).toBeUndefined();
     expect(
-      latestInstalledImplementationPlan(
-        recordedPlanEvents({ resultStatus: "failed" }),
-      ),
+      latestInstalledImplementationPlan(recordedPlanEvents({ resultStatus: "failed" })),
     ).toBeUndefined();
     expect(
-      latestInstalledImplementationPlan(
-        recordedPlanEvents({ resultToolName: "another_tool" }),
-      ),
+      latestInstalledImplementationPlan(recordedPlanEvents({ resultToolName: "another_tool" })),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
@@ -337,9 +317,7 @@ describe("installed Eve 0.43 projection", () => {
       ),
     ).toBeUndefined();
     expect(
-      latestInstalledImplementationPlan(
-        recordedPlanEvents({ outputDigest: "c".repeat(64) }),
-      ),
+      latestInstalledImplementationPlan(recordedPlanEvents({ outputDigest: "c".repeat(64) })),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
@@ -396,33 +374,25 @@ describe("installed Eve 0.43 projection", () => {
     const valid = recordedPrototypeEvents();
     expect(latestInstalledPrototype([valid[1]!])).toBeUndefined();
     expect(
-      latestInstalledPrototype(
-        recordedPrototypeEvents({ resultStatus: "rejected" }),
-      ),
+      latestInstalledPrototype(recordedPrototypeEvents({ resultStatus: "rejected" })),
     ).toBeUndefined();
     expect(
-      latestInstalledPrototype(
-        recordedPrototypeEvents({ resultToolName: "another_tool" }),
-      ),
+      latestInstalledPrototype(recordedPrototypeEvents({ resultToolName: "another_tool" })),
     ).toBeUndefined();
     expect(
-      latestInstalledPrototype(
-        recordedPrototypeEvents({ outputDigest: "f".repeat(64) }),
-      ),
+      latestInstalledPrototype(recordedPrototypeEvents({ outputDigest: "f".repeat(64) })),
     ).toBeUndefined();
 
     const malformedRequest = structuredClone(valid);
     const requested = malformedRequest[0] as MessageStreamEvent & {
       data: { actions: [{ input: { path: string } }] };
     };
-    requested.data.actions[0].input.path =
-      "prototype/vendor-onboarding/app-spec.md";
+    requested.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
   });
 
   it("projects a receipt-bound component-backed UI preview and its Browser transport", () => {
-    const content =
-      "<!doctype html><html><body>Component preview</body></html>";
+    const content = "<!doctype html><html><body>Component preview</body></html>";
     const revision = "a".repeat(64);
     const events = [
       installedEvent({
@@ -890,8 +860,7 @@ describe("installed Eve 0.43 projection", () => {
           requestId: "attempt_1",
           kind: "authorization",
           title: "Update GitHub access",
-          description:
-            "Update GitHub access to include withAutograph/app-builder-dogfood.",
+          description: "Update GitHub access to include withAutograph/app-builder-dogfood.",
           presentation: { section: "store-in", control: "provider" },
           authorization: {
             url: "https://builder.example.test/github/installations?continuation=opaque",

@@ -77,9 +77,7 @@ describe("EXT-BLD-05 evidence", () => {
         productionReadinessClaimed: false,
       },
     });
-    expect(receipt.componentReceiptDigests).toEqual(
-      ["1", "2", "3", "4", "5", "6"].map(digest),
-    );
+    expect(receipt.componentReceiptDigests).toEqual(["1", "2", "3", "4", "5", "6"].map(digest));
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain("workspace");
     expect(serialized).not.toContain("subject");
@@ -110,9 +108,7 @@ describe("EXT-BLD-05 evidence", () => {
       },
       { ...input, ambientCredential: "secret" },
     ]) {
-      expect(extBld05EvidenceInputSchema.safeParse(candidate).success).toBe(
-        false,
-      );
+      expect(extBld05EvidenceInputSchema.safeParse(candidate).success).toBe(false);
     }
   });
 

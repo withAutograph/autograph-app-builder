@@ -2,10 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { exactNormalizedChangeSet } from "./change_set_status";
-import {
-  APP_BUILDER_WORKFLOW_VERSION,
-  appBuilderWorkflowState,
-} from "@/lib/agent/workflow-state";
+import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
 export default defineTool({
@@ -15,9 +12,7 @@ export default defineTool({
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
-      throw new Error(
-        "Run the repository validation before reviewing its changes.",
-      );
+      throw new Error("Run the repository validation before reviewing its changes.");
     const changeSet = await exactNormalizedChangeSet({
       state,
       sandbox: await ctx.getSandbox(),
@@ -37,9 +32,7 @@ export default defineTool({
       preparedByCallId: state.preparedByCallId,
       workspace: state.workspace,
       sourceReceipt: state.sourceReceipt,
-      ...(state.githubSource === undefined
-        ? {}
-        : { githubSource: state.githubSource }),
+      ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
       artifacts: state.artifacts,
       appSpec: state.appSpec,
       dependencyReceipt: state.dependencyReceipt,

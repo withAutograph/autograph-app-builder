@@ -8,11 +8,7 @@ import {
 const manifest = JSON.stringify({
   version: 1,
   kind: "arrusted-component-composition-v1",
-  publicImports: [
-    "@autograph/components",
-    "@autograph/compositions",
-    "@autograph/icons",
-  ],
+  publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
   tokenEntrypoints: ["@autograph/design-system/tokens.css"],
   providers: ["@autograph/components/providers"],
   routeGlue: {
@@ -27,8 +23,7 @@ function binding() {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
   });
-  if (result.status !== "available")
-    throw new Error("Expected policy binding.");
+  if (result.status !== "available") throw new Error("Expected policy binding.");
   return result.binding;
 }
 
@@ -101,8 +96,6 @@ describe("Arrusted component composition policy", () => {
     });
     expect(result.status).toBe("failed");
     if (result.status === "failed")
-      expect(result.violations.map((violation) => violation.code)).toContain(
-        code,
-      );
+      expect(result.violations.map((violation) => violation.code)).toContain(code);
   });
 });

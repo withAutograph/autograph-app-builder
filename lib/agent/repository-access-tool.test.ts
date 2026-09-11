@@ -48,9 +48,7 @@ describe("repository access tool continuity", () => {
   beforeEach(() => vi.clearAllMocks());
   it("continues with freshly ready access without any auth request", async () => {
     runtime.classify.mockResolvedValue(ready);
-    expect(
-      await resolveRepositoryAccessForTool(input, ctx, runtime),
-    ).toMatchObject({
+    expect(await resolveRepositoryAccessForTool(input, ctx, runtime)).toMatchObject({
       kind: "ready",
       receipt: { sessionId: "ses_one", scope: ready.scope },
     });
@@ -64,9 +62,7 @@ describe("repository access tool continuity", () => {
       status: "provider-unavailable",
       repository: reference,
     });
-    await expect(
-      resolveRepositoryAccessForTool(input, ctx, runtime),
-    ).rejects.toMatchObject({
+    await expect(resolveRepositoryAccessForTool(input, ctx, runtime)).rejects.toMatchObject({
       reason: "provider_unavailable",
       retryable: true,
     });
@@ -82,9 +78,9 @@ describe("repository access tool continuity", () => {
         scopes: [],
       })
       .mockResolvedValueOnce(ready);
-    expect(
-      await resolveRepositoryAccessForTool(input, ctx, runtime),
-    ).toMatchObject({ kind: "ready" });
+    expect(await resolveRepositoryAccessForTool(input, ctx, runtime)).toMatchObject({
+      kind: "ready",
+    });
     expect(runtime.authorization).toHaveBeenCalledWith({
       repository: reference.fullName,
       sessionId: "ses_one",
@@ -105,9 +101,7 @@ describe("repository access tool continuity", () => {
         status: "provider-unavailable",
         repository: reference,
       });
-    await expect(
-      resolveRepositoryAccessForTool(input, ctx, runtime),
-    ).rejects.toMatchObject({
+    await expect(resolveRepositoryAccessForTool(input, ctx, runtime)).rejects.toMatchObject({
       reason: "provider_unavailable",
       retryable: true,
     });

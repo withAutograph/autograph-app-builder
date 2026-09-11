@@ -2,10 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
 
-import type {
-  CanonicalTemplateSnapshot,
-  SourceReceipt,
-} from "./source-receipt";
+import type { CanonicalTemplateSnapshot, SourceReceipt } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
   SUPPORTED_REPOSITORY_CONTRACT,
@@ -23,8 +20,7 @@ const SANDBOX_WORKSPACE = "/workspace/repository";
 const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
 const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
-export const SANDBOX_GITHUB_SOURCE_INSPECTION =
-  ".app-builder/canonical-clone-inspection.json";
+export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
 /** Clone a private GitHub source through the writable Vercel Sandbox. */
 export async function cloneGitHubSource(input: {
@@ -44,9 +40,7 @@ export async function cloneGitHubSource(input: {
     },
   });
   if (result.exitCode !== 0)
-    throw new Error(
-      result.stderr.trim() || "The GitHub checkout is not available.",
-    );
+    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
 }
 
 function shellQuote(value: string) {
@@ -60,10 +54,7 @@ function parseRemote(input: string) {
   } catch {
     throw new Error("The GitHub source remote is invalid.");
   }
-  const match =
-    /^\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})\.git$/u.exec(
-      remote.pathname,
-    );
+  const match = /^\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})\.git$/u.exec(remote.pathname);
   if (
     remote.origin !== "https://github.com" ||
     remote.username !== "" ||
@@ -79,10 +70,7 @@ function parseRemote(input: string) {
 }
 
 function parseBranch(input: string) {
-  if (
-    !BRANCH.test(input) ||
-    input.split("/").some((part) => part.startsWith("."))
-  )
+  if (!BRANCH.test(input) || input.split("/").some((part) => part.startsWith(".")))
     throw new Error("The GitHub source branch is invalid.");
   return input;
 }
@@ -316,10 +304,7 @@ console.log(JSON.stringify({
 }));
 `;
 
-function sandboxGitHubSourceReinspectionCommand(input: {
-  remote: string;
-  branch: string;
-}) {
+function sandboxGitHubSourceReinspectionCommand(input: { remote: string; branch: string }) {
   const expected = JSON.stringify({
     remote: parseRemote(input.remote),
     ref: `refs/remotes/origin/${parseBranch(input.branch)}`,
@@ -425,9 +410,7 @@ export async function readSandboxGitHubSourceSnapshot(
     workingDirectory: "/workspace",
   });
   if (result.exitCode !== 0)
-    throw new Error(
-      result.stderr.trim() || "The GitHub checkout is not available.",
-    );
+    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
   const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
   if (
     sourceSha === undefined ||

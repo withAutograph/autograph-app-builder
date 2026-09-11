@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  loadGatewayModels,
-  resetGatewayModelCacheForTests,
-} from "./ai-gateway-models";
+import { loadGatewayModels, resetGatewayModelCacheForTests } from "./ai-gateway-models";
 
 afterEach(() => resetGatewayModelCacheForTests());
 
@@ -78,9 +75,7 @@ describe("AI Gateway model catalog", () => {
 
   it("reports unavailable instead of restoring seeded models", async () => {
     const result = await loadGatewayModels({
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(new Response(null, { status: 503 })),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 })),
     });
     expect(result).toEqual({
       status: "unavailable",

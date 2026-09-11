@@ -5,10 +5,7 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
-import {
-  planningOverlayRoot,
-  type ExecutionDependencyLayout,
-} from "./dependency-cache";
+import { planningOverlayRoot, type ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -39,9 +36,7 @@ export const targetApplyCommandReceiptSchema = z.strictObject({
   ]),
 });
 
-export type TargetApplyCommandReceipt = z.infer<
-  typeof targetApplyCommandReceiptSchema
->;
+export type TargetApplyCommandReceipt = z.infer<typeof targetApplyCommandReceiptSchema>;
 
 export type OverlayFile = {
   path: string;
@@ -58,9 +53,7 @@ export function compareOverlayPaths(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }
 
-export function canonicalOverlayFiles(
-  files: readonly OverlayFile[],
-): OverlayFile[] {
+export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFile[] {
   return files
     .map(({ path, mode, digest }) => ({ path, mode, digest }))
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
@@ -197,33 +190,22 @@ export function assertCurrentTargetApplyReceipt(input: {
     throw new Error("A canonical V2 target apply receipt is required.");
 }
 
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-function commandFailureKind(
-  stderr: string,
-): TargetApplyFailureReceipt["commandFailureKind"] {
+function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandFailureKind"] {
   if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
-  if (/permission denied|eacces|eperm/iu.test(stderr))
-    return "permission-denied";
-  if (/not found|enoent|command not found/iu.test(stderr))
-    return "missing-command-or-file";
-  if (/dependency|lockfile|module|package|install/iu.test(stderr))
-    return "dependency";
-  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr))
-    return "validation";
-  if (/proposal is stale or noncanonical/iu.test(stderr))
-    return "stale-proposal";
-  if (/proposal must have no blockers/iu.test(stderr))
-    return "proposal-blocked";
+  if (/permission denied|eacces|eperm/iu.test(stderr)) return "permission-denied";
+  if (/not found|enoent|command not found/iu.test(stderr)) return "missing-command-or-file";
+  if (/dependency|lockfile|module|package|install/iu.test(stderr)) return "dependency";
+  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr)) return "validation";
+  if (/proposal is stale or noncanonical/iu.test(stderr)) return "stale-proposal";
+  if (/proposal must have no blockers/iu.test(stderr)) return "proposal-blocked";
   if (/already exists/iu.test(stderr)) return "app-already-exists";
   if (/create-app lock|already running/iu.test(stderr)) return "app-lock";
   if (/partial state|recovery/iu.test(stderr)) return "partial-state";
   if (/projected config|projected repository|unsupported entry/iu.test(stderr))
     return "projected-repository";
-  if (
-    /mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)
-  )
+  if (/mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr))
     return "repository-task";
   if (stderr.trim() === "") return "empty-output";
   return "unknown";
@@ -274,9 +256,7 @@ export async function materializeFreshApplyOverlay(input: {
       acceptedAppSpec === null ||
       sha256(acceptedAppSpec) !== input.proposal.contract.appSpec.sha256
     )
-      throw new Error(
-        "The planning overlay does not contain the exact accepted AppSpec.",
-      );
+      throw new Error("The planning overlay does not contain the exact accepted AppSpec.");
     return {
       applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
@@ -376,8 +356,7 @@ export async function inspectApplyOverlay(
     command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
   });
-  if (result.exitCode !== 0)
-    throw new Error("The proposal apply overlay could not be inspected.");
+  if (result.exitCode !== 0) throw new Error("The proposal apply overlay could not be inspected.");
   const files = result.stdout
     .split("\n")
     .filter(Boolean)
@@ -389,9 +368,7 @@ export async function inspectApplyOverlay(
         match[3] === undefined ||
         !safeSourcePath(match[3])
       )
-        throw new Error(
-          "The proposal apply overlay returned an invalid path receipt.",
-        );
+        throw new Error("The proposal apply overlay returned an invalid path receipt.");
       return {
         path: match[3],
         mode: match[1],
@@ -412,11 +389,9 @@ export async function inspectFixtureApplyOverlay(
   const sourceManifest = await sandbox.readTextFile({
     path: ".app-builder/source-files.json",
   });
-  if (sourceManifest === null)
-    throw new Error("The prepared workspace manifest is missing.");
+  if (sourceManifest === null) throw new Error("The prepared workspace manifest is missing.");
   const parsed = JSON.parse(sourceManifest) as unknown;
-  if (!Array.isArray(parsed))
-    throw new Error("The prepared workspace manifest is invalid.");
+  if (!Array.isArray(parsed)) throw new Error("The prepared workspace manifest is invalid.");
   const sourceFiles = parsed.map((candidate) => {
     if (
       typeof candidate !== "object" ||
@@ -445,9 +420,7 @@ export async function inspectFixtureApplyOverlay(
         const content = await sandbox.readBinaryFile({
           path: `${relativeRoot}/${path}`,
         });
-        return content === null
-          ? undefined
-          : { path, mode, digest: sha256(content) };
+        return content === null ? undefined : { path, mode, digest: sha256(content) };
       }),
     )
   ).filter((file): file is OverlayFile => file !== undefined);
@@ -458,10 +431,7 @@ export async function inspectFixtureApplyOverlay(
   };
 }
 
-export function overlayChanges(
-  before: OverlaySnapshot,
-  after: OverlaySnapshot,
-): OverlayChange[] {
+export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot): OverlayChange[] {
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
   return [...new Set([...beforeFiles.keys(), ...afterFiles.keys()])]
@@ -532,9 +502,7 @@ function parseTargetReceipt(
   return receipt;
 }
 
-function observedTargetReceipt(
-  proposal: TargetProposal,
-): TargetApplyCommandReceipt {
+function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandReceipt {
   const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
   return {
     version: 1,
@@ -548,11 +516,7 @@ function observedTargetReceipt(
     },
     mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
     recovered: false,
-    omittedAuthorities: [
-      "provider-provisioning",
-      "deployment",
-      "production-readiness",
-    ],
+    omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
   };
 }
 
@@ -594,11 +558,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         },
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         recovered: false,
-        omittedAuthorities: [
-          "provider-provisioning",
-          "deployment",
-          "production-readiness",
-        ],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
@@ -621,9 +581,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             ? "permissions"
             : /timed? out|timeout/iu.test(output)
               ? "network-timeout"
-              : /failed to resolve|package not found|module not found/iu.test(
-                    output,
-                  )
+              : /failed to resolve|package not found|module not found/iu.test(output)
                 ? "package-resolution"
                 : /fetch|connection|certificate|network/iu.test(output)
                   ? "network"
@@ -684,11 +642,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
         },
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         recovered: false,
-        omittedAuthorities: [
-          "provider-provisioning",
-          "deployment",
-          "production-readiness",
-        ],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       };
       return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
     }
@@ -730,11 +684,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       },
       mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
       recovered: false,
-      omittedAuthorities: [
-        "provider-provisioning",
-        "deployment",
-        "production-readiness",
-      ],
+      omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
     };
     return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
   };
@@ -756,9 +706,7 @@ export async function executeProposalBoundApply(input: {
     input.binding.appSpecPath !== input.proposal.contract.appSpec.path ||
     !safeSourcePath(input.binding.appSpecPath)
   )
-    throw new Error(
-      "The accepted AppSpec binding or path differs from the target proposal.",
-    );
+    throw new Error("The accepted AppSpec binding or path differs from the target proposal.");
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
@@ -826,10 +774,7 @@ export async function executeProposalBoundApply(input: {
     command = {
       exitCode: -1,
       stdout: "",
-      stderr:
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : "TargetApplyError",
+      stderr: error instanceof Error ? `${error.name}: ${error.message}` : "TargetApplyError",
     };
   }
   const attemptBase = {
@@ -841,9 +786,9 @@ export async function executeProposalBoundApply(input: {
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     command: {
-      name: ("operation" in input.proposal
-        ? "iterate-existing-app"
-        : "create-app") as "create-app" | "iterate-existing-app",
+      name: ("operation" in input.proposal ? "iterate-existing-app" : "create-app") as
+        | "create-app"
+        | "iterate-existing-app",
       exitCode: command.exitCode,
       stdoutDigest: sha256(command.stdout),
       stderrDigest: sha256(command.stderr),
@@ -871,8 +816,7 @@ export async function executeProposalBoundApply(input: {
   }
   const changes = overlayChanges(before, after);
   const targetReceipt =
-    parseTargetReceipt(command, input.proposal) ??
-    observedTargetReceipt(input.proposal);
+    parseTargetReceipt(command, input.proposal) ?? observedTargetReceipt(input.proposal);
   const base = {
     ...attemptBase,
     postTree: after.files,

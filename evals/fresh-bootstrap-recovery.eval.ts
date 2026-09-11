@@ -16,12 +16,7 @@ export default defineEval({
     "Eve requires separate approval for exact fresh-bootstrap recovery and reuses terminal state after a lost response.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "fresh-recovery-eval",
-      "fresh-template",
-    );
+    await prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template");
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = join(fixture.allowedRoot, "recovery");
@@ -29,18 +24,14 @@ export default defineEval({
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.respondAll("approve"),
-      );
+      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
 
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send("Recover fresh repository bootstrap after partial failure."),
       );
       t.requireInputRequest({ toolName: "recover_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.respondAll("approve"),
-      );
+      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
       t.check(t.reply, includes("separately approved exact"));
 

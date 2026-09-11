@@ -24,8 +24,7 @@ function sortedUnique<T extends z.ZodType<string>>(item: T) {
 }
 
 /** The target-owned policy is copied into every source-bound apply overlay. */
-export const ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH =
-  "docs/component-composition.json";
+export const ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH = "docs/component-composition.json";
 
 export const arrustedComponentCompositionPolicySchema = z
   .object({
@@ -83,8 +82,7 @@ export type AppliedAppCompositionResult =
       violations: readonly CompositionViolation[];
     };
 
-const digest = (content: string) =>
-  createHash("sha256").update(content).digest("hex");
+const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 
 /**
  * The manifest deliberately contains no source revision. A source tree cannot
@@ -119,9 +117,7 @@ export function bindArrustedComponentCompositionPolicy(input: {
   } catch {
     return {
       status: "unavailable",
-      reasons: [
-        "The Arrusted component-composition manifest is not valid JSON.",
-      ],
+      reasons: ["The Arrusted component-composition manifest is not valid JSON."],
     };
   }
   const policy = arrustedComponentCompositionPolicySchema.safeParse(parsed);
@@ -143,10 +139,9 @@ export function bindArrustedComponentCompositionPolicy(input: {
 
 function importsFrom(content: string): string[] {
   const imports = new Set<string>();
-  const pattern =
-    /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
+  const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
   for (const match of content.matchAll(pattern)) {
-      const [, specifier] = match;
+    const [, specifier] = match;
     if (specifier !== undefined) imports.add(specifier);
   }
   return [...imports].sort();
@@ -170,9 +165,7 @@ export function auditAppliedAppComposition(input: {
     ...input.binding.policy.providers,
   ]);
   const allowedRouteGlue = new Set(input.binding.policy.routeGlue.allowedFiles);
-  const allowedStyles = new Set(
-    input.binding.policy.routeGlue.allowedStyleFiles,
-  );
+  const allowedStyles = new Set(input.binding.policy.routeGlue.allowedStyleFiles);
 
   for (const file of input.files) {
     const relative = appRelativePath(input.appId, file.path);
@@ -197,8 +190,7 @@ export function auditAppliedAppComposition(input: {
       violations.push({
         code: "local-component-definition",
         path: file.path,
-        message:
-          "Generated apps may only define visual route glue named by the Arrusted policy.",
+        message: "Generated apps may only define visual route glue named by the Arrusted policy.",
       });
 
     if (isStyle && !allowedStyles.has(relative))

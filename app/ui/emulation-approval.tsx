@@ -8,24 +8,14 @@ export type EmulatedProvider = "github" | "vercel";
 
 export function VercelMark({ size = 20 }: { size?: number }) {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      fill="currentColor"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="currentColor">
       <path d="M12 3 23 21H1L12 3Z" />
     </svg>
   );
 }
 
 function ProviderMark({ provider }: { provider: EmulatedProvider }) {
-  return provider === "github" ? (
-    <FaGithub aria-hidden="true" size={20} />
-  ) : (
-    <VercelMark />
-  );
+  return provider === "github" ? <FaGithub aria-hidden="true" size={20} /> : <VercelMark />;
 }
 
 export function EmulationApproval({
@@ -105,9 +95,7 @@ export function EmulationApproval({
           <div className={styles.form} aria-label={actionLabel}>
             {action}
           </div>
-          <p className={styles.footer}>
-            {environment} only · Powered by Emulate
-          </p>
+          <p className={styles.footer}>{environment} only · Powered by Emulate</p>
         </section>
       </main>
     </div>

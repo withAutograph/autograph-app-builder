@@ -12,20 +12,15 @@ import { HOSTED_MANAGED_SKILL_CONTENTS } from "./hosted-managed-seeds.generated"
 const temporaryRoots: string[] = [];
 
 afterEach(() => {
-  for (const root of temporaryRoots.splice(0))
-    rmSync(root, { force: true, recursive: true });
+  for (const root of temporaryRoots.splice(0)) rmSync(root, { force: true, recursive: true });
 });
 
 describe("hosted runtime asset bundle", () => {
   it("loads every managed seed and immutable artifact identity without authored bytes", () => {
     const runtimeRoot = mkdtempSync(join(tmpdir(), "hosted-runtime-assets-"));
     temporaryRoots.push(runtimeRoot);
-    const seedsModule = pathToFileURL(
-      resolve("lib/sandbox/hosted-managed-seeds.ts"),
-    ).href;
-    const artifactModule = pathToFileURL(
-      resolve("lib/sandbox/hosted-artifact.ts"),
-    ).href;
+    const seedsModule = pathToFileURL(resolve("lib/sandbox/hosted-managed-seeds.ts")).href;
+    const artifactModule = pathToFileURL(resolve("lib/sandbox/hosted-artifact.ts")).href;
     const tsxLoader = import.meta.resolve("tsx/esm");
     const childEnvironment = { ...process.env };
     delete childEnvironment.NODE_OPTIONS;

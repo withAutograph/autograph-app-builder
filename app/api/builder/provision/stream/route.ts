@@ -10,9 +10,7 @@ const maxStreamMs = 30_000;
 const heartbeatIntervalMs = 10_000;
 
 function event(data: unknown, id: string, name = "snapshot") {
-  return encoder.encode(
-    `id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
-  );
+  return encoder.encode(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 function heartbeat() {
@@ -27,8 +25,7 @@ function heartbeat() {
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
-  if (!requestId)
-    return Response.json({ error: "request_invalid" }, { status: 400 });
+  if (!requestId) return Response.json({ error: "request_invalid" }, { status: 400 });
 
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
@@ -75,13 +72,8 @@ export async function GET(request: Request) {
             lastRevision = current.revision;
             lastWrite = Date.now();
           }
-          if (
-            current.provisioning.status === "settled" ||
-            Date.now() - started >= maxStreamMs
-          ) {
-            controller.enqueue(
-              event(current, String(current.revision), "end"),
-            );
+          if (current.provisioning.status === "settled" || Date.now() - started >= maxStreamMs) {
+            controller.enqueue(event(current, String(current.revision), "end"));
             controller.close();
             return;
           }
@@ -93,9 +85,7 @@ export async function GET(request: Request) {
           if (cancelled) return;
           const response = await read();
           if (!response.ok) {
-            controller.enqueue(
-              event({ error: "provisioning_unavailable" }, "error", "error"),
-            );
+            controller.enqueue(event({ error: "provisioning_unavailable" }, "error", "error"));
             controller.close();
             return;
           }
@@ -103,9 +93,7 @@ export async function GET(request: Request) {
         }
       } catch {
         if (!cancelled) {
-          controller.enqueue(
-            event({ error: "provisioning_stream_failed" }, "error", "error"),
-          );
+          controller.enqueue(event({ error: "provisioning_stream_failed" }, "error", "error"));
           controller.close();
         }
       }

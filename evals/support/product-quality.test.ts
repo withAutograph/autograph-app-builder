@@ -92,9 +92,7 @@ describe("product-quality scenarios", () => {
       reply:
         "Vendor Onboarding has an operations review queue, vendor detail panel, and conditional Finance verification step. Which layout should I use?",
     });
-    expect(report.hardFailures).toContain(
-      "Conversation asked an unnecessary product question.",
-    );
+    expect(report.hardFailures).toContain("Conversation asked an unnecessary product question.");
   });
 
   it("accepts one recommended question for material ambiguity", () => {
@@ -125,8 +123,6 @@ describe("product-quality scenarios", () => {
     });
     expect(report.hardFailures).toContain("Prototype lacks a language.");
     expect(report.hardFailures).toContain("Prototype lacks a main landmark.");
-    expect(report.hardFailures).toContain(
-      "Prototype contains unfinished placeholder content.",
-    );
+    expect(report.hardFailures).toContain("Prototype contains unfinished placeholder content.");
   });
 });

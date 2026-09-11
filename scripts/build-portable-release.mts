@@ -1,13 +1,4 @@
-import {
-  cp,
-  lstat,
-  mkdir,
-  readFile,
-  readdir,
-  realpath,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
@@ -25,8 +16,7 @@ const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--"))
-    throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
 };
 
@@ -47,8 +37,7 @@ if (sourceStatus !== "")
   throw new Error(
     `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
   );
-const sourceRepository =
-  "https://github.com/withAutograph/autograph-app-builder";
+const sourceRepository = "https://github.com/withAutograph/autograph-app-builder";
 if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
   throw new Error("Portable releases require the canonical source remote.");
 const source = {
@@ -57,9 +46,7 @@ const source = {
   tree: git("rev-parse", "HEAD^{tree}"),
 };
 const endpoint = releaseEndpoint(argument("--endpoint"));
-const requestedOutput = resolve(
-  argument("--output") ?? ".artifacts/portable-release/app-builder",
-);
+const requestedOutput = resolve(argument("--output") ?? ".artifacts/portable-release/app-builder");
 try {
   await lstat(requestedOutput);
   throw new Error(`Release output already exists: ${requestedOutput}`);
@@ -88,10 +75,7 @@ await validateAgentPluginPackage({
   packageKind: "generated-artifact",
 });
 
-const handlerSource = await readFile(
-  resolve("lib/mcp/request-handler.ts"),
-  "utf8",
-);
+const handlerSource = await readFile(resolve("lib/mcp/request-handler.ts"), "utf8");
 const tools = registeredAutographToolNames(handlerSource);
 const mockRoot = join(output, "mock");
 await mkdir(mockRoot);
@@ -152,20 +136,10 @@ await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
   mode: 0o755,
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
-const codexManifest = JSON.parse(
-  await readFile(resolve(".codex-plugin/plugin.json"), "utf8"),
-);
-if (
-  codexManifest.name !== portable.name ||
-  codexManifest.version !== portable.version
-)
-  throw new Error(
-    "The Codex adapter name and version must match the portable manifest.",
-  );
-const codexAssetReferences = [
-  codexManifest.interface?.composerIcon,
-  codexManifest.interface?.logo,
-];
+const codexManifest = JSON.parse(await readFile(resolve(".codex-plugin/plugin.json"), "utf8"));
+if (codexManifest.name !== portable.name || codexManifest.version !== portable.version)
+  throw new Error("The Codex adapter name and version must match the portable manifest.");
+const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];
 const codexMarketplaceAssetPaths: string[] = [];
 for (const reference of new Set(codexAssetReferences)) {
   if (
@@ -177,9 +151,7 @@ for (const reference of new Set(codexAssetReferences)) {
       .split("/")
       .some((part: string) => part === "" || part === "." || part === "..")
   )
-    throw new Error(
-      "Codex manifest asset references must be safe relative paths.",
-    );
+    throw new Error("Codex manifest asset references must be safe relative paths.");
   const relativeAssetPath = reference.slice(2);
   const sourceAsset = readTrackedTreeBlob({
     repositoryRoot,
@@ -189,9 +161,7 @@ for (const reference of new Set(codexAssetReferences)) {
   const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
   await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
   await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
-  codexMarketplaceAssetPaths.push(
-    `plugins/${portable.name}/${relativeAssetPath}`,
-  );
+  codexMarketplaceAssetPaths.push(`plugins/${portable.name}/${relativeAssetPath}`);
 }
 await writeFile(
   join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
@@ -213,12 +183,7 @@ await writeFile(
     2,
   )}\n`,
 );
-const marketplacePath = join(
-  marketplaceRoot,
-  ".agents",
-  "plugins",
-  "marketplace.json",
-);
+const marketplacePath = join(marketplaceRoot, ".agents", "plugins", "marketplace.json");
 await mkdir(dirname(marketplacePath), { recursive: true, mode: 0o755 });
 await writeFile(
   marketplacePath,
@@ -251,17 +216,11 @@ async function collectMarketplace(directory: string) {
     const path = join(directory, entry);
     const info = await stat(path);
     if (info.isDirectory()) await collectMarketplace(path);
-    else
-      marketplaceFiles.set(
-        relative(marketplaceRoot, path),
-        await readFile(path),
-      );
+    else marketplaceFiles.set(relative(marketplaceRoot, path), await readFile(path));
   }
 }
 await collectMarketplace(marketplaceRoot);
-const marketplaceArchive = deterministicGzip(
-  deterministicTar(marketplaceFiles),
-);
+const marketplaceArchive = deterministicGzip(deterministicTar(marketplaceFiles));
 const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.version}.tar.gz`;
 await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);
 
@@ -287,8 +246,7 @@ const receipt = {
   codexMarketplaceAssets: Object.fromEntries(
     codexMarketplaceAssetPaths.toSorted().map((path) => {
       const content = marketplaceFiles.get(path);
-      if (!content)
-        throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
+      if (!content) throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
       return [path, sha256(content)];
     }),
   ),
@@ -296,20 +254,14 @@ const receipt = {
     [...files].sort().map(([path, content]) => [path, sha256(content)]),
   ),
   auxiliaryFiles: Object.fromEntries(
-    [...auxiliaryFiles]
-      .sort()
-      .map(([path, content]) => [path, sha256(content)]),
+    [...auxiliaryFiles].sort().map(([path, content]) => [path, sha256(content)]),
   ),
   tools,
 };
-await writeFile(
-  join(output, "release-receipt.json"),
-  `${JSON.stringify(receipt, null, 2)}\n`,
-);
+await writeFile(join(output, "release-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 await writeFile(
   join(output, "SHA256SUMS"),
   `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`,
 );
-if ((await realpath(core)) !== core)
-  throw new Error("Portable core path was not canonical.");
+if ((await realpath(core)) !== core) throw new Error("Portable core path was not canonical.");
 console.log(`Sealed ${archiveName}: ${receipt.archive.sha256}`);

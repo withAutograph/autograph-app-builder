@@ -1,13 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  readFile,
-  readdir,
-  realpath,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 
 export const APP_CREATION_SKILL_ROOTS = [
@@ -50,8 +42,7 @@ export type AppCreationSkillExportManifest = {
   digest: string;
 };
 
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 async function absent(path: string): Promise<boolean> {
   try {
@@ -63,35 +54,26 @@ async function absent(path: string): Promise<boolean> {
   }
 }
 
-async function collectSkillFiles(
-  sourceRoot: string,
-): Promise<ExportedSkillFile[]> {
+async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[]> {
   const files: ExportedSkillFile[] = [];
   async function visit(directory: string): Promise<void> {
-    for (const entry of (
-      await readdir(directory, { withFileTypes: true })
-    ).toSorted((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).toSorted(
+      (left, right) => left.name.localeCompare(right.name),
+    )) {
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink())
-        throw new Error(
-          "App-creation skill exports do not accept symbolic links.",
-        );
+        throw new Error("App-creation skill exports do not accept symbolic links.");
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile()) {
         const mode = (await lstat(path)).mode & 0o777;
         if (mode !== 0o644 && mode !== 0o755)
-          throw new Error(
-            `Unsupported app-creation skill mode: ${mode.toString(8)}`,
-          );
+          throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
         files.push({
           path: relative(sourceRoot, path).split("\\").join("/"),
           mode: mode === 0o755 ? "100755" : "100644",
           sha256: sha256(await readFile(path)),
         });
-      } else
-        throw new Error(
-          "App-creation skill exports accept only files and directories.",
-        );
+      } else throw new Error("App-creation skill exports accept only files and directories.");
     }
   }
   for (const root of APP_CREATION_SKILL_ROOTS) {

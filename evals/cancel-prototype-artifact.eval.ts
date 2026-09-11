@@ -13,9 +13,7 @@ export default defineEval({
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
     await t.send("Report artifact workflow status.");

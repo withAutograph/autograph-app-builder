@@ -34,9 +34,7 @@ export default defineTool({
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
     )
-      throw new Error(
-        "Derive an exact canonical proposal before requesting target apply.",
-      );
+      throw new Error("Derive an exact canonical proposal before requesting target apply.");
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
@@ -61,8 +59,7 @@ export default defineTool({
       identityDigest: current.identityReceipt.digest,
       imageDigest: current.dependencyReceipt.imageDigest,
       dependencyCacheDigest: current.dependencyReceipt.dependencyCacheDigest,
-      dependencyCacheContentDigest:
-        current.dependencyReceipt.cacheContentDigest,
+      dependencyCacheContentDigest: current.dependencyReceipt.cacheContentDigest,
       proposalDigest: current.proposal.digest,
     };
     const result = await executeProposalBoundApply({
@@ -74,11 +71,7 @@ export default defineTool({
       ...(fixture
         ? {
             snapshotter: (fixtureSandbox, applyRoot) =>
-              inspectFixtureApplyOverlay(
-                fixtureSandbox,
-                applyRoot,
-                current.appSpec.appId,
-              ),
+              inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
           }
         : {}),
       binding,
@@ -97,9 +90,7 @@ export default defineTool({
           preparedByCallId: current.preparedByCallId,
           workspace: current.workspace,
           sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined
-            ? {}
-            : { githubSource: current.githubSource }),
+          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
           artifacts: current.artifacts,
           appSpec: current.appSpec,
           dependencyReceipt: current.dependencyReceipt,
@@ -121,9 +112,7 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         artifacts: current.artifacts,
         appSpec: current.appSpec,
         dependencyReceipt: current.dependencyReceipt,

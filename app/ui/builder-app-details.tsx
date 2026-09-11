@@ -51,11 +51,7 @@ export function AppDetailsSection({
             onChange={(event) => onBriefChange(event.target.value)}
             placeholder="Describe the app you want to build…"
           />
-          <button
-            type="button"
-            aria-label="Try another app brief example"
-            onClick={onCycleBrief}
-          >
+          <button type="button" aria-label="Try another app brief example" onClick={onCycleBrief}>
             <RefreshCw size={16} aria-hidden="true" />
           </button>
         </div>

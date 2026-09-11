@@ -31,9 +31,7 @@ export function Passkeys({ className }: PasskeysProps) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex items-end justify-between gap-3">
-        <h2 className="truncate text-sm font-semibold">
-          {passkeyLocalization.passkeys}
-        </h2>
+        <h2 className="truncate text-sm font-semibold">{passkeyLocalization.passkeys}</h2>
 
         <Button
           className="shrink-0"

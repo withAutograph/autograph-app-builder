@@ -1,9 +1,7 @@
 import type { DurableHostedSessionRecord } from "./hosted-store";
 
-export function recoveryPromptForSession(
-  record: DurableHostedSessionRecord,
-): string | undefined {
-  const {checkpoint} = record;
+export function recoveryPromptForSession(record: DurableHostedSessionRecord): string | undefined {
+  const { checkpoint } = record;
   if (checkpoint === undefined) return undefined;
   const messages = checkpoint.events
     .filter(
@@ -27,9 +25,7 @@ export function recoveryPromptForSession(
     checkpoint.inputRequests === undefined
       ? undefined
       : `Outstanding unresolved product requests from the prior runtime (the exact prior request IDs are retained for reconciliation): ${JSON.stringify(checkpoint.inputRequests)}`,
-    messages.length === 0
-      ? undefined
-      : `Prior product conversation:\n${messages}`,
+    messages.length === 0 ? undefined : `Prior product conversation:\n${messages}`,
     checkpoint.inputRequests === undefined
       ? undefined
       : "Reissue every unresolved product request before later work. Do not infer that any of them was answered or approved.",

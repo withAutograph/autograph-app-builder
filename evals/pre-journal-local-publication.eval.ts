@@ -9,11 +9,7 @@ export default defineEval({
     "A workflow-pending crash before journal creation is readable and never redispatched.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "publication-pre-journal-interruption",
-    );
+    await prepareReviewedWorkflow(t, repository, "publication-pre-journal-interruption");
     await t.send("Publish reviewed change set locally.");
     t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");

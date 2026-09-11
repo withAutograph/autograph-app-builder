@@ -10,12 +10,13 @@ import {
 describe("workspace onboarding", () => {
   it("allows the signed-in product only after workspace setup succeeds", async () => {
     const value = { userId: "user_one", workspaceId: "workspace_one" };
-    await expect(
-      resolveWorkspaceOnboardingState(async () => value),
-    ).resolves.toEqual({ status: "ready", value });
-    await expect(
-      resolveWorkspaceOnboardingState(async () => undefined),
-    ).resolves.toEqual({ status: "anonymous" });
+    await expect(resolveWorkspaceOnboardingState(async () => value)).resolves.toEqual({
+      status: "ready",
+      value,
+    });
+    await expect(resolveWorkspaceOnboardingState(async () => undefined)).resolves.toEqual({
+      status: "anonymous",
+    });
   });
 
   it.each([
@@ -33,12 +34,9 @@ describe("workspace onboarding", () => {
   });
 
   it("uses one shared onboarding recovery surface", () => {
-    expect(
-      workspaceOnboardingRedirect(
-        "https://builder.example",
-        "workspace-setup-retry",
-      ),
-    ).toBe("https://builder.example/?onboarding=workspace-setup-retry");
+    expect(workspaceOnboardingRedirect("https://builder.example", "workspace-setup-retry")).toBe(
+      "https://builder.example/?onboarding=workspace-setup-retry",
+    );
     expect(signInForWorkspaceRedirect("https://builder.example")).toBe(
       "https://builder.example/auth/sign-in?callbackURL=%2F",
     );

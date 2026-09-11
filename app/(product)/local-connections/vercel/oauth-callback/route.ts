@@ -16,12 +16,7 @@ export async function GET(request: Request) {
     const code = query.get("code");
     const state = query.get("state");
     if (!code || !state) throw new Error("invalid");
-    const relay = verifyLocalVercelRelay(
-      state,
-      emulation.relaySecret,
-      Date.now(),
-      origin,
-    );
+    const relay = verifyLocalVercelRelay(state, emulation.relaySecret, Date.now(), origin);
     const callback = new URL("/vercel/installations/callback", origin);
     callback.searchParams.set("code", code);
     callback.searchParams.set("state", relay.state);

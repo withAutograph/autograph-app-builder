@@ -29,9 +29,7 @@ export type PreviewCimdTransportDependencies = {
 
 function lookupError(hostname: string): NodeJS.ErrnoException {
   return Object.assign(
-    new Error(
-      `No pinned address satisfies the requested family for ${hostname}.`,
-    ),
+    new Error(`No pinned address satisfies the requested family for ${hostname}.`),
     { code: "ENOTFOUND" },
   );
 }
@@ -51,9 +49,7 @@ function addressesForOptions(
  * Node can request `all: true` when automatic family selection is enabled. In
  * that case the callback must receive the pinned address array, not a scalar.
  */
-export function createPinnedPreviewLookup(
-  addresses: readonly LookupAddress[],
-): LookupFunction {
+export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): LookupFunction {
   const pinnedAddresses = addresses.map(({ address, family }) => ({
     address,
     family,
@@ -123,14 +119,9 @@ export function createPreviewCimdTransport(
       throw new TypeError("Preview CIMD transport supports only GET and HEAD.");
     }
 
-    const callerSignal =
-      init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(
-      REQUEST_TIMEOUT_MS,
-    );
-    const signal = callerSignal
-      ? AbortSignal.any([callerSignal, timeoutSignal])
-      : timeoutSignal;
+    const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(REQUEST_TIMEOUT_MS);
+    const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
     const addresses = await awaitWithAbort(
       dependencies.resolveHostname(url.hostname, {
         all: true,
@@ -142,9 +133,7 @@ export function createPreviewCimdTransport(
       throw new TypeError("Metadata hostname returned no DNS addresses.");
     }
     if (addresses.some(({ address }) => !isPublicRoutableHost(address))) {
-      throw new TypeError(
-        "Metadata hostname must resolve only to public-routable addresses.",
-      );
+      throw new TypeError("Metadata hostname must resolve only to public-routable addresses.");
     }
 
     const headers = Object.fromEntries(webRequest.headers.entries());
@@ -158,17 +147,13 @@ export function createPreviewCimdTransport(
           headers,
           lookup: createPinnedPreviewLookup(addresses),
           method: webRequest.method,
-          servername:
-            isIP(url.hostname.replace(/^\[|\]$/gu, "")) === 0
-              ? url.hostname
-              : undefined,
+          servername: isIP(url.hostname.replace(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
           signal,
         },
         (response) => {
           const status = response.statusCode ?? 500;
           const body =
-            webRequest.method === "HEAD" ||
-            BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
+            webRequest.method === "HEAD" || BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
               ? null
               : (Readable.toWeb(response) as unknown as BodyInit);
           resolve(

@@ -7,10 +7,7 @@ import {
   type BuilderProvisionJournalRow,
   type BuilderProvisionJournalStore,
 } from "./journal";
-import {
-  builderProvisionRequestDigest,
-  builderProvisionRequestSchema,
-} from "./contracts";
+import { builderProvisionRequestDigest, builderProvisionRequestSchema } from "./contracts";
 
 const request = builderProvisionRequestSchema.parse({
   version: 1,
@@ -40,8 +37,7 @@ function memoryStore(): BuilderProvisionJournalStore {
       const digest = builderProvisionRequestDigest(input.request);
       const existing = rows.get(id);
       if (existing) {
-        if (existing.requestDigest !== digest)
-          throw new Error("provision-request-id-reused");
+        if (existing.requestDigest !== digest) throw new Error("provision-request-id-reused");
         return structuredClone(existing);
       }
       const row: BuilderProvisionJournalRow = {
@@ -64,8 +60,7 @@ function memoryStore(): BuilderProvisionJournalStore {
     async compareAndSet(input) {
       const id = key(input.authority, input.requestId);
       const current = rows.get(id);
-      if (!current || current.revision !== input.expectedRevision)
-        return undefined;
+      if (!current || current.revision !== input.expectedRevision) return undefined;
       const next = {
         ...current,
         state: input.record.response.status,

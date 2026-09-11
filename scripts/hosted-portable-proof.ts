@@ -2,10 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import {
-  eveSessionResultSchema,
-  type EveSessionResult,
-} from "../lib/mcp/contracts";
+import { eveSessionResultSchema, type EveSessionResult } from "../lib/mcp/contracts";
 import { TOOL_NAMES } from "./portable-release";
 import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
@@ -74,9 +71,7 @@ export const hostedProofScenarioSchema = z
         path: ["oauth", "audience"],
         message: "OAuth audience must be the exact protected resource.",
       });
-    const phases = scenario.approvalReceipts.map(
-      ({ receipt }) => receipt.phase,
-    );
+    const phases = scenario.approvalReceipts.map(({ receipt }) => receipt.phase);
     if (new Set(phases).size !== 3)
       context.addIssue({
         code: "custom",
@@ -84,7 +79,7 @@ export const hostedProofScenarioSchema = z
         message: "Each approval phase is required exactly once.",
       });
     for (const expected of scenario.approvalReceipts) {
-      const {receipt} = expected;
+      const { receipt } = expected;
       if (
         receipt.repositoryId !== scenario.target.repositoryId ||
         receipt.repository !== scenario.target.repository ||
@@ -108,10 +103,7 @@ export const hostedProofScenarioSchema = z
           : receipt.phase === "change_set"
             ? "accept-change-set"
             : "create-draft-pr";
-      if (
-        receipt.subjectDigest !== expectedDigest ||
-        receipt.outcome !== expectedOutcome
-      )
+      if (receipt.subjectDigest !== expectedDigest || receipt.outcome !== expectedOutcome)
         context.addIssue({
           code: "custom",
           path: ["approvalReceipts"],
@@ -126,19 +118,14 @@ export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
 function canonicalPublicResult(value: unknown): string {
-  if (Array.isArray(value))
-    return `[${value.map(canonicalPublicResult).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
       .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(
-        ([key, entry]) =>
-          `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`,
-      )
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
       .join(",")}}`;
   const primitive = JSON.stringify(value);
-  if (primitive === undefined)
-    throw new Error("Public tool result was not canonical JSON.");
+  if (primitive === undefined) throw new Error("Public tool result was not canonical JSON.");
   return primitive;
 }
 
@@ -161,9 +148,7 @@ const tokenClaimsSchema = z
 function tokenClaims(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("OAuth access token must be a JWT.");
-  return tokenClaimsSchema.parse(
-    JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")),
-  );
+  return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
 }
 
 export function verifyWorkspaceTokenPair(input: {
@@ -192,21 +177,12 @@ export function verifyWorkspaceTokenPair(input: {
       claims.exp - claims.nbf > 300 ||
       requiredScopes.some((scope) => !scopes.has(scope))
     )
-      throw new Error(
-        "OAuth token claims did not match the exact hosted proof contract.",
-      );
+      throw new Error("OAuth token claims did not match the exact hosted proof contract.");
   }
-  if (
-    primary.sub === secondary.sub ||
-    primary.workspace_id === secondary.workspace_id
-  )
-    throw new Error(
-      "Proof tokens must bind two distinct subjects to two distinct workspaces.",
-    );
+  if (primary.sub === secondary.sub || primary.workspace_id === secondary.workspace_id)
+    throw new Error("Proof tokens must bind two distinct subjects to two distinct workspaces.");
   return {
-    primaryIdentityDigest: digest(
-      `${primary.iss}\0${primary.sub}\0${primary.workspace_id}`,
-    ),
+    primaryIdentityDigest: digest(`${primary.iss}\0${primary.sub}\0${primary.workspace_id}`),
     secondaryIdentityDigest: digest(
       `${secondary.iss}\0${secondary.sub}\0${secondary.workspace_id}`,
     ),
@@ -216,9 +192,7 @@ export function verifyWorkspaceTokenPair(input: {
 const protectedResourceMetadataSchema = z
   .object({
     resource: z.string().url().startsWith("https://"),
-    authorization_servers: z
-      .array(z.string().url().startsWith("https://"))
-      .length(1),
+    authorization_servers: z.array(z.string().url().startsWith("https://")).length(1),
     bearer_methods_supported: z.tuple([z.literal("header")]),
     scopes_supported: z.tuple([
       z.literal("autograph:session"),
@@ -246,17 +220,12 @@ const draftPrReceiptSchema = z
   })
   .strict();
 
-export function verifiedDraftPrEvidence(
-  text: string,
-  scenario: HostedProofScenario,
-) {
+export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScenario) {
   const marker = "AUTOGRAPH_DRAFT_PR_RECEIPT ";
   const candidates = text.split("\n").filter((line) => line.startsWith(marker));
   if (candidates.length !== 1)
     throw new Error("Exactly one structural draft-PR receipt is required.");
-  const receipt = draftPrReceiptSchema.parse(
-    JSON.parse(candidates[0].slice(marker.length)),
-  );
+  const receipt = draftPrReceiptSchema.parse(JSON.parse(candidates[0].slice(marker.length)));
   const url = new URL(receipt.url);
   const expectedPath = `/${receipt.repository}/pull/`;
   if (
@@ -273,9 +242,7 @@ export function verifiedDraftPrEvidence(
     receipt.headSha === receipt.baseSha ||
     receipt.changeSetDigest !== scenario.target.changeSetDigest
   )
-    throw new Error(
-      "Draft-PR receipt did not match the exact approved target and change set.",
-    );
+    throw new Error("Draft-PR receipt did not match the exact approved target and change set.");
   return { receipt, evidenceDigest: digest(JSON.stringify(receipt)) };
 }
 
@@ -291,10 +258,7 @@ function jsonRpcPayload(text: string) {
       jsonrpc: z.literal("2.0"),
       id: z.union([z.string(), z.number()]).optional(),
       result: z.unknown().optional(),
-      error: z
-        .object({ code: z.number(), message: z.string() })
-        .passthrough()
-        .optional(),
+      error: z.object({ code: z.number(), message: z.string() }).passthrough().optional(),
     })
     .passthrough()
     .parse(payload);
@@ -333,8 +297,7 @@ export class HostedMcpProofClient {
     });
     if (options.authenticate !== false && this.token !== undefined)
       headers.set("authorization", `Bearer ${this.token}`);
-    if (this.sessionId !== undefined)
-      headers.set("mcp-session-id", this.sessionId);
+    if (this.sessionId !== undefined) headers.set("mcp-session-id", this.sessionId);
     const body = {
       jsonrpc: "2.0",
       ...(options.notification ? {} : { id: ++this.requestId }),
@@ -366,11 +329,7 @@ export class HostedMcpProofClient {
     });
     if (response.status !== 200 || response.payload?.error !== undefined)
       throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
-    const initialized = await this.post(
-      "notifications/initialized",
-      {},
-      { notification: true },
-    );
+    const initialized = await this.post("notifications/initialized", {}, { notification: true });
     if (![200, 202, 204].includes(initialized.status))
       throw new Error("MCP initialized notification was rejected.");
   }
@@ -408,10 +367,7 @@ export class HostedMcpProofClient {
     };
   }
 
-  async callToolAndDiscardResult(
-    name: (typeof TOOL_NAMES)[number],
-    args: unknown,
-  ) {
+  async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const response = await this.post("tools/call", { name, arguments: args });
     if (response.status !== 200 || response.payload?.error !== undefined)
       throw new Error(`${name} failed with HTTP ${response.status}.`);
@@ -422,8 +378,7 @@ export class HostedMcpProofClient {
       })
       .passthrough()
       .parse(response.payload?.result);
-    if (result.isError === true)
-      throw new Error(`${name} returned an error before result loss.`);
+    if (result.isError === true) throw new Error(`${name} returned an error before result loss.`);
     const publicResult = eveSessionResultSchema.parse(result.structuredContent);
     // Retain only a private canonical fingerprint. This models a caller that
     // loses the successful operation result before it can retain the public
@@ -434,10 +389,7 @@ export class HostedMcpProofClient {
     };
   }
 
-  async callToolMatchingDiscardedResult(
-    name: (typeof TOOL_NAMES)[number],
-    args: unknown,
-  ) {
+  async callToolMatchingDiscardedResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const discarded = this.discardedResult;
     if (discarded === undefined || discarded.name !== name)
       throw new Error("No matching discarded tool result was recorded.");
@@ -447,9 +399,7 @@ export class HostedMcpProofClient {
       result.session?.success === true &&
       publicResultFingerprint(result.session.data) !== discarded.fingerprint
     )
-      throw new Error(
-        "Lost-response retry did not match the discarded hosted session result.",
-      );
+      throw new Error("Lost-response retry did not match the discarded hosted session result.");
     return result;
   }
 
@@ -472,9 +422,7 @@ export class HostedMcpProofClient {
       /\bwrun_[A-Za-z0-9]+\b/u.test(joined) ||
       joined.includes("x-vercel-trusted-oidc-idp-token")
     ) {
-      throw new Error(
-        "Hosted public responses disclosed private runtime material.",
-      );
+      throw new Error("Hosted public responses disclosed private runtime material.");
     }
     return {
       publicResponsesScanned: this.responseBodies.length,
@@ -489,10 +437,7 @@ async function verifyProtectedResourceMetadata(input: {
   fetcher: typeof fetch;
 }) {
   const endpoint = new URL(input.endpoint);
-  const metadataUrl = new URL(
-    "/.well-known/oauth-protected-resource",
-    endpoint,
-  );
+  const metadataUrl = new URL("/.well-known/oauth-protected-resource", endpoint);
   if (input.scenario.oauth.resource !== endpoint.href)
     throw new Error("OAuth resource must be the exact release MCP endpoint.");
   const response = await input.fetcher(metadataUrl, {
@@ -514,10 +459,7 @@ async function verifyProtectedResourceMetadata(input: {
   };
 }
 
-function toolSession(
-  name: string,
-  result: Awaited<ReturnType<HostedMcpProofClient["callTool"]>>,
-) {
+function toolSession(name: string, result: Awaited<ReturnType<HostedMcpProofClient["callTool"]>>) {
   if (result.isError || result.session?.success !== true)
     throw new Error(`${name} returned a tool error or invalid public result.`);
   return result.session.data;
@@ -540,9 +482,7 @@ function responseFor(
       (candidate) => candidate.requestTitle === request.title,
     );
     if (matches.length !== 1)
-      throw new Error(
-        "Question did not match exactly one title-bound response.",
-      );
+      throw new Error("Question did not match exactly one title-bound response.");
     const [match] = matches;
     return {
       response: {
@@ -553,12 +493,8 @@ function responseFor(
     };
   }
   if (request.kind !== "approval" || request.description === undefined)
-    throw new Error(
-      "Only closed question or approval requests can be automated.",
-    );
-  const parsedReceipt = approvalReceiptSchema.parse(
-    JSON.parse(request.description),
-  );
+    throw new Error("Only closed question or approval requests can be automated.");
+  const parsedReceipt = approvalReceiptSchema.parse(JSON.parse(request.description));
   const matches = scenario.approvalReceipts.filter(
     (candidate) =>
       candidate.requestTitle === request.title &&
@@ -567,9 +503,7 @@ function responseFor(
   if (matches.length !== 1)
     throw new Error("Approval did not match one exact digest-bound receipt.");
   if (!permitApprovals)
-    throw new Error(
-      "Approval response requires the explicit --permit-approvals gate.",
-    );
+    throw new Error("Approval response requires the explicit --permit-approvals gate.");
   return {
     response: { kind: "approve" as const },
     approvalPhase: parsedReceipt.phase,
@@ -584,7 +518,7 @@ async function pollUntilSettled(input: {
   permitApprovals: boolean;
   requestPrefix: string;
 }) {
-  let {cursor} = input;
+  let { cursor } = input;
   let allText = "";
   let responseCount = 0;
   let responseBatchCount = 0;
@@ -601,11 +535,7 @@ async function pollUntilSettled(input: {
     ({ cursor } = page);
     allText += `\n${assistantText(page)}`;
     const responses = (page.inputRequests ?? []).map((request) => {
-      const selected = responseFor(
-        request,
-        input.scenario,
-        input.permitApprovals,
-      );
+      const selected = responseFor(request, input.scenario, input.permitApprovals);
       if (selected.approvalPhase !== undefined) {
         approvalPhases.push(selected.approvalPhase);
       }
@@ -641,9 +571,7 @@ async function pollUntilSettled(input: {
       setTimeout(() => resolve(), input.scenario.pollIntervalMs);
     });
   }
-  throw new Error(
-    "Hosted session did not settle within the bounded poll window.",
-  );
+  throw new Error("Hosted session did not settle within the bounded poll window.");
 }
 
 export interface HostedProofResult {
@@ -707,17 +635,11 @@ export async function runHostedProof(input: {
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   )
     throw new Error("Hosted endpoint did not fail closed without OAuth.");
-  const invalid = new HostedMcpProofClient(
-    input.endpoint,
-    "invalid-hosted-proof-token",
-    fetcher,
-  );
+  const invalid = new HostedMcpProofClient(input.endpoint, "invalid-hosted-proof-token", fetcher);
   const invalidResult = await invalid.rawInitialize(true);
   if (
     invalidResult.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(
-      invalidResult.headers.get("www-authenticate") ?? "",
-    ) ||
+    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get("www-authenticate") ?? "") ||
     !invalidResult.headers
       .get("www-authenticate")
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
@@ -728,9 +650,7 @@ export async function runHostedProof(input: {
   await client.initialize();
   const discoveredTools = await client.listTools();
   if (JSON.stringify(discoveredTools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error(
-      "Hosted endpoint did not expose exactly the five Autograph tools.",
-    );
+    throw new Error("Hosted endpoint did not expose exactly the five Autograph tools.");
 
   const proofId = digest(
     `${input.sourceSha}\0${JSON.stringify(input.scenario)}\0${randomUUID()}`,
@@ -759,9 +679,7 @@ export async function runHostedProof(input: {
   if (created.responseCount < 1)
     throw new Error("Hosted proof did not exercise autograph_respond.");
   if (created.page.status !== "waiting")
-    throw new Error(
-      "Create phase did not reach the waiting state for iteration.",
-    );
+    throw new Error("Create phase did not reach the waiting state for iteration.");
 
   const sent = toolSession(
     "autograph_send",
@@ -781,17 +699,12 @@ export async function runHostedProof(input: {
   });
   if (iterated.page.status !== "completed")
     throw new Error("Iteration did not reach a successful completed state.");
-  const observedApprovalPhases = [
-    ...created.approvalPhases,
-    ...iterated.approvalPhases,
-  ].sort();
+  const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].sort();
   if (
     JSON.stringify(observedApprovalPhases) !==
     JSON.stringify(["appspec", "change_set", "publication"])
   )
-    throw new Error(
-      "The live lifecycle did not consume all exact approval receipts.",
-    );
+    throw new Error("The live lifecycle did not consume all exact approval receipts.");
   const draftPr = verifiedDraftPrEvidence(iterated.allText, input.scenario);
 
   const stale = await client.callTool("autograph_get", {
@@ -799,14 +712,9 @@ export async function runHostedProof(input: {
     cursor: 0,
     limit: 1,
   });
-  if (!stale.isError)
-    throw new Error("Stale or unknown session access did not fail closed.");
+  if (!stale.isError) throw new Error("Stale or unknown session access did not fail closed.");
 
-  const crossTenant = new HostedMcpProofClient(
-    input.endpoint,
-    input.crossTenantToken,
-    fetcher,
-  );
+  const crossTenant = new HostedMcpProofClient(input.endpoint, input.crossTenantToken, fetcher);
   await crossTenant.initialize();
   const cancellationStart = toolSession(
     "autograph_start",
@@ -827,9 +735,7 @@ export async function runHostedProof(input: {
     !(await denied(crossTenant, first.sessionId)) ||
     !(await denied(client, cancellationStart.sessionId))
   )
-    throw new Error(
-      "The two server-accepted workspace identities were not mutually isolated.",
-    );
+    throw new Error("The two server-accepted workspace identities were not mutually isolated.");
   toolSession(
     "autograph_cancel",
     await crossTenant.callTool("autograph_cancel", {
@@ -845,17 +751,9 @@ export async function runHostedProof(input: {
     requestPrefix: `hosted-cancel-${proofId}`,
   });
   if (cancelled.page.status !== "cancelled")
-    throw new Error(
-      "Cooperative cancellation was not proven by public events.",
-    );
-  const primaryDisclosure = client.disclosureEvidence([
-    input.token,
-    input.crossTenantToken,
-  ]);
-  const secondaryDisclosure = crossTenant.disclosureEvidence([
-    input.token,
-    input.crossTenantToken,
-  ]);
+    throw new Error("Cooperative cancellation was not proven by public events.");
+  const primaryDisclosure = client.disclosureEvidence([input.token, input.crossTenantToken]);
+  const secondaryDisclosure = crossTenant.disclosureEvidence([input.token, input.crossTenantToken]);
 
   return {
     sourceSha: input.sourceSha,
@@ -871,8 +769,7 @@ export async function runHostedProof(input: {
     idempotentStart: true,
     discardedStartResponseRecovered: true,
     responseCount: created.responseCount + iterated.responseCount,
-    responseBatchCount:
-      created.responseBatchCount + iterated.responseBatchCount,
+    responseBatchCount: created.responseBatchCount + iterated.responseBatchCount,
     iterationProved: sent.sessionId === first.sessionId,
     publicationEvidenceProved: true,
     draftPrEvidenceDigest: draftPr.evidenceDigest,
@@ -880,8 +777,7 @@ export async function runHostedProof(input: {
     mutualWorkspaceDenial: true,
     cancellationProved: true,
     publicResponsesScanned:
-      primaryDisclosure.publicResponsesScanned +
-      secondaryDisclosure.publicResponsesScanned,
+      primaryDisclosure.publicResponsesScanned + secondaryDisclosure.publicResponsesScanned,
     publicResponseDisclosureScanDigest: digest(
       `${primaryDisclosure.publicResponseDisclosureScanDigest}\0${secondaryDisclosure.publicResponseDisclosureScanDigest}`,
     ),

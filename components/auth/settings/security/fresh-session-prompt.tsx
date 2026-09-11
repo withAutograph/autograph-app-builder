@@ -4,13 +4,7 @@ import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
@@ -48,12 +42,8 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
     <div className="p-4">
       <FieldGroup className="gap-4">
         <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium">
-            {auth.localization.settings.freshSessionTitle}
-          </h3>
-          <FieldDescription>
-            {auth.localization.settings.freshSessionDescription}
-          </FieldDescription>
+          <h3 className="text-sm font-medium">{auth.localization.settings.freshSessionTitle}</h3>
+          <FieldDescription>{auth.localization.settings.freshSessionDescription}</FieldDescription>
         </div>
         {auth.emailAndPassword?.enabled ? (
           <form className="flex flex-col gap-3" onSubmit={submit}>
@@ -71,9 +61,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 required
               />
               {signIn.error && (
-                <FieldError>
-                  {signIn.error.error?.message ?? signIn.error.message}
-                </FieldError>
+                <FieldError>{signIn.error.error?.message ?? signIn.error.message}</FieldError>
               )}
             </Field>
             <Button disabled={!password || signIn.isPending} type="submit">

@@ -28,9 +28,7 @@ function databaseFixture(rows: unknown[]) {
     query[key].mockReturnValue(query);
   return {
     query,
-    database: query as unknown as Parameters<
-      typeof createPostgresVercelAuthorizationStateStore
-    >[0],
+    database: query as unknown as Parameters<typeof createPostgresVercelAuthorizationStateStore>[0],
   };
 }
 
@@ -49,9 +47,7 @@ describe("durable Vercel connection return", () => {
     const dialect = new PgDialect();
     for (const [where] of query.where.mock.calls) {
       const observed = dialect.sqlToQuery(where);
-      expect(observed.params).toEqual(
-        expect.arrayContaining(Object.values(authority)),
-      );
+      expect(observed.params).toEqual(expect.arrayContaining(Object.values(authority)));
       expect(observed.params).toContain(input.stateDigest);
       expect(observed.params).toContain(input.authorityDigest);
     }
@@ -59,8 +55,7 @@ describe("durable Vercel connection return", () => {
 
   it("rejects unsafe persisted redirects and returns no result for missing state", async () => {
     const invalid = createPostgresVercelAuthorizationStateStore(
-      databaseFixture([{ returnTo: "https://evil.example", resumeKey }])
-        .database,
+      databaseFixture([{ returnTo: "https://evil.example", resumeKey }]).database,
     );
     const input = {
       stateDigest: "a".repeat(64),
@@ -70,9 +65,7 @@ describe("durable Vercel connection return", () => {
     };
     await expect(invalid.consume(input)).rejects.toThrow();
     await expect(invalid.recover(input)).rejects.toThrow();
-    const empty = createPostgresVercelAuthorizationStateStore(
-      databaseFixture([]).database,
-    );
+    const empty = createPostgresVercelAuthorizationStateStore(databaseFixture([]).database);
     expect(await empty.consume(input)).toBeUndefined();
     expect(await empty.recover(input)).toBeUndefined();
   });

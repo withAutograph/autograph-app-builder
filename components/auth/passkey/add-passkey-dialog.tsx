@@ -1,10 +1,7 @@
 "use client";
 
 import { isSessionNotFreshError } from "@better-auth-ui/core";
-import type {
-  AddPasskeyParams,
-  PasskeyAuthClient,
-} from "@better-auth-ui/core/plugins/passkey";
+import type { AddPasskeyParams, PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useAddPasskey } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
@@ -30,10 +27,7 @@ export type AddPasskeyDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-export function AddPasskeyDialog({
-  open,
-  onOpenChange,
-}: AddPasskeyDialogProps) {
+export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { authenticatorAttachment, localization: passkeyLocalization } =
     useAuthPlugin(passkeyPlugin);
@@ -95,15 +89,11 @@ export function AddPasskeyDialog({
                 {passkeyLocalization.addPasskey}
               </DialogTitle>
 
-              <DialogDescription>
-                {passkeyLocalization.passkeysDescription}
-              </DialogDescription>
+              <DialogDescription>{passkeyLocalization.passkeysDescription}</DialogDescription>
             </DialogHeader>
 
             <Field data-invalid={addPasskey.isError}>
-              <FieldLabel htmlFor="passkey-name">
-                {passkeyLocalization.name}
-              </FieldLabel>
+              <FieldLabel htmlFor="passkey-name">{passkeyLocalization.name}</FieldLabel>
 
               <Input
                 id="passkey-name"

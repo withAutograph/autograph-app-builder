@@ -60,10 +60,7 @@ describe("database migration secret boundary", () => {
   });
 
   it("adds exact tenant retention indexes without weakening durable keys", async () => {
-    const migration = await readFile(
-      "drizzle/0003_hosted_retention_indexes.sql",
-      "utf8",
-    );
+    const migration = await readFile("drizzle/0003_hosted_retention_indexes.sql", "utf8");
     expect(migration).toContain('"agent_session_retention_idx"');
     expect(migration).toContain('"agent_operation_retention_idx"');
     expect(migration).toContain(
@@ -76,25 +73,15 @@ describe("database migration secret boundary", () => {
   });
 
   it("migrates an exact fail-closed hosted workspace membership authority", async () => {
-    const migration = await readFile(
-      "drizzle/0002_hosted_workspace_membership.sql",
-      "utf8",
-    );
+    const migration = await readFile("drizzle/0002_hosted_workspace_membership.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "hosted_workspace_membership"');
     expect(migration).toContain('"active" boolean DEFAULT false NOT NULL');
-    expect(migration).toContain(
-      '"issuer", "audience", "workspace_id", "owner_user_id"',
-    );
+    expect(migration).toContain('"issuer", "audience", "workspace_id", "owner_user_id"');
   });
 
   it("persists only a digest-bound one-time GitHub installation state", async () => {
-    const migration = await readFile(
-      "drizzle/0007_github_installation_authorization.sql",
-      "utf8",
-    );
-    expect(migration).toContain(
-      'CREATE TABLE "github_installation_authorization_state"',
-    );
+    const migration = await readFile("drizzle/0007_github_installation_authorization.sql", "utf8");
+    expect(migration).toContain('CREATE TABLE "github_installation_authorization_state"');
     expect(migration).toContain('"state_digest" text PRIMARY KEY NOT NULL');
     expect(migration).toContain(
       '"issuer" text NOT NULL,\n  "audience" text NOT NULL,\n  "workspace_id" text NOT NULL,\n  "owner_user_id" text NOT NULL',
@@ -107,10 +94,7 @@ describe("database migration secret boundary", () => {
   });
 
   it("isolates bounded Preview emulator documents by branch namespace", async () => {
-    const migration = await readFile(
-      "drizzle/0016_emulate_preview_state.sql",
-      "utf8",
-    );
+    const migration = await readFile("drizzle/0016_emulate_preview_state.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "emulate_preview_state"');
     expect(migration).toContain('"namespace" text PRIMARY KEY NOT NULL');
     expect(migration).toContain('octet_length("state") BETWEEN 2 AND 8388608');

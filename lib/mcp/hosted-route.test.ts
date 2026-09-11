@@ -3,10 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as databaseSchema from "../db/schema";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
-import {
-  createDeploymentMcpRequestHandler,
-  readHostedDeploymentConfig,
-} from "./hosted-route";
+import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from "./hosted-route";
 
 const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
 
@@ -157,9 +154,7 @@ describe("hosted route composition", () => {
   });
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {
-    expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(
-      environment.DATABASE_URL,
-    );
+    expect(readHostedDeploymentConfig(environment).databaseUrl).toBe(environment.DATABASE_URL);
     for (const databaseUrl of [
       "mysql://database.example.test/eve",
       "postgresql://database.example.test/eve\n",

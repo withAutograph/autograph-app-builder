@@ -4,9 +4,7 @@ import { z } from "zod";
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
-function isReviewedPhase(
-  state: ReturnType<typeof appBuilderWorkflowState.get>,
-): state is Extract<
+function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
     phase:
@@ -49,9 +47,7 @@ export default defineTool({
         sessionId: ctx.session.id,
       };
     if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
-      throw new Error(
-        "Prototype artifact state belongs to a different session.",
-      );
+      throw new Error("Prototype artifact state belongs to a different session.");
     return {
       version: state.version,
       sessionId: ctx.session.id,
@@ -177,8 +173,7 @@ export default defineTool({
               callId: state.publicationCallId,
             },
           }
-        : state.phase === "publication_failed" ||
-            state.phase === "published_local"
+        : state.phase === "publication_failed" || state.phase === "published_local"
           ? {
               publication: {
                 status: state.publicationReceipt.status,
@@ -195,16 +190,14 @@ export default defineTool({
               callId: state.branchPublicationCallId,
             },
           }
-        : state.phase === "branch_publication_failed" ||
-            state.phase === "published_branch_worktree"
+        : state.phase === "branch_publication_failed" || state.phase === "published_branch_worktree"
           ? {
               branchPublication: {
                 status: state.branchPublicationReceipt.status,
                 digest: state.branchPublicationReceipt.digest,
                 branchName: state.branchPublicationReceipt.branchName,
                 worktreePath: state.branchPublicationReceipt.worktreePath,
-                recoveryRequired:
-                  state.branchPublicationReceipt.recoveryRequired,
+                recoveryRequired: state.branchPublicationReceipt.recoveryRequired,
               },
             }
           : {}),
@@ -217,8 +210,7 @@ export default defineTool({
               githubOutcome: "unavailable",
             },
           }
-        : state.phase === "fresh_bootstrap_failed" ||
-            state.phase === "published_fresh_bootstrap"
+        : state.phase === "fresh_bootstrap_failed" || state.phase === "published_fresh_bootstrap"
           ? {
               freshBootstrap: {
                 status: state.freshBootstrapReceipt.status,

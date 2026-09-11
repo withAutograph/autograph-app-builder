@@ -16,12 +16,7 @@ import {
   type PublicSessionSummary,
 } from "../mcp/contracts";
 
-export const hostedOperationKindSchema = z.enum([
-  "start",
-  "resume",
-  "send",
-  "respond",
-]);
+export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
 
 export const hostedOperationStateSchema = z.enum([
@@ -53,15 +48,12 @@ export const hostedSessionTimeoutPolicySchema = z
     "Hosted session idle timeout cannot exceed its maximum lifetime.",
   );
 
-export type HostedSessionTimeoutPolicy = z.infer<
-  typeof hostedSessionTimeoutPolicySchema
->;
+export type HostedSessionTimeoutPolicy = z.infer<typeof hostedSessionTimeoutPolicySchema>;
 
-export const DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY =
-  hostedSessionTimeoutPolicySchema.parse({
-    idleTimeoutMs: HOSTED_SESSION_IDLE_TIMEOUT_MS,
-    maxLifetimeMs: HOSTED_SESSION_MAX_LIFETIME_MS,
-  });
+export const DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY = hostedSessionTimeoutPolicySchema.parse({
+  idleTimeoutMs: HOSTED_SESSION_IDLE_TIMEOUT_MS,
+  maxLifetimeMs: HOSTED_SESSION_MAX_LIFETIME_MS,
+});
 
 const legacyHostedSessionRecordSchema = z
   .object({
@@ -75,8 +67,7 @@ const legacyHostedSessionRecordSchema = z
   })
   .strict()
   .refine(
-    ({ createdAtEpochMs, updatedAtEpochMs }) =>
-      updatedAtEpochMs >= createdAtEpochMs,
+    ({ createdAtEpochMs, updatedAtEpochMs }) => updatedAtEpochMs >= createdAtEpochMs,
     "Hosted session updates cannot precede creation.",
   );
 
@@ -94,34 +85,21 @@ export const hostedSessionCheckpointSchema = z
   })
   .strict()
   .refine(
-    (checkpoint) =>
-      new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <=
-      512 * 1_024,
+    (checkpoint) => new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <= 512 * 1_024,
     "Hosted session checkpoints must be at most 524288 bytes.",
   );
 
-export type HostedSessionCheckpoint = z.infer<
-  typeof hostedSessionCheckpointSchema
->;
+export type HostedSessionCheckpoint = z.infer<typeof hostedSessionCheckpointSchema>;
 
-export function hostedSessionCheckpointDigest(
-  checkpoint: HostedSessionCheckpoint,
-): string {
+export function hostedSessionCheckpointDigest(checkpoint: HostedSessionCheckpoint): string {
   const parsed = hostedSessionCheckpointSchema.parse(checkpoint);
-  return `sha256:${createHash("sha256")
-    .update(canonicalRecordValue(parsed))
-    .digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalRecordValue(parsed)).digest("hex")}`;
 }
 
-export function hostedSessionCheckpointProgressDigest(
-  checkpoint: HostedSessionCheckpoint,
-): string {
-  const { capturedAtEpochMs, ...progress } =
-    hostedSessionCheckpointSchema.parse(checkpoint);
+export function hostedSessionCheckpointProgressDigest(checkpoint: HostedSessionCheckpoint): string {
+  const { capturedAtEpochMs, ...progress } = hostedSessionCheckpointSchema.parse(checkpoint);
   void capturedAtEpochMs;
-  return `sha256:${createHash("sha256")
-    .update(canonicalRecordValue(progress))
-    .digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalRecordValue(progress)).digest("hex")}`;
 }
 
 export const durableHostedSessionRecordSchema = z
@@ -170,26 +148,19 @@ export const durableHostedSessionRecordSchema = z
         code: "custom",
         message: "Hosted session progress must be within its durable lifetime.",
       });
-    if (
-      (record.checkpoint === undefined) !==
-      (record.checkpointDigest === undefined)
-    )
+    if ((record.checkpoint === undefined) !== (record.checkpointDigest === undefined))
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their exact digest.",
       });
-    if (
-      (record.checkpoint === undefined) !==
-      (record.checkpointProgressDigest === undefined)
-    )
+    if ((record.checkpoint === undefined) !== (record.checkpointProgressDigest === undefined))
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their progress digest.",
       });
     if (
       record.checkpoint !== undefined &&
-      hostedSessionCheckpointDigest(record.checkpoint) !==
-        record.checkpointDigest
+      hostedSessionCheckpointDigest(record.checkpoint) !== record.checkpointDigest
     )
       context.addIssue({
         code: "custom",
@@ -197,25 +168,18 @@ export const durableHostedSessionRecordSchema = z
       });
     if (
       record.checkpoint !== undefined &&
-      hostedSessionCheckpointProgressDigest(record.checkpoint) !==
-        record.checkpointProgressDigest
+      hostedSessionCheckpointProgressDigest(record.checkpoint) !== record.checkpointProgressDigest
     )
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoint progress digest mismatch.",
       });
-    if (
-      record.checkpoint !== undefined &&
-      record.checkpoint.status !== record.status
-    )
+    if (record.checkpoint !== undefined && record.checkpoint.status !== record.status)
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoint status mismatch.",
       });
-    if (
-      record.adapterGeneration === 1 &&
-      record.adapterSessionId !== record.originAdapterSessionId
-    )
+    if (record.adapterGeneration === 1 && record.adapterSessionId !== record.originAdapterSessionId)
       context.addIssue({
         code: "custom",
         message: "The first adapter generation must retain its origin binding.",
@@ -228,16 +192,13 @@ export const hostedSessionRecordSchema = z.discriminatedUnion("version", [
 ]);
 
 export type HostedSessionRecord = z.infer<typeof hostedSessionRecordSchema>;
-export type DurableHostedSessionRecord = z.infer<
-  typeof durableHostedSessionRecordSchema
->;
+export type DurableHostedSessionRecord = z.infer<typeof durableHostedSessionRecordSchema>;
 
 function legacySessionStage(
   status: z.infer<typeof sessionStatusSchema>,
 ): z.infer<typeof publicSessionStageSchema> {
   if (status === "completed") return "complete";
-  if (["failed", "cancelled", "input_required"].includes(status))
-    return "needs_attention";
+  if (["failed", "cancelled", "input_required"].includes(status)) return "needs_attention";
   return "designing";
 }
 
@@ -263,9 +224,7 @@ export function toDurableHostedSessionRecord(
   });
 }
 
-export function hostedSessionSummary(
-  input: HostedSessionRecord,
-): PublicSessionSummary {
+export function hostedSessionSummary(input: HostedSessionRecord): PublicSessionSummary {
   const record = toDurableHostedSessionRecord(input);
   return publicSessionSummarySchema.parse({
     sessionId: record.sessionId,
@@ -274,9 +233,7 @@ export function hostedSessionSummary(
     stage: record.stage,
     status: record.status,
     resumability:
-      record.version === 2 &&
-      record.checkpoint === undefined &&
-      record.resumability !== "terminal"
+      record.version === 2 && record.checkpoint === undefined && record.resumability !== "terminal"
         ? "restart_required"
         : record.resumability,
     updatedAt: new Date(record.updatedAtEpochMs).toISOString(),
@@ -308,10 +265,7 @@ function canonicalRecordValue(value: unknown): string {
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(
-        ([key, entry]) =>
-          `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`,
-      )
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
@@ -319,15 +273,11 @@ function canonicalRecordValue(value: unknown): string {
 
 export function hostedSessionRecordDigest(record: HostedSessionRecord): string {
   const parsed = hostedSessionRecordSchema.parse(record);
-  return `sha256:${createHash("sha256")
-    .update(canonicalRecordValue(parsed))
-    .digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalRecordValue(parsed)).digest("hex")}`;
 }
 
 /** Stable creation identity used by idempotent start receipts as sessions evolve. */
-export function hostedSessionCreationDigest(
-  record: HostedSessionRecord,
-): string {
+export function hostedSessionCreationDigest(record: HostedSessionRecord): string {
   const parsed = hostedSessionRecordSchema.parse(record);
   return `sha256:${createHash("sha256")
     .update(
@@ -336,9 +286,7 @@ export function hostedSessionCreationDigest(
         sessionId: parsed.sessionId,
         principal: parsed.principal,
         originAdapterSessionId:
-          parsed.version === 1
-            ? parsed.adapterSessionId
-            : parsed.originAdapterSessionId,
+          parsed.version === 1 ? parsed.adapterSessionId : parsed.originAdapterSessionId,
         createdAtEpochMs: parsed.createdAtEpochMs,
         ...(parsed.version === 2 && parsed.sourceHandoffId
           ? { sourceHandoffId: parsed.sourceHandoffId }
@@ -399,20 +347,14 @@ export const hostedOperationRecordSchema = z
       .strict(),
   ])
   .superRefine((record, context) => {
-    if (
-      record.state === "succeeded" &&
-      record.result.sessionId !== record.sessionId
-    ) {
+    if (record.state === "succeeded" && record.result.sessionId !== record.sessionId) {
       context.addIssue({
         code: "custom",
         message: "A succeeded operation must bind its result session.",
       });
     }
     if (record.kind === "start") {
-      if (
-        record.state === "succeeded" &&
-        record.sessionRecordDigest === undefined
-      ) {
+      if (record.state === "succeeded" && record.sessionRecordDigest === undefined) {
         context.addIssue({
           code: "custom",
           message: "A succeeded start must bind its exact session record.",
@@ -445,10 +387,7 @@ export const hostedOperationRecordSchema = z
           message: "A session mutation must bind its session.",
         });
       }
-      if (
-        record.state === "succeeded" &&
-        record.sessionRecordDigest !== undefined
-      ) {
+      if (record.state === "succeeded" && record.sessionRecordDigest !== undefined) {
         context.addIssue({
           code: "custom",
           message: "A session mutation cannot create a session record.",
@@ -459,34 +398,29 @@ export const hostedOperationRecordSchema = z
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 
-export const reserveOperationResultSchema = z.discriminatedUnion(
-  "disposition",
-  [
-    z
-      .object({
-        disposition: z.literal("reserved"),
-        operation: hostedOperationRecordSchema,
-      })
-      .strict(),
-    z
-      .object({
-        disposition: z.literal("existing"),
-        operation: hostedOperationRecordSchema,
-      })
-      .strict(),
-    z.object({ disposition: z.literal("conflict") }).strict(),
-    z
-      .object({
-        disposition: z.literal("rejected"),
-        reason: z.literal("session_busy"),
-      })
-      .strict(),
-  ],
-);
+export const reserveOperationResultSchema = z.discriminatedUnion("disposition", [
+  z
+    .object({
+      disposition: z.literal("reserved"),
+      operation: hostedOperationRecordSchema,
+    })
+    .strict(),
+  z
+    .object({
+      disposition: z.literal("existing"),
+      operation: hostedOperationRecordSchema,
+    })
+    .strict(),
+  z.object({ disposition: z.literal("conflict") }).strict(),
+  z
+    .object({
+      disposition: z.literal("rejected"),
+      reason: z.literal("session_busy"),
+    })
+    .strict(),
+]);
 
-export type ReserveOperationResult = z.infer<
-  typeof reserveOperationResultSchema
->;
+export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema>;
 
 /**
  * Durable implementations must make every method atomic. All lookup methods
@@ -495,7 +429,10 @@ export type ReserveOperationResult = z.infer<
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
-  reserveOperation: (principal: z.infer<typeof hostedPrincipalSchema>, candidate: HostedOperationRecord) => Promise<ReserveOperationResult>;
+  reserveOperation: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    candidate: HostedOperationRecord,
+  ) => Promise<ReserveOperationResult>;
   settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -503,7 +440,7 @@ export interface HostedEveStore {
     result: z.infer<typeof eveSessionResultSchema>;
     session?: HostedSessionRecord;
     nowEpochMs: number;
-}) => Promise<HostedOperationRecord>;
+  }) => Promise<HostedOperationRecord>;
   settleUnsuccessful: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -511,16 +448,19 @@ export interface HostedEveStore {
     state: "submission_unknown" | "rejected";
     safeErrorCode: string;
     nowEpochMs: number;
-}) => Promise<HostedOperationRecord>;
-  getSession: (principal: z.infer<typeof hostedPrincipalSchema>, sessionId: string) => Promise<HostedSessionRecord | null>;
+  }) => Promise<HostedOperationRecord>;
+  getSession: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    sessionId: string,
+  ) => Promise<HostedSessionRecord | null>;
   listSessions: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     cursor: number;
     limit: number;
-}) => Promise<{
+  }) => Promise<{
     sessions: HostedSessionRecord[];
     cursor: number;
-}>;
+  }>;
   observeSession?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
@@ -529,7 +469,7 @@ export interface HostedEveStore {
     resumability: z.infer<typeof publicSessionResumabilitySchema>;
     appId?: string;
     nowEpochMs: number;
-}) => Promise<HostedSessionRecord>;
+  }) => Promise<HostedSessionRecord>;
   replaceSessionAdapter?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
@@ -541,7 +481,7 @@ export interface HostedEveStore {
     resumability: z.infer<typeof publicSessionResumabilitySchema>;
     appId?: string;
     nowEpochMs: number;
-}) => Promise<HostedSessionRecord>;
+  }) => Promise<HostedSessionRecord>;
 }
 
 /** Test/local conformance store. Hosted deployment must supply durable storage. */
@@ -600,9 +540,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const operation = this.requireReserved(input);
     const result = eveSessionResultSchema.parse(input.result);
     const session =
-      input.session === undefined
-        ? undefined
-        : hostedSessionRecordSchema.parse(input.session);
+      input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
     if (
       session !== undefined &&
       tenantKeyFor(session.principal) !== tenantKeyFor(input.principal)
@@ -610,18 +548,13 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error("Hosted store principal mismatch.");
     }
     if (operation.kind === "start" && session === undefined) {
-      throw new Error(
-        "A successful start must atomically persist its session.",
-      );
+      throw new Error("A successful start must atomically persist its session.");
     }
     if (operation.kind !== "start" && session !== undefined) {
       throw new Error("Only start may create a hosted session.");
     }
     const expectedSessionId = session?.sessionId ?? operation.sessionId;
-    if (
-      expectedSessionId === undefined ||
-      result.sessionId !== expectedSessionId
-    ) {
+    if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
       throw new Error("Hosted operation result session mismatch.");
     }
     const settled = hostedOperationRecordSchema.parse({
@@ -679,10 +612,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     limit: number;
   }): Promise<{ sessions: HostedSessionRecord[]; cursor: number }> {
     const sessions = [...this.sessions.values()]
-      .filter(
-        (record) =>
-          tenantKeyFor(record.principal) === tenantKeyFor(input.principal),
-      )
+      .filter((record) => tenantKeyFor(record.principal) === tenantKeyFor(input.principal))
       .toSorted(
         (left, right) =>
           right.updatedAtEpochMs - left.updatedAtEpochMs ||
@@ -711,15 +641,12 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       status: input.checkpoint.status,
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
-      checkpointProgressDigest: hostedSessionCheckpointProgressDigest(
-        input.checkpoint,
-      ),
+      checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
       stage: input.stage,
       resumability: input.resumability,
       ...(input.appId === undefined ? {} : { appId: input.appId }),
       lastProgressAtEpochMs:
-        durable.checkpointProgressDigest ===
-        hostedSessionCheckpointProgressDigest(input.checkpoint)
+        durable.checkpointProgressDigest === hostedSessionCheckpointProgressDigest(input.checkpoint)
           ? durable.lastProgressAtEpochMs
           : input.nowEpochMs,
       updatedAtEpochMs: input.nowEpochMs,
@@ -756,9 +683,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       status: input.checkpoint.status,
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
-      checkpointProgressDigest: hostedSessionCheckpointProgressDigest(
-        input.checkpoint,
-      ),
+      checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
       stage: input.stage,
       resumability: input.resumability,
       ...(input.appId === undefined ? {} : { appId: input.appId }),
@@ -774,9 +699,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     operationId: string;
     requestDigest: string;
   }): HostedOperationRecord {
-    const operation = this.operations.get(
-      this.operationKey(input.principal, input.operationId),
-    );
+    const operation = this.operations.get(this.operationKey(input.principal, input.operationId));
     if (
       operation === undefined ||
       operation.state !== "reserved" ||
@@ -794,10 +717,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return `${tenantKeyFor(principal)}\u0000${operationId}`;
   }
 
-  private sessionKey(
-    principal: z.infer<typeof hostedPrincipalSchema>,
-    sessionId: string,
-  ): string {
+  private sessionKey(principal: z.infer<typeof hostedPrincipalSchema>, sessionId: string): string {
     return `${tenantKeyFor(principal)}\u0000${sessionId}`;
   }
 }

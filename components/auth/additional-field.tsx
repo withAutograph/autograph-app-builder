@@ -21,12 +21,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
-import {
-  Field,
-  FieldContent,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -34,11 +29,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -89,8 +80,7 @@ function CopyButton({
 }) {
   const { localization } = useAuth();
   const { copied, copy } = useCopyToClipboard({
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   });
 
   async function handleCopy() {
@@ -103,14 +93,10 @@ function CopyButton({
   return (
     <InputGroupButton
       aria-label={
-        copied
-          ? localization.settings.copiedToClipboard
-          : localization.settings.copyToClipboard
+        copied ? localization.settings.copiedToClipboard : localization.settings.copyToClipboard
       }
       title={
-        copied
-          ? localization.settings.copiedToClipboard
-          : localization.settings.copyToClipboard
+        copied ? localization.settings.copiedToClipboard : localization.settings.copyToClipboard
       }
       onClick={handleCopy}
       disabled={isDisabled}
@@ -177,9 +163,7 @@ export function AdditionalField({
         <Textarea
           id={name}
           name={name}
-          defaultValue={
-            field.defaultValue == null ? undefined : String(field.defaultValue)
-          }
+          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
           placeholder={field.placeholder}
           required={field.required}
           readOnly={field.readOnly}
@@ -205,10 +189,7 @@ export function AdditionalField({
           inputMode={maxFractionDigits ? "decimal" : "numeric"}
           min={field.min}
           max={field.max}
-          step={
-            field.step ??
-            (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)
-          }
+          step={field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)}
           defaultValue={
             field.defaultValue == null
               ? undefined
@@ -237,9 +218,7 @@ export function AdditionalField({
         <Switch
           id={name}
           name={name}
-          defaultChecked={
-            field.defaultValue === true || field.defaultValue === "true"
-          }
+          defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
           disabled={isPending || field.readOnly}
         />
 
@@ -256,9 +235,7 @@ export function AdditionalField({
         <Checkbox
           id={name}
           name={name}
-          defaultChecked={
-            field.defaultValue === true || field.defaultValue === "true"
-          }
+          defaultChecked={field.defaultValue === true || field.defaultValue === "true"}
           required={field.required}
           disabled={isPending || field.readOnly}
         />
@@ -277,9 +254,7 @@ export function AdditionalField({
 
         <Select
           name={name}
-          defaultValue={
-            field.defaultValue != null ? String(field.defaultValue) : undefined
-          }
+          defaultValue={field.defaultValue != null ? String(field.defaultValue) : undefined}
           required={field.required}
           disabled={isPending || field.readOnly}
         >
@@ -309,9 +284,7 @@ export function AdditionalField({
         <Combobox
           items={field.options ?? []}
           name={name}
-          defaultValue={
-            field.defaultValue != null ? String(field.defaultValue) : undefined
-          }
+          defaultValue={field.defaultValue != null ? String(field.defaultValue) : undefined}
           required={field.required}
           disabled={isPending || field.readOnly}
         >
@@ -351,14 +324,8 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const isNumeric = field.type === "number";
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
   const nativeInputType = isNumeric ? "number" : undefined;
-  const nativeInputMode = isNumeric
-    ? maxFractionDigits
-      ? "decimal"
-      : "numeric"
-    : undefined;
-  const nativeStep = maxFractionDigits
-    ? 1 / 10 ** maxFractionDigits
-    : undefined;
+  const nativeInputMode = isNumeric ? (maxFractionDigits ? "decimal" : "numeric") : undefined;
+  const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
 
   if (hasPrefix || hasSuffix) {
     return (
@@ -366,11 +333,7 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
         <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
 
         <InputGroup>
-          {hasPrefix && (
-            <InputGroupAddon align="inline-start">
-              {field.prefix}
-            </InputGroupAddon>
-          )}
+          {hasPrefix && <InputGroupAddon align="inline-start">{field.prefix}</InputGroupAddon>}
 
           <InputGroupInput
             ref={inputRef}
@@ -379,11 +342,7 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
             type={nativeInputType}
             inputMode={nativeInputMode}
             step={nativeStep}
-            defaultValue={
-              field.defaultValue == null
-                ? undefined
-                : String(field.defaultValue)
-            }
+            defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
             placeholder={field.placeholder}
             required={field.required}
             readOnly={field.readOnly}
@@ -392,16 +351,11 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
 
           {field.copyable ? (
             <InputGroupAddon align="inline-end">
-              <CopyButton
-                getValue={() => inputRef.current?.value}
-                isDisabled={isPending}
-              />
+              <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
             </InputGroupAddon>
           ) : (
             field.suffix != null && (
-              <InputGroupAddon align="inline-end">
-                {field.suffix}
-              </InputGroupAddon>
+              <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
             )
           )}
         </InputGroup>
@@ -421,9 +375,7 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
         type={nativeInputType}
         inputMode={nativeInputMode}
         step={nativeStep}
-        defaultValue={
-          field.defaultValue == null ? undefined : String(field.defaultValue)
-        }
+        defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
         placeholder={field.placeholder}
         required={field.required}
         readOnly={field.readOnly}
@@ -444,8 +396,7 @@ function SliderField({ name, field, isPending }: AdditionalFieldProps) {
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
   const min = field.min ?? 0;
   const max = field.max ?? 100;
-  const step =
-    field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
+  const step = field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
   const initial =
     typeof field.defaultValue === "number"
       ? field.defaultValue
@@ -492,12 +443,8 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
   const inputType = resolveInputType(field);
   const isDateTime = inputType === "datetime";
 
-  const [date, setDate] = useState<Date | undefined>(
-    toDate(field.defaultValue),
-  );
-  const [time, setTime] = useState<string>(
-    isDateTime && date ? formatTime(date) : "",
-  );
+  const [date, setDate] = useState<Date | undefined>(toDate(field.defaultValue));
+  const [time, setTime] = useState<string>(isDateTime && date ? formatTime(date) : "");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string>();
 

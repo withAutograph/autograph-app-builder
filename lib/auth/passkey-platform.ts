@@ -7,8 +7,7 @@ type PlatformAuthenticatorCapability = {
  * Omitting the attachment keeps Better Auth's platform/cross-platform fallback.
  */
 export async function preferredPasskeyAuthenticatorAttachment(
-  capability:
-    PlatformAuthenticatorCapability | undefined = typeof PublicKeyCredential ===
+  capability: PlatformAuthenticatorCapability | undefined = typeof PublicKeyCredential ===
   "undefined"
     ? undefined
     : PublicKeyCredential,

@@ -31,8 +31,7 @@ export default defineDynamic({
             try {
               await sourceStatus.execute({}, ctx);
               const source = sourceWorkflowState.get();
-              if (source.phase !== "empty")
-                await prepareWorkspace.execute({}, ctx);
+              if (source.phase !== "empty") await prepareWorkspace.execute({}, ctx);
             } catch {
               // The session sandbox remains the authority for a best-effort
               // read of newly generated files, even before its workflow state
@@ -44,9 +43,7 @@ export default defineDynamic({
           if (!safeSourcePath(appId) || appId.includes("/"))
             throw new Error("The requested application cannot be read safely.");
           const requestedPaths = paths.flatMap((path) =>
-            safeSourcePath(path)
-              ? [path.startsWith(prefix) ? path : `${prefix}${path}`]
-              : [],
+            safeSourcePath(path) ? [path.startsWith(prefix) ? path : `${prefix}${path}`] : [],
           );
           const sandbox = await ctx.getSandbox();
           // The signed-in session supplies this sandbox. Read its current
@@ -56,20 +53,18 @@ export default defineDynamic({
           });
           let manifest: unknown = [];
           try {
-            manifest =
-              manifestSource === null ? [] : JSON.parse(manifestSource);
+            manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
           } catch {
             manifest = [];
           }
           const allowed = new Set(
-            (Array.isArray(manifest) ? manifest : []).flatMap(
-              (candidate): string[] =>
-                typeof candidate === "object" &&
-                candidate !== null &&
-                "path" in candidate &&
-                typeof candidate.path === "string"
-                  ? [candidate.path]
-                  : [],
+            (Array.isArray(manifest) ? manifest : []).flatMap((candidate): string[] =>
+              typeof candidate === "object" &&
+              candidate !== null &&
+              "path" in candidate &&
+              typeof candidate.path === "string"
+                ? [candidate.path]
+                : [],
             ),
           );
           const availablePaths = [...allowed]

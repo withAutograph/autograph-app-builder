@@ -27,9 +27,7 @@ const exactTools = [
   "autograph_start",
 ];
 
-function claims(
-  input: Partial<VerifiedHostedClaims> = {},
-): VerifiedHostedClaims {
+function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims {
   return {
     issuer: auth.issuer,
     audience: auth.audience,
@@ -135,8 +133,7 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
   const payload = JSON.parse(data ?? body) as { result?: T };
-  if (payload.result === undefined)
-    throw new Error(`MCP result was missing: ${body}`);
+  if (payload.result === undefined) throw new Error(`MCP result was missing: ${body}`);
   return payload.result;
 }
 
@@ -165,9 +162,7 @@ describe("branded public tool mapping", () => {
         calls.push({ operation: "get", input });
         return result;
       },
-      async recoverStart(
-        input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0],
-      ) {
+      async recoverStart(input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0]) {
         calls.push({ operation: "recoverStart", input });
         return result;
       },
@@ -424,17 +419,12 @@ describe("branded public tool mapping", () => {
       }>;
     }>(response);
 
-    expect((result.tools ?? []).map(({ name }) => name).sort()).toEqual(
-      exactTools,
+    expect((result.tools ?? []).map(({ name }) => name).sort()).toEqual(exactTools);
+    expect((result.tools ?? []).every(({ _meta }) => _meta?.ui?.resourceUri === undefined)).toBe(
+      true,
     );
     expect(
-      (result.tools ?? []).every(
-        ({ _meta }) => _meta?.ui?.resourceUri === undefined,
-      ),
-    ).toBe(true);
-    expect(
-      result.tools?.find(({ name }) => name === "autograph_respond")?._meta?.ui
-        ?.visibility,
+      result.tools?.find(({ name }) => name === "autograph_respond")?._meta?.ui?.visibility,
     ).toEqual(["model", "app"]);
   });
 
@@ -474,10 +464,7 @@ describe("branded public tool mapping", () => {
     };
     const handler = createAutographMcpHandler(service);
     const invocations = [
-      [
-        "autograph_start",
-        { prompt: "Build an app", clientRequestId: "start-one" },
-      ],
+      ["autograph_start", { prompt: "Build an app", clientRequestId: "start-one" }],
       ["autograph_get", { sessionId: "session-one", cursor: 0, limit: 25 }],
       [
         "autograph_send",
@@ -507,9 +494,7 @@ describe("branded public tool mapping", () => {
     for (const [name, args] of invocations) {
       const response = await handler(mcpToolRequest(name, args));
       expect(response.status).toBe(200);
-      const callResult = await mcpResult<{ structuredContent?: unknown }>(
-        response,
-      );
+      const callResult = await mcpResult<{ structuredContent?: unknown }>(response);
       expect(callResult.structuredContent).toEqual(result);
     }
 
@@ -552,9 +537,7 @@ describe("branded public tool mapping", () => {
       cancel: vi.fn(async () => sessionResult),
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service);
-    const response = await handler(
-      mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }),
-    );
+    const response = await handler(mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }));
     const result = await mcpResult<{ structuredContent: unknown }>(response);
 
     expect(result.structuredContent).toEqual(listed);
@@ -573,8 +556,7 @@ describe("branded public tool mapping", () => {
         path: "prototype/vendor-onboarding/index.html",
         mediaType: "text/html" as const,
         content,
-        digest:
-          "e8385bab4b1d1c12641b37bdeec4e359c40a6f30016f724ec61b5b8b20ca8c0f",
+        digest: "e8385bab4b1d1c12641b37bdeec4e359c40a6f30016f724ec61b5b8b20ca8c0f",
         revision: "b".repeat(64),
       },
     };
@@ -666,12 +648,8 @@ describe("request-scoped MCP service selection", () => {
       structuredContent: { error: { code: string } };
     }>(protectedCall);
     expect(authResult.isError).toBe(true);
-    expect(authResult.structuredContent.error.code).toBe(
-      "authentication_required",
-    );
-    expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
-      'error="invalid_token"',
-    );
+    expect(authResult.structuredContent.error.code).toBe("authentication_required");
+    expect(authResult._meta["mcp/www_authenticate"][0]).toContain('error="invalid_token"');
     expect(authResult._meta["mcp/www_authenticate"][0]).toContain(
       'error_description="Sign in to Autograph App Builder to continue"',
     );
@@ -702,9 +680,7 @@ describe("request-scoped MCP service selection", () => {
       environment: { EVE_HOSTED_ADAPTER: "1" },
       hostedRuntime,
     });
-    const response = await handler(
-      mcpRequest({ authorization: "Bearer token" }, "tools/call"),
-    );
+    const response = await handler(mcpRequest({ authorization: "Bearer token" }, "tools/call"));
     expect(response.status).toBe(503);
   });
 
@@ -742,9 +718,7 @@ describe("request-scoped MCP service selection", () => {
       const result = await mcpResult<{
         _meta: { "mcp/www_authenticate": string[] };
       }>(response);
-      expect(result._meta["mcp/www_authenticate"][0]).toContain(
-        'error="invalid_token"',
-      );
+      expect(result._meta["mcp/www_authenticate"][0]).toContain('error="invalid_token"');
       expect(result._meta["mcp/www_authenticate"][0]).toContain(
         'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
       );
@@ -826,9 +800,7 @@ describe("request-scoped MCP service selection", () => {
         body: await response.json(),
       })),
     );
-    expect(
-      new Set(projections.map((projection) => JSON.stringify(projection))).size,
-    ).toBe(1);
+    expect(new Set(projections.map((projection) => JSON.stringify(projection))).size).toBe(1);
     expect(projections[0]).toEqual({
       status: 404,
       cache: "no-store",
@@ -920,14 +892,8 @@ describe("request-scoped MCP service selection", () => {
       }>;
     }>(toolResponse);
     expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
-    expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(
-      true,
-    );
-    expect(
-      Object.fromEntries(
-        toolResult.tools.map(({ name, title }) => [name, title]),
-      ),
-    ).toEqual({
+    expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(true);
+    expect(Object.fromEntries(toolResult.tools.map(({ name, title }) => [name, title]))).toEqual({
       autograph_start: "Start with Autograph App Builder",
       autograph_get: "Check App Builder progress",
       autograph_send: "Send App Builder feedback",
@@ -935,9 +901,7 @@ describe("request-scoped MCP service selection", () => {
       autograph_cancel: "Stop App Builder work",
     });
     expect(
-      Object.fromEntries(
-        toolResult.tools.map(({ name, description }) => [name, description]),
-      ),
+      Object.fromEntries(toolResult.tools.map(({ name, description }) => [name, description])),
     ).toEqual({
       autograph_start:
         "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
@@ -951,9 +915,7 @@ describe("request-scoped MCP service selection", () => {
         "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
     });
     expect(
-      Object.fromEntries(
-        toolResult.tools.map(({ name, annotations }) => [name, annotations]),
-      ),
+      Object.fromEntries(toolResult.tools.map(({ name, annotations }) => [name, annotations])),
     ).toEqual({
       autograph_start: {
         readOnlyHint: false,
@@ -1021,8 +983,8 @@ describe("request-scoped MCP service selection", () => {
     }>(resourceReadResponse);
     expect(resourceRead.contents).toHaveLength(1);
     expect(resourceRead.contents[0]?._meta?.ui).toEqual(resourceMeta);
-    expect(
-      McpUiResourceMetaSchema.parse(resourceRead.contents[0]?._meta?.ui),
-    ).toEqual(resourceMeta);
+    expect(McpUiResourceMetaSchema.parse(resourceRead.contents[0]?._meta?.ui)).toEqual(
+      resourceMeta,
+    );
   });
 });

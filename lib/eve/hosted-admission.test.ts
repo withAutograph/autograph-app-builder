@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { HostedPrincipal } from "./hosted-auth";
-import {
-  createHostedEveSessionService,
-  type HostedEveTransport,
-} from "./hosted-service";
+import { createHostedEveSessionService, type HostedEveTransport } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
 
 function principal(ownerUserId: string): HostedPrincipal {
@@ -58,11 +55,7 @@ function service(input: {
   });
 }
 
-async function startTwice(
-  hosted: ReturnType<typeof service>,
-  first = "one",
-  second = "two",
-) {
+async function startTwice(hosted: ReturnType<typeof service>, first = "one", second = "two") {
   await hosted.start({ prompt: "Build", clientRequestId: first });
   return hosted.start({ prompt: "Build again", clientRequestId: second });
 }

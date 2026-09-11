@@ -20,13 +20,10 @@ const authority = {
   ownerUserId: "user_one",
 } as const;
 
-const sha256 = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function pendingReceipt(
-  overrides: Partial<
-    Omit<GitHubMutationReceipt, "version" | "kind" | "status" | "digest">
-  > = {},
+  overrides: Partial<Omit<GitHubMutationReceipt, "version" | "kind" | "status" | "digest">> = {},
 ) {
   const unsigned = {
     version: GITHUB_PUBLICATION_VERSION,
@@ -89,9 +86,7 @@ function databaseFixture(input: {
 describe("PostgreSQL GitHub publication receipt journal", () => {
   it("accepts only a canonically rebound closed receipt row", () => {
     const receipt = pendingReceipt();
-    expect(parseGitHubPublicationJournalRow(journalRow(receipt))).toEqual(
-      receipt,
-    );
+    expect(parseGitHubPublicationJournalRow(journalRow(receipt))).toEqual(receipt);
     expect(() =>
       parseGitHubPublicationJournalRow({
         ...journalRow(receipt),
@@ -115,10 +110,7 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
   it("reads only one exact proposal-digest row", async () => {
     const receipt = pendingReceipt();
     const fixture = databaseFixture({ selected: [journalRow(receipt)] });
-    const store = createPostgresGitHubPublicationReceiptStore(
-      fixture.database,
-      authority,
-    );
+    const store = createPostgresGitHubPublicationReceiptStore(fixture.database, authority);
     await expect(store.read(receipt.proposalDigest)).resolves.toEqual(receipt);
     expect(fixture.select).toHaveBeenCalledTimes(1);
     expect(fixture.limit).toHaveBeenCalledWith(1);
@@ -135,19 +127,20 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
       authority,
       () => new Date("2026-08-27T00:00:00.000Z"),
     );
-    await expect(
-      store.compareAndSet(receipt.proposalDigest, undefined, receipt),
-    ).resolves.toBe(true);
+    await expect(store.compareAndSet(receipt.proposalDigest, undefined, receipt)).resolves.toBe(
+      true,
+    );
     expect(successful.insert).toHaveBeenCalledTimes(1);
     expect(successful.onConflictDoNothing).toHaveBeenCalledTimes(1);
     expect(successful.update).not.toHaveBeenCalled();
 
     const collided = databaseFixture({ inserted: [] });
     await expect(
-      createPostgresGitHubPublicationReceiptStore(
-        collided.database,
-        authority,
-      ).compareAndSet(receipt.proposalDigest, undefined, receipt),
+      createPostgresGitHubPublicationReceiptStore(collided.database, authority).compareAndSet(
+        receipt.proposalDigest,
+        undefined,
+        receipt,
+      ),
     ).resolves.toBe(false);
   });
 
@@ -156,49 +149,33 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
     const fixture = databaseFixture({
       updated: [{ proposalDigest: receipt.proposalDigest }],
     });
-    const store = createPostgresGitHubPublicationReceiptStore(
-      fixture.database,
-      authority,
-    );
+    const store = createPostgresGitHubPublicationReceiptStore(fixture.database, authority);
     await expect(
       store.compareAndSet(receipt.proposalDigest, "c".repeat(64), receipt),
     ).resolves.toBe(true);
     expect(fixture.update).toHaveBeenCalledTimes(1);
     expect(fixture.whereUpdate).toHaveBeenCalledTimes(1);
     expect(fixture.insert).not.toHaveBeenCalled();
-    await expect(
-      store.compareAndSet("d".repeat(64), "c".repeat(64), receipt),
-    ).rejects.toThrow("CAS binding");
+    await expect(store.compareAndSet("d".repeat(64), "c".repeat(64), receipt)).rejects.toThrow(
+      "CAS binding",
+    );
   });
 
   it("keeps CAS predicates and the durable migration closed", async () => {
     const [adapter, migration] = await Promise.all([
-      readFile(
-        "lib/repository/postgres-github-publication-receipt-store.ts",
-        "utf8",
-      ),
+      readFile("lib/repository/postgres-github-publication-receipt-store.ts", "utf8"),
       readFile("drizzle/0006_tenant_github_publication.sql", "utf8"),
     ]);
-    expect(adapter).toContain(
-      "eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)",
-    );
-    expect(adapter).toContain(
-      "eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest)",
-    );
-    expect(adapter).toContain(
-      "eq(hostedGitHubPublicationJournals.kind, receipt.kind)",
-    );
+    expect(adapter).toContain("eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)");
+    expect(adapter).toContain("eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest)");
+    expect(adapter).toContain("eq(hostedGitHubPublicationJournals.kind, receipt.kind)");
     expect(adapter).toContain("hostedGitHubPublicationJournals.idempotencyKey");
     expect(adapter).toContain("hostedGitHubPublicationJournals.issuer");
     expect(adapter).toContain("hostedGitHubPublicationJournals.workspaceId");
-    expect(migration).toContain(
-      'CREATE TABLE "hosted_github_publication_journal"',
-    );
+    expect(migration).toContain('CREATE TABLE "hosted_github_publication_journal"');
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "hosted_github_publication_journal_idempotency_uidx"',
     );
-    expect(migration).toContain(
-      "CHECK (\"status\" IN ('pending', 'failed', 'succeeded'))",
-    );
+    expect(migration).toContain("CHECK (\"status\" IN ('pending', 'failed', 'succeeded'))");
   });
 });

@@ -3,13 +3,7 @@
 import type { MultiSessionAuthClient } from "@better-auth-ui/core/plugins/multi-session";
 import { useAuth, useSession } from "@better-auth-ui/react";
 import { useSetActiveSession } from "@better-auth-ui/react/plugins/multi-session";
-import {
-  ChevronsUpDown,
-  LogIn,
-  LogOut,
-  Settings,
-  UserPlus2,
-} from "lucide-react";
+import { ChevronsUpDown, LogIn, LogOut, Settings, UserPlus2 } from "lucide-react";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -31,8 +25,7 @@ export type UserButtonProps = {
   align?: "center" | "end" | "start" | undefined;
   sideOffset?: number;
   size?: "default" | "icon";
-  variant?:
-    "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
+  variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
 };
 
 /**
@@ -73,11 +66,7 @@ export function UserButton({
         className={
           size === "icon"
             ? cn("rounded-full", className)
-            : cn(
-                buttonVariants({ variant, size: "lg" }),
-                "py-2.5 h-auto font-normal",
-                className,
-              )
+            : cn(buttonVariants({ variant, size: "lg" }), "py-2.5 h-auto font-normal", className)
         }
       >
         {size === "icon" ? (
@@ -121,11 +110,7 @@ export function UserButton({
         {session ? (
           <>
             <DropdownMenuItem
-              render={
-                <Link
-                  href={`${basePaths.settings}/${viewPaths.settings.account}`}
-                />
-              }
+              render={<Link href={`${basePaths.settings}/${viewPaths.settings.account}`} />}
             >
               <Settings className="text-muted-foreground" />
 
@@ -138,10 +123,7 @@ export function UserButton({
 
             <DropdownMenuItem
               render={
-                <Link
-                  href={`${basePaths.auth}/${viewPaths.auth.signOut}`}
-                  prefetch={false}
-                />
+                <Link href={`${basePaths.auth}/${viewPaths.auth.signOut}`} prefetch={false} />
               }
             >
               <LogOut className="text-muted-foreground" />
@@ -152,12 +134,7 @@ export function UserButton({
         ) : (
           <>
             <DropdownMenuItem
-              render={
-                <Link
-                  href={`${basePaths.auth}/${viewPaths.auth.signIn}`}
-                  prefetch={false}
-                />
-              }
+              render={<Link href={`${basePaths.auth}/${viewPaths.auth.signIn}`} prefetch={false} />}
             >
               <LogIn className="text-muted-foreground" />
 
@@ -165,12 +142,7 @@ export function UserButton({
             </DropdownMenuItem>
 
             <DropdownMenuItem
-              render={
-                <Link
-                  href={`${basePaths.auth}/${viewPaths.auth.signUp}`}
-                  prefetch={false}
-                />
-              }
+              render={<Link href={`${basePaths.auth}/${viewPaths.auth.signUp}`} prefetch={false} />}
             >
               <UserPlus2 className="text-muted-foreground" />
 

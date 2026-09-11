@@ -69,35 +69,23 @@ export default defineTool({
     existingAppChanges: existingAppChangesSchema.optional(),
   }),
   async execute(
-    {
-      appId,
-      expectedArtifactDigest,
-      expectedArtifactRevision,
-      existingAppChanges,
-    },
+    { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
   ) {
-    if (!validAppId(appId))
-      throw new Error("App id must be one lowercase kebab-case segment.");
+    if (!validAppId(appId)) throw new Error("App id must be one lowercase kebab-case segment.");
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty")
-      throw new Error(
-        "Start a workspace before creating an implementation plan.",
-      );
+      throw new Error("Start a workspace before creating an implementation plan.");
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = current.artifacts.find(
       (candidate) =>
         candidate.path === path &&
         candidate.sessionId === ctx.session.id &&
-        (expectedArtifactDigest === undefined ||
-          candidate.digest === expectedArtifactDigest) &&
-        (expectedArtifactRevision === undefined ||
-          candidate.revision === expectedArtifactRevision),
+        (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
+        (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision),
     );
     if (artifact === undefined)
-      throw new Error(
-        "Create a product design before creating its implementation plan.",
-      );
+      throw new Error("Create a product design before creating its implementation plan.");
     if (artifact.mediaType !== "text/markdown")
       throw new Error("The accepted AppSpec artifact media type is invalid.");
     const content = normalizeBuildReadyAppSpec(artifact.content);
@@ -110,9 +98,7 @@ export default defineTool({
       digest: sha256(content),
       acceptedByCallId: ctx.callId,
       artifactRevision: artifact.revision,
-      ...(current.phase === "ui_accepted"
-        ? { uiRevision: current.uiPreview.revision }
-        : {}),
+      ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
     if (
       (current.phase === "app_spec_accepted" ||
@@ -139,9 +125,7 @@ export default defineTool({
           phase: "app_spec_accepted",
           workspace: current.workspace,
           sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined
-            ? {}
-            : { githubSource: current.githubSource }),
+          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
           preparedByCallId: current.preparedByCallId,
           artifacts: current.artifacts,
           appSpec: accepted,

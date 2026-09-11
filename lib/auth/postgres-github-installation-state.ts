@@ -33,27 +33,12 @@ export function createPostgresGitHubInstallationAuthorizationStateStore(
         .set({ consumedAt: input.now })
         .where(
           and(
-            eq(
-              githubInstallationAuthorizationStates.stateDigest,
-              input.stateDigest,
-            ),
-            eq(
-              githubInstallationAuthorizationStates.authorityDigest,
-              input.authorityDigest,
-            ),
+            eq(githubInstallationAuthorizationStates.stateDigest, input.stateDigest),
+            eq(githubInstallationAuthorizationStates.authorityDigest, input.authorityDigest),
             eq(githubInstallationAuthorizationStates.issuer, authority.issuer),
-            eq(
-              githubInstallationAuthorizationStates.audience,
-              authority.audience,
-            ),
-            eq(
-              githubInstallationAuthorizationStates.workspaceId,
-              authority.workspaceId,
-            ),
-            eq(
-              githubInstallationAuthorizationStates.ownerUserId,
-              authority.ownerUserId,
-            ),
+            eq(githubInstallationAuthorizationStates.audience, authority.audience),
+            eq(githubInstallationAuthorizationStates.workspaceId, authority.workspaceId),
+            eq(githubInstallationAuthorizationStates.ownerUserId, authority.ownerUserId),
             isNull(githubInstallationAuthorizationStates.consumedAt),
             gt(githubInstallationAuthorizationStates.expiresAt, input.now),
           ),

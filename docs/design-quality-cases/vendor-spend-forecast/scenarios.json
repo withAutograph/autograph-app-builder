@@ -1,9 +1,7 @@
 [
   {
     "name": "record a simulated review",
-    "steps": [
-      { "action": "click", "role": "button", "name": "Mark review complete" }
-    ],
+    "steps": [{ "action": "click", "role": "button", "name": "Mark review complete" }],
     "expect": { "text": "Review simulation recorded" }
   },
   {

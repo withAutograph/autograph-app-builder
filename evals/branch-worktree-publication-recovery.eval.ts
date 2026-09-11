@@ -9,11 +9,7 @@ export default defineEval({
     "A partial branch-worktree apply is durable, never auto-retried, and requires a separate digest-bound recovery approval.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "branch-publication-partial-failure",
-    );
+    await prepareReviewedWorkflow(t, repository, "branch-publication-partial-failure");
 
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({

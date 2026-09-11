@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  signLocalVercelRelay,
-  verifyLocalVercelRelay,
-} from "./local-oauth-relay";
+import { signLocalVercelRelay, verifyLocalVercelRelay } from "./local-oauth-relay";
 
 describe("local Vercel OAuth relay", () => {
   it("accepts only signed, unexpired relay state", () => {
@@ -18,22 +15,12 @@ describe("local Vercel OAuth relay", () => {
       secret,
     );
     expect(
-      verifyLocalVercelRelay(
-        value,
-        secret,
-        1_000,
-        "https://branch-one.vercel.app",
-      ),
+      verifyLocalVercelRelay(value, secret, 1_000, "https://branch-one.vercel.app"),
     ).toMatchObject({
       teamId: "team_1",
     });
     expect(() =>
-      verifyLocalVercelRelay(
-        value,
-        secret,
-        1_000,
-        "https://branch-two.vercel.app",
-      ),
+      verifyLocalVercelRelay(value, secret, 1_000, "https://branch-two.vercel.app"),
     ).toThrow("origin");
     expect(() => verifyLocalVercelRelay(`${value}x`, secret, 1_000)).toThrow();
     expect(() => verifyLocalVercelRelay(value, secret, 2_000)).toThrow();

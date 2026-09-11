@@ -33,23 +33,16 @@ export type DeletePasskeyDialogProps = {
   passkey: ListedPasskey;
 };
 
-export function DeletePasskeyDialog({
-  open,
-  onOpenChange,
-  passkey,
-}: DeletePasskeyDialogProps) {
+export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
   const passkeyName = passkey.name || passkeyLocalization.passkey;
   const previewId = `delete-passkey-preview-${passkey.id}`;
 
-  const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(
-    authClient,
-    {
-      onSuccess: () => onOpenChange(false),
-    },
-  );
+  const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(authClient, {
+    onSuccess: () => onOpenChange(false),
+  });
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -59,9 +52,7 @@ export function DeletePasskeyDialog({
             <Fingerprint />
           </AlertDialogMedia>
 
-          <AlertDialogTitle>
-            {passkeyLocalization.deletePasskeyTitle}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{passkeyLocalization.deletePasskeyTitle}</AlertDialogTitle>
 
           <AlertDialogDescription>
             {passkeyLocalization.deletePasskeyWarning}
@@ -69,9 +60,7 @@ export function DeletePasskeyDialog({
         </AlertDialogHeader>
 
         <Field>
-          <FieldLabel htmlFor={previewId}>
-            {passkey.name || passkeyLocalization.passkey}
-          </FieldLabel>
+          <FieldLabel htmlFor={previewId}>{passkey.name || passkeyLocalization.passkey}</FieldLabel>
 
           <Input id={previewId} value={passkeyName} readOnly disabled />
         </Field>

@@ -2,9 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-const previewPath = z
-  .string()
-  .regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tsx?|css)$/u);
+const previewPath = z.string().regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tsx?|css)$/u);
 const route = z.string().regex(/^\/[a-z0-9-]*(?:\/[a-z0-9-]+)*$/u);
 
 export const uiPreviewFileSchema = z.strictObject({
@@ -53,15 +51,9 @@ export const uiPreviewManifestSchema = z.strictObject({
     )
     .min(1)
     .max(16),
-  productionComponents: z
-    .array(catalogElement(z.literal("@autograph/components")))
-    .max(128),
-  productionCompositions: z
-    .array(catalogElement(z.literal("@autograph/compositions")))
-    .max(64),
-  productionIcons: z
-    .array(catalogElement(z.literal("@autograph/icons")))
-    .max(128),
+  productionComponents: z.array(catalogElement(z.literal("@autograph/components"))).max(128),
+  productionCompositions: z.array(catalogElement(z.literal("@autograph/compositions"))).max(64),
+  productionIcons: z.array(catalogElement(z.literal("@autograph/icons"))).max(128),
   fixtureFacts: z.array(manifestItem).max(64),
   decisions: z.array(manifestItem).max(64),
   assumptions: z.array(manifestItem).max(64),
@@ -103,11 +95,7 @@ function digest(value: unknown) {
 }
 
 function imports(content: string) {
-  return [
-    ...content.matchAll(
-      /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu,
-    ),
-  ]
+  return [...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu)]
     .map((match) => match[1]!)
     .toSorted();
 }
@@ -132,13 +120,8 @@ function namedImports(content: string, source: string): string[] {
   return [...names].toSorted();
 }
 
-function manifestNames(
-  values: readonly { name: string; source: string }[],
-  source: string,
-) {
-  return new Set(
-    values.filter((value) => value.source === source).map(({ name }) => name),
-  );
+function manifestNames(values: readonly { name: string; source: string }[], source: string) {
+  return new Set(values.filter((value) => value.source === source).map(({ name }) => name));
 }
 
 /**
@@ -148,22 +131,18 @@ function manifestNames(
 export function validateUiPreview(input: UiPreviewInput): void {
   const parsed = uiPreviewInputSchema.parse(input);
   const paths = new Set(parsed.files.map(({ path }) => path));
-  if (paths.size !== parsed.files.length)
-    throw new Error("UI preview paths must be unique.");
+  if (paths.size !== parsed.files.length) throw new Error("UI preview paths must be unique.");
   if (new Set(parsed.routes).size !== parsed.routes.length)
     throw new Error("UI preview routes must be unique.");
   if (parsed.catalogGaps.length > 0)
     throw new Error(
       "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
     );
-  const screenRoutes = new Set(
-    parsed.manifest.screens.map(({ route }) => route),
-  );
+  const screenRoutes = new Set(parsed.manifest.screens.map(({ route }) => route));
   if (
     parsed.routes.some((value) => !screenRoutes.has(value)) ||
     parsed.manifest.screens.some(
-      ({ route: value, entry }) =>
-        !parsed.routes.includes(value) || !paths.has(entry),
+      ({ route: value, entry }) => !parsed.routes.includes(value) || !paths.has(entry),
     )
   )
     throw new Error("UI preview screens, routes, and entries must agree.");
@@ -175,22 +154,12 @@ export function validateUiPreview(input: UiPreviewInput): void {
     parsed.manifest.productionCompositions,
     "@autograph/compositions",
   );
-  const iconNames = manifestNames(
-    parsed.manifest.productionIcons,
-    "@autograph/icons",
-  );
+  const iconNames = manifestNames(parsed.manifest.productionIcons, "@autograph/icons");
 
   for (const file of parsed.files) {
-    if (
-      /\/(?:api|schema|server)\//u.test(file.path) ||
-      /(?:^|\/)route\.ts$/u.test(file.path)
-    )
-      throw new Error(
-        "UI previews cannot contain backend, schema, or API files.",
-      );
-    if (
-      /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content)
-    )
+    if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path))
+      throw new Error("UI previews cannot contain backend, schema, or API files.");
+    if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content))
       throw new Error("UI previews cannot contact a network service.");
     if (/\b(?:use server|server action|next\/server)\b/u.test(file.content))
       throw new Error("UI previews cannot define server behavior.");
@@ -203,16 +172,12 @@ export function validateUiPreview(input: UiPreviewInput): void {
         "Compose screens from existing Arrusted components; do not define replacement components.",
       );
     if (/<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content))
-      throw new Error(
-        "Local workflow components must compose public Arrusted primitives.",
-      );
+      throw new Error("Local workflow components must compose public Arrusted primitives.");
     for (const specifier of imports(file.content)) {
       if (specifier.startsWith("@autograph/") && !publicImports.has(specifier))
         throw new Error(`UI preview import is not public: ${specifier}`);
       if (specifier.startsWith("../") || specifier.startsWith("../../"))
-        throw new Error(
-          "UI preview imports must remain inside its source bundle.",
-        );
+        throw new Error("UI preview imports must remain inside its source bundle.");
     }
     for (const [source, inventory] of [
       ["@autograph/components", componentNames],
@@ -237,17 +202,12 @@ export function validateUiPreview(input: UiPreviewInput): void {
   ])
     for (const item of collection)
       if (item.routes.some((value) => !screenRoutes.has(value)))
-        throw new Error(
-          "UI preview manifest metadata refers to an unknown route.",
-        );
+        throw new Error("UI preview manifest metadata refers to an unknown route.");
   for (const gap of parsed.catalogGaps)
     for (const item of gap.composes) {
-      const inventory =
-        item.source === "@autograph/components" ? componentNames : iconNames;
+      const inventory = item.source === "@autograph/components" ? componentNames : iconNames;
       if (!inventory.has(item.name))
-        throw new Error(
-          "Each catalog gap must compose inventoried public primitives.",
-        );
+        throw new Error("Each catalog gap must compose inventoried public primitives.");
     }
 }
 
@@ -255,9 +215,7 @@ export function uiPreviewSourceDigest(input: UiPreviewInput) {
   return digest({
     appId: input.appId,
     routes: [...input.routes].toSorted(),
-    files: [...input.files].toSorted((left, right) =>
-      left.path.localeCompare(right.path),
-    ),
+    files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
     manifest: input.manifest,
     catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
       left.path.localeCompare(right.path),

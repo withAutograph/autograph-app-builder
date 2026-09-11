@@ -24,9 +24,7 @@ async function loadPrototype(page: Page) {
     return runner.run();
   });
   expect(accessibility.violations).toEqual([]);
-  await expect(
-    page.getByRole("heading", { name: "Vendor Review" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vendor Review" })).toBeVisible();
 }
 
 test.beforeAll(async () => {
@@ -56,17 +54,13 @@ test.describe("recorded Vendor Onboarding prototype", () => {
     await page.setViewportSize({ width: 1592, height: 902 });
     await loadPrototype(page);
     await page.getByRole("button", { name: "Kiteworks GmbH" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Kiteworks GmbH" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Kiteworks GmbH" })).toBeVisible();
     await expect(page.locator("#tax-step")).toBeHidden();
   });
 
   test("keeps the workflow usable on a narrow viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await loadPrototype(page);
-    await expect(
-      page.getByRole("button", { name: "Send to finance" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send to finance" })).toBeVisible();
   });
 });

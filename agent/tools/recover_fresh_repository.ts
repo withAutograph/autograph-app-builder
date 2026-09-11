@@ -4,10 +4,7 @@ import { z } from "zod";
 
 import { freshBootstrapDigest } from "@/lib/agent/fresh-bootstrap-schema";
 import { currentFreshBootstrapCapability } from "@/lib/agent/fresh-bootstrap-capability";
-import {
-  appBuilderWorkflowState,
-  updateExactWorkflow,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import {
   exactFreshBootstrapProposalMatch,
   proposalFromFreshBootstrapJournal,
@@ -31,28 +28,19 @@ export default defineTool({
         workflow.phase !== "fresh_bootstrap_failed") ||
       workflow.sourceReceipt.sourceKind !== "fresh-template"
     )
-      throw new Error(
-        "Fresh-bootstrap recovery requires an exact pending or failed workflow.",
-      );
+      throw new Error("Fresh-bootstrap recovery requires an exact pending or failed workflow.");
     const proposal =
       workflow.phase === "fresh_bootstrap_pending"
         ? workflow.freshBootstrapProposal
         : proposalFromFreshBootstrapJournal(workflow.freshBootstrapReceipt);
     if (proposal.digest !== input.expectedProposalDigest)
-      throw new Error(
-        "The fresh-bootstrap proposal changed before recovery approval.",
-      );
+      throw new Error("The fresh-bootstrap proposal changed before recovery approval.");
     if (
       workflow.phase === "fresh_bootstrap_failed" &&
       workflow.freshBootstrapReceipt.digest !== input.expectedJournalDigest
     )
-      throw new Error(
-        "The failed fresh-bootstrap journal changed before recovery approval.",
-      );
-    const relativeRoot = workflow.applyReceipt.applyRoot.replace(
-      /^\/workspace\//u,
-      "",
-    );
+      throw new Error("The failed fresh-bootstrap journal changed before recovery approval.");
+    const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const sandbox = await ctx.getSandbox();
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
       sandbox,
@@ -78,17 +66,13 @@ export default defineTool({
           current.phase !== "fresh_bootstrap_pending" &&
           current.phase !== "fresh_bootstrap_failed"
         )
-          throw new Error(
-            "The fresh-bootstrap workflow phase changed during recovery.",
-          );
+          throw new Error("The fresh-bootstrap workflow phase changed during recovery.");
         const currentProposal =
           current.phase === "fresh_bootstrap_pending"
             ? current.freshBootstrapProposal
             : proposalFromFreshBootstrapJournal(current.freshBootstrapReceipt);
         if (!exactFreshBootstrapProposalMatch(currentProposal, proposal))
-          throw new Error(
-            "The fresh-bootstrap workflow changed during recovery.",
-          );
+          throw new Error("The fresh-bootstrap workflow changed during recovery.");
         return result.ok
           ? {
               ...current,

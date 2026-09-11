@@ -5,11 +5,7 @@ import { z } from "zod";
 import * as databaseSchema from "../db/schema";
 import { agentOperations, agentSessions } from "../db/schema";
 import { eveSessionResultSchema } from "../mcp/contracts";
-import {
-  hostedPrincipalSchema,
-  tenantKeyFor,
-  type HostedPrincipal,
-} from "./hosted-auth";
+import { hostedPrincipalSchema, tenantKeyFor, type HostedPrincipal } from "./hosted-auth";
 import {
   hostedOperationRecordSchema,
   durableHostedSessionRecordSchema,
@@ -130,8 +126,7 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
         row.stage !== record.stage ||
         row.resumabilityState !== record.resumability ||
         row.checkpointDigest !== (record.checkpointDigest ?? null) ||
-        row.checkpointProgressDigest !==
-          (record.checkpointProgressDigest ?? null) ||
+        row.checkpointProgressDigest !== (record.checkpointProgressDigest ?? null) ||
         row.parentSessionId !== (record.parentSessionId ?? null) ||
         row.lastProgressAt?.getTime() !== record.lastProgressAtEpochMs) ||
     row.createdAt.getTime() !== record.createdAtEpochMs ||
@@ -172,14 +167,11 @@ function sessionValues(record: HostedSessionRecord) {
     title: record.version === 1 ? null : record.title,
     stage: record.version === 1 ? null : record.stage,
     resumabilityState: record.version === 1 ? null : record.resumability,
-    checkpointDigest:
-      record.version === 1 ? null : (record.checkpointDigest ?? null),
+    checkpointDigest: record.version === 1 ? null : (record.checkpointDigest ?? null),
     checkpointProgressDigest:
       record.version === 1 ? null : (record.checkpointProgressDigest ?? null),
-    parentSessionId:
-      record.version === 1 ? null : (record.parentSessionId ?? null),
-    lastProgressAt:
-      record.version === 1 ? null : new Date(record.lastProgressAtEpochMs),
+    parentSessionId: record.version === 1 ? null : (record.parentSessionId ?? null),
+    lastProgressAt: record.version === 1 ? null : new Date(record.lastProgressAtEpochMs),
     record,
     createdAt: new Date(record.createdAtEpochMs),
     updatedAt: new Date(record.updatedAtEpochMs),
@@ -195,12 +187,7 @@ async function operationById(
   const query = database
     .select()
     .from(agentOperations)
-    .where(
-      and(
-        tenantPredicate(principal),
-        eq(agentOperations.operationId, operationId),
-      ),
-    )
+    .where(and(tenantPredicate(principal), eq(agentOperations.operationId, operationId)))
     .limit(1);
   const rows = lock ? await query.for("update") : await query;
   return rows[0] === undefined ? null : parseHostedOperationRow(rows[0]);
@@ -235,21 +222,13 @@ async function sessionById(
   const query = database
     .select()
     .from(agentSessions)
-    .where(
-      and(
-        sessionTenantPredicate(principal),
-        eq(agentSessions.sessionId, sessionId),
-      ),
-    )
+    .where(and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, sessionId)))
     .limit(1);
   const rows = lock ? await query.for("update") : await query;
   return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
 }
 
-function isExactReservation(
-  existing: HostedOperationRecord,
-  candidate: HostedOperationRecord,
-) {
+function isExactReservation(existing: HostedOperationRecord, candidate: HostedOperationRecord) {
   return (
     existing.operationId === candidate.operationId &&
     existing.requestDigest === candidate.requestDigest &&
@@ -277,9 +256,7 @@ function assertReserved(
  * Durable tenant-scoped store. The JSON record is the closed authority; every
  * duplicated index column is re-bound to it on read before it can be used.
  */
-export function createPostgresHostedEveStore(
-  database: Database,
-): HostedEveStore {
+export function createPostgresHostedEveStore(database: Database): HostedEveStore {
   return {
     async reserveOperation(principalInput, candidateInput) {
       const principal = hostedPrincipalSchema.parse(principalInput);
@@ -292,11 +269,7 @@ export function createPostgresHostedEveStore(
       }
 
       return database.transaction(async (transaction) => {
-        const existing = await operationById(
-          transaction,
-          principal,
-          candidate.operationId,
-        );
+        const existing = await operationById(transaction, principal, candidate.operationId);
         if (existing !== null) {
           return isExactReservation(existing, candidate)
             ? { disposition: "existing" as const, operation: existing }
@@ -316,12 +289,7 @@ export function createPostgresHostedEveStore(
         if (candidate.kind !== "start") {
           if (
             candidate.sessionId === undefined ||
-            (await sessionById(
-              transaction,
-              principal,
-              candidate.sessionId,
-              true,
-            )) === null
+            (await sessionById(transaction, principal, candidate.sessionId, true)) === null
           )
             return { disposition: "conflict" as const };
           const active = await transaction
@@ -341,18 +309,8 @@ export function createPostgresHostedEveStore(
               reason: "session_busy" as const,
             };
         }
-        if (
-          candidate.kind === "start" &&
-          candidate.resumeSessionId !== undefined
-        ) {
-          if (
-            (await sessionById(
-              transaction,
-              principal,
-              candidate.resumeSessionId,
-              true,
-            )) === null
-          )
+        if (candidate.kind === "start" && candidate.resumeSessionId !== undefined) {
+          if ((await sessionById(transaction, principal, candidate.resumeSessionId, true)) === null)
             return { disposition: "conflict" as const };
           const activeResume = await transaction
             .select({ value: count() })
@@ -386,11 +344,7 @@ export function createPostgresHostedEveStore(
           };
         } catch (error) {
           const raced =
-            (await operationById(
-              transaction,
-              principal,
-              candidate.operationId,
-            )) ??
+            (await operationById(transaction, principal, candidate.operationId)) ??
             (await operationByRequest(
               transaction,
               principal,
@@ -408,37 +362,22 @@ export function createPostgresHostedEveStore(
     async settleSucceeded(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
-        const operation = await operationById(
-          transaction,
-          principal,
-          input.operationId,
-          true,
-        );
+        const operation = await operationById(transaction, principal, input.operationId, true);
         assertReserved(operation, input.requestDigest);
         const result = eveSessionResultSchema.parse(input.result);
         const session =
-          input.session === undefined
-            ? undefined
-            : hostedSessionRecordSchema.parse(input.session);
-        if (
-          session !== undefined &&
-          tenantKeyFor(session.principal) !== tenantKeyFor(principal)
-        ) {
+          input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
+        if (session !== undefined && tenantKeyFor(session.principal) !== tenantKeyFor(principal)) {
           throw new Error("Hosted store principal mismatch.");
         }
         if (operation.kind === "start" && session === undefined) {
-          throw new Error(
-            "A successful start must atomically persist its session.",
-          );
+          throw new Error("A successful start must atomically persist its session.");
         }
         if (operation.kind !== "start" && session !== undefined) {
           throw new Error("Only start may create a hosted session.");
         }
         const expectedSessionId = session?.sessionId ?? operation.sessionId;
-        if (
-          expectedSessionId === undefined ||
-          result.sessionId !== expectedSessionId
-        ) {
+        if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
           throw new Error("Hosted operation result session mismatch.");
         }
         const settled = hostedOperationRecordSchema.parse({
@@ -485,12 +424,7 @@ export function createPostgresHostedEveStore(
     async settleUnsuccessful(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
-        const operation = await operationById(
-          transaction,
-          principal,
-          input.operationId,
-          true,
-        );
+        const operation = await operationById(transaction, principal, input.operationId, true);
         assertReserved(operation, input.requestDigest);
         const settled = hostedOperationRecordSchema.parse({
           ...operation,
@@ -544,25 +478,16 @@ export function createPostgresHostedEveStore(
           .select()
           .from(agentSessions)
           .where(
-            and(
-              sessionTenantPredicate(principal),
-              eq(agentSessions.sessionId, input.sessionId),
-            ),
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
           )
           .limit(1)
           .for("update");
         if (rows[0] === undefined) {
           throw new Error("Hosted session was not found.");
         }
-        const current = toDurableHostedSessionRecord(
-          parseHostedSessionRow(rows[0]),
-        );
-        const checkpointDigest = hostedSessionCheckpointDigest(
-          input.checkpoint,
-        );
-        const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(
-          input.checkpoint,
-        );
+        const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
+        const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
+        const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
         const observed = durableHostedSessionRecordSchema.parse({
           ...current,
           status: input.checkpoint.status,
@@ -599,21 +524,14 @@ export function createPostgresHostedEveStore(
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
-        const row = await sessionById(
-          transaction,
-          principal,
-          input.sessionId,
-          true,
-        );
+        const row = await sessionById(transaction, principal, input.sessionId, true);
         if (row === null) throw new Error("Hosted session was not found.");
         const current = toDurableHostedSessionRecord(row);
         if (
           current.adapterGeneration !== input.expectedAdapterGeneration ||
           current.checkpointDigest !== input.expectedCheckpointDigest
         )
-          throw new Error(
-            "Hosted session recovery raced another continuation.",
-          );
+          throw new Error("Hosted session recovery raced another continuation.");
         const replaced = durableHostedSessionRecordSchema.parse({
           ...current,
           adapterSessionId: input.adapterSessionId,
@@ -621,9 +539,7 @@ export function createPostgresHostedEveStore(
           status: input.checkpoint.status,
           checkpoint: input.checkpoint,
           checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
-          checkpointProgressDigest: hostedSessionCheckpointProgressDigest(
-            input.checkpoint,
-          ),
+          checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
           stage: input.stage,
           resumability: input.resumability,
           ...(input.appId === undefined ? {} : { appId: input.appId }),
@@ -642,8 +558,7 @@ export function createPostgresHostedEveStore(
             ),
           )
           .returning();
-        if (updated.length !== 1)
-          throw new Error("Hosted session recovery was not durable.");
+        if (updated.length !== 1) throw new Error("Hosted session recovery was not durable.");
         return parseHostedSessionRow(updated[0]);
       });
     },

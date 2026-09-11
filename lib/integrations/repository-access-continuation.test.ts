@@ -92,9 +92,7 @@ describe("GitHub repository access continuation", () => {
     expect(JSON.stringify(store.records)).not.toContain(continuationId);
 
     current = new Date("2026-09-01T12:01:00.000Z");
-    await expect(
-      service.authorize({ authority, continuationId }),
-    ).resolves.toBe(
+    await expect(service.authorize({ authority, continuationId })).resolves.toBe(
       "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token?provider=github&status=connected",
     );
     await expect(

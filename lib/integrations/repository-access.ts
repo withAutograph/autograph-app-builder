@@ -26,11 +26,10 @@ const repositoryReferenceInputSchema = z
   })
   .strict();
 
-export const repositoryReferenceSchema =
-  repositoryReferenceInputSchema.transform((value) => ({
-    ...value,
-    fullName: `${value.owner}/${value.name}`,
-  }));
+export const repositoryReferenceSchema = repositoryReferenceInputSchema.transform((value) => ({
+  ...value,
+  fullName: `${value.owner}/${value.name}`,
+}));
 
 const repositoryReferenceResultSchema = z
   .object({
@@ -91,9 +90,7 @@ export const repositoryAccessSnapshotSchema = z
   })
   .strict();
 
-export type RepositoryAccessSnapshot = z.infer<
-  typeof repositoryAccessSnapshotSchema
->;
+export type RepositoryAccessSnapshot = z.infer<typeof repositoryAccessSnapshotSchema>;
 
 const scopeSchema = z
   .object({
@@ -135,23 +132,15 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
     .strict(),
 ]);
 
-export type RepositoryAccessResult = z.infer<
-  typeof repositoryAccessResultSchema
->;
-export type ReadyRepositoryAccess = Extract<
-  RepositoryAccessResult,
-  { status: "ready" }
->;
+export type RepositoryAccessResult = z.infer<typeof repositoryAccessResultSchema>;
+export type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
 
 export interface GitHubRepositoryAccessProvider {
   inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
-}) => Promise<unknown>;
-  inspectRepositoryByName: (input: {
-    owner: string;
-    name: string;
-}) => Promise<unknown | undefined>;
+  }) => Promise<unknown>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
 }
 
 export type GitHubRepositoryAccessProviderFactory = (input: {
@@ -168,8 +157,7 @@ const READ_PERMISSIONS = readPermissionsSchema.parse({
   variables: "read",
 });
 
-const sha256 = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function scope(binding: HostedGitHubInstallationBinding) {
   return scopeSchema.parse({
@@ -214,15 +202,13 @@ export async function classifyGitHubRepositoryAccess(input: {
     .filter((binding) => binding.active)
     .filter(
       (binding) =>
-        selectedInstallationId === undefined ||
-        binding.installationId === selectedInstallationId,
+        selectedInstallationId === undefined || binding.installationId === selectedInstallationId,
     );
   const publicScopes = active.map(scope);
   if (active.length === 0) {
-    const anyActive = mergeHostedGitHubInstallationBindings(
-      listed,
-      legacy,
-    ).some((binding) => binding.active);
+    const anyActive = mergeHostedGitHubInstallationBindings(listed, legacy).some(
+      (binding) => binding.active,
+    );
     return repositoryAccessResultSchema.parse({
       status: "authorization-required",
       action: anyActive ? "update" : "connect",
@@ -278,7 +264,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       scopes: matches.map(({ binding }) => scope(binding)),
     });
   }
-    const [match] = matches;
+  const [match] = matches;
   if (match) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({

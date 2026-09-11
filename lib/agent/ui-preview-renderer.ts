@@ -20,17 +20,14 @@ export function uiPreviewRendererFiles(input: UiPreviewInput) {
   const root = `.builder-preview/${uiPreviewSourceDigest(input)}`;
   // These public compositions use Arrusted's AG Charts runtime. Match its
   // Storybook setup only when the submitted interface actually uses charts.
-  const chartInitialization = input.manifest.productionCompositions.some(
-    ({ name }) => chartCompositions.has(name),
+  const chartInitialization = input.manifest.productionCompositions.some(({ name }) =>
+    chartCompositions.has(name),
   )
     ? `import { bootstrapAgCharts } from "@autograph/compositions";
 bootstrapAgCharts({ allowMissingLicense: true });`
     : "";
   const imports = input.manifest.screens
-    .map(
-      (screen, index) =>
-        `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`,
-    )
+    .map((screen, index) => `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`)
     .join("\n");
   const routes = input.manifest.screens
     .map((screen, index) => `${JSON.stringify(screen.route)}: Screen${index}`)
@@ -118,9 +115,7 @@ export async function renderUiPreview(
   let result = await compile();
   if (
     result.exitCode !== 0 &&
-    /could not resolve|cannot find (?:module|package)/iu.test(
-      `${result.stderr}\n${result.stdout}`,
-    )
+    /could not resolve|cannot find (?:module|package)/iu.test(`${result.stderr}\n${result.stdout}`)
   ) {
     const installation = await sandbox.run({
       command: "bun install",
@@ -128,20 +123,15 @@ export async function renderUiPreview(
     });
     if (installation.exitCode !== 0)
       throw new Error(
-        installation.stderr ||
-          installation.stdout ||
-          "Dependency installation failed.",
+        installation.stderr || installation.stdout || "Dependency installation failed.",
       );
     result = await compile();
   }
   if (result.exitCode !== 0)
-    throw new Error(
-      result.stderr || result.stdout || "The preview compiler failed.",
-    );
+    throw new Error(result.stderr || result.stdout || "The preview compiler failed.");
   const html = await sandbox.readTextFile({
     path: `/workspace/repository/${bundle.root}/index.html`,
   });
-  if (html === null)
-    throw new Error("The preview compiler did not produce a document.");
+  if (html === null) throw new Error("The preview compiler did not produce a document.");
   return html;
 }

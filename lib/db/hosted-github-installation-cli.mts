@@ -18,10 +18,7 @@ const MAX_REQUEST_BYTES = 16 * 1024;
 
 async function readOwnerOnlyRequest(path: string): Promise<unknown> {
   if (!isAbsolute(path)) throw new Error("Request path must be absolute.");
-  const [link, canonicalPath] = await Promise.all([
-    lstat(path),
-    realpath(path),
-  ]);
+  const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path)
     throw new Error("Request path must be canonical and unsymlinked.");
   const metadata = await stat(path);
@@ -43,9 +40,7 @@ if (argv[0] === "plan") {
   const request = hostedGitHubInstallationPlanRequestSchema.parse(
     await readOwnerOnlyRequest(argv[2]),
   );
-  process.stdout.write(
-    `${JSON.stringify(planHostedGitHubInstallation(request))}\n`,
-  );
+  process.stdout.write(`${JSON.stringify(planHostedGitHubInstallation(request))}\n`);
 } else if (argv[0] === "apply") {
   if (
     argv.length !== 5 ||

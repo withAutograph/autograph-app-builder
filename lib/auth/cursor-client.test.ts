@@ -89,14 +89,10 @@ describe("dedicated Cursor deployment registration", () => {
     { scopes: ["admin"] },
   ])("rejects conflicting policy without replacing it: %j", async (change) => {
     const { database, rows } = storage();
-    rows.set(schema.oauthClient, [
-      { ...cursorClientRegistration(), ...change },
-    ]);
+    rows.set(schema.oauthClient, [{ ...cursorClientRegistration(), ...change }]);
     const before = structuredClone(rows.get(schema.oauthClient));
     expect(await isCursorClientReady(database, resource)).toBe(false);
-    await expect(setupCursorClient(database, resource)).rejects.toThrow(
-      "conflicts",
-    );
+    await expect(setupCursorClient(database, resource)).rejects.toThrow("conflicts");
     expect(rows.get(schema.oauthClient)).toEqual(before);
     expect(rows.get(schema.oauthClientResource)).toEqual([]);
   });
@@ -104,9 +100,7 @@ describe("dedicated Cursor deployment registration", () => {
   it("requires initialized resources and rejects a foreign resource binding", async () => {
     const { database, rows, insert } = storage();
     rows.set(schema.oauthResource, []);
-    await expect(setupCursorClient(database, resource)).rejects.toThrow(
-      "Initialize",
-    );
+    await expect(setupCursorClient(database, resource)).rejects.toThrow("Initialize");
     expect(insert).not.toHaveBeenCalled();
     rows.set(schema.oauthClient, [cursorClientRegistration()]);
     rows.set(schema.oauthClientResource, [
@@ -114,10 +108,7 @@ describe("dedicated Cursor deployment registration", () => {
     ]);
     expect(await isCursorClientReady(database, resource)).toBe(false);
     await expect(
-      isCursorClientReady(
-        database,
-        "https://builder.example.test/mcp?credential=unsafe",
-      ),
+      isCursorClientReady(database, "https://builder.example.test/mcp?credential=unsafe"),
     ).rejects.toThrow();
   });
 });

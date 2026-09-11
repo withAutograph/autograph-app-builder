@@ -1,13 +1,8 @@
 import { z } from "zod";
 
-export const hostedDeploymentEnvironmentSchema = z.enum([
-  "preview",
-  "production",
-]);
+export const hostedDeploymentEnvironmentSchema = z.enum(["preview", "production"]);
 
-export type HostedDeploymentEnvironment = z.infer<
-  typeof hostedDeploymentEnvironmentSchema
->;
+export type HostedDeploymentEnvironment = z.infer<typeof hostedDeploymentEnvironmentSchema>;
 
 const hostedDeploymentEnvironmentBindingSchema = z
   .object({
@@ -21,8 +16,7 @@ const hostedDeploymentEnvironmentBindingSchema = z
       context.addIssue({
         code: "custom",
         path: ["configuredEnvironment"],
-        message:
-          "The configured hosted environment must exactly match VERCEL_ENV.",
+        message: "The configured hosted environment must exactly match VERCEL_ENV.",
       });
     }
   });

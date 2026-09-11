@@ -7,9 +7,7 @@ type BuilderLoadingShellProps = {
 };
 
 /** Static shell for request-bound builder content. */
-export function BuilderLoadingShell({
-  title = "Create an app",
-}: BuilderLoadingShellProps) {
+export function BuilderLoadingShell({ title = "Create an app" }: BuilderLoadingShellProps) {
   return (
     <main
       id="main-content"

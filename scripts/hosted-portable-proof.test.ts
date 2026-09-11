@@ -50,20 +50,17 @@ const scenario = hostedProofScenarioSchema.parse({
     resource: "https://preview.autograph.dev/mcp",
   },
   questionResponses: [],
-  approvalReceipts: (["appspec", "change_set", "publication"] as const).map(
-    (phase) => ({
-      requestTitle: `Approve ${phase}`,
-      receipt: receipt(phase),
-      response: "approve",
-    }),
-  ),
+  approvalReceipts: (["appspec", "change_set", "publication"] as const).map((phase) => ({
+    requestTitle: `Approve ${phase}`,
+    receipt: receipt(phase),
+    response: "approve",
+  })),
   maxPolls: 8,
   pollIntervalMs: 100,
 });
 
 function jwt(subject: string, workspaceId: string) {
-  const encode = (value: unknown) =>
-    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     iss: scenario.oauth.issuer,
     aud: scenario.oauth.audience,
@@ -142,10 +139,7 @@ function hostedFixture(
       });
     const headers = new Headers(init?.headers);
     const authorization = headers.get("authorization");
-    if (
-      authorization === null ||
-      authorization === "Bearer invalid-hosted-proof-token"
-    )
+    if (authorization === null || authorization === "Bearer invalid-hosted-proof-token")
       return new Response("", {
         status: 401,
         headers: {
@@ -170,14 +164,10 @@ function hostedFixture(
     const args = body.params.arguments as Record<string, unknown>;
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
-    const denialFailure = (
-      direction: "primary-reads-secondary" | "secondary-reads-primary",
-    ) => {
+    const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {
       if (options.denialFailure?.direction !== direction) return undefined;
-      if (options.denialFailure.kind === "transport")
-        throw new Error("fixture transport failure");
-      if (options.denialFailure.kind === "http500")
-        return new Response("", { status: 500 });
+      if (options.denialFailure.kind === "transport") throw new Error("fixture transport failure");
+      if (options.denialFailure.kind === "http500") return new Response("", { status: 500 });
       return rpc(body.id, {
         isError: "not-a-boolean",
         structuredContent: session(String(args.sessionId), "working", 0),
@@ -234,9 +224,7 @@ function hostedFixture(
           "secondary-session",
           cancelRequested ? "cancelled" : "working",
           cancelRequested ? 1 : 0,
-          cancelRequested
-            ? [{ type: "status", index: 0, status: "cancelled" }]
-            : [],
+          cancelRequested ? [{ type: "status", index: 0, status: "cancelled" }] : [],
         ),
       );
     }
@@ -249,9 +237,7 @@ function hostedFixture(
           : tool(session("primary-session", "working", 0), true);
       }
       const pendingPhases = (
-        createIterated
-          ? (["publication"] as const)
-          : (["appspec", "change_set"] as const)
+        createIterated ? (["publication"] as const) : (["appspec", "change_set"] as const)
       ).filter((phase) => !approved.has(`approve-${phase}`));
       if (pendingPhases.length > 0) {
         const requests = pendingPhases.map((phase) => {
@@ -297,9 +283,7 @@ function hostedFixture(
         baseSha: target.baseSha,
         headRef: target.headRef,
         headSha: "d".repeat(40),
-        changeSetDigest: options.draftDigestDrift
-          ? "e".repeat(64)
-          : target.changeSetDigest,
+        changeSetDigest: options.draftDigestDrift ? "e".repeat(64) : target.changeSetDigest,
         outcome: "draft-pr-created",
       };
       const status = options.iterationStatus ?? "completed";
@@ -347,9 +331,7 @@ describe("hosted portable fresh-client proof", () => {
   });
 
   it("proves exact approvals, metadata, identities, publication, and five tools", async () => {
-    const result = await runHostedProof(
-      proofInput(hostedFixture() as typeof fetch),
-    );
+    const result = await runHostedProof(proofInput(hostedFixture() as typeof fetch));
     expect(result.discoveredTools).toEqual(TOOL_NAMES);
     expect(result).toMatchObject({
       missingAuthRejected: true,
@@ -365,26 +347,17 @@ describe("hosted portable fresh-client proof", () => {
       mutualWorkspaceDenial: true,
       cancellationProved: true,
       publicResponsesScanned: expect.any(Number),
-      publicResponseDisclosureScanDigest:
-        expect.stringMatching(/^[a-f0-9]{64}$/u),
+      publicResponseDisclosureScanDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
-    expect(
-      Object.keys(result).some((key) =>
-        /discarded.*(?:digest|fingerprint)/iu.test(key),
-      ),
-    ).toBe(false);
+    expect(Object.keys(result).some((key) => /discarded.*(?:digest|fingerprint)/iu.test(key))).toBe(
+      false,
+    );
   });
 
   it("rejects retries that differ from the discarded start result", async () => {
     await expect(
-      runHostedProof(
-        proofInput(
-          hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch,
-        ),
-      ),
-    ).rejects.toThrow(
-      "Lost-response retry did not match the discarded hosted session result",
-    );
+      runHostedProof(proofInput(hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch)),
+    ).rejects.toThrow("Lost-response retry did not match the discarded hosted session result");
   });
 
   it("rejects a bearer or adapter session disclosure in public responses", async () => {
@@ -395,10 +368,7 @@ describe("hosted portable fresh-client proof", () => {
         method?: string;
         params?: { name?: string };
       };
-      if (
-        body.method !== "tools/call" ||
-        body.params?.name !== "autograph_get"
-      ) {
+      if (body.method !== "tools/call" || body.params?.name !== "autograph_get") {
         return response;
       }
       const payload = JSON.parse(await response.text()) as {
@@ -419,11 +389,7 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects approval digest drift and missing approval authority", async () => {
     await expect(
-      runHostedProof(
-        proofInput(
-          hostedFixture({ approvalDigestDrift: true }) as typeof fetch,
-        ),
-      ),
+      runHostedProof(proofInput(hostedFixture({ approvalDigestDrift: true }) as typeof fetch)),
     ).rejects.toThrow("exact digest-bound receipt");
     await expect(
       runHostedProof({
@@ -435,20 +401,14 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects nonterminal iteration and invalid draft evidence", async () => {
     await expect(
-      runHostedProof(
-        proofInput(
-          hostedFixture({ iterationStatus: "waiting" }) as typeof fetch,
-        ),
-      ),
+      runHostedProof(proofInput(hostedFixture({ iterationStatus: "waiting" }) as typeof fetch)),
     ).rejects.toThrow("successful completed state");
     await expect(
-      runHostedProof(
-        proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch),
-      ),
+      runHostedProof(proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch)),
     ).rejects.toThrow("approved target and change set");
-    expect(() =>
-      verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario),
-    ).toThrow("Exactly one structural draft-PR receipt");
+    expect(() => verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario)).toThrow(
+      "Exactly one structural draft-PR receipt",
+    );
   });
 
   it("rejects metadata drift and reused subject or workspace bindings", async () => {
@@ -489,26 +449,16 @@ describe("hosted portable fresh-client proof", () => {
 
   it("requires mutual server-backed workspace denial", async () => {
     await expect(
-      runHostedProof(
-        proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch),
-      ),
+      runHostedProof(proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch)),
     ).rejects.toThrow("not mutually isolated");
   });
 
   it.each([
     ["primary-reads-secondary", "transport", "fixture transport failure"],
-    [
-      "primary-reads-secondary",
-      "http500",
-      "autograph_get failed with HTTP 500",
-    ],
+    ["primary-reads-secondary", "http500", "autograph_get failed with HTTP 500"],
     ["primary-reads-secondary", "malformed", "expected boolean"],
     ["secondary-reads-primary", "transport", "fixture transport failure"],
-    [
-      "secondary-reads-primary",
-      "http500",
-      "autograph_get failed with HTTP 500",
-    ],
+    ["secondary-reads-primary", "http500", "autograph_get failed with HTTP 500"],
     ["secondary-reads-primary", "malformed", "expected boolean"],
   ] as const)(
     "does not treat %s %s failure as workspace denial",

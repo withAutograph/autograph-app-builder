@@ -14,18 +14,14 @@ import {
 } from "./local-eve-launch";
 
 function fixture() {
-  const stateRoot = realpathSync(
-    mkdtempSync(join(tmpdir(), "app-builder-local-eve-")),
-  );
+  const stateRoot = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-local-eve-")));
   chmodSync(stateRoot, 0o700);
   const repositoryRoot = join(stateRoot, "repository");
   const runsRoot = join(stateRoot, "runs");
   mkdirSync(repositoryRoot, { mode: 0o700 });
   mkdirSync(runsRoot, { mode: 0o700 });
   const activeRun = realpathSync(mkdtempSync(join(runsRoot, "run-")));
-  const supervisorRoot = realpathSync(
-    mkdtempSync(join(runsRoot, "supervisor-")),
-  );
+  const supervisorRoot = realpathSync(mkdtempSync(join(runsRoot, "supervisor-")));
   const cycleRoot = realpathSync(mkdtempSync(join(supervisorRoot, "cycle-")));
   const applicationRoot = join(cycleRoot, "eve-application/source");
   const sourceRoot = join(activeRun, "source");
@@ -118,13 +114,9 @@ describe("closed local Eve launch", () => {
     expect(invocation.cwd).toBe(realpathSync(input.applicationRoot));
     expect(invocation.environment.VERCEL_OIDC_TOKEN).toBe(sentinel);
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
-    expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe(
-      "local-development",
-    );
+    expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe("local-development");
     expect(invocation.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
-    expect(invocation.environment.WORKFLOW_LOCAL_BASE_URL).toBe(
-      "http://127.0.0.1:2000",
-    );
+    expect(invocation.environment.WORKFLOW_LOCAL_BASE_URL).toBe("http://127.0.0.1:2000");
     expect(invocation.environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
     expect(invocation.environment.MSB_HOME).toBeUndefined();
     const receipt = JSON.stringify(localEveLaunchReceipt(invocation));

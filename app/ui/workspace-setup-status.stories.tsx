@@ -17,9 +17,7 @@ export const Error: Story = {
   args: { status: "error", callbackUrl: "/?mode=authenticated" },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole("link", { name: "Return to sign in" }),
-    ).toHaveAttribute(
+    await expect(canvas.getByRole("link", { name: "Return to sign in" })).toHaveAttribute(
       "href",
       "/auth/sign-in?callbackURL=%2F%3Fmode%3Dauthenticated",
     );

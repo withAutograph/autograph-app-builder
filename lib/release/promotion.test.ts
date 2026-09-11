@@ -1,12 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -114,10 +107,7 @@ async function candidate() {
   const packageArchive = Buffer.from("portable-package");
   const marketplaceArchive = Buffer.from("marketplace-package");
   const checksums = Buffer.from("checksums\n");
-  await writeFile(
-    join(root, "package/app-builder-0.2.12.tar.gz"),
-    packageArchive,
-  );
+  await writeFile(join(root, "package/app-builder-0.2.12.tar.gz"), packageArchive);
   await writeFile(
     join(root, "package/app-builder-codex-marketplace-0.2.12.tar.gz"),
     marketplaceArchive,
@@ -125,10 +115,7 @@ async function candidate() {
   await writeFile(join(root, "package/SHA256SUMS"), checksums);
   await writeFile(join(root, "deployment/.vercel/output/config.json"), "{}\n");
   const projectBinding = Buffer.from('{"projectId":"prj_test"}\n');
-  await writeFile(
-    join(root, "deployment/.vercel/project.json"),
-    projectBinding,
-  );
+  await writeFile(join(root, "deployment/.vercel/project.json"), projectBinding);
 
   const manifest = Buffer.from(
     JSON.stringify({
@@ -191,13 +178,8 @@ async function candidate() {
     auxiliaryFiles: {},
     tools: TOOL_NAMES,
   };
-  const packageReceiptBytes = Buffer.from(
-    `${JSON.stringify(packageReceipt, null, 2)}\n`,
-  );
-  await writeFile(
-    join(root, "package/release-receipt.json"),
-    packageReceiptBytes,
-  );
+  const packageReceiptBytes = Buffer.from(`${JSON.stringify(packageReceipt, null, 2)}\n`);
+  await writeFile(join(root, "package/release-receipt.json"), packageReceiptBytes);
   values.package = {
     ...values.package,
     receiptSha256: sha256(packageReceiptBytes),
@@ -207,9 +189,7 @@ async function candidate() {
   };
   values.deployment = {
     root: "deployment",
-    outputTreeSha256: await immutableTreeDigest(
-      join(root, "deployment/.vercel/output"),
-    ),
+    outputTreeSha256: await immutableTreeDigest(join(root, "deployment/.vercel/output")),
     projectBindingSha256: sha256(projectBinding),
   };
   await writeFile(
@@ -251,9 +231,7 @@ describe("release promotion contract", () => {
   });
 
   it("publishes only receipt-bound bytes and contains no build command", () => {
-    const commands = releasePublicationCommands(
-      sealPromotionReceipt(unsigned()),
-    );
+    const commands = releasePublicationCommands(sealPromotionReceipt(unsigned()));
     expect(commands.map(({ tool }) => tool)).toEqual([
       "docker",
       "docker",
@@ -268,9 +246,7 @@ describe("release promotion contract", () => {
   });
 
   it("requires clean committed Builder and Arrusted sources", async () => {
-    const root = await realpath(
-      await mkdtemp(join(tmpdir(), "release-clean-")),
-    );
+    const root = await realpath(await mkdtemp(join(tmpdir(), "release-clean-")));
     await chmod(root, 0o700);
     await writeFile(join(root, "source.txt"), "clean\n");
     const git = (...args: string[]) =>
@@ -300,51 +276,44 @@ describe("release promotion contract", () => {
       root,
     });
     await writeFile(join(root, "source.txt"), "dirty\n");
-    await expect(exactCleanGitSource(root, "Arrusted")).rejects.toThrow(
-      "must be clean",
-    );
+    await expect(exactCleanGitSource(root, "Arrusted")).rejects.toThrow("must be clean");
   });
 
   it("accepts exact candidate bytes and rejects every mutated binding", async () => {
     const valid = await candidate();
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: valid }),
-    ).resolves.toMatchObject({
+    await expect(verifyPromotionCandidate({ candidateRoot: valid })).resolves.toMatchObject({
       root: valid,
     });
 
     const packageMutation = await candidate();
-    await writeFile(
-      join(packageMutation, "package/app-builder-0.2.12.tar.gz"),
-      "changed",
+    await writeFile(join(packageMutation, "package/app-builder-0.2.12.tar.gz"), "changed");
+    await expect(verifyPromotionCandidate({ candidateRoot: packageMutation })).rejects.toThrow(
+      "bytes drifted",
     );
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: packageMutation }),
-    ).rejects.toThrow("bytes drifted");
 
     const imageMutation = await candidate();
     await writeFile(join(imageMutation, "image.oci.tar"), "changed");
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: imageMutation }),
-    ).rejects.toThrow("bytes drifted");
+    await expect(verifyPromotionCandidate({ candidateRoot: imageMutation })).rejects.toThrow(
+      "bytes drifted",
+    );
 
     const deploymentMutation = await candidate();
     await writeFile(
       join(deploymentMutation, "deployment/.vercel/output/config.json"),
       '{"changed":true}\n',
     );
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: deploymentMutation }),
-    ).rejects.toThrow("deployment bytes");
+    await expect(verifyPromotionCandidate({ candidateRoot: deploymentMutation })).rejects.toThrow(
+      "deployment bytes",
+    );
 
     const bindingMutation = await candidate();
     await writeFile(
       join(bindingMutation, "deployment/.vercel/project.json"),
       '{"projectId":"other"}\n',
     );
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: bindingMutation }),
-    ).rejects.toThrow("deployment bytes");
+    await expect(verifyPromotionCandidate({ candidateRoot: bindingMutation })).rejects.toThrow(
+      "deployment bytes",
+    );
 
     const receiptMutation = await candidate();
     const receiptPath = join(receiptMutation, "promotion-receipt.json");
@@ -353,8 +322,8 @@ describe("release promotion contract", () => {
     };
     receipt.digest = "0".repeat(64);
     await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
-    await expect(
-      verifyPromotionCandidate({ candidateRoot: receiptMutation }),
-    ).rejects.toThrow("digest drifted");
+    await expect(verifyPromotionCandidate({ candidateRoot: receiptMutation })).rejects.toThrow(
+      "digest drifted",
+    );
   });
 });

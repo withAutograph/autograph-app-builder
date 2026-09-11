@@ -22,9 +22,7 @@ const request = {
 
 describe("builder provisioning contracts", () => {
   it("derives the exact target-planning app ID and bounded provider suffixes", () => {
-    expect(deriveBuilderAppId(request.appName)).toBe(
-      "vendor-and-credit-portal",
-    );
+    expect(deriveBuilderAppId(request.appName)).toBe("vendor-and-credit-portal");
     expect(
       suffixedProviderName({
         base: "x".repeat(100),
@@ -41,9 +39,7 @@ describe("builder provisioning contracts", () => {
       ...request,
       operation: "vercel",
     });
-    expect(builderProvisionRequestDigest(github)).toBe(
-      builderProvisionRequestDigest(vercel),
-    );
+    expect(builderProvisionRequestDigest(github)).toBe(builderProvisionRequestDigest(vercel));
     expect(
       builderProvisionRequestSchema.safeParse({
         ...request,

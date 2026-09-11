@@ -6,12 +6,10 @@ import { assertExactToolDiscovery, parseReviewedProof } from "./proof-evidence";
 describe("release proof evidence", () => {
   it("requires exact ordered five-tool discovery", () => {
     expect(() => assertExactToolDiscovery(TOOL_NAMES)).not.toThrow();
-    expect(() => assertExactToolDiscovery(TOOL_NAMES.slice(0, 4))).toThrow(
+    expect(() => assertExactToolDiscovery(TOOL_NAMES.slice(0, 4))).toThrow("five public tools");
+    expect(() => assertExactToolDiscovery([...TOOL_NAMES].toReversed())).toThrow(
       "five public tools",
     );
-    expect(() =>
-      assertExactToolDiscovery([...TOOL_NAMES].toReversed()),
-    ).toThrow("five public tools");
   });
 
   it("accepts only Browser-backed reviewed proof without publication", () => {
@@ -22,9 +20,7 @@ describe("release proof evidence", () => {
         publicationAttempted: false,
         ...overrides,
       });
-    expect(
-      parseReviewedProof(receipt(), "sandbox-existing-iteration"),
-    ).toMatchObject({
+    expect(parseReviewedProof(receipt(), "sandbox-existing-iteration")).toMatchObject({
       eval: "sandbox-existing-iteration",
       terminalPhase: "reviewed",
     });
@@ -34,8 +30,8 @@ describe("release proof evidence", () => {
       receipt({ publicationAttempted: true }),
       "no structural receipt",
     ])
-      expect(() =>
-        parseReviewedProof(invalid, "sandbox-reviewed-change-set"),
-      ).toThrow("reviewed proof receipt");
+      expect(() => parseReviewedProof(invalid, "sandbox-reviewed-change-set")).toThrow(
+        "reviewed proof receipt",
+      );
   });
 });

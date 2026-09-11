@@ -2,17 +2,10 @@ import type { ReactNode } from "react";
 
 import styles from "../../app/ui/app-builder.module.css";
 
-export function CreateAppFormStoryLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function CreateAppFormStoryLayout({ children }: { children: ReactNode }) {
   return (
     <main className={styles.authenticatedPage}>
-      <form
-        className={styles.builderCard}
-        onSubmit={(event) => event.preventDefault()}
-      >
+      <form className={styles.builderCard} onSubmit={(event) => event.preventDefault()}>
         {children}
       </form>
     </main>

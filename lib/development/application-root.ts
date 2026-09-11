@@ -35,8 +35,7 @@ async function makeDevelopmentWorkAreaWritable(
   if (info.isDirectory()) {
     await chmod(path, 0o700);
     for (const entry of await readdir(path)) {
-      if (preserveRuntime && (entry === ".eve" || entry === "node_modules"))
-        continue;
+      if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) continue;
       await makeDevelopmentWorkAreaWritable(join(path, entry), preserveRuntime);
     }
     return;

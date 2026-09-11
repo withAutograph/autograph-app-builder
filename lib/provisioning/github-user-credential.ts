@@ -32,10 +32,8 @@ export const githubUserTokenSetSchema = z
   .strict()
   .superRefine((value, context) => {
     if (
-      (value.accessTokenExpiresAt === undefined) !==
-        (value.refreshToken === undefined) ||
-      (value.refreshToken === undefined) !==
-        (value.refreshTokenExpiresAt === undefined)
+      (value.accessTokenExpiresAt === undefined) !== (value.refreshToken === undefined) ||
+      (value.refreshToken === undefined) !== (value.refreshTokenExpiresAt === undefined)
     ) {
       context.addIssue({
         code: "custom",
@@ -61,23 +59,23 @@ export interface GitHubUserCredentialStore {
     providerLogin: string;
     tokens: GitHubUserTokenSet;
     now: Date;
-}) => Promise<GitHubUserCredential>;
+  }) => Promise<GitHubUserCredential>;
   read: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
-}) => Promise<GitHubUserCredential | undefined>;
+  }) => Promise<GitHubUserCredential | undefined>;
   rotate: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
     expectedRevision: number;
     tokens: GitHubUserTokenSet;
     now: Date;
-}) => Promise<GitHubUserCredential | undefined>;
+  }) => Promise<GitHubUserCredential | undefined>;
   deactivate: (input: {
     authority: BuilderProvisionAuthority;
     providerUserId: string;
     now: Date;
-}) => Promise<number>;
+  }) => Promise<number>;
 }
 
 export function githubCredentialAssociatedData(input: {
@@ -99,10 +97,7 @@ export function encryptGitHubUserTokens(input: {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
-  const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(tokens), "utf8"),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf8"), cipher.final()]);
   return {
     encryptedCredential: encrypted.toString("base64"),
     credentialIv: iv.toString("base64"),

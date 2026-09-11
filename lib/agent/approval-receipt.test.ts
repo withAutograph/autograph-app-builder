@@ -51,15 +51,12 @@ describe("approval receipt", () => {
 
   it("accepts SHA-256 repository object ids", () => {
     expect(
-      approvalReceiptSchema.parse({ ...receipt, baseSha: "a".repeat(64) })
-        .baseSha,
+      approvalReceiptSchema.parse({ ...receipt, baseSha: "a".repeat(64) }).baseSha,
     ).toHaveLength(64);
   });
 
   it("rejects extra keys, mismatched outcomes, targets, and subjects", () => {
-    expect(() =>
-      approvalReceiptSchema.parse({ ...receipt, content: "private" }),
-    ).toThrow();
+    expect(() => approvalReceiptSchema.parse({ ...receipt, content: "private" })).toThrow();
     expect(() =>
       approvalReceiptSchema.parse({
         ...receipt,

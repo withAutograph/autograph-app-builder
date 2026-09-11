@@ -33,9 +33,7 @@ export const EditName: Story = {
     const input = within(canvasElement).getByLabelText("App Name");
     await userEvent.clear(input);
     await userEvent.type(input, "Finance Hub");
-    await expect(args.onAppNameChange).toHaveBeenLastCalledWith(
-      "Vendor Portalb",
-    );
+    await expect(args.onAppNameChange).toHaveBeenLastCalledWith("Vendor Portalb");
   },
 };
 export const CycleBrief: Story = {
@@ -68,12 +66,7 @@ function GeneratedNameHarness() {
 export const GeneratedNameSync: Story = {
   render: () => <GeneratedNameHarness />,
   play: async ({ canvasElement }) => {
-    await userEvent.type(
-      within(canvasElement).getByLabelText("App Brief"),
-      "Build a finance hub",
-    );
-    await expect(within(canvasElement).getByLabelText("App Name")).toHaveValue(
-      "Finance Hub",
-    );
+    await userEvent.type(within(canvasElement).getByLabelText("App Brief"), "Build a finance hub");
+    await expect(within(canvasElement).getByLabelText("App Name")).toHaveValue("Finance Hub");
   },
 };

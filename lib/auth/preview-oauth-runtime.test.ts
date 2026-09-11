@@ -125,9 +125,7 @@ describe("Preview OAuth runtime configuration", () => {
     const fetchImplementation = vi.fn(async (url: string | URL) =>
       String(url) === "https://api.github.com/user"
         ? Response.json({ id: 123, login: "autograph-user" })
-        : Response.json([
-            { email: "user@example.com", primary: true, verified: false },
-          ]),
+        : Response.json([{ email: "user@example.com", primary: true, verified: false }]),
     );
 
     await expect(
@@ -201,8 +199,7 @@ describe("Preview OAuth runtime configuration", () => {
             email: "user@example.com",
           }),
         },
-        async () =>
-          new Response("{}", { headers: { "content-length": "16385" } }),
+        async () => new Response("{}", { headers: { "content-length": "16385" } }),
       ),
     ).resolves.toBeNull();
   });
@@ -214,9 +211,7 @@ describe("Preview OAuth runtime configuration", () => {
       githubClientSecret: "github-client-secret",
     });
     for (const field of ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
-      expect(() =>
-        readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
-      ).toThrow();
+      expect(() => readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined })).toThrow();
     }
   });
 
@@ -226,13 +221,8 @@ describe("Preview OAuth runtime configuration", () => {
       vercelClientSecret: "vercel-client-secret",
     });
 
-    for (const field of [
-      "VERCEL_AUTH_CLIENT_ID",
-      "VERCEL_AUTH_CLIENT_SECRET",
-    ] as const) {
-      expect(() =>
-        readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined }),
-      ).toThrow();
+    for (const field of ["VERCEL_AUTH_CLIENT_ID", "VERCEL_AUTH_CLIENT_SECRET"] as const) {
+      expect(() => readPreviewOAuthRuntimeConfig({ ...environment, [field]: undefined })).toThrow();
     }
   });
 
@@ -259,8 +249,7 @@ describe("Preview OAuth runtime configuration", () => {
       }),
     ).toMatchObject({
       environment: "local",
-      databaseUrl:
-        "postgresql://postgres@127.0.0.1:54339/autograph_app_builder",
+      databaseUrl: "postgresql://postgres@127.0.0.1:54339/autograph_app_builder",
       passkeyOnboarding: {
         origin: "https://localhost:3001",
         rpId: "localhost",

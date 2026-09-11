@@ -15,8 +15,7 @@ describe("GitHub Store In view model", () => {
       }),
     ).toMatchObject({
       actionLabel: "Connect GitHub",
-      description:
-        "Connect GitHub so Autograph can access withAutograph/app-builder-dogfood.",
+      description: "Connect GitHub so Autograph can access withAutograph/app-builder-dogfood.",
       scopeSummary: "No GitHub account connected yet",
     });
 
@@ -34,8 +33,7 @@ describe("GitHub Store In view model", () => {
       }),
     ).toMatchObject({
       actionLabel: "Update GitHub access",
-      description:
-        "Update GitHub access to include withAutograph/app-builder-dogfood.",
+      description: "Update GitHub access to include withAutograph/app-builder-dogfood.",
       scopeSummary: "Connected to withAutograph",
     });
   });

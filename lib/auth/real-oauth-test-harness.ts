@@ -20,11 +20,9 @@ export const issuer = `${origin}/api/auth`;
 export const resource = `${origin}/mcp`;
 export const clientId = "https://client.withautograph.com/portable.json";
 export const redirectUri = "http://127.0.0.1:43123/auth/callback";
-export const requestedScope =
-  "autograph:session autograph:start offline_access";
+export const requestedScope = "autograph:session autograph:start offline_access";
 
-export const codexClientId =
-  "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";
+export const codexClientId = "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json";
 export const codexRedirectUris = [
   "http://127.0.0.1/callback/4-bzS8rt42zJ",
   "http://localhost/callback/4-bzS8rt42zJ",
@@ -123,35 +121,27 @@ export async function createRealOAuthHarness(
     ...instance,
     fetchClientMetadata,
     membershipState,
-    signIn: async (
-      credentials: { email: string; password: string } = instance.testUser,
-    ) => {
-      const response = await instance.customFetchImpl(
-        `${issuer}/sign-in/email`,
-        {
-          method: "POST",
-          headers: {
-            origin,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
+    signIn: async (credentials: { email: string; password: string } = instance.testUser) => {
+      const response = await instance.customFetchImpl(`${issuer}/sign-in/email`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          email: credentials.email,
+          password: credentials.password,
+        }),
+      });
       if (!response.ok) throw new Error("Test sign-in failed.");
       const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
-      if (cookie === undefined)
-        throw new Error("Test session was unavailable.");
+      if (cookie === undefined) throw new Error("Test session was unavailable.");
       return new Headers({ cookie });
     },
   }));
 }
 
-export type RealOAuthHarness = Awaited<
-  ReturnType<typeof createRealOAuthHarness>
->;
+export type RealOAuthHarness = Awaited<ReturnType<typeof createRealOAuthHarness>>;
 export type OAuthTokens = {
   access_token: string;
   refresh_token: string;
@@ -212,13 +202,11 @@ export async function grantRealOAuth(
     redirect: "manual",
   });
   const location = authorization.headers.get("location");
-  if (authorization.status !== 302 || !location)
-    throw new Error("OAuth authorization failed.");
+  if (authorization.status !== 302 || !location) throw new Error("OAuth authorization failed.");
   let callback = new URL(location, origin);
   const consentRequired = callback.pathname === "/auth/consent";
   if (consentRequired) {
-    if (!callback.searchParams.has("sig"))
-      throw new Error("Consent continuation was not signed.");
+    if (!callback.searchParams.has("sig")) throw new Error("Consent continuation was not signed.");
     const headers = new Headers(browserHeaders);
     headers.set("origin", origin);
     headers.set("content-type", "application/json");
@@ -262,10 +250,7 @@ export async function grantRealOAuth(
   return { tokens, claims, consentRequired };
 }
 
-export async function verifyRealOAuthToken(
-  harness: RealOAuthHarness,
-  accessToken: string,
-) {
+export async function verifyRealOAuthToken(harness: RealOAuthHarness, accessToken: string) {
   const response = await harness.customFetchImpl(`${issuer}/jwks`);
   const jwks = (await response.json()) as { keys: JsonWebKey[] };
   return (

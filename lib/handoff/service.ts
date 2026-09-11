@@ -36,10 +36,13 @@ export interface BuilderHandoffStore {
     requestDigest: string;
     now: Date;
     expiresAt: Date;
-  }) => Promise<{
-    disposition: "renewed" | "existing";
-    record: BuilderHandoffRecord;
-  } | undefined>;
+  }) => Promise<
+    | {
+        disposition: "renewed" | "existing";
+        record: BuilderHandoffRecord;
+      }
+    | undefined
+  >;
   bindSession: (input: {
     authority: Authority;
     handoffId: string;
@@ -71,8 +74,7 @@ function requireOwnedRecord(
   if (!parsed.success) throw new BuilderHandoffUnavailableError();
   const record = parsed.data;
   if (
-    (expected.handoffId !== undefined &&
-      record.handoffId !== expected.handoffId) ||
+    (expected.handoffId !== undefined && record.handoffId !== expected.handoffId) ||
     record.authority.issuer !== expected.authority.issuer ||
     record.authority.audience !== expected.authority.audience ||
     record.authority.workspaceId !== expected.authority.workspaceId ||
@@ -84,8 +86,7 @@ function requireOwnedRecord(
 
 export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const intent = builderHandoffIntentSchema.parse(intentInput);
-  const repository =
-    intent.repository.resolvedFullName ?? intent.repository.requestedName;
+  const repository = intent.repository.resolvedFullName ?? intent.repository.requestedName;
   return [
     `Create ${intent.appName} with Autograph App Builder.`,
     "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
@@ -139,9 +140,7 @@ export function createBuilderHandoffService(input: {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       if (!input.store.findLatestPending) return undefined;
       const stored = await input.store.findLatestPending({ authority });
-      return stored
-        ? requireOwnedRecord(stored, { authority })
-        : undefined;
+      return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
 
     async status(value: { authority: Authority; handoffId: string }) {
@@ -161,10 +160,7 @@ export function createBuilderHandoffService(input: {
       intent: BuilderHandoffIntent;
     }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const creationRequestId = z
-        .string()
-        .uuid()
-        .parse(value.creationRequestId);
+      const creationRequestId = z.string().uuid().parse(value.creationRequestId);
       const intent = builderHandoffIntentSchema.parse(value.intent);
       const requestDigest = builderHandoffRequestDigest({
         authority,
@@ -185,14 +181,9 @@ export function createBuilderHandoffService(input: {
       const reserved = await input.store.reserve(candidate);
       const record = requireOwnedRecord(reserved.record, {
         authority,
-        ...(reserved.disposition === "created"
-          ? { handoffId: candidate.handoffId }
-          : {}),
+        ...(reserved.disposition === "created" ? { handoffId: candidate.handoffId } : {}),
       });
-      if (
-        record.requestDigest !== requestDigest ||
-        record.creationRequestId !== creationRequestId
-      )
+      if (record.requestDigest !== requestDigest || record.creationRequestId !== creationRequestId)
         throw new BuilderHandoffConflictError();
       return {
         handoffId: record.handoffId,
@@ -218,11 +209,7 @@ export function createBuilderHandoffService(input: {
       };
     },
 
-    async renew(value: {
-      authority: Authority;
-      handoffId: string;
-      creationRequestId: string;
-    }) {
+    async renew(value: { authority: Authority; handoffId: string; creationRequestId: string }) {
       z.string().uuid().parse(value.creationRequestId);
       const record = await read(value);
       const timestamp = now();
@@ -277,10 +264,7 @@ export function createBuilderHandoffService(input: {
       });
       if (!record) throw new BuilderHandoffUnavailableError();
       const parsed = requireOwnedRecord(record, value);
-      if (
-        parsed.requestDigest !== value.requestDigest ||
-        parsed.sessionId !== value.sessionId
-      )
+      if (parsed.requestDigest !== value.requestDigest || parsed.sessionId !== value.sessionId)
         throw new BuilderHandoffConflictError();
       return parsed;
     },

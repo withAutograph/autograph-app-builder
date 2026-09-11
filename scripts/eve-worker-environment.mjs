@@ -1,10 +1,8 @@
 import { isIP } from "node:net";
 
-export const eveWorkerEnvelopeKey =
-  "__appBuilderAuthorizedEveWorkerEnvironmentV1";
+export const eveWorkerEnvelopeKey = "__appBuilderAuthorizedEveWorkerEnvironmentV1";
 
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const transportSecretPattern = /^[A-Za-z0-9_-]{43}$/u;
 
 function fail(field) {
@@ -12,9 +10,7 @@ function fail(field) {
 }
 
 function validLoopbackHostname(hostname) {
-  const normalized = hostname.startsWith("[")
-    ? hostname.slice(1, -1)
-    : hostname;
+  const normalized = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
   if (normalized === "::1") return true;
   if (isIP(normalized) !== 4) return false;
   return normalized.split(".")[0] === "127";
@@ -80,22 +76,14 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
     appRoot: expectedAppRoot,
     baseUrl,
     port,
-    transportSecret: validateTransportSecret(
-      source.EVE_DEV_WORKFLOW_TRANSPORT_SECRET,
-    ),
+    transportSecret: validateTransportSecret(source.EVE_DEV_WORKFLOW_TRANSPORT_SECRET),
     developmentSandboxRunId: validateUuid(
       source.EVE_DEVELOPMENT_SANDBOX_RUN_ID,
       "sandbox run id",
       true,
     ),
-    evaluationRunId: validateUuid(
-      source.EVE_EVALUATION_RUN_ID,
-      "evaluation run id",
-    ),
-    bodyTimeout: validateWorkflowTimeout(
-      source.WORKFLOW_LOCAL_BODY_TIMEOUT_MS,
-      "body timeout",
-    ),
+    evaluationRunId: validateUuid(source.EVE_EVALUATION_RUN_ID, "evaluation run id"),
+    bodyTimeout: validateWorkflowTimeout(source.WORKFLOW_LOCAL_BODY_TIMEOUT_MS, "body timeout"),
     headersTimeout: validateWorkflowTimeout(
       source.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS,
       "headers timeout",
@@ -147,15 +135,11 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   environment.EVE_DEV_WORKFLOW_TRANSPORT_SECRET = captured.transportSecret;
   if (captured.developmentSandboxRunId === undefined)
     delete environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID;
-  else
-    environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID =
-      captured.developmentSandboxRunId;
+  else environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID = captured.developmentSandboxRunId;
   environment.EVE_EVALUATION = "1";
   environment.EVE_EVALUATION_RUN_ID = captured.evaluationRunId;
-  if (captured.bodyTimeout === undefined)
-    delete environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS;
+  if (captured.bodyTimeout === undefined) delete environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS;
   else environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = captured.bodyTimeout;
-  if (captured.headersTimeout === undefined)
-    delete environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS;
+  if (captured.headersTimeout === undefined) delete environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS;
   else environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = captured.headersTimeout;
 }

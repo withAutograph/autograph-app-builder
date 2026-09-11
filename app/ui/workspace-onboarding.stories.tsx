@@ -18,8 +18,9 @@ export const AccessDenied: Story = {
   args: { status: "access-denied" },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole("link", { name: "Sign out" }),
-    ).toHaveAttribute("href", "/auth/sign-out");
+    await expect(canvas.getByRole("link", { name: "Sign out" })).toHaveAttribute(
+      "href",
+      "/auth/sign-out",
+    );
   },
 };

@@ -1,16 +1,5 @@
-import {
-  createPrivateKey,
-  createPublicKey,
-  randomBytes,
-  sign,
-} from "node:crypto";
-import {
-  fstatSync,
-  readSync,
-  realpathSync,
-  statSync,
-  writeSync,
-} from "node:fs";
+import { createPrivateKey, createPublicKey, randomBytes, sign } from "node:crypto";
+import { fstatSync, readSync, realpathSync, statSync, writeSync } from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,9 +38,7 @@ if (
 )
   throw new Error("Structural test package root was not owner-bound.");
 const require = createRequire(import.meta.url);
-const registry = require(
-  resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"),
-);
+const registry = require(resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
 const workerThreads = require("node:worker_threads");
 const allowedWorkerEnvironment = new Set([
   "HOME",
@@ -74,14 +61,8 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
       environment[name] = source[name];
   const hasEveEnvelope = eveEnvelope !== undefined;
-  environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope
-    ? undefined
-    : repositoryRoot;
-  environment.EVE_DEV = hasEveEnvelope
-    ? undefined
-    : eveProfile
-      ? "1"
-      : undefined;
+  environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope ? undefined : repositoryRoot;
+  environment.EVE_DEV = hasEveEnvelope ? undefined : eveProfile ? "1" : undefined;
   if (eveEnvelope?.bodyTimeout === "360000")
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
   if (eveEnvelope?.headersTimeout === "360000")
@@ -113,14 +94,12 @@ function readFdFrame() {
   while (!source.includes("\n")) {
     const buffer = Buffer.alloc(512);
     const count = readSync(authorizationFd, buffer, 0, buffer.length, null);
-    if (count <= 0)
-      throw new Error("Structural test authorization was absent.");
+    if (count <= 0) throw new Error("Structural test authorization was absent.");
     source += buffer.subarray(0, count).toString("utf8");
     const newline = source.indexOf("\n");
     if (
       (newline < 0 && Buffer.byteLength(source) > maxBytes) ||
-      (newline >= 0 &&
-        Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
+      (newline >= 0 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
     )
       throw new Error("Structural test authorization was oversized.");
   }
@@ -162,10 +141,7 @@ function requestAuthorization() {
   } else {
     if (!fstatSync(authorizationFd).isSocket())
       throw new Error("Structural test authorization was not private IPC.");
-    writeSync(
-      authorizationFd,
-      `${JSON.stringify({ version: 2, ...request })}\n`,
-    );
+    writeSync(authorizationFd, `${JSON.stringify({ version: 2, ...request })}\n`);
     response = readFdFrame();
   }
   if (
@@ -207,9 +183,7 @@ function requestAuthorization() {
 
 function workerFilename(value) {
   try {
-    return realpathSync(
-      value instanceof URL ? fileURLToPath(value) : String(value),
-    );
+    return realpathSync(value instanceof URL ? fileURLToPath(value) : String(value));
   } catch {
     return undefined;
   }
@@ -217,19 +191,14 @@ function workerFilename(value) {
 function allowedWorkerPaths() {
   const paths = [
     resolve(repositoryRoot, "scripts/test-capability-worker-fixture.mjs"),
-    resolve(
-      repositoryRoot,
-      "scripts/test-capability-worker-timeout-fixture.mjs",
-    ),
+    resolve(repositoryRoot, "scripts/test-capability-worker-timeout-fixture.mjs"),
   ];
   for (const [pkg, relative] of [
     ["vitest", "dist/workers/threads.js"],
     ["eve", "dist/src/compiled/env-runner/node-worker.js"],
   ]) {
     try {
-      paths.push(
-        resolve(dirname(require.resolve(`${pkg}/package.json`)), relative),
-      );
+      paths.push(resolve(dirname(require.resolve(`${pkg}/package.json`)), relative));
     } catch {
       /* optional owner */
     }
@@ -252,13 +221,7 @@ function eveRuntimeWorkerPath() {
     ),
   );
 }
-function installWorkerBroker(
-  capabilities,
-  privateKey,
-  publicKey,
-  eveProfile,
-  gateAEvalProfile,
-) {
+function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, gateAEvalProfile) {
   const allowed = allowedWorkerPaths();
   const eveWorker = eveRuntimeWorkerPath();
   const OriginalWorker = workerThreads.Worker;
@@ -298,11 +261,7 @@ function installWorkerBroker(
         transferList: [...(options.transferList ?? []), channel.port2],
         execArgv: [],
         env: {
-          ...workerEnvironment(
-            options.env ?? process.env,
-            eveProfile,
-            eveEnvelope,
-          ),
+          ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
           NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
           APP_BUILDER_TEST_MODEL: undefined,
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
@@ -349,11 +308,7 @@ function installWorkerBroker(
           publicKey,
           gateAEvalProfile: nestedGateAEvalProfile,
         };
-        const signature = sign(
-          null,
-          Buffer.from(canonical(proof)),
-          privateKey,
-        ).toString("base64");
+        const signature = sign(null, Buffer.from(canonical(proof)), privateKey).toString("base64");
         channel.port1.postMessage({
           ...proof,
           signature,
@@ -378,19 +333,13 @@ try {
   const workerGateAEvalProfile = workerData?.[gateAEvalProfileKey];
   if (
     !isMainThread &&
-    JSON.stringify(workerGateAEvalProfile) !==
-      JSON.stringify(authorization.gateAEvalProfile)
+    JSON.stringify(workerGateAEvalProfile) !== JSON.stringify(authorization.gateAEvalProfile)
   )
     throw new Error("The delegated Gate A eval profile did not match.");
   const gateAEvalProfileToInstall = isMainThread
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;
-  if (eveProfile)
-    installGateAEvalProfile(
-      process.env,
-      gateAEvalProfileToInstall,
-      repositoryRoot,
-    );
+  if (eveProfile) installGateAEvalProfile(process.env, gateAEvalProfileToInstall, repositoryRoot);
   else for (const name of gateAEnvironmentFields) delete process.env[name];
   if (!isMainThread) delete workerData[gateAEvalProfileKey];
   if (eveEnvelope !== undefined) {

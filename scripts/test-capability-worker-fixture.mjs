@@ -1,11 +1,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 
 const accessor =
-  process[
-    Symbol.for(
-      "withAutograph.autograph-app-builder.test-capability-registry.v2",
-    )
-  ];
+  process[Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")];
 const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
 const gateAFields = [
   "APP_BUILDER_LOCAL_PUBLICATION",
@@ -52,14 +48,11 @@ parentPort?.postMessage({
   workflowBodyTimeout: process.env.WORKFLOW_LOCAL_BODY_TIMEOUT_MS ?? null,
   workflowHeadersTimeout: process.env.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS ?? null,
   port: process.env.PORT ?? null,
-  hasTransportSecret:
-    process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
+  hasTransportSecret: process.env.EVE_DEV_WORKFLOW_TRANSPORT_SECRET !== undefined,
   sandboxRunId: process.env.EVE_DEVELOPMENT_SANDBOX_RUN_ID ?? null,
   evaluation: process.env.EVE_EVALUATION ?? null,
   evaluationRunId: process.env.EVE_EVALUATION_RUN_ID ?? null,
-  hasGateAEnvironment: gateAFields.some(
-    (field) => process.env[field] !== undefined,
-  ),
+  hasGateAEnvironment: gateAFields.some((field) => process.env[field] !== undefined),
   nestedCapability,
   nestedAppRoot,
   nestedEveDev,

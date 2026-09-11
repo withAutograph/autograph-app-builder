@@ -69,10 +69,7 @@ export function createPostgresBuilderProvisionJournalStore(
           requestDigest,
           state: "pending",
           revision: 1,
-          record: initialBuilderProvisionJournalRecord(
-            input.request,
-            input.now,
-          ),
+          record: initialBuilderProvisionJournalRecord(input.request, input.now),
           createdAt: input.now,
           updatedAt: input.now,
         })
@@ -82,8 +79,7 @@ export function createPostgresBuilderProvisionJournalStore(
         ? parseRow(rows[0])
         : await read({ authority, requestId: input.request.requestId });
       if (!row) throw new Error("provision-journal-not-durable");
-      if (row.requestDigest !== requestDigest)
-        throw new Error("provision-request-id-reused");
+      if (row.requestDigest !== requestDigest) throw new Error("provision-request-id-reused");
       return row;
     },
     read,

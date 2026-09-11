@@ -15,10 +15,7 @@ import {
 } from "@/components/ui/item";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 
-import {
-  DeletePasskeyDialog,
-  type ListedPasskey,
-} from "./delete-passkey-dialog";
+import { DeletePasskeyDialog, type ListedPasskey } from "./delete-passkey-dialog";
 import { RenamePasskeyDialog } from "./rename-passkey-dialog";
 
 export type PasskeyProps = {
@@ -56,21 +53,14 @@ export function Passkey({ passkey }: PasskeyProps) {
           variant="outline"
           size="sm"
           onClick={() => setDeleteOpen(true)}
-          aria-label={passkeyLocalization.deletePasskey.replace(
-            "{{name}}",
-            passkeyName,
-          )}
+          aria-label={passkeyLocalization.deletePasskey.replace("{{name}}", passkeyName)}
         >
           <X />
 
           {localization.settings.delete}
         </Button>
 
-        <DeletePasskeyDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          passkey={passkey}
-        />
+        <DeletePasskeyDialog open={deleteOpen} onOpenChange={setDeleteOpen} passkey={passkey} />
         <RenamePasskeyDialog
           key={`${passkey.id}-${passkey.name ?? ""}`}
           open={renameOpen}

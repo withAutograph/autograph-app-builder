@@ -29,14 +29,10 @@ const preview = {
         entry: "src/routes/index.tsx",
       },
     ],
-    productionComponents: [
-      { name: "Button", source: "@autograph/components" as const },
-    ],
+    productionComponents: [{ name: "Button", source: "@autograph/components" as const }],
     productionCompositions: [],
     productionIcons: [],
-    fixtureFacts: [
-      { id: "request-count", statement: "Three requests", routes: ["/"] },
-    ],
+    fixtureFacts: [{ id: "request-count", statement: "Three requests", routes: ["/"] }],
     decisions: [],
     assumptions: [
       {
@@ -94,11 +90,7 @@ describe("component-backed UI preview policy", () => {
       'export default function Page() { fetch("https://example.test"); return null; }',
       /network/u,
     ],
-    [
-      "replacement token",
-      ":root { --new-token: red; }",
-      /replacement design tokens/u,
-    ],
+    ["replacement token", ":root { --new-token: red; }", /replacement design tokens/u],
   ])("rejects %s", (_name, content, message) => {
     expect(() =>
       validateUiPreview({
@@ -152,9 +144,7 @@ describe("component-backed UI preview policy", () => {
         ],
       },
     };
-    expect(uiPreviewSourceDigest(changed)).not.toBe(
-      uiPreviewSourceDigest(preview),
-    );
+    expect(uiPreviewSourceDigest(changed)).not.toBe(uiPreviewSourceDigest(preview));
   });
 
   it("keeps internal context and draft behavior out of Browser transport", () => {
@@ -203,10 +193,7 @@ describe("component-backed UI preview policy", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
-        files: [
-          ...preview.files,
-          { path: "src/components/ReviewRail.tsx", content },
-        ],
+        files: [...preview.files, { path: "src/components/ReviewRail.tsx", content }],
         catalogGaps: [
           {
             path: "src/components/ReviewRail.tsx",

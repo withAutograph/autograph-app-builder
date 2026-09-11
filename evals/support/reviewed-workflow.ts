@@ -13,9 +13,7 @@ export async function prepareReviewedWorkflow(
       ? `Prepare fresh template at ${repository}`
       : `Prepare supported repository at ${repository}`,
   );
-  await t.send(
-    `Accept build-ready AppSpec for ${appId}:\n${BUILD_READY_APP_SPEC}`,
-  );
+  await t.send(`Accept build-ready AppSpec for ${appId}:\n${BUILD_READY_APP_SPEC}`);
 
   await t.send("Prepare offline target dependencies.");
 

@@ -5374,11 +5374,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-73-color",
         "dimension": "styling",
@@ -6881,11 +6877,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-74-color",
         "dimension": "styling",
@@ -10064,11 +10056,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-75-color",
         "dimension": "styling",
@@ -11649,11 +11637,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-81-font-size",
         "dimension": "styling",
@@ -11686,11 +11670,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-81-font-weight",
         "dimension": "styling",
@@ -11723,12 +11703,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-81-line-height",
         "dimension": "styling",
@@ -12334,11 +12309,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-82-font-size",
         "dimension": "styling",
@@ -12371,11 +12342,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-82-font-weight",
         "dimension": "styling",
@@ -12408,12 +12375,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-82-line-height",
         "dimension": "styling",
@@ -12600,11 +12562,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-20-color",
         "dimension": "styling",
@@ -13294,11 +13252,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-23-color",
         "dimension": "styling",
@@ -13643,11 +13597,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-84-color",
         "dimension": "styling",
@@ -13992,11 +13942,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-21-color",
         "dimension": "styling",
@@ -14341,11 +14287,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-85-color",
         "dimension": "styling",
@@ -16642,11 +16584,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-86-color",
         "dimension": "styling",
@@ -18150,11 +18088,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-92-font-size",
         "dimension": "styling",
@@ -18187,11 +18121,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-92-font-weight",
         "dimension": "styling",
@@ -18224,12 +18154,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-92-line-height",
         "dimension": "styling",
@@ -18427,10 +18352,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-45-color",
         "dimension": "styling",
@@ -18838,11 +18760,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-93-font-size",
         "dimension": "styling",
@@ -18875,11 +18793,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-93-font-weight",
         "dimension": "styling",
@@ -18912,12 +18826,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-93-line-height",
         "dimension": "styling",
@@ -20115,11 +20024,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-95-color",
         "dimension": "styling",
@@ -20775,11 +20680,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-96-color",
         "dimension": "styling",
@@ -21820,10 +21721,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-61-color",
         "dimension": "styling",
@@ -22885,11 +22783,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-97-color",
         "dimension": "styling",
@@ -24506,11 +24400,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-103-font-size",
         "dimension": "styling",
@@ -24543,11 +24433,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-103-font-weight",
         "dimension": "styling",
@@ -24580,12 +24466,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-103-line-height",
         "dimension": "styling",
@@ -25363,11 +25244,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-104-font-size",
         "dimension": "styling",
@@ -25400,11 +25277,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-104-font-weight",
         "dimension": "styling",
@@ -25437,12 +25310,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-104-line-height",
         "dimension": "styling",
@@ -26629,11 +26497,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-106-color",
         "dimension": "styling",
@@ -27289,11 +27153,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-107-color",
         "dimension": "styling",
@@ -29501,11 +29361,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-108-color",
         "dimension": "styling",
@@ -31031,11 +30887,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-114-font-size",
         "dimension": "styling",
@@ -31068,11 +30920,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-114-font-weight",
         "dimension": "styling",
@@ -31105,12 +30953,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-114-line-height",
         "dimension": "styling",
@@ -31738,11 +31581,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-0-style-115-font-size",
         "dimension": "styling",
@@ -31775,11 +31614,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-0-style-115-font-weight",
         "dimension": "styling",
@@ -31812,12 +31647,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-0-style-115-line-height",
         "dimension": "styling",
@@ -32726,10 +32556,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-130-color",
         "dimension": "styling",
@@ -33461,10 +33288,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-131-color",
         "dimension": "styling",
@@ -33797,10 +33621,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-135-color",
         "dimension": "styling",
@@ -34477,10 +34298,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-137-color",
         "dimension": "styling",
@@ -35168,10 +34986,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-138-color",
         "dimension": "styling",
@@ -35493,10 +35308,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-136-color",
         "dimension": "styling",
@@ -35840,10 +35652,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-140-color",
         "dimension": "styling",
@@ -36176,10 +35985,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-141-color",
         "dimension": "styling",
@@ -45434,10 +45240,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-0-style-180-color",
         "dimension": "styling",
@@ -49333,11 +49136,7 @@
         "category": "color",
         "computed": "rgb(254, 254, 254)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-inverse)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-206-color",
         "dimension": "styling",
@@ -54368,11 +54167,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-73-color",
         "dimension": "styling",
@@ -55083,11 +54878,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-74-color",
         "dimension": "styling",
@@ -56128,11 +55919,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-20-color",
         "dimension": "styling",
@@ -56822,11 +56609,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-23-color",
         "dimension": "styling",
@@ -57171,11 +56954,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-75-color",
         "dimension": "styling",
@@ -57560,11 +57339,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-21-color",
         "dimension": "styling",
@@ -58962,11 +58737,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-81-font-size",
         "dimension": "styling",
@@ -58999,11 +58770,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-81-font-weight",
         "dimension": "styling",
@@ -59036,12 +58803,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-81-line-height",
         "dimension": "styling",
@@ -59669,11 +59431,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-82-font-size",
         "dimension": "styling",
@@ -59706,11 +59464,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-82-font-weight",
         "dimension": "styling",
@@ -59743,12 +59497,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-82-line-height",
         "dimension": "styling",
@@ -60924,11 +60673,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-84-color",
         "dimension": "styling",
@@ -61584,11 +61329,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-85-color",
         "dimension": "styling",
@@ -61973,10 +61714,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-45-color",
         "dimension": "styling",
@@ -63643,11 +63381,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-86-color",
         "dimension": "styling",
@@ -65151,11 +64885,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-92-font-size",
         "dimension": "styling",
@@ -65188,11 +64918,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-92-font-weight",
         "dimension": "styling",
@@ -65225,12 +64951,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-92-line-height",
         "dimension": "styling",
@@ -65428,10 +65149,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-61-color",
         "dimension": "styling",
@@ -65839,11 +65557,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-93-font-size",
         "dimension": "styling",
@@ -65876,11 +65590,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-93-font-weight",
         "dimension": "styling",
@@ -65913,12 +65623,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-93-line-height",
         "dimension": "styling",
@@ -66856,11 +66561,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-95-color",
         "dimension": "styling",
@@ -67205,11 +66906,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-96-color",
         "dimension": "styling",
@@ -68284,11 +67981,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-97-color",
         "dimension": "styling",
@@ -69170,11 +68863,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-103-font-size",
         "dimension": "styling",
@@ -69207,11 +68896,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-103-font-weight",
         "dimension": "styling",
@@ -69244,12 +68929,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-103-line-height",
         "dimension": "styling",
@@ -69544,11 +69224,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-104-font-size",
         "dimension": "styling",
@@ -69581,11 +69257,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-104-font-weight",
         "dimension": "styling",
@@ -69618,12 +69290,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-104-line-height",
         "dimension": "styling",
@@ -70155,11 +69822,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-106-color",
         "dimension": "styling",
@@ -70504,11 +70167,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-107-color",
         "dimension": "styling",
@@ -71583,11 +71242,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-108-color",
         "dimension": "styling",
@@ -72469,11 +72124,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-114-font-size",
         "dimension": "styling",
@@ -72506,11 +72157,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-114-font-weight",
         "dimension": "styling",
@@ -72543,12 +72190,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-114-line-height",
         "dimension": "styling",
@@ -72843,11 +72485,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-115-font-size",
         "dimension": "styling",
@@ -72880,11 +72518,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-115-font-weight",
         "dimension": "styling",
@@ -72917,12 +72551,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-115-line-height",
         "dimension": "styling",
@@ -76252,10 +75881,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-130-color",
         "dimension": "styling",
@@ -76610,10 +76236,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-131-color",
         "dimension": "styling",
@@ -78011,10 +77634,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-135-color",
         "dimension": "styling",
@@ -78358,10 +77978,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-137-color",
         "dimension": "styling",
@@ -78694,10 +78311,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-138-color",
         "dimension": "styling",
@@ -79019,10 +78633,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-136-color",
         "dimension": "styling",
@@ -79366,10 +78977,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-140-color",
         "dimension": "styling",
@@ -79702,10 +79310,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-141-color",
         "dimension": "styling",
@@ -88960,10 +88565,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-wide-0-style-180-color",
         "dimension": "styling",
@@ -91766,11 +91368,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-73-color",
         "dimension": "styling",
@@ -93273,11 +92871,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-74-color",
         "dimension": "styling",
@@ -96456,11 +96050,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-75-color",
         "dimension": "styling",
@@ -98041,11 +97631,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-81-font-size",
         "dimension": "styling",
@@ -98078,11 +97664,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-81-font-weight",
         "dimension": "styling",
@@ -98115,12 +97697,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-81-line-height",
         "dimension": "styling",
@@ -98726,11 +98303,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-82-font-size",
         "dimension": "styling",
@@ -98763,11 +98336,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-82-font-weight",
         "dimension": "styling",
@@ -98800,12 +98369,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-82-line-height",
         "dimension": "styling",
@@ -98992,11 +98556,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-20-color",
         "dimension": "styling",
@@ -99686,11 +99246,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-23-color",
         "dimension": "styling",
@@ -100035,11 +99591,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-84-color",
         "dimension": "styling",
@@ -100384,11 +99936,7 @@
         "category": "color",
         "computed": "rgb(78, 82, 83)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-secondary)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-21-color",
         "dimension": "styling",
@@ -100733,11 +100281,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-85-color",
         "dimension": "styling",
@@ -103034,11 +102578,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-86-color",
         "dimension": "styling",
@@ -104542,11 +104082,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-92-font-size",
         "dimension": "styling",
@@ -104579,11 +104115,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-92-font-weight",
         "dimension": "styling",
@@ -104616,12 +104148,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-92-line-height",
         "dimension": "styling",
@@ -104819,10 +104346,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-45-color",
         "dimension": "styling",
@@ -105230,11 +104754,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-93-font-size",
         "dimension": "styling",
@@ -105267,11 +104787,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-93-font-weight",
         "dimension": "styling",
@@ -105304,12 +104820,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-93-line-height",
         "dimension": "styling",
@@ -106507,11 +106018,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-95-color",
         "dimension": "styling",
@@ -107167,11 +106674,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-96-color",
         "dimension": "styling",
@@ -108212,10 +107715,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-61-color",
         "dimension": "styling",
@@ -109277,11 +108777,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-97-color",
         "dimension": "styling",
@@ -110898,11 +110394,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-103-font-size",
         "dimension": "styling",
@@ -110935,11 +110427,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-103-font-weight",
         "dimension": "styling",
@@ -110972,12 +110460,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-103-line-height",
         "dimension": "styling",
@@ -111755,11 +111238,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-104-font-size",
         "dimension": "styling",
@@ -111792,11 +111271,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-104-font-weight",
         "dimension": "styling",
@@ -111829,12 +111304,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-104-line-height",
         "dimension": "styling",
@@ -113021,11 +112491,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-106-color",
         "dimension": "styling",
@@ -113681,11 +113147,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-107-color",
         "dimension": "styling",
@@ -115893,11 +115355,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "inherit",
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-108-color",
         "dimension": "styling",
@@ -117423,11 +116881,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-114-font-size",
         "dimension": "styling",
@@ -117460,11 +116914,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-114-font-weight",
         "dimension": "styling",
@@ -117497,12 +116947,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-114-line-height",
         "dimension": "styling",
@@ -118130,11 +117575,7 @@
         "category": "typography",
         "computed": "10px",
         "classification": "unknown",
-        "declarations": [
-          "var(--text-badge-xs)",
-          "inherit",
-          "var(--text-control-md)"
-        ],
+        "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-115-font-size",
         "dimension": "styling",
@@ -118167,11 +117608,7 @@
         "category": "typography",
         "computed": "500",
         "classification": "unknown",
-        "declarations": [
-          "var(--font-weight-medium)",
-          "inherit",
-          "var(--font-weight-semibold)"
-        ],
+        "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-115-font-weight",
         "dimension": "styling",
@@ -118204,12 +117641,7 @@
         "category": "typography",
         "computed": "12px",
         "classification": "unknown",
-        "declarations": [
-          "var(--leading-badge-xs)",
-          "inherit",
-          "var(--leading-body)",
-          "1.5"
-        ],
+        "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
         "origin": "unknown",
         "id": "desktop-window-0-style-115-line-height",
         "dimension": "styling",
@@ -119118,10 +118550,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-130-color",
         "dimension": "styling",
@@ -119853,10 +119282,7 @@
         "category": "color",
         "computed": "rgb(244, 93, 72)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-status-danger)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-131-color",
         "dimension": "styling",
@@ -120189,10 +119615,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-135-color",
         "dimension": "styling",
@@ -120869,10 +120292,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-137-color",
         "dimension": "styling",
@@ -121560,10 +120980,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-138-color",
         "dimension": "styling",
@@ -121885,10 +121302,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-136-color",
         "dimension": "styling",
@@ -122232,10 +121646,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-140-color",
         "dimension": "styling",
@@ -122568,10 +121979,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-141-color",
         "dimension": "styling",
@@ -131826,10 +131234,7 @@
         "category": "color",
         "computed": "rgb(116, 119, 120)",
         "classification": "unknown",
-        "declarations": [
-          "var(--color-text-muted)",
-          "var(--color-text-primary)"
-        ],
+        "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
         "origin": "unknown",
         "id": "desktop-window-0-style-180-color",
         "dimension": "styling",
@@ -132845,11 +132250,7 @@
   "reference": {
     "name": "arrusted-compact-decision-card-20260908",
     "commit": "eb696f95b2297bfdf893ea07fc181014904e418c",
-    "publicModules": [
-      "@autograph/components",
-      "@autograph/compositions",
-      "@autograph/icons"
-    ],
+    "publicModules": ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     "catalogAvailable": true
   },
   "captures": [
@@ -133027,27 +132428,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -133099,9 +132492,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -135323,11 +134714,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-73-color",
             "dimension": "styling",
@@ -136830,11 +136217,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-74-color",
             "dimension": "styling",
@@ -140013,11 +139396,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-75-color",
             "dimension": "styling",
@@ -141598,11 +140977,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-81-font-size",
             "dimension": "styling",
@@ -141635,11 +141010,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-81-font-weight",
             "dimension": "styling",
@@ -141672,12 +141043,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-81-line-height",
             "dimension": "styling",
@@ -142283,11 +141649,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-82-font-size",
             "dimension": "styling",
@@ -142320,11 +141682,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-82-font-weight",
             "dimension": "styling",
@@ -142357,12 +141715,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-82-line-height",
             "dimension": "styling",
@@ -142549,11 +141902,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-20-color",
             "dimension": "styling",
@@ -143243,11 +142592,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-23-color",
             "dimension": "styling",
@@ -143592,11 +142937,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-84-color",
             "dimension": "styling",
@@ -143941,11 +143282,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-21-color",
             "dimension": "styling",
@@ -144290,11 +143627,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-85-color",
             "dimension": "styling",
@@ -146591,11 +145924,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-86-color",
             "dimension": "styling",
@@ -148099,11 +147428,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-92-font-size",
             "dimension": "styling",
@@ -148136,11 +147461,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-92-font-weight",
             "dimension": "styling",
@@ -148173,12 +147494,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-92-line-height",
             "dimension": "styling",
@@ -148376,10 +147692,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-45-color",
             "dimension": "styling",
@@ -148787,11 +148100,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-93-font-size",
             "dimension": "styling",
@@ -148824,11 +148133,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-93-font-weight",
             "dimension": "styling",
@@ -148861,12 +148166,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-93-line-height",
             "dimension": "styling",
@@ -150064,11 +149364,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-95-color",
             "dimension": "styling",
@@ -150724,11 +150020,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-96-color",
             "dimension": "styling",
@@ -151769,10 +151061,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-61-color",
             "dimension": "styling",
@@ -152834,11 +152123,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-97-color",
             "dimension": "styling",
@@ -154455,11 +153740,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-103-font-size",
             "dimension": "styling",
@@ -154492,11 +153773,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-103-font-weight",
             "dimension": "styling",
@@ -154529,12 +153806,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-103-line-height",
             "dimension": "styling",
@@ -155312,11 +154584,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-104-font-size",
             "dimension": "styling",
@@ -155349,11 +154617,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-104-font-weight",
             "dimension": "styling",
@@ -155386,12 +154650,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-104-line-height",
             "dimension": "styling",
@@ -156578,11 +155837,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-106-color",
             "dimension": "styling",
@@ -157238,11 +156493,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-107-color",
             "dimension": "styling",
@@ -159450,11 +158701,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-108-color",
             "dimension": "styling",
@@ -160980,11 +160227,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-114-font-size",
             "dimension": "styling",
@@ -161017,11 +160260,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-114-font-weight",
             "dimension": "styling",
@@ -161054,12 +160293,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-114-line-height",
             "dimension": "styling",
@@ -161687,11 +160921,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-0-style-115-font-size",
             "dimension": "styling",
@@ -161724,11 +160954,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-0-style-115-font-weight",
             "dimension": "styling",
@@ -161761,12 +160987,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-0-style-115-line-height",
             "dimension": "styling",
@@ -162675,10 +161896,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-130-color",
             "dimension": "styling",
@@ -163410,10 +162628,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-131-color",
             "dimension": "styling",
@@ -163746,10 +162961,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-135-color",
             "dimension": "styling",
@@ -164426,10 +163638,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-137-color",
             "dimension": "styling",
@@ -165117,10 +164326,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-138-color",
             "dimension": "styling",
@@ -165442,10 +164648,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-136-color",
             "dimension": "styling",
@@ -165789,10 +164992,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-140-color",
             "dimension": "styling",
@@ -166125,10 +165325,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-141-color",
             "dimension": "styling",
@@ -175383,10 +174580,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-0-style-180-color",
             "dimension": "styling",
@@ -176576,27 +175770,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -176648,9 +175834,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -179654,11 +178838,7 @@
             "category": "color",
             "computed": "rgb(254, 254, 254)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-inverse)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-inverse)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-206-color",
             "dimension": "styling",
@@ -184689,11 +183869,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-73-color",
             "dimension": "styling",
@@ -185404,11 +184580,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-74-color",
             "dimension": "styling",
@@ -186449,11 +185621,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-20-color",
             "dimension": "styling",
@@ -187143,11 +186311,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-23-color",
             "dimension": "styling",
@@ -187492,11 +186656,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-75-color",
             "dimension": "styling",
@@ -187881,11 +187041,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-21-color",
             "dimension": "styling",
@@ -189283,11 +188439,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-81-font-size",
             "dimension": "styling",
@@ -189320,11 +188472,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-81-font-weight",
             "dimension": "styling",
@@ -189357,12 +188505,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-81-line-height",
             "dimension": "styling",
@@ -189990,11 +189133,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-82-font-size",
             "dimension": "styling",
@@ -190027,11 +189166,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-82-font-weight",
             "dimension": "styling",
@@ -190064,12 +189199,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-82-line-height",
             "dimension": "styling",
@@ -191245,11 +190375,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-84-color",
             "dimension": "styling",
@@ -191905,11 +191031,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-85-color",
             "dimension": "styling",
@@ -192294,10 +191416,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-45-color",
             "dimension": "styling",
@@ -193964,11 +193083,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-86-color",
             "dimension": "styling",
@@ -195472,11 +194587,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-92-font-size",
             "dimension": "styling",
@@ -195509,11 +194620,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-92-font-weight",
             "dimension": "styling",
@@ -195546,12 +194653,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-92-line-height",
             "dimension": "styling",
@@ -195749,10 +194851,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-61-color",
             "dimension": "styling",
@@ -196160,11 +195259,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-93-font-size",
             "dimension": "styling",
@@ -196197,11 +195292,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-93-font-weight",
             "dimension": "styling",
@@ -196234,12 +195325,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-93-line-height",
             "dimension": "styling",
@@ -197177,11 +196263,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-95-color",
             "dimension": "styling",
@@ -197526,11 +196608,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-96-color",
             "dimension": "styling",
@@ -198605,11 +197683,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-97-color",
             "dimension": "styling",
@@ -199491,11 +198565,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-103-font-size",
             "dimension": "styling",
@@ -199528,11 +198598,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-103-font-weight",
             "dimension": "styling",
@@ -199565,12 +198631,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-103-line-height",
             "dimension": "styling",
@@ -199865,11 +198926,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-104-font-size",
             "dimension": "styling",
@@ -199902,11 +198959,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-104-font-weight",
             "dimension": "styling",
@@ -199939,12 +198992,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-104-line-height",
             "dimension": "styling",
@@ -200476,11 +199524,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-106-color",
             "dimension": "styling",
@@ -200825,11 +199869,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-107-color",
             "dimension": "styling",
@@ -201904,11 +200944,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-108-color",
             "dimension": "styling",
@@ -202790,11 +201826,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-114-font-size",
             "dimension": "styling",
@@ -202827,11 +201859,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-114-font-weight",
             "dimension": "styling",
@@ -202864,12 +201892,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-114-line-height",
             "dimension": "styling",
@@ -203164,11 +202187,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-115-font-size",
             "dimension": "styling",
@@ -203201,11 +202220,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-115-font-weight",
             "dimension": "styling",
@@ -203238,12 +202253,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-115-line-height",
             "dimension": "styling",
@@ -206573,10 +205583,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-130-color",
             "dimension": "styling",
@@ -206931,10 +205938,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-131-color",
             "dimension": "styling",
@@ -208332,10 +207336,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-135-color",
             "dimension": "styling",
@@ -208679,10 +207680,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-137-color",
             "dimension": "styling",
@@ -209015,10 +208013,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-138-color",
             "dimension": "styling",
@@ -209340,10 +208335,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-136-color",
             "dimension": "styling",
@@ -209687,10 +208679,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-140-color",
             "dimension": "styling",
@@ -210023,10 +209012,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-141-color",
             "dimension": "styling",
@@ -219281,10 +218267,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-wide-0-style-180-color",
             "dimension": "styling",
@@ -220163,27 +219146,19 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(1) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dt"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"
-                  ],
+                  "target": [".flex.gap-\\[var\\(--space-1\\)\\]:nth-child(2) > dd"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.47 (foreground color: #747778, background color: #fefefe, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
@@ -220235,9 +219210,7 @@
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.24 (foreground color: #a9adaf, background color: #fefefe, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 },
                 {
-                  "target": [
-                    ".bg-\\[var\\(--color-action-primary\\)\\] > span"
-                  ],
+                  "target": [".bg-\\[var\\(--color-action-primary\\)\\] > span"],
                   "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.78 (foreground color: #fefefe, background color: #8192ff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
                 }
               ]
@@ -222459,11 +221432,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-73-color",
             "dimension": "styling",
@@ -223966,11 +222935,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-74-color",
             "dimension": "styling",
@@ -227149,11 +226114,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-75-color",
             "dimension": "styling",
@@ -228734,11 +227695,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-81-font-size",
             "dimension": "styling",
@@ -228771,11 +227728,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-81-font-weight",
             "dimension": "styling",
@@ -228808,12 +227761,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-81-line-height",
             "dimension": "styling",
@@ -229419,11 +228367,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-82-font-size",
             "dimension": "styling",
@@ -229456,11 +228400,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-82-font-weight",
             "dimension": "styling",
@@ -229493,12 +228433,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-82-line-height",
             "dimension": "styling",
@@ -229685,11 +228620,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-20-color",
             "dimension": "styling",
@@ -230379,11 +229310,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-23-color",
             "dimension": "styling",
@@ -230728,11 +229655,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-84-color",
             "dimension": "styling",
@@ -231077,11 +230000,7 @@
             "category": "color",
             "computed": "rgb(78, 82, 83)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-secondary)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-secondary)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-21-color",
             "dimension": "styling",
@@ -231426,11 +230345,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-85-color",
             "dimension": "styling",
@@ -233727,11 +232642,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-86-color",
             "dimension": "styling",
@@ -235235,11 +234146,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-92-font-size",
             "dimension": "styling",
@@ -235272,11 +234179,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-92-font-weight",
             "dimension": "styling",
@@ -235309,12 +234212,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-92-line-height",
             "dimension": "styling",
@@ -235512,10 +234410,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-45-color",
             "dimension": "styling",
@@ -235923,11 +234818,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-93-font-size",
             "dimension": "styling",
@@ -235960,11 +234851,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-93-font-weight",
             "dimension": "styling",
@@ -235997,12 +234884,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-93-line-height",
             "dimension": "styling",
@@ -237200,11 +236082,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-95-color",
             "dimension": "styling",
@@ -237860,11 +236738,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-96-color",
             "dimension": "styling",
@@ -238905,10 +237779,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-61-color",
             "dimension": "styling",
@@ -239970,11 +238841,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-97-color",
             "dimension": "styling",
@@ -241591,11 +240458,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-103-font-size",
             "dimension": "styling",
@@ -241628,11 +240491,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-103-font-weight",
             "dimension": "styling",
@@ -241665,12 +240524,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-103-line-height",
             "dimension": "styling",
@@ -242448,11 +241302,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-104-font-size",
             "dimension": "styling",
@@ -242485,11 +241335,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-104-font-weight",
             "dimension": "styling",
@@ -242522,12 +241368,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-104-line-height",
             "dimension": "styling",
@@ -243714,11 +242555,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-106-color",
             "dimension": "styling",
@@ -244374,11 +243211,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-107-color",
             "dimension": "styling",
@@ -246586,11 +245419,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "inherit",
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["inherit", "var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-108-color",
             "dimension": "styling",
@@ -248116,11 +246945,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-114-font-size",
             "dimension": "styling",
@@ -248153,11 +246978,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-114-font-weight",
             "dimension": "styling",
@@ -248190,12 +247011,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-114-line-height",
             "dimension": "styling",
@@ -248823,11 +247639,7 @@
             "category": "typography",
             "computed": "10px",
             "classification": "unknown",
-            "declarations": [
-              "var(--text-badge-xs)",
-              "inherit",
-              "var(--text-control-md)"
-            ],
+            "declarations": ["var(--text-badge-xs)", "inherit", "var(--text-control-md)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-115-font-size",
             "dimension": "styling",
@@ -248860,11 +247672,7 @@
             "category": "typography",
             "computed": "500",
             "classification": "unknown",
-            "declarations": [
-              "var(--font-weight-medium)",
-              "inherit",
-              "var(--font-weight-semibold)"
-            ],
+            "declarations": ["var(--font-weight-medium)", "inherit", "var(--font-weight-semibold)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-115-font-weight",
             "dimension": "styling",
@@ -248897,12 +247705,7 @@
             "category": "typography",
             "computed": "12px",
             "classification": "unknown",
-            "declarations": [
-              "var(--leading-badge-xs)",
-              "inherit",
-              "var(--leading-body)",
-              "1.5"
-            ],
+            "declarations": ["var(--leading-badge-xs)", "inherit", "var(--leading-body)", "1.5"],
             "origin": "unknown",
             "id": "desktop-window-0-style-115-line-height",
             "dimension": "styling",
@@ -249811,10 +248614,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-130-color",
             "dimension": "styling",
@@ -250546,10 +249346,7 @@
             "category": "color",
             "computed": "rgb(244, 93, 72)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-status-danger)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-status-danger)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-131-color",
             "dimension": "styling",
@@ -250882,10 +249679,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-135-color",
             "dimension": "styling",
@@ -251562,10 +250356,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-137-color",
             "dimension": "styling",
@@ -252253,10 +251044,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-138-color",
             "dimension": "styling",
@@ -252578,10 +251366,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-136-color",
             "dimension": "styling",
@@ -252925,10 +251710,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-140-color",
             "dimension": "styling",
@@ -253261,10 +252043,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-141-color",
             "dimension": "styling",
@@ -262519,10 +261298,7 @@
             "category": "color",
             "computed": "rgb(116, 119, 120)",
             "classification": "unknown",
-            "declarations": [
-              "var(--color-text-muted)",
-              "var(--color-text-primary)"
-            ],
+            "declarations": ["var(--color-text-muted)", "var(--color-text-primary)"],
             "origin": "unknown",
             "id": "desktop-window-0-style-180-color",
             "dimension": "styling",

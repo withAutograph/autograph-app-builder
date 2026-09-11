@@ -406,26 +406,15 @@ describe("readReference", () => {
         exports: { ".": "./src/index.ts", "./table": "./src/table.ts" },
       }),
     );
-    await writeFile(
-      join(packageRoot, "src/index.ts"),
-      `export const Overview = () => null;`,
-    );
-    await writeFile(
-      join(packageRoot, "src/table.ts"),
-      `export const DataTable = () => null;`,
-    );
+    await writeFile(join(packageRoot, "src/index.ts"), `export const Overview = () => null;`);
+    await writeFile(join(packageRoot, "src/table.ts"), `export const DataTable = () => null;`);
 
     const reference = await readReference(root);
-    expect(
-      reference.modules["@autograph/components"].exports.Button.props?.variant
-        .values,
-    ).toEqual(["primary", "secondary"]);
-    expect(
-      reference.modules["@autograph/compositions"].exports.Overview,
-    ).toBeDefined();
-    expect(
-      reference.modules["@autograph/compositions/table"].exports.DataTable,
-    ).toBeDefined();
+    expect(reference.modules["@autograph/components"].exports.Button.props?.variant.values).toEqual(
+      ["primary", "secondary"],
+    );
+    expect(reference.modules["@autograph/compositions"].exports.Overview).toBeDefined();
+    expect(reference.modules["@autograph/compositions/table"].exports.DataTable).toBeDefined();
   });
 
   it("reads exported component props from the selected checkout, not a catalog", async () => {
@@ -447,14 +436,10 @@ describe("readReference", () => {
     );
 
     const reference = await readReference(root);
-    expect(
-      reference.modules["@autograph/components"].exports.Button.props,
-    ).toEqual({
+    expect(reference.modules["@autograph/components"].exports.Button.props).toEqual({
       variant: { required: false, values: ["primary", "secondary"] },
       label: { required: true, primitiveKinds: ["string"] },
     });
-    expect(reference.modules["@autograph/components"].exports.helper).toEqual(
-      {},
-    );
+    expect(reference.modules["@autograph/components"].exports.helper).toEqual({});
   });
 });

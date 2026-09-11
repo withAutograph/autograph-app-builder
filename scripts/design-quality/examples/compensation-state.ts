@@ -38,18 +38,14 @@ export type CompensationAction =
   | { type: "clear-decision" }
   | { type: "reset"; fixture: CompensationFixture };
 
-export function compensationAssumptions(
-  fixture: CompensationFixture,
-): CompensationAssumptions {
+export function compensationAssumptions(fixture: CompensationFixture): CompensationAssumptions {
   return {
     ...fixture.proposal,
     ...fixture.comparison,
   };
 }
 
-export function initialCompensationState(
-  fixture: CompensationFixture,
-): CompensationState {
+export function initialCompensationState(fixture: CompensationFixture): CompensationState {
   return {
     assumptions: compensationAssumptions(fixture),
     assumptionsApplied: true,
@@ -60,14 +56,10 @@ export function initialCompensationState(
 export function calculateCompensation(input: CompensationAssumptions) {
   if (Object.keys(validateCompensation(input)).length > 0) return undefined;
   const currentTax = Math.round(input.baseSalary * input.employerTaxRate);
-  const proposedBase = Math.round(
-    input.baseSalary * (1 + input.plannedIncrease),
-  );
+  const proposedBase = Math.round(input.baseSalary * (1 + input.plannedIncrease));
   const proposedTax = Math.round(proposedBase * input.employerTaxRate);
-  const currentTotal =
-    input.baseSalary + input.targetBonus + input.annualBenefits + currentTax;
-  const proposedTotal =
-    proposedBase + input.targetBonus + input.annualBenefits + proposedTax;
+  const currentTotal = input.baseSalary + input.targetBonus + input.annualBenefits + currentTax;
+  const proposedTotal = proposedBase + input.targetBonus + input.annualBenefits + proposedTax;
   return {
     currentTax,
     currentTotal,
@@ -80,12 +72,7 @@ export function calculateCompensation(input: CompensationAssumptions) {
 
 export function validateCompensation(input: CompensationAssumptions) {
   const errors: Partial<Record<keyof CompensationAssumptions, string>> = {};
-  for (const field of [
-    "baseSalary",
-    "targetBonus",
-    "annualBenefits",
-    "bandMidpoint",
-  ] as const) {
+  for (const field of ["baseSalary", "targetBonus", "annualBenefits", "bandMidpoint"] as const) {
     if (!Number.isFinite(input[field]) || input[field] < 0)
       errors[field] = "Enter a non-negative amount.";
   }
@@ -121,9 +108,7 @@ export function reduceCompensationState(
       ? { ...state, assumptionsApplied: true }
       : state;
   if (action.type === "recommend")
-    return state.assumptionsApplied
-      ? { ...state, decision: "recommended" }
-      : state;
+    return state.assumptionsApplied ? { ...state, decision: "recommended" } : state;
   if (action.type === "hold")
     return state.assumptionsApplied ? { ...state, decision: "held" } : state;
   if (action.type === "clear-decision") return { ...state, decision: "none" };
@@ -139,8 +124,6 @@ export function compensationDecisionModel(state: CompensationState) {
           ? "Draft kept for further review"
           : undefined,
     primaryLabel:
-      state.decision === "recommended"
-        ? "Recommended in preview"
-        : "Recommend for planning",
+      state.decision === "recommended" ? "Recommended in preview" : "Recommend for planning",
   };
 }

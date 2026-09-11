@@ -1,8 +1,5 @@
 import { validateBuildReadyAppSpec } from "../../lib/agent/app-spec-validation";
-import {
-  isProductFacing,
-  forbiddenPublicVocabulary,
-} from "./public-conversation";
+import { isProductFacing, forbiddenPublicVocabulary } from "./public-conversation";
 
 export type ProductQualityScenario = {
   id:
@@ -34,11 +31,7 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
         "vendor detail panel",
         "conditional Finance verification step",
       ],
-      inferredChoices: [
-        "vendor-onboarding",
-        "operations review queue",
-        "vendor detail panel",
-      ],
+      inferredChoices: ["vendor-onboarding", "operations review queue", "vendor detail panel"],
       question: "forbidden",
       prototype: {
         appId: "vendor-onboarding",
@@ -110,9 +103,7 @@ export function evaluateConversationQuality(input: {
   const messages = input.assistantMessages ?? [input.reply];
   const hardFailures: string[] = [];
   if (!messages.every(isProductFacing))
-    hardFailures.push(
-      "Conversation exposed internal orchestration vocabulary.",
-    );
+    hardFailures.push("Conversation exposed internal orchestration vocabulary.");
   if (messages.some((message) => forbiddenPublicVocabulary.test(message)))
     hardFailures.push("Conversation used forbidden public vocabulary.");
   for (const expected of input.scenario.expected.replyIncludes)
@@ -155,16 +146,14 @@ export function evaluatePrototypeQuality(input: {
   html: string;
   appSpec: string;
 }): PrototypeQualityReport {
-  const {prototype} = input.scenario.expected;
+  const { prototype } = input.scenario.expected;
   if (prototype === undefined)
     throw new Error("This product-quality scenario has no prototype contract.");
   const hardFailures: string[] = [];
   const require = (condition: boolean, message: string) => {
     if (!condition) hardFailures.push(message);
   };
-  require(/<html\s+lang=["']en["']/iu.test(
-    input.html,
-  ), "Prototype lacks a language.");
+  require(/<html\s+lang=["']en["']/iu.test(input.html), "Prototype lacks a language.");
   require(/<meta\s+name=["']viewport["']/iu.test(
     input.html,
   ), "Prototype lacks a responsive viewport.");
@@ -186,19 +175,14 @@ export function evaluatePrototypeQuality(input: {
     hardFailures,
     score: {
       semanticStructure:
-        /<main[\s>]/iu.test(input.html) &&
-        /<section\s+aria-labelledby=/iu.test(input.html),
+        /<main[\s>]/iu.test(input.html) && /<section\s+aria-labelledby=/iu.test(input.html),
       contentComplete: !/lorem ipsum|todo:|placeholder text/iu.test(input.html),
     },
   };
 }
 
-export function productQualityScenario(
-  id: ProductQualityScenario["id"],
-): ProductQualityScenario {
-  const scenario = PRODUCT_QUALITY_SCENARIOS.find(
-    (candidate) => candidate.id === id,
-  );
+export function productQualityScenario(id: ProductQualityScenario["id"]): ProductQualityScenario {
+  const scenario = PRODUCT_QUALITY_SCENARIOS.find((candidate) => candidate.id === id);
   if (scenario === undefined) throw new Error(`Unknown product eval ${id}.`);
   return scenario;
 }

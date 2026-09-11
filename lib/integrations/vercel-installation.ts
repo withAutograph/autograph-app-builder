@@ -9,10 +9,7 @@ import {
 
 import { z } from "zod";
 
-import {
-  hostedTenantAuthoritySchema,
-  type HostedAdminPlanRequest,
-} from "../db/hosted-admin";
+import { hostedTenantAuthoritySchema, type HostedAdminPlanRequest } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
 import type { ProviderEmulation } from "./local-provider-emulation";
 
@@ -35,10 +32,7 @@ export type VercelIntegrationConfig = z.infer<typeof configSchema>;
 export function readVercelIntegrationEnvironment(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): VercelIntegrationConfig {
-  const tokenKey = Buffer.from(
-    environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "",
-    "base64",
-  );
+  const tokenKey = Buffer.from(environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "", "base64");
   return configSchema.parse({
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
@@ -58,18 +52,18 @@ export type VercelAuthorizationStateStore = {
     createdAt: Date;
     expiresAt: Date;
     returnState: ProviderConnectionReturn;
-}) => Promise<void>;
+  }) => Promise<void>;
   consume: (input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
     now: Date;
-}) => Promise<ProviderConnectionReturn | undefined>;
+  }) => Promise<ProviderConnectionReturn | undefined>;
   recover: (input: {
     stateDigest: string;
     authority: Authority;
     authorityDigest: string;
-}) => Promise<ProviderConnectionReturn | undefined>;
+  }) => Promise<ProviderConnectionReturn | undefined>;
 };
 
 export class VercelInstallationAuthorizationError extends Error {
@@ -99,7 +93,7 @@ export type VercelInstallationStore = {
     binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
     token: string;
     now: Date;
-}) => Promise<VercelInstallationBinding>;
+  }) => Promise<VercelInstallationBinding>;
   deactivate: (installationId: string, now: Date) => Promise<number>;
 };
 
@@ -111,18 +105,11 @@ function authorityDigest(authority: Authority) {
   return digest(JSON.stringify(hostedTenantAuthoritySchema.parse(authority)));
 }
 
-export function encryptVercelToken(input: {
-  token: string;
-  key: Buffer;
-  associatedData: string;
-}) {
+export function encryptVercelToken(input: { token: string; key: Buffer; associatedData: string }) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
-  const encrypted = Buffer.concat([
-    cipher.update(input.token, "utf8"),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(input.token, "utf8"), cipher.final()]);
   return {
     encryptedToken: encrypted.toString("base64"),
     tokenIv: iv.toString("base64"),
@@ -137,11 +124,7 @@ export function decryptVercelToken(input: {
   key: Buffer;
   associatedData: string;
 }) {
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    input.key,
-    Buffer.from(input.tokenIv, "base64"),
-  );
+  const decipher = createDecipheriv("aes-256-gcm", input.key, Buffer.from(input.tokenIv, "base64"));
   decipher.setAAD(Buffer.from(input.associatedData));
   decipher.setAuthTag(Buffer.from(input.tokenTag, "base64"));
   return Buffer.concat([
@@ -150,9 +133,7 @@ export function decryptVercelToken(input: {
   ]).toString("utf8");
 }
 
-const tokenResponseSchema = z
-  .object({ access_token: z.string().min(1).max(8_192) })
-  .passthrough();
+const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8_192) }).passthrough();
 const teamSchema = z
   .object({
     id: z.string().min(1),
@@ -184,7 +165,7 @@ export function createVercelInstallationAuthorization(input: {
   config: VercelIntegrationConfig;
   states: VercelAuthorizationStateStore;
   installations: VercelInstallationStore;
-  membership: { isActiveMember: (authority: Authority) => Promise<boolean>; };
+  membership: { isActiveMember: (authority: Authority) => Promise<boolean> };
   fetch?: typeof fetch;
   now?: () => number;
   nonce?: () => string;
@@ -225,16 +206,8 @@ export function createVercelInstallationAuthorization(input: {
     async complete(callbackUrl: string, authorityInput: Authority) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       const url = new URL(callbackUrl);
-      const code = z
-        .string()
-        .min(1)
-        .max(2_048)
-        .parse(url.searchParams.get("code"));
-      const state = z
-        .string()
-        .min(32)
-        .max(512)
-        .parse(url.searchParams.get("state"));
+      const code = z.string().min(1).max(2_048).parse(url.searchParams.get("code"));
+      const state = z.string().min(32).max(512).parse(url.searchParams.get("state"));
       const installationId = z
         .string()
         .min(1)
@@ -288,15 +261,12 @@ export function createVercelInstallationAuthorization(input: {
           const errorPayload = z
             .object({ error: z.string().max(64).optional() })
             .safeParse(await tokenResponse.json().catch(() => ({})));
-          const errorCode = errorPayload.success
-            ? errorPayload.data.error
-            : undefined;
+          const errorCode = errorPayload.success ? errorPayload.data.error : undefined;
           throw new Error(
             `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`,
           );
         }
-        return tokenResponseSchema.parse(await tokenResponse.json())
-          .access_token;
+        return tokenResponseSchema.parse(await tokenResponse.json()).access_token;
       })();
       const headers = {
         Accept: "application/json",
@@ -358,11 +328,8 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature))
-    return false;
+  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) return false;
   const expected = createHmac("sha1", input.secret).update(input.body).digest();
   const provided = Buffer.from(input.signature, "hex");
-  return (
-    provided.length === expected.length && timingSafeEqual(provided, expected)
-  );
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }

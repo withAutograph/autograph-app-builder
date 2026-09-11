@@ -18,9 +18,7 @@ const config = hostedMcpAuthConfigSchema.parse({
 
 describe("hosted MCP request authentication", () => {
   it("accepts only one strict RFC 6750 Bearer value", () => {
-    expect(parseStrictBearerAuthorization("Bearer abc.DEF_-/~+==")).toBe(
-      "abc.DEF_-/~+==",
-    );
+    expect(parseStrictBearerAuthorization("Bearer abc.DEF_-/~+==")).toBe("abc.DEF_-/~+==");
     for (const value of [
       null,
       "Basic abc",
@@ -81,8 +79,7 @@ describe("hosted MCP request authentication", () => {
   it("verifies exact issuer, audience, algorithm, kid, time, scope, and workspace claims", async () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
     const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
-    const fetchCalls: Array<[string | URL | Request, RequestInit | undefined]> =
-      [];
+    const fetchCalls: Array<[string | URL | Request, RequestInit | undefined]> = [];
     const fetchImplementation: typeof fetch = async (url, options) => {
       fetchCalls.push([url, options]);
       return Response.json({ keys: [jwk] });
@@ -105,9 +102,7 @@ describe("hosted MCP request authentication", () => {
       .setExpirationTime(now + 60)
       .sign(privateKey);
 
-    await expect(
-      verifier.verify({ token, nowEpochSeconds: now }),
-    ).resolves.toEqual({
+    await expect(verifier.verify({ token, nowEpochSeconds: now })).resolves.toEqual({
       issuer: config.issuer,
       audience: config.audience,
       subject: "user-one",
@@ -161,9 +156,7 @@ describe("hosted MCP request authentication", () => {
       .setNotBefore(override.notBefore ?? now - 1)
       .setExpirationTime(override.expirationTime ?? now + 60);
     const token = await signer.sign(privateKey);
-    await expect(
-      verifier.verify({ token, nowEpochSeconds: now }),
-    ).rejects.toThrow();
+    await expect(verifier.verify({ token, nowEpochSeconds: now })).rejects.toThrow();
   });
 
   it("refuses JWKS redirects", async () => {
@@ -188,8 +181,8 @@ describe("hosted MCP request authentication", () => {
       .setNotBefore(1_999_999_999)
       .setExpirationTime(2_000_000_060)
       .sign(privateKey);
-    await expect(
-      verifier.verify({ token, nowEpochSeconds: 2_000_000_000 }),
-    ).rejects.toThrow("redirects");
+    await expect(verifier.verify({ token, nowEpochSeconds: 2_000_000_000 })).rejects.toThrow(
+      "redirects",
+    );
   });
 });

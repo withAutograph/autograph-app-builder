@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import {
-  assertExactReviewedChangeSet,
-  stableDigest,
-} from "./local-publication";
+import { assertExactReviewedChangeSet, stableDigest } from "./local-publication";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 
@@ -117,10 +114,7 @@ type TerminalBase = Omit<FreshBootstrapProposal, "digest"> & {
   previousLeaseMarkerDigest?: string;
 };
 
-export type FreshBootstrapPendingReceipt = Omit<
-  FreshBootstrapProposal,
-  "digest"
-> & {
+export type FreshBootstrapPendingReceipt = Omit<FreshBootstrapProposal, "digest"> & {
   proposalDigest: string;
   status: "pending";
   publishedByCallId: string;
@@ -198,13 +192,9 @@ export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
       !/^[0-9a-f]{40}$/u.test(file.blob) ||
       paths.has(file.path) ||
       components.some((component) =>
-        [".git", ".repository-bootstrap-claim"].includes(
-          component.toLowerCase(),
-        ),
+        [".git", ".repository-bootstrap-claim"].includes(component.toLowerCase()),
       ) ||
-      components.some((_, index) =>
-        paths.has(components.slice(0, index + 1).join("/")),
-      ) ||
+      components.some((_, index) => paths.has(components.slice(0, index + 1).join("/"))) ||
       [...paths].some((path) => path.startsWith(`${file.path}/`))
     )
       throw new Error("The fresh-bootstrap tree contains an unsafe entry.");
@@ -235,17 +225,12 @@ export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
         mode: "40000" as const,
         oid: walk(child),
       })),
-    ].toSorted((left, right) =>
-      Buffer.from(left.sort).compare(Buffer.from(right.sort)),
-    );
+    ].toSorted((left, right) => Buffer.from(left.sort).compare(Buffer.from(right.sort)));
     return sha1Object(
       "tree",
       Buffer.concat(
         entries.map(({ mode, name, oid }) =>
-          Buffer.concat([
-            Buffer.from(`${mode} ${name}\0`),
-            Buffer.from(oid, "hex"),
-          ]),
+          Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(oid, "hex")]),
         ),
       ),
     );
@@ -275,19 +260,14 @@ function commitActor(identity: FreshBootstrapIdentity): string {
   return `${identity.authorName} <${identity.authorEmail}> ${Math.floor(milliseconds / 1000)} ${offset[1]}${offset[2]}${offset[3]}`;
 }
 
-export function initialCommitId(input: {
-  tree: string;
-  identity: FreshBootstrapIdentity;
-}): string {
+export function initialCommitId(input: { tree: string; identity: FreshBootstrapIdentity }): string {
   const actor = commitActor(input.identity);
   const message = input.identity.commitMessage.endsWith("\n")
     ? input.identity.commitMessage
     : `${input.identity.commitMessage}\n`;
   return sha1Object(
     "commit",
-    Buffer.from(
-      `tree ${input.tree}\nauthor ${actor}\ncommitter ${actor}\n\n${message}`,
-    ),
+    Buffer.from(`tree ${input.tree}\nauthor ${actor}\ncommitter ${actor}\n\n${message}`),
   );
 }
 
@@ -402,14 +382,7 @@ function hasExactKeys(value: object, keys: readonly string[]): boolean {
   return JSON.stringify(observed) === JSON.stringify([...keys].toSorted());
 }
 
-const pathIdentityKeys = [
-  "path",
-  "device",
-  "inode",
-  "uid",
-  "mode",
-  "nlink",
-] as const;
+const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -438,17 +411,13 @@ function isExecutableIdentity(value: unknown): value is ExecutableIdentity {
   return (
     isRecord(value) &&
     hasExactKeys(value, executableIdentityKeys) &&
-    isPathIdentity(
-      Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]])),
-    ) &&
+    isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]]))) &&
     typeof value.sha256 === "string" &&
     /^[0-9a-f]{64}$/u.test(value.sha256)
   );
 }
 
-export function assertExactFreshBootstrapProposal(
-  proposal: FreshBootstrapProposal,
-): void {
+export function assertExactFreshBootstrapProposal(proposal: FreshBootstrapProposal): void {
   if (
     !isRecord(proposal) ||
     !isRecord(proposal.capability) ||
@@ -466,8 +435,7 @@ export function assertExactFreshBootstrapProposal(
     !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
     !isExecutableIdentity(proposal.capability.systemNodeIdentity) ||
     !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
-    (proposal.capability.lockStrategy !== "flock" &&
-      proposal.capability.lockStrategy !== "lockf")
+    (proposal.capability.lockStrategy !== "flock" && proposal.capability.lockStrategy !== "lockf")
   )
     throw new Error("The fresh-bootstrap proposal is not canonical V3.");
   if (
@@ -544,9 +512,7 @@ export function assertExactFreshBootstrapProposal(
       "commitMessage",
       "commitTimestamp",
     ]) ||
-    !proposal.exactTree.every((file) =>
-      hasExactKeys(file, ["path", "mode", "blob"]),
-    ) ||
+    !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
     proposal.releaseEnabled !== false ||
@@ -559,8 +525,7 @@ export function assertExactFreshBootstrapProposal(
       }) ||
     proposal.lockPath !==
       `${proposal.capability.stateRoot.path}/locks/${proposal.destinationLockDigest}.lock` ||
-    dirnameForComparison(proposal.stagingPath) !==
-      dirnameForComparison(proposal.destinationPath) ||
+    dirnameForComparison(proposal.stagingPath) !== dirnameForComparison(proposal.destinationPath) ||
     proposal.exactTreeDigest !== stableDigest(proposal.exactTree) ||
     proposal.expectedGitTree !== gitTreeId(proposal.exactTree) ||
     proposal.expectedInitialCommit !==
@@ -578,8 +543,7 @@ function dirnameForComparison(path: string): string {
   return index <= 0 ? "/" : path.slice(0, index);
 }
 
-export const freshBootstrapJournalDigest = (value: unknown) =>
-  stableDigest(value);
+export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
 
 export function proposalFromFreshBootstrapJournal(
   journal: FreshBootstrapJournal,
@@ -614,9 +578,7 @@ export function proposalFromFreshBootstrapJournal(
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 }
 
-export function assertCanonicalFreshBootstrapJournal(
-  journal: FreshBootstrapJournal,
-): void {
+export function assertCanonicalFreshBootstrapJournal(journal: FreshBootstrapJournal): void {
   if (
     !isRecord(journal) ||
     (journal.status !== "pending" &&
@@ -626,8 +588,7 @@ export function assertCanonicalFreshBootstrapJournal(
     journal.publishedByCallId.length === 0 ||
     journal.publishedByCallId.length > 512 ||
     typeof journal.leaseMarkerDigest !== "string" ||
-    (journal.recoveryOfDigest !== undefined &&
-      typeof journal.recoveryOfDigest !== "string") ||
+    (journal.recoveryOfDigest !== undefined && typeof journal.recoveryOfDigest !== "string") ||
     (journal.previousLeaseMarkerDigest !== undefined &&
       typeof journal.previousLeaseMarkerDigest !== "string") ||
     ((journal.status === "pending" || journal.status === "failed") &&
@@ -657,9 +618,7 @@ export function assertCanonicalFreshBootstrapJournal(
   const proposalKeys = Object.keys(canonicalProposal(proposal));
   const lineageKeys = [
     ...(journal.recoveryOfDigest === undefined ? [] : ["recoveryOfDigest"]),
-    ...(journal.previousLeaseMarkerDigest === undefined
-      ? []
-      : ["previousLeaseMarkerDigest"]),
+    ...(journal.previousLeaseMarkerDigest === undefined ? [] : ["previousLeaseMarkerDigest"]),
   ];
   const common = [
     ...proposalKeys,
@@ -688,9 +647,7 @@ export function assertCanonicalFreshBootstrapJournal(
               ...common,
               "destinationIdentity",
               "gitDirectoryIdentity",
-              ...(journal.swappedOldIdentity === undefined
-                ? []
-                : ["swappedOldIdentity"]),
+              ...(journal.swappedOldIdentity === undefined ? [] : ["swappedOldIdentity"]),
               "headReference",
               "headCommit",
               "headTree",
@@ -711,8 +668,7 @@ export function assertCanonicalFreshBootstrapJournal(
         !/^[0-9a-f]{64}$/u.test(journal.previousLeaseMarkerDigest!))) ||
     ((journal.status === "pending" || journal.status === "failed") &&
       (journal.stageCreated !== (journal.layout.phase !== "intent") ||
-        journal.destinationPublished !==
-          (journal.layout.phase === "published"))) ||
+        journal.destinationPublished !== (journal.layout.phase === "published"))) ||
     (journal.status === "failed" && journal.recoveryRequired !== true) ||
     (journal.status === "succeeded" &&
       (journal.recoveryRequired !== false ||
@@ -731,8 +687,7 @@ export function assertCanonicalFreshBootstrapJournal(
     if (journal.swappedOldIdentity !== undefined)
       assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");
     if (
-      journal.headReference !==
-        `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
+      journal.headReference !== `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
       journal.headCommit !== journal.expectedInitialCommit ||
       journal.headTree !== journal.expectedGitTree ||
       !/^[0-9a-f]{64}$/u.test(journal.remoteDigest) ||
@@ -753,9 +708,7 @@ function assertExactFreshBootstrapLayout(layout: FreshBootstrapLayout): void {
           ? [
               "phase",
               "destinationIdentity",
-              ...(layout.swappedOldIdentity === undefined
-                ? []
-                : ["swappedOldIdentity"]),
+              ...(layout.swappedOldIdentity === undefined ? [] : ["swappedOldIdentity"]),
             ]
           : [];
   if (!hasExactKeys(layout, keys))
@@ -783,7 +736,6 @@ export function exactFreshBootstrapProposalMatch(
 ): boolean {
   return (
     left.digest === right.digest &&
-    JSON.stringify(canonicalProposal(left)) ===
-      JSON.stringify(canonicalProposal(right))
+    JSON.stringify(canonicalProposal(left)) === JSON.stringify(canonicalProposal(right))
   );
 }

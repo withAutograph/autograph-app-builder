@@ -10,9 +10,7 @@ const secret = "github-webhook-secret-that-is-long-enough";
 
 function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   const bytes = JSON.stringify(body);
-  const signature = `sha256=${createHmac("sha256", signatureSecret)
-    .update(bytes)
-    .digest("hex")}`;
+  const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;
   return new Request("https://builder.example.test/api/github/webhooks", {
     method: "POST",
     headers: {

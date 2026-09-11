@@ -28,18 +28,11 @@ const content = {
   { title: string; description: string; action: string }
 >;
 
-export function WorkspaceOnboarding({
-  status,
-}: {
-  status: WorkspaceOnboardingFailure;
-}) {
+export function WorkspaceOnboarding({ status }: { status: WorkspaceOnboardingFailure }) {
   const message = content[status];
   return (
     <main className={styles.onboardingPage} id="main-content">
-      <section
-        className={styles.onboardingCard}
-        aria-labelledby="onboarding-title"
-      >
+      <section className={styles.onboardingCard} aria-labelledby="onboarding-title">
         <p className={styles.onboardingBrand}>Autograph</p>
         <h1 id="onboarding-title">{message.title}</h1>
         <p>{message.description}</p>

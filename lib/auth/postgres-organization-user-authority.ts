@@ -22,12 +22,7 @@ interface OrganizationRow {
 
 function resultRows<T>(input: unknown): readonly T[] {
   if (Array.isArray(input)) return input as T[];
-  if (
-    typeof input === "object" &&
-    input !== null &&
-    "rows" in input &&
-    Array.isArray(input.rows)
-  ) {
+  if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
     return input.rows as T[];
   }
   throw new Error("PostgreSQL returned an unsupported organization result.");
@@ -70,9 +65,7 @@ async function exactActiveOrganization(
   authority: { issuer: string; audience: string },
   userId: string,
 ) {
-  return oneAuthorizedOrganization(
-    await activeOrganizations(database, authority, userId),
-  );
+  return oneAuthorizedOrganization(await activeOrganizations(database, authority, userId));
 }
 
 function personalWorkspaceSlug(userId: string) {
@@ -85,8 +78,8 @@ function personalWorkspaceName(name: string) {
   return firstName ? `${firstName}’s Workspace` : "My Workspace";
 }
 
-export type PostgresPreviewOrganizationAuthority =
-  PreviewOrganizationUserAuthority & PreviewOAuthMembershipAuthority;
+export type PostgresPreviewOrganizationAuthority = PreviewOrganizationUserAuthority &
+  PreviewOAuthMembershipAuthority;
 
 /**
  * Better Auth organization authority used by login and OAuth token issuance.
@@ -121,7 +114,7 @@ export function createPostgresPreviewOrganizationAuthority(
           email_verified: boolean;
           banned: boolean | null;
         }>(userResult);
-    const [user] = users;
+        const [user] = users;
         if (users.length !== 1 || user === undefined) {
           throw new OrganizationProvisioningError("workspace-setup-failed");
         }
@@ -148,18 +141,13 @@ export function createPostgresPreviewOrganizationAuthority(
              where "user_id" = ${userId}
              limit 1
           `);
-          passkeyIdentity =
-            resultRows<{ id: string }>(passkeysResult).length === 1;
+          passkeyIdentity = resultRows<{ id: string }>(passkeysResult).length === 1;
         }
         if (!providerIdentity && !passkeyIdentity) {
           throw new OrganizationProvisioningError("verified-identity-required");
         }
 
-        const memberships = await activeOrganizations(
-          transaction,
-          authority,
-          userId,
-        );
+        const memberships = await activeOrganizations(transaction, authority, userId);
         if (memberships.length > 1) {
           throw new OrganizationProvisioningError("workspace-ambiguous");
         }
@@ -190,7 +178,7 @@ export function createPostgresPreviewOrganizationAuthority(
         if (invitations.length > 1) {
           throw new OrganizationProvisioningError("workspace-ambiguous");
         }
-    const [invitation] = invitations;
+        const [invitation] = invitations;
         if (invitation !== undefined) {
           const role = invitation.role ?? "member";
           if (!new Set(["owner", "admin", "member"]).has(role)) {
@@ -203,9 +191,7 @@ export function createPostgresPreviewOrganizationAuthority(
                and "status" = 'pending'
             returning "organization_id"
           `);
-          if (
-            resultRows<{ organization_id: string }>(acceptedResult).length !== 1
-          ) {
+          if (resultRows<{ organization_id: string }>(acceptedResult).length !== 1) {
             throw new OrganizationProvisioningError("workspace-setup-failed");
           }
           await transaction.execute(sql`
@@ -217,11 +203,7 @@ export function createPostgresPreviewOrganizationAuthority(
             )
             on conflict ("organization_id", "user_id") do nothing
           `);
-          const invitedMemberships = await activeOrganizations(
-            transaction,
-            authority,
-            userId,
-          );
+          const invitedMemberships = await activeOrganizations(transaction, authority, userId);
           const invited = oneAuthorizedOrganization(invitedMemberships);
           if (
             invitedMemberships.length !== 1 ||
@@ -239,15 +221,12 @@ export function createPostgresPreviewOrganizationAuthority(
            where "user_id" = ${userId}
            limit 2
         `);
-        if (
-          resultRows<{ organization_id: string }>(mappingResult).length !== 0
-        ) {
+        if (resultRows<{ organization_id: string }>(mappingResult).length !== 0) {
           throw new OrganizationProvisioningError("access-revoked");
         }
         let selfServiceSignupEnabled = false;
         try {
-          selfServiceSignupEnabled =
-            (await options.isSelfServiceSignupEnabled?.()) === true;
+          selfServiceSignupEnabled = (await options.isSelfServiceSignupEnabled?.()) === true;
         } catch {}
         if (!selfServiceSignupEnabled) {
           throw new OrganizationProvisioningError("signup-disabled");
@@ -276,11 +255,7 @@ export function createPostgresPreviewOrganizationAuthority(
             "user_id", "organization_id", "created_at"
           ) values (${userId}, ${organizationId}, clock_timestamp())
         `);
-        const createdMemberships = await activeOrganizations(
-          transaction,
-          authority,
-          userId,
-        );
+        const createdMemberships = await activeOrganizations(transaction, authority, userId);
         const created = oneAuthorizedOrganization(createdMemberships);
         if (
           createdMemberships.length !== 1 ||
@@ -297,8 +272,7 @@ export function createPostgresPreviewOrganizationAuthority(
       if (issuer !== authority.issuer || audience !== authority.audience) {
         return undefined;
       }
-      return (await exactActiveOrganization(database, authority, ownerUserId))
-        ?.workspaceId;
+      return (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId;
     },
 
     async isActiveMember({ issuer, audience, workspaceId, ownerUserId }) {
@@ -306,8 +280,8 @@ export function createPostgresPreviewOrganizationAuthority(
         return false;
       }
       return (
-        (await exactActiveOrganization(database, authority, ownerUserId))
-          ?.workspaceId === workspaceId
+        (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId ===
+        workspaceId
       );
     },
   };

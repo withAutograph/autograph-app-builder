@@ -9,9 +9,7 @@ import {
 
 describe("passkeyClientError", () => {
   it("accepts successful Better Auth passkey responses", () => {
-    expect(
-      passkeyClientError({ data: { session: {} }, error: null }),
-    ).toBeNull();
+    expect(passkeyClientError({ data: { session: {} }, error: null })).toBeNull();
   });
 
   it("turns resolved WebAuthn cancellation responses into errors", () => {
@@ -46,9 +44,7 @@ describe("passkey onboarding conflict detection", () => {
       message: "The current session is already authenticated.",
     };
 
-    expect(passkeyErrorCode(response)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
-    );
+    expect(passkeyErrorCode(response)).toBe(PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED);
     expect(isPasskeyOnboardingAlreadyAuthenticated(response)).toBe(true);
   });
 
@@ -61,9 +57,7 @@ describe("passkey onboarding conflict detection", () => {
       },
     };
 
-    expect(passkeyErrorCode(result)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
-    );
+    expect(passkeyErrorCode(result)).toBe(PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED);
     expect(isPasskeyOnboardingAlreadyAuthenticated(result)).toBe(true);
   });
 
@@ -77,9 +71,7 @@ describe("passkey onboarding conflict detection", () => {
       },
     });
 
-    expect(passkeyErrorCode(error)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
-    );
+    expect(passkeyErrorCode(error)).toBe(PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED);
     expect(isPasskeyOnboardingAlreadyAuthenticated(error)).toBe(true);
   });
 

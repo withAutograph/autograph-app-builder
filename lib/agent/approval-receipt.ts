@@ -1,9 +1,7 @@
 import { z } from "zod";
 import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 
-export const gitObjectIdSchema = z
-  .string()
-  .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
+export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -89,12 +87,8 @@ export function assertApprovalReceipt(input: {
   return actual;
 }
 
-export function publicApprovalDescription(
-  input: unknown,
-  toolName?: string,
-): string | undefined {
-  if (typeof input !== "object" || input === null || Array.isArray(input))
-    return undefined;
+export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined;
   const record = input as Record<string, unknown>;
   if (Object.hasOwn(record, "approvalReceipt")) {
     const parsed = approvalReceiptSchema.safeParse(record.approvalReceipt);
@@ -106,8 +100,7 @@ export function publicApprovalDescription(
           : toolName === "publish_github_draft_pr"
             ? "publication"
             : undefined;
-    return parsed.success &&
-      (expectedPhase === undefined || parsed.data.phase === expectedPhase)
+    return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)
       ? JSON.stringify(parsed.data)
       : undefined;
   }
@@ -194,8 +187,7 @@ export function approvalRequestDecision(input: {
   } catch {
     return {
       type: "denied",
-      reason:
-        "The GitHub-bound approval receipt is missing, stale, or for the wrong phase.",
+      reason: "The GitHub-bound approval receipt is missing, stale, or for the wrong phase.",
     };
   }
 }

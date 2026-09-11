@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  docs,
-  docsHref,
-  getAdjacentDocuments,
-  getDocument,
-} from "./docs-registry";
+import { docs, docsHref, getAdjacentDocuments, getDocument } from "./docs-registry";
 
 describe("documentation registry", () => {
   it("publishes the curated newcomer journey in a stable order", () => {
@@ -16,9 +11,7 @@ describe("documentation registry", () => {
       "create-an-app",
       "troubleshooting",
     ]);
-    expect(new Set(docs.map((document) => document.slug))).toHaveLength(
-      docs.length
-    );
+    expect(new Set(docs.map((document) => document.slug))).toHaveLength(docs.length);
   });
 
   it("uses only public documentation URLs", () => {

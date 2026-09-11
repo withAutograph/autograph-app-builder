@@ -2,9 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-const repositorySchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
+const repositorySchema = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
 const localOrigin = z
   .string()
@@ -12,10 +10,8 @@ const localOrigin = z
   .transform((value, context) => {
     const url = new URL(value);
     const local =
-      (url.protocol === "http:" &&
-        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
-      (url.protocol === "https:" &&
-        url.hostname.endsWith(".emulate.localhost"));
+      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
+      (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
     if (!local || url.pathname !== "/" || url.search || url.hash)
       context.addIssue({
         code: "custom",
@@ -41,9 +37,7 @@ const vercelHost = z
     return `https://${normalized}`;
   });
 
-export function readVercelPreviewOrigin(
-  hostname: string | undefined,
-): string | undefined {
+export function readVercelPreviewOrigin(hostname: string | undefined): string | undefined {
   return hostname === undefined ? undefined : vercelHost.parse(hostname);
 }
 
@@ -76,8 +70,7 @@ export type PreviewProviderEmulation = SharedProviderEmulation & {
   branch: string;
 };
 
-export type ProviderEmulation =
-  LocalProviderEmulation | PreviewProviderEmulation;
+export type ProviderEmulation = LocalProviderEmulation | PreviewProviderEmulation;
 
 export function previewEmulationNamespace(input: {
   repository: string;
@@ -90,8 +83,7 @@ export function previewEmulationNamespace(input: {
 export function readPreviewProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): PreviewProviderEmulation | undefined {
-  if (environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === undefined)
-    return undefined;
+  if (environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === undefined) return undefined;
   if (
     environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
     environment.VERCEL_ENV !== "preview" ||
@@ -118,8 +110,7 @@ export function readPreviewProviderEmulation(
       branch: environment.VERCEL_GIT_COMMIT_REF,
       repository: environment.VERCEL_GIT_REPO_SLUG,
       project: environment.VERCEL_PROJECT_ID,
-      githubRepository:
-        environment.EMULATE_GITHUB_REPOSITORY ?? "autograph-local/demo-app",
+      githubRepository: environment.EMULATE_GITHUB_REPOSITORY ?? "autograph-local/demo-app",
       relaySecret: environment.EMULATE_PREVIEW_RELAY_SECRET,
       githubClientId: environment.EMULATE_PREVIEW_GITHUB_CLIENT_ID,
       githubClientSecret: environment.EMULATE_PREVIEW_GITHUB_CLIENT_SECRET,
@@ -148,8 +139,7 @@ export function readPreviewProviderEmulation(
 export function readLocalProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): LocalProviderEmulation | undefined {
-  if (environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === undefined)
-    return undefined;
+  if (environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === undefined) return undefined;
   if (
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1" ||
     environment.NODE_ENV === "production" ||
@@ -190,8 +180,7 @@ export function readProviderEmulation(
 ): ProviderEmulation | undefined {
   const local = readLocalProviderEmulation(environment);
   const preview = readPreviewProviderEmulation(environment);
-  if (local && preview)
-    throw new Error("Provider emulation mode is ambiguous.");
+  if (local && preview) throw new Error("Provider emulation mode is ambiguous.");
   return local ?? preview;
 }
 
@@ -200,8 +189,7 @@ export function providerEmulationEnvironment(
 ) {
   const emulation = readProviderEmulation(environment);
   if (!emulation) return environment;
-  if (emulation.mode === "local")
-    return { ...environment, APP_ORIGIN: emulation.canonicalOrigin };
+  if (emulation.mode === "local") return { ...environment, APP_ORIGIN: emulation.canonicalOrigin };
   return {
     ...environment,
     APP_ORIGIN: emulation.canonicalOrigin,

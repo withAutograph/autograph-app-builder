@@ -2,10 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { inspectTargetExecutionReadiness } from "@/lib/agent/target-execution";
-import {
-  appBuilderWorkflowState,
-  assertUpstreamMutationAllowed,
-} from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, assertUpstreamMutationAllowed } from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description:
@@ -15,10 +12,7 @@ export default defineTool({
   }),
   async execute({ expectedProposalDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
-    assertUpstreamMutationAllowed(
-      current,
-      "target execution readiness inspection",
-    );
+    assertUpstreamMutationAllowed(current, "target execution readiness inspection");
     if (
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&

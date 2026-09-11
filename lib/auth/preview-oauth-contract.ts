@@ -65,10 +65,7 @@ export const previewMcpScopes = [
   "autograph:cancel",
 ] as const;
 
-export const previewOAuthScopes = [
-  ...previewMcpScopes,
-  "offline_access",
-] as const;
+export const previewOAuthScopes = [...previewMcpScopes, "offline_access"] as const;
 
 const refreshTokenLifetimeSeconds = 60 * 60 * 8;
 
@@ -77,13 +74,13 @@ export interface PreviewOAuthMembershipAuthority {
     issuer: string;
     audience: string;
     ownerUserId: string;
-}) => Promise<string | undefined>;
+  }) => Promise<string | undefined>;
   isActiveMember: (input: {
     issuer: string;
     audience: string;
     workspaceId: string;
     ownerUserId: string;
-}) => Promise<boolean>;
+  }) => Promise<boolean>;
 }
 
 /**
@@ -143,9 +140,7 @@ export function buildPreviewMcpOAuthOptions(input: {
           ownerUserId: user.id,
         });
         if (workspaceId === undefined) {
-          throw new Error(
-            "Preview OAuth requires exactly one active workspace membership.",
-          );
+          throw new Error("Preview OAuth requires exactly one active workspace membership.");
         }
         return false;
       },
@@ -156,9 +151,7 @@ export function buildPreviewMcpOAuthOptions(input: {
           ownerUserId: user.id,
         });
         if (workspaceId === undefined) {
-          throw new Error(
-            "Preview OAuth requires exactly one active workspace membership.",
-          );
+          throw new Error("Preview OAuth requires exactly one active workspace membership.");
         }
         return workspaceId;
       },
@@ -214,9 +207,7 @@ export function buildPreviewCimdOptions(input: {
         return response;
       }
       if (record.token_endpoint_auth_method !== "none") {
-        throw new Error(
-          "Preview CIMD clients must use token_endpoint_auth_method none.",
-        );
+        throw new Error("Preview CIMD clients must use token_endpoint_auth_method none.");
       }
       return response;
     },

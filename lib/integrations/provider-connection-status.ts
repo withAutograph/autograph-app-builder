@@ -7,9 +7,7 @@ export const providerConnectionFailureReasonSchema = z.enum([
   "callback-invalid",
 ]);
 
-export type ProviderConnectionFailureReason = z.infer<
-  typeof providerConnectionFailureReasonSchema
->;
+export type ProviderConnectionFailureReason = z.infer<typeof providerConnectionFailureReasonSchema>;
 
 export type ProviderConnectionNotice = {
   provider: "github" | "vercel";

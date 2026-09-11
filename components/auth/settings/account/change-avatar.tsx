@@ -25,8 +25,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
   const { authClient, localization, avatar } = useAuth();
   const { data: session } = useSession(authClient);
 
-  const { mutate: updateUser, isPending: updatePending } =
-    useUpdateUser(authClient);
+  const { mutate: updateUser, isPending: updatePending } = useUpdateUser(authClient);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -43,18 +42,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(true);
 
     try {
-      const resized =
-        (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
+      const resized = (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
 
-      const image =
-        (await avatar.upload?.(resized)) ||
-        (await fileToAvatarDataUrl(resized));
+      const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
 
       updateUser(
         { image },
         {
-          onSuccess: () =>
-            toast.success(localization.settings.avatarChangedSuccess),
+          onSuccess: () => toast.success(localization.settings.avatarChangedSuccess),
         },
       );
     } catch (error) {

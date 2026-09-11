@@ -50,10 +50,7 @@ class TestEventSource {
     TestEventSource.instances.push(this);
   }
 
-  addEventListener(
-    name: string,
-    listener: (event: MessageEvent<string>) => void,
-  ) {
+  addEventListener(name: string, listener: (event: MessageEvent<string>) => void) {
     const listeners = this.listeners.get(name) ?? new Set();
     listeners.add(listener);
     this.listeners.set(name, listeners);
@@ -74,9 +71,8 @@ class TestEventSource {
   }
 }
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -86,9 +82,7 @@ async function render(initial = projection(1)) {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root?.render(
-      <HandoffProvisioningProgress handoffId={handoffId} initial={initial} />,
-    );
+    root?.render(<HandoffProvisioningProgress handoffId={handoffId} initial={initial} />);
   });
 }
 
@@ -107,10 +101,7 @@ describe("HandoffProvisioningProgress", () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();
 
-    expect(actions.continue).toHaveBeenCalledWith(
-      undefined,
-      { handoffId },
-    );
+    expect(actions.continue).toHaveBeenCalledWith(undefined, { handoffId });
     const stream = TestEventSource.instances[0]!;
     expect(stream.url).toBe(
       `/api/builder/provision/stream?requestId=${encodeURIComponent(requestId)}`,

@@ -18,10 +18,7 @@ describe("sandbox backend selection", () => {
           localImageConfigured: true,
         }),
       ).toEqual({
-        kind:
-          environmentName === "preview"
-            ? "vercel-preview"
-            : "vercel-production",
+        kind: environmentName === "preview" ? "vercel-preview" : "vercel-production",
         blockers: [],
       });
     },
@@ -66,9 +63,7 @@ describe("sandbox backend selection", () => {
       }),
     ).toEqual({
       kind: "unsupported-development",
-      blockers: [
-        "Development execution requires the exact local Vercel Sandbox binding.",
-      ],
+      blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
     });
     expect(() =>
       selectSandboxDefinition("unsupported-development", {

@@ -30,8 +30,7 @@ export async function resolveRepositoryAccessForTool(
     }
 > {
   const access = await runtime.classify(input);
-  if (access.status === "scope-selection-required")
-    return { kind: "selection", access };
+  if (access.status === "scope-selection-required") return { kind: "selection", access };
   if (access.status === "provider-unavailable")
     throw new ConnectionAuthorizationFailedError("github-repository-access", {
       reason: "provider_unavailable",
@@ -82,7 +81,6 @@ export async function resolveRepositoryAccessForTool(
     });
     return recorded;
   });
-  if (recorded === undefined)
-    throw new Error("Confirmed repository access was not recorded.");
+  if (recorded === undefined) throw new Error("Confirmed repository access was not recorded.");
   return { kind: "ready", access: confirmed, receipt: recorded };
 }

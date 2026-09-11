@@ -15,10 +15,7 @@ import {
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
-import {
-  assertApprovalReceipt,
-  type ApprovalReceipt,
-} from "./approval-receipt";
+import { assertApprovalReceipt, type ApprovalReceipt } from "./approval-receipt";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
@@ -60,26 +57,26 @@ export interface GitHubPublicationRuntime {
     expectedSha: string;
     expectedTree: string;
     approvedByCallId: string;
-}) => Promise<ImmutableGitHubSourceReceipt>;
+  }) => Promise<ImmutableGitHubSourceReceipt>;
   sealDraftPullRequestProposal: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
     source: SourceReceiptEvidence;
     review: ReviewedChangeSetReceipt;
     title: string;
-}) => Promise<DraftPullRequestProposal>;
+  }) => Promise<DraftPullRequestProposal>;
   createFreshRepository: (input: {
     expectedProposalDigest: string;
     review: ReviewedChangeSetReceipt;
     contentSource: GitHubFreshRepositoryContentSource;
     approvedByCallId: string;
-}) => Promise<FreshRepositorySuccessReceipt>;
+  }) => Promise<FreshRepositorySuccessReceipt>;
   publishDraftPullRequest: (input: {
     expectedProposalDigest: string;
     approvalReceipt: ApprovalReceipt;
     review: ReviewedChangeSetReceipt;
     contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
-}) => Promise<DraftPullRequestSuccessReceipt>;
+  }) => Promise<DraftPullRequestSuccessReceipt>;
 }
 
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
@@ -157,9 +154,9 @@ export function composeGitHubPublicationRuntime(input: {
       "GitHub publication cannot be enabled without its typed adapter and durable stores.",
     );
   }
-  const {adapter} = input;
-  const {proposals} = input;
-  const {receipts} = input;
+  const { adapter } = input;
+  const { proposals } = input;
+  const { receipts } = input;
   return {
     async status() {
       return runtimeStatus(true);
@@ -181,9 +178,7 @@ export function composeGitHubPublicationRuntime(input: {
         repositoryId: request.githubSource.repository.repositoryId,
         ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
       });
-      const installation = await adapter.inspectInstallation(
-        "publish-draft-pull-request",
-      );
+      const installation = await adapter.inspectInstallation("publish-draft-pull-request");
       const proposal = createDraftPullRequestProposal({
         installation,
         repository,
@@ -201,9 +196,7 @@ export function composeGitHubPublicationRuntime(input: {
         proposal.digest !== request.expectedProposalDigest ||
         proposal.intendedOutcome !== "create-private-fresh-history-repository"
       ) {
-        throw new Error(
-          "The exact fresh-repository proposal is unavailable or changed.",
-        );
+        throw new Error("The exact fresh-repository proposal is unavailable or changed.");
       }
       return createApprovedFreshRepository({
         adapter,
@@ -219,12 +212,9 @@ export function composeGitHubPublicationRuntime(input: {
       if (
         proposal === undefined ||
         proposal.digest !== request.expectedProposalDigest ||
-        proposal.intendedOutcome !==
-          "publish-reviewed-change-set-as-draft-pull-request"
+        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
       ) {
-        throw new Error(
-          "The exact draft-pull-request proposal is unavailable or changed.",
-        );
+        throw new Error("The exact draft-pull-request proposal is unavailable or changed.");
       }
       assertApprovalReceipt({
         actual: request.approvalReceipt,

@@ -41,9 +41,8 @@ ${renewalReviewDesignPrompt}`);
           };
           return (
             (manifest.productionComponents?.length ?? 0) >= 4 &&
-            manifest.productionCompositions?.some(
-              ({ name }) => name === "DataTableComposition",
-            ) === true &&
+            manifest.productionCompositions?.some(({ name }) => name === "DataTableComposition") ===
+              true &&
             (manifest.assumptions?.length ?? 0) === 1 &&
             (manifest.decisions?.length ?? 0) === 0 &&
             (manifest.openQuestions?.length ?? 0) === 1
@@ -68,9 +67,7 @@ ${renewalReviewDesignPrompt}`);
       satisfies(
         (reply) =>
           isProductFacing(reply) &&
-          !/implementation plan|Context|Draft spec|manifest|receipt/iu.test(
-            String(reply),
-          ),
+          !/implementation plan|Context|Draft spec|manifest|receipt/iu.test(String(reply)),
         "the review remains product-facing and exposes no internal workbench material",
       ),
     );

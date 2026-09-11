@@ -124,14 +124,10 @@ export const hostedPreviewActivationReceiptSchema = z
   })
   .strict();
 
-export type HostedPreviewActivationReceipt = z.infer<
-  typeof hostedPreviewActivationReceiptSchema
->;
+export type HostedPreviewActivationReceipt = z.infer<typeof hostedPreviewActivationReceiptSchema>;
 
 function digest(value: unknown): `sha256:${string}` {
-  return `sha256:${createHash("sha256")
-    .update(JSON.stringify(value))
-    .digest("hex")}`;
+  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
 export function buildHostedPreviewSourceConfigurationReceipt(input: {
@@ -139,9 +135,7 @@ export function buildHostedPreviewSourceConfigurationReceipt(input: {
   sourceTree: string;
   configuration: unknown;
 }): HostedPreviewSourceConfigurationReceipt {
-  const configuration = hostedPreviewConfigurationSchema.parse(
-    input.configuration,
-  );
+  const configuration = hostedPreviewConfigurationSchema.parse(input.configuration);
   return hostedPreviewSourceConfigurationReceiptSchema.parse({
     version: 1,
     runtime: "hosted-preview",

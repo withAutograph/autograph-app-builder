@@ -36,8 +36,7 @@ const cssLiteral =
   /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/g;
 const structuralLiteral =
   /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
-const autographUiImport =
-  /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
+const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
 
 function unique(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -66,9 +65,7 @@ export function parseTokens(css: string): Record<string, string> {
     return result;
   };
 
-  return Object.fromEntries(
-    Object.keys(declared).map((name) => [name, resolve(name)]),
-  );
+  return Object.fromEntries(Object.keys(declared).map((name) => [name, resolve(name)]));
 }
 
 function isSemanticToken(name: string): boolean {
@@ -91,35 +88,24 @@ function collectCssLiterals(text: string, destination: string[]) {
 
 function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
   if (!attribute.initializer) return undefined;
-  if (ts.isStringLiteral(attribute.initializer))
-    return attribute.initializer.text;
-  if (
-    !ts.isJsxExpression(attribute.initializer) ||
-    !attribute.initializer.expression
-  )
+  if (ts.isStringLiteral(attribute.initializer)) return attribute.initializer.text;
+  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression)
     return undefined;
-  const {expression} = attribute.initializer;
-  if (
-    ts.isStringLiteral(expression) ||
-    ts.isNoSubstitutionTemplateLiteral(expression)
-  )
+  const { expression } = attribute.initializer;
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
     return expression.text;
   if (ts.isNumericLiteral(expression)) return expression.text;
   return undefined;
 }
 
-function collectStyleExpression(
-  expression: ts.Expression,
-  destination: string[],
-) {
+function collectStyleExpression(expression: ts.Expression, destination: string[]) {
   if (!ts.isObjectLiteralExpression(expression)) return;
   for (const property of expression.properties) {
     if (!ts.isPropertyAssignment(property)) continue;
     const value = property.initializer;
     if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))
       collectCssLiterals(value.text, destination);
-    else if (ts.isNumericLiteral(value))
-      collectCssLiterals(value.text, destination);
+    else if (ts.isNumericLiteral(value)) collectCssLiterals(value.text, destination);
   }
 }
 
@@ -127,17 +113,12 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   if (ts.isIdentifier(tag)) return tag.text;
   // TypeScript represents `<Icons.Check />` as a PropertyAccessExpression.
   if (!ts.isPropertyAccessExpression(tag)) return undefined;
-  let {expression} = tag;
-  while (ts.isPropertyAccessExpression(expression))
-    ({ expression } = expression);
+  let { expression } = tag;
+  while (ts.isPropertyAccessExpression(expression)) ({ expression } = expression);
   return ts.isIdentifier(expression) ? expression.text : undefined;
 }
 
-function collectCssFile(
-  content: string,
-  tokenRefs: string[],
-  literals: string[],
-) {
+function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
   postcss.parse(content).walkDecls((declaration) => {
     collectVarReferences(declaration.value, tokenRefs);
     collectCssLiterals(declaration.value, literals);
@@ -157,21 +138,13 @@ function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
   return jsxAttributeText(attribute);
 }
 
-function literalKind(
-  attribute: ts.JsxAttribute,
-): "string" | "number" | "boolean" | undefined {
+function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean" | undefined {
   if (!attribute.initializer) return "boolean";
   if (ts.isStringLiteral(attribute.initializer)) return "string";
-  if (
-    !ts.isJsxExpression(attribute.initializer) ||
-    !attribute.initializer.expression
-  )
+  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression)
     return undefined;
-  const {expression} = attribute.initializer;
-  if (
-    ts.isStringLiteral(expression) ||
-    ts.isNoSubstitutionTemplateLiteral(expression)
-  )
+  const { expression } = attribute.initializer;
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
     return "string";
   if (ts.isNumericLiteral(expression)) return "number";
   if (
@@ -185,11 +158,7 @@ function literalKind(
 function containsJsx(node: ts.Node): boolean {
   let found = false;
   const inspect = (child: ts.Node) => {
-    if (
-      ts.isJsxElement(child) ||
-      ts.isJsxSelfClosingElement(child) ||
-      ts.isJsxFragment(child)
-    ) {
+    if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
       found = true;
       return;
     }
@@ -211,15 +180,11 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
   const entries: ts.Node[] = [];
   for (const statement of source.statements) {
     const exported = Boolean(
-      ts.getCombinedModifierFlags(statement as unknown as ts.Declaration) &
-      ts.ModifierFlags.Export,
+      ts.getCombinedModifierFlags(statement as unknown as ts.Declaration) & ts.ModifierFlags.Export,
     );
     if (
       ts.isFunctionDeclaration(statement) &&
-      (exported ||
-        statement.modifiers?.some(
-          (m) => m.kind === ts.SyntaxKind.DefaultKeyword,
-        ))
+      (exported || statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
     )
       entries.push(statement);
     if (ts.isVariableStatement(statement) && exported) entries.push(statement);
@@ -296,10 +261,7 @@ export function analyzeSource({
     : undefined;
   if (typedJsx) limitations.push(...typedJsx.limitations);
   const typedAttributes = new Map(
-    typedJsx?.attributes.map((attribute) => [
-      `${attribute.path}:${attribute.start}`,
-      attribute,
-    ]),
+    typedJsx?.attributes.map((attribute) => [`${attribute.path}:${attribute.start}`, attribute]),
   );
   const implementationDiagnostics = [
     ...new Map(
@@ -311,9 +273,7 @@ export function analyzeSource({
   ];
   const reachableCss = new Set<string>();
   const referencedClasses = new Set<string>();
-  for (const file of files.filter(
-    (candidate) => !/\.css$/i.test(candidate.path),
-  )) {
+  for (const file of files.filter((candidate) => !/\.css$/i.test(candidate.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,
@@ -322,9 +282,7 @@ export function analyzeSource({
       ts.ScriptKind.TSX,
     );
     if (!exportedEntries(source).length) continue;
-    for (const match of file.content.matchAll(
-      /className\s*=\s*["']([^"']+)["']/g,
-    ))
+    for (const match of file.content.matchAll(/className\s*=\s*["']([^"']+)["']/g))
       for (const name of match[1].split(/\s+/))
         if (name && !name.includes("[")) referencedClasses.add(name);
     for (const statement of source.statements)
@@ -334,12 +292,7 @@ export function analyzeSource({
         /\.css$/i.test(statement.moduleSpecifier.text)
       )
         reachableCss.add(
-          posix.normalize(
-            posix.join(
-              posix.dirname(file.path),
-              statement.moduleSpecifier.text,
-            ),
-          ),
+          posix.normalize(posix.join(posix.dirname(file.path), statement.moduleSpecifier.text)),
         );
   }
 
@@ -357,12 +310,9 @@ export function analyzeSource({
       const css = postcss.parse(file.content, { from: file.path });
       css.walkDecls((declaration) => {
         const selector =
-          declaration.parent?.type === "rule"
-            ? declaration.parent.selector
-            : undefined;
+          declaration.parent?.type === "rule" ? declaration.parent.selector : undefined;
         const selectorUsed =
-          !selector ||
-          [...referencedClasses].some((name) => selector.includes(`.${name}`));
+          !selector || [...referencedClasses].some((name) => selector.includes(`.${name}`));
         const source = declaration.source?.start
           ? {
               path: file.path,
@@ -433,8 +383,7 @@ export function analyzeSource({
     const usedInJsx = new Set<string>();
 
     for (const statement of source.statements) {
-      if (!ts.isImportDeclaration(statement) || !statement.importClause)
-        continue;
+      if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
       if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
       const moduleSource = statement.moduleSpecifier.text;
       const bindings = statement.importClause.namedBindings;
@@ -447,8 +396,7 @@ export function analyzeSource({
           });
         else unresolvedImports.add(statement.importClause.name.text);
       if (bindings && ts.isNamespaceImport(bindings))
-        if (isAutograph)
-          imported.set(bindings.name.text, { source: moduleSource, name: "*" });
+        if (isAutograph) imported.set(bindings.name.text, { source: moduleSource, name: "*" });
         else unresolvedImports.add(bindings.name.text);
       if (bindings && ts.isNamedImports(bindings))
         for (const item of bindings.elements)
@@ -460,24 +408,13 @@ export function analyzeSource({
           else unresolvedImports.add(item.name.text);
     }
     for (const statement of source.statements) {
-      if (
-        ts.isFunctionDeclaration(statement) &&
-        statement.name &&
-        containsNativeControl(statement)
-      )
+      if (ts.isFunctionDeclaration(statement) && statement.name && containsNativeControl(statement))
         localDeclarations.add(statement.name.text);
-      if (
-        ts.isClassDeclaration(statement) &&
-        statement.name &&
-        containsNativeControl(statement)
-      )
+      if (ts.isClassDeclaration(statement) && statement.name && containsNativeControl(statement))
         localDeclarations.add(statement.name.text);
       if (ts.isVariableStatement(statement))
         for (const declaration of statement.declarationList.declarations)
-          if (
-            ts.isIdentifier(declaration.name) &&
-            containsNativeControl(declaration)
-          )
+          if (ts.isIdentifier(declaration.name) && containsNativeControl(declaration))
             localDeclarations.add(declaration.name.text);
     }
 
@@ -501,10 +438,7 @@ export function analyzeSource({
         if (node.elseStatement) visit(node.elseStatement);
         return;
       }
-      if (
-        ts.isConditionalExpression(node) &&
-        isStaticallyFalse(node.condition)
-      ) {
+      if (ts.isConditionalExpression(node) && isStaticallyFalse(node.condition)) {
         visit(node.whenFalse);
         return;
       }
@@ -554,14 +488,8 @@ export function analyzeSource({
           const text = jsxAttributeText(attribute);
           if (name === "className" && text) {
             for (const bracketed of text.matchAll(/\[([^\]]+)\]/g)) {
-              const prefix =
-                text.slice(0, bracketed.index).split(/\s/).at(-1) ?? "";
-              if (
-                /(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/.test(
-                  prefix,
-                )
-              )
-                continue;
+              const prefix = text.slice(0, bracketed.index).split(/\s/).at(-1) ?? "";
+              if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/.test(prefix)) continue;
               collectCssLiterals(bracketed[1], literals);
               const refs: string[] = [];
               collectVarReferences(bracketed[1], refs);
@@ -570,16 +498,12 @@ export function analyzeSource({
                   observation(
                     `styling:class-var:${file.path}:${attribute.getStart(source)}:${ref}`,
                     "styling",
-                    item &&
-                      /(?:^|:)(?:bg|text|border)-$/.test(prefix) &&
-                      ref.startsWith("--color-")
+                    item && /(?:^|:)(?:bg|text|border)-$/.test(prefix) && ref.startsWith("--color-")
                       ? "nonconforming"
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? "conforming"
                         : "unassessed",
-                    item &&
-                      /(?:^|:)(?:bg|text|border)-$/.test(prefix) &&
-                      ref.startsWith("--color-")
+                    item && /(?:^|:)(?:bg|text|border)-$/.test(prefix) && ref.startsWith("--color-")
                       ? `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? `className uses declared semantic token ${ref}.`
@@ -617,8 +541,7 @@ export function analyzeSource({
             attribute.initializer.expression &&
             ts.isObjectLiteralExpression(attribute.initializer.expression)
           )
-            for (const property of attribute.initializer.expression
-              .properties) {
+            for (const property of attribute.initializer.expression.properties) {
               if (!ts.isPropertyAssignment(property)) continue;
               const value = property.initializer;
               if (
@@ -645,18 +568,12 @@ export function analyzeSource({
                   observation(
                     `styling:style-var:${file.path}:${property.getStart(source)}:${ref}`,
                     "styling",
-                    item &&
-                      /^(?:color|background|border)/i.test(
-                        property.name.getText(source),
-                      )
+                    item && /^(?:color|background|border)/i.test(property.name.getText(source))
                       ? "nonconforming"
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? "conforming"
                         : "unassessed",
-                    item &&
-                      /^(?:color|background|border)/i.test(
-                        property.name.getText(source),
-                      )
+                    item && /^(?:color|background|border)/i.test(property.name.getText(source))
                       ? `Public ${item.name} receives a generated color treatment override.`
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? `style uses declared semantic token ${ref}.`
@@ -668,8 +585,7 @@ export function analyzeSource({
               const styleLiterals: string[] = [];
               collectCssLiterals(value.text, styleLiterals);
               for (const literal of styleLiterals) {
-                if (isStructuralProperty(property.name.getText(source)))
-                  continue;
+                if (isStructuralProperty(property.name.getText(source))) continue;
                 observations.push(
                   observation(
                     `styling:style-literal:${file.path}:${property.getStart(source)}:${literal}`,
@@ -683,8 +599,7 @@ export function analyzeSource({
               }
             }
           if (item && reference) {
-            const declaration =
-              reference.modules[item.source]?.exports[item.name];
+            const declaration = reference.modules[item.source]?.exports[item.name];
             if (!declaration) {
               observations.push(
                 observation(
@@ -707,11 +622,7 @@ export function analyzeSource({
                   "type-unresolved",
                 ),
               );
-            } else if (
-              name !== "children" &&
-              name !== "key" &&
-              !declaration.props[name]
-            ) {
+            } else if (name !== "children" && name !== "key" && !declaration.props[name]) {
               observations.push(
                 observation(
                   `api:prop:${file.path}:${attribute.getStart(source)}:${name}`,
@@ -723,9 +634,7 @@ export function analyzeSource({
                 ),
               );
             } else if (declaration.props?.[name]) {
-              const typed = typedAttributes.get(
-                `${file.path}:${attribute.getStart(source)}`,
-              );
+              const typed = typedAttributes.get(`${file.path}:${attribute.getStart(source)}`);
               const value = staticLiteral(attribute);
               const allowed = declaration.props[name].values;
               const acceptedPrimitives = declaration.props[name].primitiveKinds;
@@ -782,11 +691,7 @@ export function analyzeSource({
               "public-component",
             ),
           );
-        else if (
-          ts.isIdentifier(tag) &&
-          /^[A-Z]/.test(tag.text) &&
-          localDeclarations.has(tag.text)
-        )
+        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text) && localDeclarations.has(tag.text))
           observations.push(
             observation(
               `component:local:${file.path}:${node.getStart(source)}`,
@@ -797,11 +702,7 @@ export function analyzeSource({
               "local-control",
             ),
           );
-        else if (
-          ts.isIdentifier(tag) &&
-          /^[A-Z]/.test(tag.text) &&
-          unresolvedImports.has(tag.text)
-        )
+        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text) && unresolvedImports.has(tag.text))
           observations.push(
             observation(
               `component:unresolved:${file.path}:${node.getStart(source)}`,
@@ -823,10 +724,7 @@ export function analyzeSource({
               "unresolved-component",
             ),
           );
-        else if (
-          ts.isIdentifier(tag) &&
-          /^(button|input|select|textarea)$/.test(tag.text)
-        )
+        else if (ts.isIdentifier(tag) && /^(button|input|select|textarea)$/.test(tag.text))
           observations.push(
             observation(
               `component:native:${file.path}:${node.getStart(source)}`,
@@ -838,18 +736,12 @@ export function analyzeSource({
             ),
           );
       }
-      if (
-        ts.isJsxExpression(node) &&
-        node.expression &&
-        ts.isIdentifier(node.expression)
-      )
+      if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression))
         usedInJsx.add(node.expression.text);
       ts.forEachChild(node, visit);
     };
     for (const entry of seenEntries) visit(entry, entry);
-    for (const localName of unique(
-      [...usedInJsx].filter((name) => imported.has(name)),
-    )) {
+    for (const localName of unique([...usedInJsx].filter((name) => imported.has(name)))) {
       const item = imported.get(localName);
       if (item) imports.push({ path: file.path, localName, ...item });
     }
@@ -878,9 +770,7 @@ export function analyzeSource({
     generatedLiterals,
     matchingLiterals,
     unknownLiterals,
-    observations: observations.sort((left, right) =>
-      left.id.localeCompare(right.id),
-    ),
+    observations: observations.sort((left, right) => left.id.localeCompare(right.id)),
     implementationDiagnostics,
     limitations: unique(limitations),
   };

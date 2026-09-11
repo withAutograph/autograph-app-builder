@@ -20,9 +20,7 @@ describe("tenant GitHub installation binding schema", () => {
     expect(migration).toContain(
       'ON "hosted_github_installation_binding" ("installation_id", "issuer", "audience", "workspace_id", "owner_user_id");',
     );
-    expect(migration).not.toContain(
-      'ON "hosted_github_installation_binding" ("installation_id");',
-    );
+    expect(migration).not.toContain('ON "hosted_github_installation_binding" ("installation_id");');
   });
 
   it("accepts one exact active installation identity", () => {
@@ -81,12 +79,7 @@ describe("tenant GitHub installation binding schema", () => {
       updatedAt,
     });
 
-    expect(mergeHostedGitHubInstallationBindings([added], legacy)).toEqual([
-      added,
-      legacy,
-    ]);
-    expect(mergeHostedGitHubInstallationBindings([legacy], legacy)).toEqual([
-      legacy,
-    ]);
+    expect(mergeHostedGitHubInstallationBindings([added], legacy)).toEqual([added, legacy]);
+    expect(mergeHostedGitHubInstallationBindings([legacy], legacy)).toEqual([legacy]);
   });
 });

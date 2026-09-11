@@ -3,15 +3,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const guidancePath = resolve(
-  repositoryRoot,
-  "agent/skills/create-app/references/react-19-3.md",
-);
+const guidancePath = resolve(repositoryRoot, "agent/skills/create-app/references/react-19-3.md");
 const homePagePath = resolve(repositoryRoot, "app/(product)/page.tsx");
-const handoffPagePath = resolve(
-  repositoryRoot,
-  "app/(product)/handoff/[id]/page.tsx"
-);
+const handoffPagePath = resolve(repositoryRoot, "app/(product)/handoff/[id]/page.tsx");
 
 describe("React 19.3 generated-app guidance", () => {
   const guidance = readFileSync(guidancePath, "utf8");
@@ -29,9 +23,7 @@ describe("React 19.3 generated-app guidance", () => {
       const page = readFileSync(pagePath, "utf8");
 
       expect(page).not.toContain('"use client"');
-      expect(page).toContain(
-        'import { Suspense, ViewTransition } from "react"',
-      );
+      expect(page).toContain('import { Suspense, ViewTransition } from "react"');
       expect(page).toMatch(
         /<Suspense[\s\S]*?<ViewTransition>[\s\S]*?<\/ViewTransition>[\s\S]*?<\/Suspense>/,
       );
@@ -42,9 +34,7 @@ describe("React 19.3 generated-app guidance", () => {
     expect(guidance).toContain("use(browser())");
     expect(guidance).toContain("Fragment ref");
     expect(guidance).toContain("client-exported Context");
-    expect(guidance).toContain(
-      "Do not enable `require-trusted-types-for 'script'` by default",
-    );
+    expect(guidance).toContain("Do not enable `require-trusted-types-for 'script'` by default");
     expect(guidance).toContain("not introduce `dangerouslySetInnerHTML`");
   });
 });

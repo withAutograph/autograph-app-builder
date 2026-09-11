@@ -4,32 +4,23 @@ import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import * as databaseSchema from "../db/schema";
-import {
-  hostedGitHubInstallationBindings,
-  hostedGitHubInstallations,
-} from "../db/schema";
+import { hostedGitHubInstallationBindings, hostedGitHubInstallations } from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
-export type HostedGitHubTenantAuthority = z.infer<
-  typeof hostedTenantAuthoritySchema
->;
+export type HostedGitHubTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export const hostedGitHubInstallationBindingSchema = z
   .object({
     installationId: z.string().regex(/^[1-9][0-9]*$/u),
     accountId: z.string().regex(/^[1-9][0-9]*$/u),
-    accountLogin: z
-      .string()
-      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
+    accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
     accountType: z.enum(["Organization", "User"]),
     active: z.boolean(),
     updatedAt: z.date(),
   })
   .strict();
 
-export type HostedGitHubInstallationBinding = z.infer<
-  typeof hostedGitHubInstallationBindingSchema
->;
+export type HostedGitHubInstallationBinding = z.infer<typeof hostedGitHubInstallationBindingSchema>;
 
 export function mergeHostedGitHubInstallationBindings(
   bindings: HostedGitHubInstallationBinding[],
@@ -71,13 +62,15 @@ const bindingSelection = {
 };
 
 export interface HostedGitHubInstallationStore {
-  read: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding | undefined>;
+  read: (
+    authority: HostedGitHubTenantAuthority,
+  ) => Promise<HostedGitHubInstallationBinding | undefined>;
   list?: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding[]>;
   bind: (input: {
     authority: HostedGitHubTenantAuthority;
     binding: Omit<HostedGitHubInstallationBinding, "active" | "updatedAt">;
     now: Date;
-}) => Promise<HostedGitHubInstallationBinding>;
+  }) => Promise<HostedGitHubInstallationBinding>;
 }
 
 export function createPostgresHostedGitHubInstallationStore(
@@ -107,9 +100,7 @@ export function createPostgresHostedGitHubInstallationStore(
         .from(hostedGitHubInstallationBindings)
         .where(bindingTenantPredicate(authority))
         .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
-      return rows.map((row) =>
-        hostedGitHubInstallationBindingSchema.parse(row),
-      );
+      return rows.map((row) => hostedGitHubInstallationBindingSchema.parse(row));
     },
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
@@ -131,7 +122,7 @@ export function createPostgresHostedGitHubInstallationStore(
           .from(hostedGitHubInstallations)
           .where(tenantPredicate(authority))
           .limit(1);
-    const [legacy] = legacyRows;
+        const [legacy] = legacyRows;
         if (legacy !== undefined) {
           await transaction
             .insert(hostedGitHubInstallationBindings)
@@ -154,9 +145,7 @@ export function createPostgresHostedGitHubInstallationStore(
           })
           .returning(bindingSelection);
         if (bindingRows.length !== 1)
-          throw new Error(
-            "Hosted GitHub installation binding was not durable.",
-          );
+          throw new Error("Hosted GitHub installation binding was not durable.");
 
         // Maintain the original single publication binding as an explicit
         // compatibility row. Publication continues to require its own later

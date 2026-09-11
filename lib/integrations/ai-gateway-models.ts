@@ -1,9 +1,6 @@
 import { z } from "zod";
 
-import {
-  builderModelSchema,
-  type BuilderIntegrationState,
-} from "./builder-state";
+import { builderModelSchema, type BuilderIntegrationState } from "./builder-state";
 import { activeBuilderModelId } from "./active-model";
 
 const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
@@ -20,9 +17,7 @@ const gatewayModelSchema = z
   })
   .passthrough();
 
-const responseSchema = z
-  .object({ data: z.array(gatewayModelSchema).max(1_000) })
-  .passthrough();
+const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1_000) }).passthrough();
 
 type ModelState = BuilderIntegrationState["models"];
 let cached: { value: ModelState; expiresAt: number } | undefined;
@@ -34,8 +29,7 @@ export async function loadGatewayModels(input?: {
   force?: boolean;
 }): Promise<ModelState> {
   const now = input?.now?.() ?? Date.now();
-  if (!input?.force && cached && cached.expiresAt > now)
-    return { ...cached.value, cached: true };
+  if (!input?.force && cached && cached.expiresAt > now) return { ...cached.value, cached: true };
 
   try {
     const response = await (input?.fetch ?? fetch)(GATEWAY_MODELS_URL, {
@@ -46,9 +40,7 @@ export async function loadGatewayModels(input?: {
     if (!response.ok) throw new Error("gateway-models-unavailable");
     const parsed = responseSchema.parse(await response.json());
     const entries = parsed.data
-      .filter(
-        (model) => model.type === "language" && model.owned_by === "openai",
-      )
+      .filter((model) => model.type === "language" && model.owned_by === "openai")
       .map((model) =>
         builderModelSchema.parse({
           id: model.id,
@@ -60,9 +52,7 @@ export async function loadGatewayModels(input?: {
       )
       .sort((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) throw new Error("gateway-models-empty");
-    const defaultModelId = entries.some(
-      (entry) => entry.id === activeBuilderModelId,
-    )
+    const defaultModelId = entries.some((entry) => entry.id === activeBuilderModelId)
       ? activeBuilderModelId
       : undefined;
     const value: ModelState = {

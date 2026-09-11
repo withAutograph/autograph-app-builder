@@ -9,10 +9,7 @@ import {
 } from "../lib/feature-flags.ts";
 
 async function resolveFlagForStorybook(flag: {
-  run: (context: {
-    identify: Record<string, never>;
-    request: Request;
-  }) => Promise<boolean>;
+  run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
   if (!process.env.FLAGS) return false;
   try {
@@ -28,12 +25,11 @@ async function resolveFlagForStorybook(flag: {
 }
 
 export async function resolveBuilderFlagsForStorybook() {
-  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] =
-    await Promise.all([
-      resolveFlagForStorybook(builderConnectionsFlag),
-      resolveFlagForStorybook(builderComingSoonFlag),
-      resolveFlagForStorybook(builderResourceProvisioningFlag),
-    ]);
+  const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
+    resolveFlagForStorybook(builderConnectionsFlag),
+    resolveFlagForStorybook(builderComingSoonFlag),
+    resolveFlagForStorybook(builderResourceProvisioningFlag),
+  ]);
 
   return { connectionsEnabled, comingSoonEnabled, provisioningEnabled };
 }
@@ -44,11 +40,7 @@ const config: StorybookConfig = {
     "../components/**/*.stories.@(ts|tsx)",
     "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
   ],
-  addons: [
-    "@storybook/addon-vitest",
-    "@storybook/addon-a11y",
-    "@storybook/addon-docs",
-  ],
+  addons: ["@storybook/addon-vitest", "@storybook/addon-a11y", "@storybook/addon-docs"],
   framework: "@storybook/nextjs-vite",
   staticDirs: ["../public"],
   async viteFinal(viteConfig) {
@@ -59,14 +51,8 @@ const config: StorybookConfig = {
           find,
           replacement,
         }));
-    const storybookBuilderActions = path.join(
-      import.meta.dirname,
-      "builder-actions.ts",
-    );
-    const storybookBuilderDraftActions = path.join(
-      import.meta.dirname,
-      "builder-draft-actions.ts",
-    );
+    const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
+    const storybookBuilderDraftActions = path.join(import.meta.dirname, "builder-draft-actions.ts");
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
     viteConfig.define = {
@@ -105,10 +91,7 @@ const config: StorybookConfig = {
         // Storybook already receives the resolved values above.
         {
           find: "@flags-sdk/vercel",
-          replacement: path.join(
-            import.meta.dirname,
-            "vercel-flags-adapter.ts",
-          ),
+          replacement: path.join(import.meta.dirname, "vercel-flags-adapter.ts"),
         },
         ...aliases,
       ],

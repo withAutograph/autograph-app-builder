@@ -9,11 +9,7 @@ export default defineEval({
     "A pre-journal precondition failure remains readable without a forged durable journal.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(
-      t,
-      repository,
-      "publication-precondition-failure",
-    );
+    await prepareReviewedWorkflow(t, repository, "publication-precondition-failure");
     await t.send("Publish reviewed change set locally.");
     t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");

@@ -17,9 +17,7 @@ const planSchema = z
       .object({
         installationId: z.string().regex(/^[1-9][0-9]*$/u),
         accountId: z.string().regex(/^[1-9][0-9]*$/u),
-        accountLogin: z
-          .string()
-          .regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
+        accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
         accountType: z.enum(["Organization", "User"]),
       })
       .strict(),
@@ -64,9 +62,7 @@ export async function bindHostedGitHubInstallation(input: {
   store: HostedGitHubInstallationStore;
   now?: () => Date;
 }) {
-  const request = hostedGitHubInstallationApplyRequestSchema.parse(
-    input.request,
-  );
+  const request = hostedGitHubInstallationApplyRequestSchema.parse(input.request);
   const { confirmationDigest, ...planRequest } = request;
   const plan = planHostedGitHubInstallation(planRequest);
   if (confirmationDigest !== plan.requiredConfirmationDigest)

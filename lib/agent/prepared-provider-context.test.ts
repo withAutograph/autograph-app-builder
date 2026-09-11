@@ -96,8 +96,7 @@ describe("prepared provider continuity", () => {
         authority,
         intent,
         readCredential: async () => credential,
-        fetch: async () =>
-          Response.json({ id: "prj_1", name: "stock", accountId: "team_1" }),
+        fetch: async () => Response.json({ id: "prj_1", name: "stock", accountId: "team_1" }),
       }),
     ).toMatchObject({ status: "ready", project: { id: "prj_1" } });
   });
@@ -142,26 +141,25 @@ describe("prepared provider continuity", () => {
       access: { vercel: { status: "ready" } },
       resources: first.status === "prepared" ? first.resources : {},
     });
-    expect(
-      second.status === "prepared" && second.access.vercel,
-    ).not.toHaveProperty("reconnectUrl");
+    expect(second.status === "prepared" && second.access.vercel).not.toHaveProperty("reconnectUrl");
   });
   it("uses the saved installation only for the matching repository, respecting explicit choices", () => {
-    expect(
-      withPreparedGitHubSelection({ repository: "ACME/Stock" }, intent),
-    ).toEqual({ repository: "ACME/Stock", selectedInstallationId: "10" });
-    expect(
-      withPreparedGitHubSelection({ repository: "other/stock" }, intent),
-    ).toEqual({ repository: "other/stock" });
+    expect(withPreparedGitHubSelection({ repository: "ACME/Stock" }, intent)).toEqual({
+      repository: "ACME/Stock",
+      selectedInstallationId: "10",
+    });
+    expect(withPreparedGitHubSelection({ repository: "other/stock" }, intent)).toEqual({
+      repository: "other/stock",
+    });
     expect(
       withPreparedGitHubSelection(
         { repository: "acme/stock", selectedInstallationId: "20" },
         intent,
       ),
     ).toEqual({ repository: "acme/stock", selectedInstallationId: "20" });
-    expect(
-      withPreparedGitHubSelection({ repository: "acme/stock" }, undefined),
-    ).toEqual({ repository: "acme/stock" });
+    expect(withPreparedGitHubSelection({ repository: "acme/stock" }, undefined)).toEqual({
+      repository: "acme/stock",
+    });
   });
 
   it("reads the selected installation under the full tenant and returns only observed project metadata", async () => {
@@ -242,11 +240,8 @@ describe("prepared provider continuity", () => {
 
   it("does not use another tenant or a different selected scope when credentials are unavailable", async () => {
     const request = vi.fn<typeof fetch>();
-    const readCredential = vi.fn(
-      async (input: { authority: typeof authority }) =>
-        input.authority.ownerUserId === authority.ownerUserId
-          ? credential
-          : undefined,
+    const readCredential = vi.fn(async (input: { authority: typeof authority }) =>
+      input.authority.ownerUserId === authority.ownerUserId ? credential : undefined,
     );
     expect(
       await readPreparedVercelAccess({

@@ -9,10 +9,7 @@ import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
 
-import {
-  ARRUSTED_TARGET_SHA,
-  ARRUSTED_TARGET_TREE,
-} from "../repository/dependency-cache";
+import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 import {
   inspectClonedTemplateSourceReceipt,
   ARRUSTED_TEMPLATE_REPOSITORY,
@@ -32,9 +29,7 @@ export const starterSourceManifestSchema = z
     version: z.literal(1),
     source: z
       .object({
-        repository: z.literal(
-          "https://github.com/withAutograph/arrusted-development",
-        ),
+        repository: z.literal("https://github.com/withAutograph/arrusted-development"),
         sha: objectId,
         tree: objectId,
       })
@@ -179,10 +174,7 @@ function sha256(bytes: Uint8Array) {
 
 async function boundedBytes(response: Response, maximum: number) {
   const declared = response.headers.get("content-length");
-  if (
-    declared !== null &&
-    (!/^\d+$/u.test(declared) || Number(declared) > maximum)
-  )
+  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > maximum))
     throw new Error("starter-response-too-large");
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength > maximum) throw new Error("starter-response-too-large");
@@ -191,19 +183,13 @@ async function boundedBytes(response: Response, maximum: number) {
 
 function tarFiles(archive: Uint8Array) {
   const tar = gunzipSync(archive);
-  const files = new Map<
-    string,
-    { mode: "100644" | "100755"; bytes: Uint8Array }
-  >();
+  const files = new Map<string, { mode: "100644" | "100755"; bytes: Uint8Array }>();
   let offset = 0;
   while (offset + 512 <= tar.byteLength) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
     const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "");
-    const prefix = header
-      .subarray(345, 500)
-      .toString("utf8")
-      .replace(/\0.*$/u, "");
+    const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/u, "");
     const path = prefix ? `${prefix}/${name}` : name;
     const size = Number.parseInt(
       header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim(),
@@ -253,14 +239,11 @@ export async function loadStarterSource(input: {
   });
   if (!manifestResponse.ok) throw new Error("starter-manifest-unavailable");
   const manifestBytes = await boundedBytes(manifestResponse, 5 * 1024 * 1024);
-  if (sha256(manifestBytes) !== config.manifestSha256)
-    throw new Error("starter-manifest-mismatch");
+  if (sha256(manifestBytes) !== config.manifestSha256) throw new Error("starter-manifest-mismatch");
   let manifest: StarterSourceManifest;
   try {
     manifest = starterSourceManifestSchema.parse(
-      JSON.parse(
-        new TextDecoder("utf8", { fatal: true }).decode(manifestBytes),
-      ),
+      JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(manifestBytes)),
     );
   } catch {
     throw new Error("starter-manifest-invalid");
@@ -277,10 +260,7 @@ export async function loadStarterSource(input: {
   });
   if (!archiveResponse.ok) throw new Error("starter-archive-unavailable");
   const archive = await boundedBytes(archiveResponse, manifest.archive.bytes);
-  if (
-    archive.byteLength !== manifest.archive.bytes ||
-    sha256(archive) !== manifest.archive.sha256
-  )
+  if (archive.byteLength !== manifest.archive.bytes || sha256(archive) !== manifest.archive.sha256)
     throw new Error("starter-archive-mismatch");
   const files = tarFiles(archive);
   const expectedPaths = new Set<string>();
@@ -321,9 +301,7 @@ export async function loadStarterSource(input: {
 export async function cloneStarterSource(input?: {
   reader?: ArrustedTemplateReader;
 }): Promise<StarterSource> {
-  const access = await (
-    input?.reader ?? deploymentArrustedTemplateReader()
-  ).acquire();
+  const access = await (input?.reader ?? deploymentArrustedTemplateReader()).acquire();
   const root = await mkdtemp(join(tmpdir(), "autograph-app-builder-starter-"));
   const checkout = join(root, "repository");
   const credentialFile = join(root, "git-credential");
@@ -359,42 +337,19 @@ export async function cloneStarterSource(input?: {
     );
     if (clone.stderr.length > 2 * 1024 * 1024)
       throw new Error("starter-source-clone-output-invalid");
-    await Promise.all([
-      rm(credentialFile, { force: true }),
-      rm(askpassFile, { force: true }),
-    ]);
-    const origin = await restrictedGit([
-      "-C",
-      checkout,
-      "config",
-      "--get",
-      "remote.origin.url",
-    ]);
+    await Promise.all([rm(credentialFile, { force: true }), rm(askpassFile, { force: true })]);
+    const origin = await restrictedGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
     if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY)
       throw new Error("starter-source-origin-drifted");
     const sha = (
-      await restrictedGit([
-        "-C",
-        checkout,
-        "rev-parse",
-        "refs/remotes/origin/main",
-      ])
+      await restrictedGit(["-C", checkout, "rev-parse", "refs/remotes/origin/main"])
     ).stdout.trim();
-    if (!/^[0-9a-f]{40}$/u.test(sha))
-      throw new Error("starter-source-ref-invalid");
-    await restrictedGit([
-      "-C",
-      checkout,
-      "checkout",
-      "--detach",
-      "--quiet",
-      sha,
-    ]);
+    if (!/^[0-9a-f]{40}$/u.test(sha)) throw new Error("starter-source-ref-invalid");
+    await restrictedGit(["-C", checkout, "checkout", "--detach", "--quiet", sha]);
     const tree = (
       await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`])
     ).stdout.trim();
-    if (!/^[0-9a-f]{40}$/u.test(tree))
-      throw new Error("starter-source-tree-invalid");
+    if (!/^[0-9a-f]{40}$/u.test(tree)) throw new Error("starter-source-tree-invalid");
     const readinessDigest = await templateReadinessAttestationDigest({
       sha,
       tree,
@@ -416,8 +371,7 @@ export async function cloneStarterSource(input?: {
       throw new Error("starter-source-file-count-invalid");
     const files = await Promise.all(
       paths.map(async (path): Promise<StarterSourceFile> => {
-        if (!safeSourcePath(path))
-          throw new Error("starter-source-path-invalid");
+        if (!safeSourcePath(path)) throw new Error("starter-source-path-invalid");
         const filePath = join(checkout, path);
         const stat = await lstat(filePath);
         if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES)

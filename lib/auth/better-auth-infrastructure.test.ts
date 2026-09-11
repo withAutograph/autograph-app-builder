@@ -33,9 +33,7 @@ describe("resolveBetterAuthInfrastructure", () => {
       plan: "starter",
       organizationAuthorityReady: true,
     });
-    expect(JSON.stringify(result.summary)).not.toContain(
-      "test-infrastructure-key",
-    );
+    expect(JSON.stringify(result.summary)).not.toContain("test-infrastructure-key");
   });
 
   it("fails closed before the organization migration is verified", () => {

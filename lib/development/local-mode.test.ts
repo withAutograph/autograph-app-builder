@@ -30,30 +30,21 @@ afterEach(async () => {
   const { rm } = await import("node:fs/promises");
   const makeWritable = async (path: string) => {
     await chmod(path, 0o700).catch(() => undefined);
-    for (const entry of await readdir(path, { withFileTypes: true }).catch(
-      () => [],
-    )) {
+    for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
       if (entry.isDirectory()) await makeWritable(join(path, entry.name));
       else if (!entry.isSymbolicLink())
         await chmod(join(path, entry.name), 0o600).catch(() => undefined);
     }
   };
   await Promise.all(roots.map(makeWritable));
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 async function fixture() {
-  const root = await realpath(
-    await mkdtemp(join(tmpdir(), "app-builder-dev-source-")),
-  );
+  const root = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-source-")));
   roots.push(root);
   await mkdir(join(root, ".config/mise"), { recursive: true });
-  await writeFile(
-    join(root, ".config/mise/config.toml"),
-    '[tools]\nbun = "1.3.14"\n',
-  );
+  await writeFile(join(root, ".config/mise/config.toml"), '[tools]\nbun = "1.3.14"\n');
   await writeFile(join(root, ".config/mise/mise.lock"), "mise-lock\n");
   await writeFile(join(root, "bun.lock"), "bun-lock\n");
   await writeFile(join(root, "Cargo.lock"), "cargo-lock\n");
@@ -93,13 +84,7 @@ describe("development source snapshots", () => {
       execFileSync("/usr/bin/git", args, { cwd, encoding: "utf8" });
     const head = git(source, "rev-parse", "HEAD").trim();
     const submodule = join(source, "plugin");
-    git(
-      source,
-      "update-index",
-      "--add",
-      "--cacheinfo",
-      `160000,${head},plugin`,
-    );
+    git(source, "update-index", "--add", "--cacheinfo", `160000,${head},plugin`);
     await mkdir(submodule);
     const empty = await fingerprintDevelopmentSource(source);
     await writeFile(join(submodule, "not-initialized.txt"), "not a checkout");
@@ -111,37 +96,28 @@ describe("development source snapshots", () => {
     git(submodule, "add", ".gitignore", "tracked.txt");
     await writeFile(join(submodule, "tracked.txt"), "dirty");
     await writeFile(join(submodule, "ignored.txt"), "ignored");
-    const runRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-")),
-    );
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
     const snapshot = await createDevelopmentSnapshot({
       sourceRoot: source,
       runRoot,
     });
-    expect(
-      await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf8"),
-    ).toBe("dirty");
-    expect(
-      await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf8"),
-    ).toBe("not a checkout");
-    await expect(
-      stat(join(snapshot.root, "plugin/ignored.txt")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf8")).toBe("dirty");
+    expect(await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf8")).toBe(
+      "not a checkout",
+    );
+    await expect(stat(join(snapshot.root, "plugin/ignored.txt"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(snapshot.fingerprint).not.toBe(empty);
   });
 
   it("captures dirty and untracked source in an owner-writable Git snapshot", async () => {
     const source = await fixture();
     await writeFile(join(source, "README.md"), "dirty\n");
-    await writeFile(
-      join(source, "new-file.ts"),
-      "export const fresh = true;\n",
-    );
-    const runRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-run-")),
-    );
+    await writeFile(join(source, "new-file.ts"), "export const fresh = true;\n");
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-run-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
 
@@ -150,19 +126,11 @@ describe("development source snapshots", () => {
       runRoot,
     });
 
-    expect(await readFile(join(snapshot.root, "README.md"), "utf8")).toBe(
-      "dirty\n",
-    );
-    expect(
-      await readFile(join(snapshot.root, "new-file.ts"), "utf8"),
-    ).toContain("fresh");
+    expect(await readFile(join(snapshot.root, "README.md"), "utf8")).toBe("dirty\n");
+    expect(await readFile(join(snapshot.root, "new-file.ts"), "utf8")).toContain("fresh");
     expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(
-      0o600,
-    );
-    expect(snapshot.fingerprint).toBe(
-      await fingerprintDevelopmentSource(source),
-    );
+    expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(0o600);
+    expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(source));
     expect(snapshot.commit).toMatch(/^[0-9a-f]{40}$/u);
   });
 
@@ -175,12 +143,8 @@ describe("development source snapshots", () => {
 
   it("refreshes the reviewed snapshot after a live Arrusted edit", async () => {
     const source = await fixture();
-    const firstRunRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
-    );
-    const secondRunRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")),
-    );
+    const firstRunRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")));
+    const secondRunRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")));
     roots.push(firstRunRoot, secondRunRoot);
     await chmod(firstRunRoot, 0o700);
     await chmod(secondRunRoot, 0o700);
@@ -202,9 +166,7 @@ describe("development source snapshots", () => {
 
   it("rejects a tracked file whose parent was replaced by an escaping symlink", async () => {
     const source = await fixture();
-    const outside = await realpath(
-      await mkdtemp(join(tmpdir(), "app-builder-dev-outside-")),
-    );
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-outside-")));
     roots.push(outside);
     await mkdir(join(source, "tracked"));
     await writeFile(join(source, "tracked/secret.txt"), "inside\n");
@@ -215,9 +177,7 @@ describe("development source snapshots", () => {
     await rm(join(source, "tracked"), { recursive: true });
     await writeFile(join(outside, "secret.txt"), "outside\n");
     await symlink(outside, join(source, "tracked"));
-    await expect(fingerprintDevelopmentSource(source)).rejects.toThrow(
-      "ancestor was unsafe",
-    );
+    await expect(fingerprintDevelopmentSource(source)).rejects.toThrow("ancestor was unsafe");
   });
 
   it("invalidates an active run after a source change and closes on abort", async () => {
@@ -304,9 +264,7 @@ describe("development CLI", () => {
         "https://example.com",
       ]),
     ).toThrow(/unsupported/u);
-    expect(
-      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]),
-    ).toMatchObject({
+    expect(parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"])).toMatchObject({
       arrustedRoot: "/tmp/arrusted",
       nextPort: 3000,
       evePort: 2000,

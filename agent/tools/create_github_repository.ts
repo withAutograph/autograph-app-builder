@@ -16,9 +16,7 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed")
-      throw new Error(
-        "An exact reviewed change set is required before repository creation.",
-      );
+      throw new Error("An exact reviewed change set is required before repository creation.");
     const sandbox = await ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({
       state,

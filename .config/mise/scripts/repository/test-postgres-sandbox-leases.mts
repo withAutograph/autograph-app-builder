@@ -19,8 +19,7 @@ import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbo
 function argument(name: string) {
   const index = process.argv.indexOf(name);
   const value = index < 0 ? undefined : process.argv[index + 1];
-  if (value === undefined || value.length === 0)
-    throw new Error(`Missing ${name}.`);
+  if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
   return value;
 }
 
@@ -88,9 +87,7 @@ async function expire(lease: SandboxExecutionLease) {
 }
 
 try {
-  await client.unsafe(
-    await readFile("drizzle/0008_sandbox_execution_lease.sql", "utf8"),
-  );
+  await client.unsafe(await readFile("drizzle/0008_sandbox_execution_lease.sql", "utf8"));
 
   const sameSubject = await Promise.all([
     acquire("user_1", "session_1"),
@@ -100,9 +97,7 @@ try {
     "acquired",
     "acquired",
   ]);
-  const acquired = sameSubject.find(
-    (result) => result.disposition === "acquired",
-  );
+  const acquired = sameSubject.find((result) => result.disposition === "acquired");
   assert(acquired?.disposition === "acquired");
   assert(acquired.lease.acquiredAtEpochMs > Date.now() - 60_000);
   const replay = await store.acquire({
@@ -116,14 +111,9 @@ try {
 
   await clear();
   const workspace = await Promise.all(
-    Array.from({ length: 5 }, (_, index) =>
-      acquire(`user_${index}`, `session_${index}`),
-    ),
+    Array.from({ length: 5 }, (_, index) => acquire(`user_${index}`, `session_${index}`)),
   );
-  assert.equal(
-    workspace.filter(({ disposition }) => disposition === "acquired").length,
-    5,
-  );
+  assert.equal(workspace.filter(({ disposition }) => disposition === "acquired").length, 5);
 
   await clear();
   const rollback = await acquire("user_1", "rollback_session");
@@ -156,10 +146,7 @@ try {
     nowEpochMs: 0,
   });
   assert(heartbeat.heartbeatAtEpochMs > rollback.lease.heartbeatAtEpochMs);
-  assert.equal(
-    heartbeat.expiresAtEpochMs - heartbeat.heartbeatAtEpochMs,
-    policy.lease.ttlMs,
-  );
+  assert.equal(heartbeat.expiresAtEpochMs - heartbeat.heartbeatAtEpochMs, policy.lease.ttlMs);
 
   await expire(heartbeat);
   const [claimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
@@ -276,10 +263,7 @@ try {
   });
   assert.equal(retry.claimed, 1);
   assert.equal(retry.stopped.length, 1);
-  assert.equal(
-    (await acquire("user_failed", "batch_failed")).disposition,
-    "acquired",
-  );
+  assert.equal((await acquire("user_failed", "batch_failed")).disposition, "acquired");
 
   process.stdout.write(
     JSON.stringify({

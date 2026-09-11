@@ -37,35 +37,25 @@ const repositoryAccessReceiptUnsignedSchema = z.strictObject({
   confirmedByCallId: z.string().min(1).max(255),
 });
 
-const receiptDigest = (
-  value: z.infer<typeof repositoryAccessReceiptUnsignedSchema>,
-) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const receiptDigest = (value: z.infer<typeof repositoryAccessReceiptUnsignedSchema>) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-export const repositoryAccessReceiptSchema =
-  repositoryAccessReceiptUnsignedSchema
-    .extend({ digest })
-    .superRefine((value, context) => {
-      const { digest: actualDigest, ...unsigned } = value;
-      if (actualDigest !== receiptDigest(unsigned))
-        context.addIssue({
-          code: "custom",
-          path: ["digest"],
-          message: "Repository access receipt digest is invalid.",
-        });
-    });
+export const repositoryAccessReceiptSchema = repositoryAccessReceiptUnsignedSchema
+  .extend({ digest })
+  .superRefine((value, context) => {
+    const { digest: actualDigest, ...unsigned } = value;
+    if (actualDigest !== receiptDigest(unsigned))
+      context.addIssue({
+        code: "custom",
+        path: ["digest"],
+        message: "Repository access receipt digest is invalid.",
+      });
+  });
 
-export type RepositoryAccessReceipt = z.infer<
-  typeof repositoryAccessReceiptSchema
->;
-type ReadyRepositoryAccess = Extract<
-  RepositoryAccessResult,
-  { status: "ready" }
->;
+export type RepositoryAccessReceipt = z.infer<typeof repositoryAccessReceiptSchema>;
+type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
 
-function receiptObservation(input: {
-  sessionId: string;
-  access: ReadyRepositoryAccess;
-}) {
+function receiptObservation(input: { sessionId: string; access: ReadyRepositoryAccess }) {
   return {
     version: REPOSITORY_ACCESS_RECEIPT_VERSION,
     sessionId: input.sessionId,
@@ -90,9 +80,7 @@ export function recordRepositoryAccessReceipt(input: {
 }): RepositoryAccessReceipt {
   const observation = receiptObservation(input);
   const current =
-    input.current === undefined
-      ? undefined
-      : repositoryAccessReceiptSchema.parse(input.current);
+    input.current === undefined ? undefined : repositoryAccessReceiptSchema.parse(input.current);
   if (current !== undefined && current.sessionId !== input.sessionId)
     throw new Error("Repository access state belongs to a different session.");
   if (
@@ -137,9 +125,7 @@ export function assertRepositoryAccessReceiptForSource(input: {
     receipt.repository.headSha !== input.expectedSha ||
     receipt.repository.headTree !== input.expectedTree
   )
-    throw new Error(
-      "The repository access receipt does not match this session and source.",
-    );
+    throw new Error("The repository access receipt does not match this session and source.");
   return receipt;
 }
 
@@ -148,7 +134,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
   source: ImmutableGitHubSourceReceipt;
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
-  const {repository} = input.source;
+  const { repository } = input.source;
   if (
     repository.repositoryId !== access.repository.repositoryId ||
     repository.owner !== access.repository.owner ||
@@ -156,8 +142,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
     repository.defaultBranch !== access.repository.defaultBranch ||
     repository.headSha !== access.repository.headSha ||
     repository.headTree !== access.repository.headTree ||
-    input.source.resolvedRef !==
-      `refs/heads/${access.repository.defaultBranch}` ||
+    input.source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}` ||
     input.source.resolvedSha !== access.repository.headSha ||
     input.source.resolvedTree !== access.repository.headTree
   )
@@ -166,6 +151,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
     );
 }
 
-export const repositoryAccessReceiptState = defineState<
-  RepositoryAccessReceipt | undefined
->("autograph-app-builder.repository-access.v1", () => undefined);
+export const repositoryAccessReceiptState = defineState<RepositoryAccessReceipt | undefined>(
+  "autograph-app-builder.repository-access.v1",
+  () => undefined,
+);

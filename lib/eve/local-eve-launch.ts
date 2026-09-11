@@ -37,11 +37,7 @@ function required(environment: Environment, name: string) {
 }
 
 function ownerDirectory(path: string, label: string, ownerOnly = false) {
-  if (
-    !isAbsolute(path) ||
-    resolve(path) !== path ||
-    realpathSync(path) !== path
-  )
+  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
     throw new Error(`${label} was not an absolute canonical directory.`);
   const info = lstatSync(path);
   if (
@@ -80,25 +76,17 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development Eve supervisor root",
     true,
   );
-  if (
-    !contained(runsRoot, supervisorRoot) ||
-    dirname(supervisorRoot) !== runsRoot
-  )
+  if (!contained(runsRoot, supervisorRoot) || dirname(supervisorRoot) !== runsRoot)
     throw new Error("Development Eve supervisor was outside the runs root.");
   const cycleRoot = ownerDirectory(
     dirname(dirname(applicationRoot)),
     "Development Eve cycle root",
     true,
   );
-  if (
-    !contained(supervisorRoot, cycleRoot) ||
-    dirname(cycleRoot) !== supervisorRoot
-  )
+  if (!contained(supervisorRoot, cycleRoot) || dirname(cycleRoot) !== supervisorRoot)
     throw new Error("Development Eve cycle was outside the supervisor root.");
   if (applicationRoot !== join(cycleRoot, "eve-application/source"))
-    throw new Error(
-      "Development Eve application root was not supervisor-bound.",
-    );
+    throw new Error("Development Eve application root was not supervisor-bound.");
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
     "Development Arrusted source root",
@@ -170,18 +158,9 @@ function exactBinding(environment: Environment) {
   if (environment.WORKFLOW_LOCAL_BASE_URL !== `http://127.0.0.1:${port}`)
     throw new Error("Local Eve workflow queue binding was invalid.");
   const sourceSha = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA");
-  const sourceTree = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_TREE",
-  );
-  const fingerprint = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT",
-  );
-  const dependencyKey = required(
-    environment,
-    "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY",
-  );
+  const sourceTree = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE");
+  const fingerprint = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT");
+  const dependencyKey = required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY");
   if (
     !gitObject.test(sourceSha) ||
     !gitObject.test(sourceTree) ||
@@ -204,15 +183,7 @@ export function createLocalEveInvocation(input: {
   const binding = exactBinding(input.environment);
   return {
     command: input.pinnedNode,
-    args: [
-      input.eveCli,
-      "dev",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      binding.port,
-      "--no-ui",
-    ],
+    args: [input.eveCli, "dev", "--host", "127.0.0.1", "--port", binding.port, "--no-ui"],
     cwd: roots.applicationRoot,
     environment: {
       PATH: `${dirname(input.pinnedNode)}:/usr/bin:/bin`,
@@ -305,10 +276,7 @@ export async function runLocalEve(input: {
   nowEpochSeconds?: number;
 }) {
   const environment = input.environment ?? process.env;
-  const repositoryRoot = ownerDirectory(
-    input.repositoryRoot,
-    "App Builder repository root",
-  );
+  const repositoryRoot = ownerDirectory(input.repositoryRoot, "App Builder repository root");
   const token = parseLocalVercelOidcToken(
     readOwnerBoundLocalFile(join(repositoryRoot, ".env.local"), {
       confidential: true,

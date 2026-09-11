@@ -21,10 +21,7 @@ import {
 
 async function fixture<T>(id: string): Promise<T> {
   return JSON.parse(
-    await readFile(
-      resolve(`docs/design-quality-cases/${id}/fixtures.json`),
-      "utf8",
-    ),
+    await readFile(resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf8"),
   ) as T;
 }
 
@@ -144,9 +141,7 @@ describe("renderer inputs", () => {
     "assembles and validates the %s public-component fixture",
     async (id) => {
       const input = await loadDesignQualityExample(id);
-      expect(input.files.map(({ path }) => path)).toContain(
-        input.manifest.screens[0]?.entry,
-      );
+      expect(input.files.map(({ path }) => path)).toContain(input.manifest.screens[0]?.entry);
       expect(input.catalogGaps).toEqual([]);
     },
   );

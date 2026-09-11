@@ -16,10 +16,7 @@ import type { BuilderProvisionAuthority } from "./journal";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
-function predicate(
-  authority: BuilderProvisionAuthority,
-  providerUserId: string,
-) {
+function predicate(authority: BuilderProvisionAuthority, providerUserId: string) {
   return and(
     eq(hostedGitHubUserCredentials.issuer, authority.issuer),
     eq(hostedGitHubUserCredentials.audience, authority.audience),

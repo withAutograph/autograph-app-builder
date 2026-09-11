@@ -43,8 +43,7 @@ const sameOriginConfigSchema = z
       context.addIssue({
         code: "custom",
         path: ["baseUrl"],
-        message:
-          "The canonical Eve API must use a credential-free HTTPS origin.",
+        message: "The canonical Eve API must use a credential-free HTTPS origin.",
       });
       return z.NEVER;
     }
@@ -67,14 +66,10 @@ const cancelResponseSchema = z.discriminatedUnion("status", [
       status: z.literal("accepted"),
     })
     .strict(),
-  z
-    .object({ ok: z.literal(true), status: z.literal("no_active_turn") })
-    .strict(),
+  z.object({ ok: z.literal(true), status: z.literal("no_active_turn") }).strict(),
 ]);
 
-const errorResponseSchema = z
-  .object({ code: z.string().min(1).max(100) })
-  .passthrough();
+const errorResponseSchema = z.object({ code: z.string().min(1).max(100) }).passthrough();
 
 const streamEnvelopeSchema = z
   .object({ type: z.string().min(1), data: z.record(z.string(), z.unknown()) })
@@ -96,17 +91,11 @@ function exactToken(value: string): string {
   return value;
 }
 
-function endpoint(
-  config: z.infer<typeof sameOriginConfigSchema>,
-  path: string,
-): string {
+function endpoint(config: z.infer<typeof sameOriginConfigSchema>, path: string): string {
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
-function forwardedPrincipal(
-  principalInput: HostedPrincipal,
-  sourceHandoffId?: string,
-) {
+function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: string) {
   const principal = hostedPrincipalSchema.parse(principalInput);
   return {
     current: {
@@ -117,10 +106,7 @@ function forwardedPrincipal(
         ...(sourceHandoffId === undefined
           ? {}
           : {
-              "autograph:source-handoff-id": z
-                .string()
-                .uuid()
-                .parse(sourceHandoffId),
+              "autograph:source-handoff-id": z.string().uuid().parse(sourceHandoffId),
             }),
       },
       authenticator: "mcp-oauth-jwks",
@@ -148,8 +134,7 @@ async function boundedJson(response: Response): Promise<unknown> {
   const declaredLength = response.headers.get("content-length");
   if (
     declaredLength !== null &&
-    (!/^\d+$/u.test(declaredLength) ||
-      Number(declaredLength) > MAX_RESPONSE_BYTES)
+    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_RESPONSE_BYTES)
   ) {
     throw new Error("The canonical Eve API response is too large.");
   }
@@ -173,33 +158,25 @@ async function postMutation(input: {
   try {
     headers = await workloadHeaders(input.workloadIdentity);
   } catch {
-    throw new SubmissionRejectedBeforeDispatchError(
-      "workload_identity_unavailable",
-    );
+    throw new SubmissionRejectedBeforeDispatchError("workload_identity_unavailable");
   }
 
   let response: Response;
   try {
-    response = await input.fetchImplementation(
-      endpoint(input.config, input.path),
-      {
-        method: "POST",
-        redirect: "manual",
-        signal: AbortSignal.timeout(input.config.timeoutMs),
-        headers: {
-          ...headers,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...input.body,
-          forwardedPrincipal: forwardedPrincipal(
-            input.principal,
-            input.sourceHandoffId,
-          ),
-        }),
+    response = await input.fetchImplementation(endpoint(input.config, input.path), {
+      method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(input.config.timeoutMs),
+      headers: {
+        ...headers,
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        ...input.body,
+        forwardedPrincipal: forwardedPrincipal(input.principal, input.sourceHandoffId),
+      }),
+    });
   } catch {
     throw new SubmissionOutcomeUnknownError();
   }
@@ -254,10 +231,7 @@ async function readInstalledSnapshot(input: {
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }
-  if (
-    response.headers.get("content-type")?.split(";", 1)[0] !==
-    "application/x-ndjson"
-  ) {
+  if (response.headers.get("content-type")?.split(";", 1)[0] !== "application/x-ndjson") {
     throw new Error("Canonical Eve returned an invalid stream type.");
   }
   if (
@@ -295,9 +269,7 @@ async function readInstalledSnapshot(input: {
         const line = buffered.trim();
         if (line.length > 0 && events.length <= tail) {
           events.push(
-            streamEnvelopeSchema.parse(
-              JSON.parse(line),
-            ) as unknown as MessageStreamEvent,
+            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
           );
         }
         break;
@@ -311,9 +283,7 @@ async function readInstalledSnapshot(input: {
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
           events.push(
-            streamEnvelopeSchema.parse(
-              JSON.parse(line),
-            ) as unknown as MessageStreamEvent,
+            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
           );
         }
         newline = buffered.indexOf("\n");
@@ -351,9 +321,7 @@ async function readSnapshot(
   return (await readInstalledSnapshot(input)).snapshot;
 }
 
-function activeTurnId(
-  events: readonly MessageStreamEvent[],
-): string | undefined {
+function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined {
   let active: string | undefined;
   for (const event of events) {
     const turnId =
@@ -366,17 +334,11 @@ function activeTurnId(
     )
       active = turnId;
     if (
-      ["turn.completed", "turn.failed", "turn.cancelled"].includes(
-        event.type,
-      ) &&
+      ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
       (turnId === undefined || turnId === active)
     )
       active = undefined;
-    if (
-      ["session.waiting", "session.completed", "session.failed"].includes(
-        event.type,
-      )
-    )
+    if (["session.waiting", "session.completed", "session.failed"].includes(event.type))
       active = undefined;
   }
   return active;
@@ -393,25 +355,18 @@ function cancellationSettled(
   );
   return (
     cancelledAt >= 0 &&
-    next
-      .slice(cancelledAt + 1)
-      .some((event) => event.type === "session.waiting")
+    next.slice(cancelledAt + 1).some((event) => event.type === "session.waiting")
   );
 }
 
-function outstandingRequestIds(
-  events: readonly MessageStreamEvent[],
-): ReadonlySet<string> {
+function outstandingRequestIds(events: readonly MessageStreamEvent[]): ReadonlySet<string> {
   const outstanding = new Set<string>();
   for (const event of events) {
     if (event.type === "input.requested")
-      for (const request of event.data.requests)
-        outstanding.add(request.requestId);
+      for (const request of event.data.requests) outstanding.add(request.requestId);
     if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions)
-        outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled")
-      outstanding.delete(event.data.requestId);
+      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
+    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
   }
   return outstanding;
 }
@@ -464,8 +419,7 @@ export function createSameOriginEveTransport(input: {
         }),
       };
     },
-    get: (request) =>
-      readSnapshot({ ...common, sessionId: request.adapterSessionId }),
+    get: (request) => readSnapshot({ ...common, sessionId: request.adapterSessionId }),
     async send(request) {
       const accepted = await postMutation({
         ...common,
@@ -528,9 +482,7 @@ export function createSameOriginEveTransport(input: {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(
-            guardedTurnId === undefined ? {} : { turnId: guardedTurnId },
-          ),
+          body: JSON.stringify(guardedTurnId === undefined ? {} : { turnId: guardedTurnId }),
         },
       });
       if (response.status !== 200 && response.status !== 202) {
@@ -543,27 +495,17 @@ export function createSameOriginEveTransport(input: {
       ) {
         throw new Error("Canonical Eve cancellation status was inconsistent.");
       }
-      if (
-        cancelled.status === "accepted" &&
-        cancelled.sessionId !== request.adapterSessionId
-      ) {
+      if (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId) {
         throw new Error("Canonical Eve cancellation changed the session.");
       }
       if (cancelled.status === "no_active_turn") return before.snapshot;
-      if (guardedTurnId === undefined)
-        throw new HostedCancellationUnsettledError();
+      if (guardedTurnId === undefined) throw new HostedCancellationUnsettledError();
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const observed = await readInstalledSnapshot({
           ...common,
           sessionId: request.adapterSessionId,
         });
-        if (
-          cancellationSettled(
-            observed.installed,
-            before.installed.length,
-            guardedTurnId,
-          )
-        )
+        if (cancellationSettled(observed.installed, before.installed.length, guardedTurnId))
           return observed.snapshot;
         const newerTurn = activeTurnId(observed.installed);
         if (newerTurn !== undefined && newerTurn !== guardedTurnId)

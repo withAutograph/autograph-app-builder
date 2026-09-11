@@ -71,9 +71,7 @@ async function privateRoot(path: string) {
     info.uid !== process.getuid?.() ||
     (info.mode & 0o077) !== 0
   )
-    throw new Error(
-      `Development root must be canonical, owner-only, and mode 0700: ${path}`,
-    );
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);
   return canonical;
 }
 
@@ -176,18 +174,12 @@ async function runEveCycle(input: {
       platform: "linux/amd64",
       tools: developmentTools,
     });
-    const dependencyCacheHit =
-      input.packageState.dependencyKey === dependencyKey;
+    const dependencyCacheHit = input.packageState.dependencyKey === dependencyKey;
     const previousEntries = new Map(
       input.packageState.snapshot?.entries.map((entry) => [entry.path, entry]),
     );
-    const currentEntries = new Map(
-      snapshot.entries.map((entry) => [entry.path, entry]),
-    );
-    const changedPaths = new Set([
-      ...previousEntries.keys(),
-      ...currentEntries.keys(),
-    ]);
+    const currentEntries = new Map(snapshot.entries.map((entry) => [entry.path, entry]));
+    const changedPaths = new Set([...previousEntries.keys(), ...currentEntries.keys()]);
     let snapshotDeltaFiles = 0;
     let snapshotDeltaBytes = 0;
     for (const path of changedPaths) {
@@ -197,8 +189,7 @@ async function runEveCycle(input: {
       snapshotDeltaFiles += 1;
       snapshotDeltaBytes += current?.bytes ?? previous?.bytes ?? 0;
     }
-    const runtimeFingerprint =
-      await fingerprintDevelopmentRuntime(repositoryRoot);
+    const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
       repositoryRoot,
       port: input.nextPort,
@@ -215,8 +206,7 @@ async function runEveCycle(input: {
       input.packageState.fingerprint = packageFingerprint;
     }
     const packageResult = input.packageState.result;
-    if (packageResult === undefined)
-      throw new Error("Development package was unavailable.");
+    if (packageResult === undefined) throw new Error("Development package was unavailable.");
     const closed = developmentLaunchEnvironment({
       sourceRoot: input.sourceRoot,
       snapshotRoot: snapshot.root,
@@ -232,10 +222,7 @@ async function runEveCycle(input: {
       [
         "--import",
         "tsx",
-        join(
-          repositoryRoot,
-          ".config/mise/scripts/repository/run-local-development-eve.mts",
-        ),
+        join(repositoryRoot, ".config/mise/scripts/repository/run-local-development-eve.mts"),
       ],
       {
         cwd: repositoryRoot,
@@ -269,10 +256,7 @@ async function runEveCycle(input: {
       kind: "eve-exit" as const,
       code,
     }));
-    const stopping = waitForDevelopmentShutdown(
-      input.signal,
-      input.shutdownExitCode,
-    );
+    const stopping = waitForDevelopmentShutdown(input.signal, input.shutdownExitCode);
     try {
       const startup = await Promise.race([
         waitForDevelopmentMcp({
@@ -289,10 +273,7 @@ async function runEveCycle(input: {
       if (!packageReused)
         await registerDevelopmentPackage({
           codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
-          codexHome: requiredEnvironment(
-            "APP_BUILDER_DEV_CODEX_HOME",
-            "profile root",
-          ),
+          codexHome: requiredEnvironment("APP_BUILDER_DEV_CODEX_HOME", "profile root"),
           marketplaceRoot: packageResult.marketplaceRoot,
           version: packageResult.receipt.version,
         });
@@ -311,9 +292,7 @@ async function runEveCycle(input: {
       input.packageState.dependencyKey = dependencyKey;
       input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
-      console.log(
-        "Open a fresh Codex task and select Autograph App Builder (Development).",
-      );
+      console.log("Open a fresh Codex task and select Autograph App Builder (Development).");
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
       return await Promise.race([
         sourceChanged,
@@ -397,11 +376,7 @@ try {
       shutdownExitCode: shutdown.exitCode,
       nextExited,
     });
-    if (
-      outcome.kind === "next-exit" ||
-      outcome.kind === "eve-exit" ||
-      outcome.kind === "stop"
-    ) {
+    if (outcome.kind === "next-exit" || outcome.kind === "eve-exit" || outcome.kind === "stop") {
       process.exitCode = outcome.code;
       break;
     }

@@ -1,10 +1,4 @@
-import {
-  lstatSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  statSync,
-} from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 type LinkedVercelProject = {
@@ -30,11 +24,7 @@ type VercelOidcClaims = {
 function assertOwnerNonWritable(path: string): void {
   const stat = statSync(path);
   const ownerId = process.getuid?.();
-  if (
-    ownerId === undefined ||
-    stat.uid !== ownerId ||
-    (stat.mode & 0o022) !== 0
-  ) {
+  if (ownerId === undefined || stat.uid !== ownerId || (stat.mode & 0o022) !== 0) {
     throw new Error("Installed Eve input was not owner-bound.");
   }
 }
@@ -118,23 +108,14 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     "Installed Eve package",
   );
   const bin = closedObject(metadata.bin, "Installed Eve bin");
-  if (
-    metadata.name !== "eve" ||
-    metadata.version !== "0.44.4" ||
-    bin.eve !== "./bin/eve.js"
-  ) {
+  if (metadata.name !== "eve" || metadata.version !== "0.44.4" || bin.eve !== "./bin/eve.js") {
     throw new Error("Installed Eve package identity was invalid.");
   }
   const rootMetadata = closedObject(
-    JSON.parse(
-      readFileSync(join(repositoryRoot, "package.json"), "utf8"),
-    ) as unknown,
+    JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as unknown,
     "Repository package",
   );
-  const dependencies = closedObject(
-    rootMetadata.dependencies,
-    "Repository dependencies",
-  );
+  const dependencies = closedObject(rootMetadata.dependencies, "Repository dependencies");
   if (dependencies.eve !== "0.44.4") {
     throw new Error("Repository Eve dependency was not pinned to 0.44.4.");
   }
@@ -195,16 +176,12 @@ export function readOwnerBoundLocalFile(
 }
 
 export function parseLocalVercelOidcToken(source: string): string {
-  const matches = source
-    .split(/\r?\n/u)
-    .filter((line) => line.startsWith("VERCEL_OIDC_TOKEN="));
+  const matches = source.split(/\r?\n/u).filter((line) => line.startsWith("VERCEL_OIDC_TOKEN="));
   if (matches.length !== 1) {
     throw new Error("Expected exactly one VERCEL_OIDC_TOKEN entry.");
   }
   const encoded = matches[0]!.slice("VERCEL_OIDC_TOKEN=".length);
-  const token = encoded.startsWith('"')
-    ? (JSON.parse(encoded) as unknown)
-    : encoded;
+  const token = encoded.startsWith('"') ? (JSON.parse(encoded) as unknown) : encoded;
   if (
     typeof token !== "string" ||
     token.length > 8192 ||

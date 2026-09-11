@@ -2,11 +2,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { isHostedVercelRuntime } from "../sandbox/backend";
-import {
-  inspectSourceReceipt,
-  type SourceKind,
-  type SourceReceipt,
-} from "./source-receipt";
+import { inspectSourceReceipt, type SourceKind, type SourceReceipt } from "./source-receipt";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -25,12 +21,8 @@ const closedDevelopmentBinding = (environment: Environment) =>
   environment.EVE_HOSTED_ADAPTER === "0" &&
   environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS === "0";
 
-export function canAutoSelectDevelopmentSource(
-  environment: Environment = process.env,
-) {
-  return (
-    !isHostedVercelRuntime(environment) && closedDevelopmentBinding(environment)
-  );
+export function canAutoSelectDevelopmentSource(environment: Environment = process.env) {
+  return !isHostedVercelRuntime(environment) && closedDevelopmentBinding(environment);
 }
 
 function required(environment: Environment, name: string) {
@@ -41,11 +33,7 @@ function required(environment: Environment, name: string) {
 }
 
 function exactDevelopmentSourceRoot(path: string) {
-  if (
-    !isAbsolute(path) ||
-    resolve(path) !== path ||
-    realpathSync(path) !== path
-  )
+  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
     throw new Error("Development source root was not canonical.");
   const info = lstatSync(path);
   if (!info.isDirectory() || info.isSymbolicLink())
@@ -64,18 +52,13 @@ export async function developmentSourceReceipt(
   environment: Environment = process.env,
 ): Promise<SourceReceipt | undefined> {
   if (isHostedVercelRuntime(environment)) return undefined;
-  if (environment.APP_BUILDER_EXECUTION_MODE !== "development")
-    return undefined;
+  if (environment.APP_BUILDER_EXECUTION_MODE !== "development") return undefined;
   if (!closedDevelopmentBinding(environment))
     throw new Error("Development source binding was not closed.");
 
-  const sourceRoot = exactDevelopmentSourceRoot(
-    required(environment, "REPOSITORY_LOCAL_ROOTS"),
-  );
+  const sourceRoot = exactDevelopmentSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
   if (suppliedPath !== undefined && suppliedPath !== sourceRoot)
-    throw new Error(
-      "Development source path did not match the selected snapshot.",
-    );
+    throw new Error("Development source path did not match the selected snapshot.");
   // Development deliberately re-observes a live checkout.  Source edits are
   // normal planning input, not authority failures; the sandbox materializer
   // computes the current working-tree generation when it synchronizes bytes.

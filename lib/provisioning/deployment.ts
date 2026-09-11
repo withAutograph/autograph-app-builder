@@ -10,10 +10,7 @@ import {
 import { readVercelIntegrationEnvironment } from "../integrations/vercel-installation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
-import {
-  builderProvisionProjectionSchema,
-  builderProvisionRequestSchema,
-} from "./contracts";
+import { builderProvisionProjectionSchema, builderProvisionRequestSchema } from "./contracts";
 import { readGitHubProvisioningEnvironment } from "./github-provider";
 import { readGitHubUserCredentialEnvironment } from "./github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "./postgres-github-user-credential";
@@ -25,26 +22,24 @@ const noStore = { "Cache-Control": "no-store" } as const;
 export function createBuilderProvisioningRouteHandler(input: {
   origin: string;
   enabled: () => Promise<boolean>;
-  authorityForRequest: (request: Request) => Promise<{
-    issuer: string;
-    audience: string;
-    workspaceId: string;
-    ownerUserId: string;
-} | undefined>;
+  authorityForRequest: (request: Request) => Promise<
+    | {
+        issuer: string;
+        audience: string;
+        workspaceId: string;
+        ownerUserId: string;
+      }
+    | undefined
+  >;
   execute: typeof executeBuilderProvisioning;
   read: typeof readBuilderProvisioning;
-  dependencies: Parameters<
-    typeof executeBuilderProvisioning
-  >[0]["dependencies"];
+  dependencies: Parameters<typeof executeBuilderProvisioning>[0]["dependencies"];
 }) {
-  const {origin} = new URL(input.origin);
+  const { origin } = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (new URL(request.url).origin !== origin)
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       const authority = await input.authorityForRequest(request);
       if (!authority)
         return Response.json(
@@ -69,10 +64,7 @@ export function createBuilderProvisioningRouteHandler(input: {
                 }),
                 { headers: noStore },
               )
-            : Response.json(
-                { error: "provisioning_not_found" },
-                { status: 404, headers: noStore },
-              );
+            : Response.json({ error: "provisioning_not_found" }, { status: 404, headers: noStore });
         }
         const result = await input.read({
           authority,
@@ -81,32 +73,19 @@ export function createBuilderProvisioningRouteHandler(input: {
         });
         return result
           ? Response.json(result, { headers: noStore })
-          : Response.json(
-              { error: "provisioning_not_found" },
-              { status: 404, headers: noStore },
-            );
+          : Response.json({ error: "provisioning_not_found" }, { status: 404, headers: noStore });
       }
       if (
         request.method !== "POST" ||
         request.headers.get("origin") !== origin ||
-        request.headers.get("content-type")?.split(";", 1)[0] !==
-          "application/json"
+        request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       if (!(await input.enabled()))
-        return Response.json(
-          { error: "feature_disabled" },
-          { status: 503, headers: noStore },
-        );
+        return Response.json({ error: "feature_disabled" }, { status: 503, headers: noStore });
       const length = request.headers.get("content-length");
       if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384))
-        return Response.json(
-          { error: "request_invalid" },
-          { status: 400, headers: noStore },
-        );
+        return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
       const body = builderProvisionRequestSchema.parse(await request.json());
       if (new URL(request.url).searchParams.get("mode") === "reserve") {
         const reserved = await input.dependencies.journal.reserve({
@@ -123,9 +102,7 @@ export function createBuilderProvisioningRouteHandler(input: {
       });
       return Response.json(result, { headers: noStore });
     } catch (error) {
-      const conflict =
-        error instanceof Error &&
-        error.message === "provision-request-id-reused";
+      const conflict = error instanceof Error && error.message === "provision-request-id-reused";
       return Response.json(
         {
           error: conflict ? "request_id_conflict" : "provisioning_unavailable",
@@ -149,9 +126,7 @@ export function getBuilderProvisioningDeploymentHandler(
     database,
     config: vercelConfig,
   });
-  const dependencies: Parameters<
-    typeof executeBuilderProvisioning
-  >[0]["dependencies"] = {
+  const dependencies: Parameters<typeof executeBuilderProvisioning>[0]["dependencies"] = {
     journal: createPostgresBuilderProvisionJournalStore(database),
     githubInstallations: createPostgresHostedGitHubInstallationStore(database),
     githubCredentials: createPostgresGitHubUserCredentialStore({

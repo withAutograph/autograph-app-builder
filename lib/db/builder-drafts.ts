@@ -1,10 +1,7 @@
 import { and, eq, lt, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import {
-  builderDraftRecordSchema,
-  builderDraftStatusSchema,
-} from "../builder-drafts/contracts";
+import { builderDraftRecordSchema, builderDraftStatusSchema } from "../builder-drafts/contracts";
 import type {
   BuilderDraftAuthority,
   BuilderDraftRow,
@@ -26,15 +23,10 @@ function authorityPredicate(authorityInput: BuilderDraftAuthority) {
 }
 
 function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
-  return and(
-    authorityPredicate(authority),
-    eq(schema.builderDrafts.draftId, draftId),
-  );
+  return and(authorityPredicate(authority), eq(schema.builderDrafts.draftId, draftId));
 }
 
-function parseRow(
-  row: typeof schema.builderDrafts.$inferSelect,
-): BuilderDraftRow {
+function parseRow(row: typeof schema.builderDrafts.$inferSelect): BuilderDraftRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
       issuer: row.issuer,
@@ -55,12 +47,7 @@ function parseRow(
 }
 
 function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
 export function createBuilderDraftStore(database: Database): BuilderDraftStore {
@@ -77,12 +64,7 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
     const rows = await database
       .select()
       .from(schema.builderDrafts)
-      .where(
-        and(
-          authorityPredicate(authority),
-          eq(schema.builderDrafts.status, "active"),
-        ),
-      )
+      .where(and(authorityPredicate(authority), eq(schema.builderDrafts.status, "active")))
       .limit(1);
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
@@ -184,19 +166,12 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
       const rows = await database
         .update(schema.builderDrafts)
         .set({ status: "archived", updatedAt: now })
-        .where(
-          and(
-            rowPredicate(authority, draftId),
-            eq(schema.builderDrafts.status, "active"),
-          ),
-        )
+        .where(and(rowPredicate(authority, draftId), eq(schema.builderDrafts.status, "active")))
         .returning({ draftId: schema.builderDrafts.draftId });
       return rows.length > 0;
     },
     async deleteInactiveSince({ now, maxAgeMs }) {
-      const cutoff = new Date(
-        now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000),
-      );
+      const cutoff = new Date(now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000));
       const rows = await database
         .delete(schema.builderDrafts)
         .where(

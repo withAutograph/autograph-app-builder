@@ -27,16 +27,13 @@ export default defineTool({
         const location = await sandbox.run({
           command: `command -v ${command}`,
         });
-        if (location.exitCode !== 0)
-          return { command, available: false as const };
+        if (location.exitCode !== 0) return { command, available: false as const };
         const version = await sandbox.run({ command: `${command} --version` });
         return {
           command,
           available: true as const,
           path: location.stdout.trim(),
-          version:
-            (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
-            "",
+          version: (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ?? "",
         };
       }),
     );
@@ -60,9 +57,7 @@ export default defineTool({
             }
           })();
     const required = (
-      Object.keys(requiredToolVersions) as Array<
-        keyof typeof requiredToolVersions
-      >
+      Object.keys(requiredToolVersions) as Array<keyof typeof requiredToolVersions>
     ).map((command) => {
       const observed = tools.find((tool) => tool.command === command);
       return {
@@ -70,25 +65,18 @@ export default defineTool({
         expected: requiredToolVersions[command].source,
         available: observed?.available === true,
         version: observed?.available === true ? observed.version : "",
-        matches:
-          observed?.available === true &&
-          toolVersionMatches(command, observed.version),
+        matches: observed?.available === true && toolVersionMatches(command, observed.version),
       };
     });
     return {
       sandboxId: sandbox.id,
       backend: backend.kind,
       backendBlockers: backend.blockers,
-      imageConfiguration:
-        execution === undefined ? "unconfigured" : "configured",
+      imageConfiguration: execution === undefined ? "unconfigured" : "configured",
       toolchainReady:
-        execution !== undefined &&
-        cache !== undefined &&
-        required.every((tool) => tool.matches),
+        execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       dependencyCacheDigest:
-        cache === undefined
-          ? "unverified"
-          : dependencyCacheReceiptDigest(cache),
+        cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
       required,
       tools,
     };

@@ -1,13 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readdirSync,
-  readSync,
-  realpathSync,
-} from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -83,11 +76,7 @@ export function assertBoundGhcrPayload(
   );
   const expected = Buffer.from(expectedIdentityDigest, "hex");
   try {
-    if (
-      observed.length !== 32 ||
-      expected.length !== 32 ||
-      !timingSafeEqual(observed, expected)
-    )
+    if (observed.length !== 32 || expected.length !== 32 || !timingSafeEqual(observed, expected))
       throw new Error("GHCR provider identity drifted after approval.");
   } finally {
     secret.fill(0);
@@ -112,8 +101,7 @@ export function assertVerifiedGhcrLoginPayload(
     throw new Error("GitHub keyring verification returned malformed output.");
   const record = parsed as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !==
-      "Username,identityDigest,provenanceDigest" ||
+    Object.keys(record).sort().join(",") !== "Username,identityDigest,provenanceDigest" ||
     record.Username !== expectedUsername ||
     record.provenanceDigest !== expectedProvenanceDigest ||
     record.identityDigest !== expectedIdentityDigest
@@ -131,10 +119,7 @@ type GhStatusRecord = Readonly<{
   tokenSource: "keyring";
 }>;
 
-export function parseGhAuthStatus(
-  payload: string,
-  expectedUsername: string,
-): GhStatusRecord {
+export function parseGhAuthStatus(payload: string, expectedUsername: string): GhStatusRecord {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
@@ -148,7 +133,7 @@ export function parseGhAuthStatus(
     Object.keys(parsed).join(",") !== "hosts"
   )
     throw new Error("GitHub authentication status was malformed.");
-  const {hosts} = (parsed as { hosts?: unknown });
+  const { hosts } = parsed as { hosts?: unknown };
   if (
     typeof hosts !== "object" ||
     hosts === null ||
@@ -159,7 +144,7 @@ export function parseGhAuthStatus(
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1)
     throw new Error("GitHub authentication status was ambiguous.");
-    const [record] = records;
+  const [record] = records;
   if (typeof record !== "object" || record === null || Array.isArray(record))
     throw new Error("GitHub authentication status was malformed.");
   const value = record as Record<string, unknown>;
@@ -199,12 +184,8 @@ function exactGithubCli(): string {
   if (!isAbsolute(path) || realpathSync(path) !== path)
     throw new Error("GitHub CLI executable is invalid.");
   const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink())
-    throw new Error("GitHub CLI executable is invalid.");
-  if (
-    createHash("sha256").update(readFileSync(path)).digest("hex") !==
-    expectedSha256
-  )
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("GitHub CLI executable is invalid.");
+  if (createHash("sha256").update(readFileSync(path)).digest("hex") !== expectedSha256)
     throw new Error("GitHub CLI executable drifted after approval.");
   return path;
 }
@@ -225,23 +206,15 @@ export function githubConfigDigest(configRoot: string): string {
   const records: string[] = [];
   for (const name of ["config.yml", "hosts.yml"] as const) {
     const path = join(configRoot, name);
-    if (realpathSync(path) !== path)
-      throw new Error("GitHub configuration file is unsafe.");
+    if (realpathSync(path) !== path) throw new Error("GitHub configuration file is unsafe.");
     const stat = lstatSync(path);
-    if (
-      !stat.isFile() ||
-      stat.isSymbolicLink() ||
-      stat.uid !== uid ||
-      (stat.mode & 0o077) !== 0
-    )
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== uid || (stat.mode & 0o077) !== 0)
       throw new Error("GitHub configuration file is unsafe.");
     const bytes = readFileSync(path);
     try {
       if (/^\s*(?:oauth_token|token)\s*:/imu.test(bytes.toString("utf8")))
         throw new Error("Plaintext GitHub credentials are not eligible.");
-      records.push(
-        `${name}\0${createHash("sha256").update(bytes).digest("hex")}`,
-      );
+      records.push(`${name}\0${createHash("sha256").update(bytes).digest("hex")}`);
     } finally {
       bytes.fill(0);
     }
@@ -250,11 +223,7 @@ export function githubConfigDigest(configRoot: string): string {
 }
 
 export function assertGithubStateRoot(stateRoot: string): void {
-  if (
-    !isAbsolute(stateRoot) ||
-    !existsSync(stateRoot) ||
-    realpathSync(stateRoot) !== stateRoot
-  )
+  if (!isAbsolute(stateRoot) || !existsSync(stateRoot) || realpathSync(stateRoot) !== stateRoot)
     throw new Error("GitHub state root is invalid.");
   const uid = process.getuid?.();
   const rootStat = lstatSync(stateRoot);
@@ -309,8 +278,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
 export function githubStateDigest(stateRoot: string): string {
   assertGithubStateRoot(stateRoot);
   const deviceId = join(stateRoot, "gh", "device-id");
-  if (!existsSync(deviceId))
-    return createHash("sha256").update("empty").digest("hex");
+  if (!existsSync(deviceId)) return createHash("sha256").update("empty").digest("hex");
   const bytes = readFileSync(deviceId);
   try {
     return createHash("sha256")
@@ -348,10 +316,7 @@ function assertExpectedGithubState(): void {
   const expectedDigest = process.env.APP_BUILDER_GH_STATE_DIGEST;
   assertGithubStateRoot(stateRoot);
   if (expectedDigest === undefined) return;
-  if (
-    !/^[a-f0-9]{64}$/u.test(expectedDigest) ||
-    githubStateDigest(stateRoot) !== expectedDigest
-  )
+  if (!/^[a-f0-9]{64}$/u.test(expectedDigest) || githubStateDigest(stateRoot) !== expectedDigest)
     throw new Error("GitHub state drifted after approval.");
 }
 
@@ -450,14 +415,7 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
   } finally {
     status.fill(0);
   }
-  const raw = await runBoundedGh([
-    "auth",
-    "token",
-    "--hostname",
-    githubHost,
-    "--user",
-    username,
-  ]);
+  const raw = await runBoundedGh(["auth", "token", "--hostname", githubHost, "--user", username]);
   try {
     return parseExactToken(raw);
   } finally {
@@ -476,8 +434,7 @@ async function verifyNamespace(username: string): Promise<void> {
   try {
     if (
       user.toString("utf8").trim() !== username ||
-      membership.toString("utf8").trim() !==
-        `active\tadmin\t${githubOrganization}`
+      membership.toString("utf8").trim() !== `active\tadmin\t${githubOrganization}`
     )
       throw new Error("GitHub namespace authority did not match approval.");
   } finally {
@@ -497,9 +454,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   try {
     await new Promise<void>((resolveWrite, rejectWrite) => {
       process.stdout.write(payload, (error) =>
-        error === undefined || error === null
-          ? resolveWrite()
-          : rejectWrite(error),
+        error === undefined || error === null ? resolveWrite() : rejectWrite(error),
       );
     });
   } finally {
@@ -526,9 +481,7 @@ async function writeVerifiedLogin(
   try {
     await new Promise<void>((resolveWrite, rejectWrite) => {
       process.stdout.write(payload, (error) =>
-        error === undefined || error === null
-          ? resolveWrite()
-          : rejectWrite(error),
+        error === undefined || error === null ? resolveWrite() : rejectWrite(error),
       );
     });
   } finally {
@@ -549,25 +502,14 @@ async function run(): Promise<void> {
     throw new Error("Initial GHCR login cannot inherit approved state.");
   }
   const username = requiredEnvironment("APP_BUILDER_GHCR_USERNAME");
-  const provenanceDigest = requiredEnvironment(
-    "APP_BUILDER_GHCR_PROVENANCE_DIGEST",
-  );
-  const expectedDigest = requiredEnvironment(
-    "APP_BUILDER_GHCR_IDENTITY_DIGEST",
-  );
+  const provenanceDigest = requiredEnvironment("APP_BUILDER_GHCR_PROVENANCE_DIGEST");
+  const expectedDigest = requiredEnvironment("APP_BUILDER_GHCR_IDENTITY_DIGEST");
   const token = await readApprovedKeyringToken(username);
   try {
-    const observed = Buffer.from(
-      ghcrIdentityDigest(username, provenanceDigest, token),
-      "hex",
-    );
+    const observed = Buffer.from(ghcrIdentityDigest(username, provenanceDigest, token), "hex");
     const expected = Buffer.from(expectedDigest, "hex");
     try {
-      if (
-        observed.length !== 32 ||
-        expected.length !== 32 ||
-        !timingSafeEqual(observed, expected)
-      )
+      if (observed.length !== 32 || expected.length !== 32 || !timingSafeEqual(observed, expected))
         throw new Error("GitHub keyring credential drifted after approval.");
     } finally {
       observed.fill(0);
@@ -582,10 +524,7 @@ async function run(): Promise<void> {
         rawApproved.fill(0);
       }
       try {
-        if (
-          approved.length !== token.length ||
-          !timingSafeEqual(approved, token)
-        )
+        if (approved.length !== token.length || !timingSafeEqual(approved, token))
           throw new Error("GitHub keyring credential drifted after approval.");
       } finally {
         approved.fill(0);
@@ -600,16 +539,11 @@ async function run(): Promise<void> {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     await run();
   } catch (error) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : "GHCR provider failed."}\n`,
-    );
+    process.stderr.write(`${error instanceof Error ? error.message : "GHCR provider failed."}\n`);
     process.exitCode = 1;
   }
 }

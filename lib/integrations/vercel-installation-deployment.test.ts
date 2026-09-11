@@ -4,9 +4,7 @@ import { createVercelInstallationDeploymentHandler } from "./vercel-installation
 
 describe("Vercel installation deployment route", () => {
   it("returns a visible configuration failure when provider activation is absent", async () => {
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const handler = createVercelInstallationDeploymentHandler("start", {
       APP_ORIGIN: "https://builder.example",
     });
@@ -27,12 +25,8 @@ describe("Vercel installation deployment route", () => {
       "https://builder.example/?vercel=failed&vercelReason=configuration-unavailable",
     );
     expect(error).toHaveBeenCalledOnce();
-    expect(error.mock.calls[0]?.[0]).toContain(
-      '"reason":"configuration-unavailable"',
-    );
-    expect(error.mock.calls[0]?.[0]).toContain(
-      '"requestId":"iad1::safe-request-id"',
-    );
+    expect(error.mock.calls[0]?.[0]).toContain('"reason":"configuration-unavailable"');
+    expect(error.mock.calls[0]?.[0]).toContain('"requestId":"iad1::safe-request-id"');
   });
 
   it("rejects a cross-origin start before initializing provider state", async () => {

@@ -4,10 +4,7 @@ import { createHash } from "node:crypto";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationContentSource } from "../repository/github-publication";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import {
-  inspectApplyOverlay,
-  inspectFixtureApplyOverlay,
-} from "../repository/target-apply";
+import { inspectApplyOverlay, inspectFixtureApplyOverlay } from "../repository/target-apply";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
 
@@ -18,20 +15,14 @@ type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
  * postimages to the publication runtime. No bytes are retained in workflow or
  * durable publication state.
  */
-const sha256 = (value: string | Uint8Array) =>
-  createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 export function publicationContentSourceForReviewedWorkflow(input: {
   state: ReviewedWorkflow;
   sandbox: SandboxSession;
 }): GitHubPublicationContentSource {
-  const relativeRoot = input.state.applyReceipt.applyRoot.replace(
-    /^\/workspace\//u,
-    "",
-  );
-  let applyFiles:
-    | Promise<Map<string, { path: string; mode: string; digest: string }>>
-    | undefined;
+  const relativeRoot = input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
+  let applyFiles: Promise<Map<string, { path: string; mode: string; digest: string }>> | undefined;
   const observeApplyFiles = () =>
     (applyFiles ??= (async () => {
       const observed = hasTestCapability("simulated-target")
@@ -40,14 +31,9 @@ export function publicationContentSourceForReviewedWorkflow(input: {
             input.state.applyReceipt.applyRoot,
             input.state.appSpec.appId,
           )
-        : await inspectApplyOverlay(
-            input.sandbox,
-            input.state.applyReceipt.applyRoot,
-          );
+        : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
       if (observed.treeDigest !== input.state.reviewReceipt.postTreeDigest)
-        throw new Error(
-          "The reviewed apply overlay changed before GitHub publication.",
-        );
+        throw new Error("The reviewed apply overlay changed before GitHub publication.");
       return new Map(observed.files.map((file) => [file.path, file]));
     })());
   return {
@@ -58,19 +44,14 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         expectedWorkspace: input.state.workspace,
         githubSource: input.state.githubSource,
       });
-      const sourceFiles = await readPreparedSandboxSourceManifest(
-        input.sandbox,
-        prepared,
-      );
+      const sourceFiles = await readPreparedSandboxSourceManifest(input.sandbox, prepared);
       const files = await Promise.all(
         sourceFiles.map(async (file) => {
           const bytes = await input.sandbox.readBinaryFile({
             path: `repository/${file.path}`,
           });
           if (bytes === null || sha256(bytes) !== file.sha256)
-            throw new Error(
-              "A prepared source file changed before publication.",
-            );
+            throw new Error("A prepared source file changed before publication.");
           return {
             path: file.path,
             mode: file.mode as "100644" | "100755",

@@ -4,12 +4,7 @@ export interface DocsTableOfContentsItem {
 }
 
 export interface DocsDocument {
-  slug:
-    | "overview"
-    | "install-autograph"
-    | "connect-access"
-    | "create-an-app"
-    | "troubleshooting";
+  slug: "overview" | "install-autograph" | "connect-access" | "create-an-app" | "troubleshooting";
   title: string;
   description: string;
   toc: DocsTableOfContentsItem[];
@@ -19,8 +14,7 @@ export const docs: readonly DocsDocument[] = [
   {
     slug: "overview",
     title: "Welcome to Autograph",
-    description:
-      "Learn how Autograph App Builder turns a product idea into a working application.",
+    description: "Learn how Autograph App Builder turns a product idea into a working application.",
     toc: [
       { id: "what-you-can-do", label: "What you can do" },
       { id: "your-first-app", label: "Your first app" },
@@ -30,8 +24,7 @@ export const docs: readonly DocsDocument[] = [
   {
     slug: "install-autograph",
     title: "Install Autograph",
-    description:
-      "Install Autograph App Builder and start your first Codex task.",
+    description: "Install Autograph App Builder and start your first Codex task.",
     toc: [
       { id: "confirm-the-installation", label: "Confirm the installation" },
       { id: "sign-in-when-prompted", label: "Sign in when prompted" },
@@ -44,8 +37,7 @@ export const docs: readonly DocsDocument[] = [
   {
     slug: "connect-access",
     title: "Connect accounts and access",
-    description:
-      "Connect Autograph to the accounts and repositories you choose.",
+    description: "Connect Autograph to the accounts and repositories you choose.",
     toc: [
       { id: "sign-in-to-autograph", label: "Sign in to Autograph" },
       { id: "give-repository-access", label: "Give repository access" },
@@ -59,8 +51,7 @@ export const docs: readonly DocsDocument[] = [
   {
     slug: "create-an-app",
     title: "Create an app",
-    description:
-      "Start with an outcome, review the product, and choose where it lives when ready.",
+    description: "Start with an outcome, review the product, and choose where it lives when ready.",
     toc: [
       { id: "start-with-the-outcome", label: "Start with the outcome" },
       { id: "review-and-refine", label: "Review and refine" },

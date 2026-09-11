@@ -39,8 +39,7 @@ function canonicalSelector(value: string) {
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char))
-        output += " ";
+      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char)) output += " ";
     }
     pendingSpace = false;
     output += char;
@@ -60,8 +59,7 @@ function ruleSignature(
         properties.some(
           (other) =>
             other !== property &&
-            (other.startsWith(`${property}-`) ||
-              property.startsWith(`${other}-`)),
+            (other.startsWith(`${property}-`) || property.startsWith(`${other}-`)),
         ),
     )
   )
@@ -75,9 +73,7 @@ function ruleSignature(
     .join("\u0001")}`;
 }
 
-export function collectCssRuleEvidence(
-  files: CssSourceFile[],
-): CssRuleEvidence[] {
+export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
     const css = postcss.parse(file.content, { from: file.path });
@@ -86,9 +82,7 @@ export function collectCssRuleEvidence(
       // backend, so it deliberately stays unassessed.
       if (rule.parent?.type !== "root") return;
       const declarations =
-        rule.nodes?.filter(
-          (node): node is postcss.Declaration => node.type === "decl",
-        ) ?? [];
+        rule.nodes?.filter((node): node is postcss.Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
       if (!signature) return;
       for (const declaration of declarations) {
@@ -128,15 +122,11 @@ export function generatedCssRule(
       important: declaration.important,
     })),
   );
-  const loaded = actual
-    ? matchingGenerated.filter((rule) => rule.ruleSignature === actual)
-    : [];
+  const loaded = actual ? matchingGenerated.filter((rule) => rule.ruleSignature === actual) : [];
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
-  return loaded.length === 1 &&
-    matchingGenerated.length === 1 &&
-    !matchingShared.length
+  return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
     ? loaded[0]
     : undefined;
 }
