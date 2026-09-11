@@ -75,7 +75,13 @@ import { SearchCombobox, type ComboOption } from "./search-combobox";
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-export { SearchCombobox, type ComboOption } from "./search-combobox";
+import type {
+  BuilderDraft,
+  BuilderForm,
+  DeploymentProvider,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
 export type {
   BuilderDraft,
   BuilderForm,
