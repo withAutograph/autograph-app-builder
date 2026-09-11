@@ -68,17 +68,12 @@ import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
 import { InfoTooltip } from "./builder-info-tooltip";
 import { SearchCombobox, type ComboOption } from "./search-combobox";
+import { AutographMark } from "./autograph-mark";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-import type {
-  BuilderDraft,
-  BuilderForm,
-  DeploymentProvider,
-  ProviderField,
-  StorageProvider,
-} from "./builder-types";
+export { AutographMark } from "./autograph-mark";
 export type {
   BuilderDraft,
   BuilderForm,
@@ -1046,7 +1041,11 @@ export function Builder({
     new Map<
       string,
       {
-        resolve: (saved: { draftId: string; revision: number; updatedAt: string }) => void;
+        resolve: (saved: {
+          draftId: string;
+          revision: number;
+          updatedAt: string;
+        }) => void;
         reject: (error: Error) => void;
       }
     >(),
