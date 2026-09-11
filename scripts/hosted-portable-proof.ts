@@ -543,7 +543,7 @@ function responseFor(
       throw new Error(
         "Question did not match exactly one title-bound response.",
       );
-    const match = matches[0];
+    const [match] = matches;
     return {
       response: {
         kind: "answer" as const,
@@ -598,7 +598,7 @@ async function pollUntilSettled(input: {
         limit: 250,
       }),
     );
-    cursor = page.cursor;
+    ({ cursor } = page);
     allText += `\n${assistantText(page)}`;
     const responses = (page.inputRequests ?? []).map((request) => {
       const selected = responseFor(

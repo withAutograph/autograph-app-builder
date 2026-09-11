@@ -263,12 +263,12 @@ try {
   });
   await mutateReceipt("core digest drift", (receipt) => {
     const files = receipt.coreFiles as Record<string, string>;
-    const path = Object.keys(files)[0];
+    const [path] = Object.keys(files);
     files[path] = "0".repeat(64);
   });
   await mutateReceipt("auxiliary digest drift", (receipt) => {
     const files = receipt.auxiliaryFiles as Record<string, string>;
-    const path = Object.keys(files)[0];
+    const [path] = Object.keys(files);
     files[path] = "0".repeat(64);
   });
 

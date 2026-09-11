@@ -1645,7 +1645,7 @@ wait
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {
         output += chunk;
-        const line = output.split("\n")[0];
+    const [line] = output.split("\n");
         if (line !== "") {
           clearTimeout(timeout);
           resolvePath(line);

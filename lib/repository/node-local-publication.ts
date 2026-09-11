@@ -246,8 +246,7 @@ function statusMetadata(record: string): {
   indexObjectId?: string;
 } {
   const fields = record.split(" ");
-  const indexMode = fields[4];
-  const indexObjectId = fields[7];
+    const [, , , , indexMode, , , indexObjectId] = fields;
   return indexMode !== undefined && indexObjectId !== undefined
     ? { indexMode, indexObjectId }
     : {};

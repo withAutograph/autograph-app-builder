@@ -215,7 +215,7 @@ export function recordPrototypeArtifactBundle(input: {
       callId: input.callId,
       expectedAppId: input.expectedAppId,
     });
-    artifacts = recorded.artifacts;
+    ({ artifacts } = recorded);
     reused &&= recorded.reused;
   }
   const appSpec = completeBuildReadyPrototypeAppSpec({

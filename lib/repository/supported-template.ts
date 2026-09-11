@@ -457,7 +457,7 @@ function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
 function declaredMiseTasks(source: string): Map<string, number> {
   const tasks = new Map<string, number>();
   for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
-    const name = match[1];
+    const [, name] = match;
     if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
   }
   return tasks;

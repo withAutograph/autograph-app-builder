@@ -845,7 +845,7 @@ export function createGitHubAppHttpProvider(input: {
       if (!Array.isArray(pulls.body)) throw new Error("invalid-response");
       const candidates = pulls.body;
       if (candidates.length > 1) throw new Error("invalid-response");
-      const pull = candidates[0];
+    const [pull] = candidates;
       const exactPull =
         pull !== undefined &&
         stringProperty(pull, "title") === proposal.title &&

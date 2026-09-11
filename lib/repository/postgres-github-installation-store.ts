@@ -135,7 +135,7 @@ export function createPostgresHostedGitHubInstallationStore(
           .from(hostedGitHubInstallations)
           .where(tenantPredicate(authority))
           .limit(1);
-        const legacy = legacyRows[0];
+    const [legacy] = legacyRows;
         if (legacy !== undefined) {
           await transaction
             .insert(hostedGitHubInstallationBindings)

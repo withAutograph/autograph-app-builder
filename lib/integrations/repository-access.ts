@@ -278,7 +278,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       scopes: matches.map(({ binding }) => scope(binding)),
     });
   }
-  const match = matches[0];
+    const [match] = matches;
   if (match) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({

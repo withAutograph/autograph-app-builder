@@ -61,7 +61,7 @@ export function originalCssSource(
         const decoded = decodeVlq(segment, index);
         if (!decoded) return undefined;
         fields.push(decoded.value);
-        index = decoded.index;
+    ({ index } = decoded);
       }
       if (!fields.length) continue;
       generated += fields[0]!;

@@ -299,7 +299,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     expect(create).toHaveBeenCalledTimes(2);
     expect(resolveRecovery).toHaveBeenCalledOnce();
     expect(prewarm).toHaveBeenCalledOnce();
-    const prewarmInput = prewarm.mock.calls[0]![0];
+    const [[prewarmInput]] = prewarm.mock.calls;
     expect(prewarmInput).toMatchObject({
       runtimeContext,
       seedFiles,

@@ -150,8 +150,7 @@ export async function judgeDesign(
         ],
         providerOptions: { gateway: { only: ["openai"] } },
       });
-      output = result.output;
-      usage = result.usage;
+      ({ output, usage } = result);
     }
     return {
       ...base,

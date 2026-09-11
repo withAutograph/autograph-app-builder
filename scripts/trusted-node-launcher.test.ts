@@ -26,7 +26,7 @@ const pinnedNode = process.execPath.includes("/mise/installs/")
       cwd: repositoryRoot,
       encoding: "utf8",
     }).stdout.trim();
-const accountHome = pinnedNode.split("/.local/share/mise/")[0];
+const [accountHome] = pinnedNode.split("/.local/share/mise/");
 const pinnedPnpm = resolve(
   accountHome,
   ".local/share/mise/installs/pnpm/11.7.0/pnpm",

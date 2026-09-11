@@ -576,7 +576,7 @@ export async function templateReadinessAttestationDigest(input: {
   )
     throw new Error("Template-readiness evidence is invalid.");
   const checks = (body as { check_runs: unknown[] }).check_runs;
-  const readiness = checks
+  const [readiness] = checks
     .filter(
       (check): check is Record<string, unknown> =>
         typeof check === "object" &&
@@ -586,7 +586,7 @@ export async function templateReadinessAttestationDigest(input: {
           TEMPLATE_READINESS_CHECK &&
         (check as Record<string, unknown>)["head_sha"] === sha,
     )
-    .toSorted((left, right) => Number(right.id) - Number(left.id))[0];
+    .toSorted((left, right) => Number(right.id) - Number(left.id));
   if (
     readiness === undefined ||
     readiness.status !== "completed" ||

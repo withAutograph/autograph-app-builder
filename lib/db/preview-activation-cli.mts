@@ -131,7 +131,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
           accountRowsAffected = 1;
         } else {
-          const account = accounts[0];
+    const [account] = accounts;
           if (
             accounts.length !== 1 ||
             account?.id !== accountId ||
@@ -257,7 +257,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           r.rolreplication, r.rolbypassrls,
           (select count(*)::integer from pg_auth_members m where m.member = r.oid) as membership_count
         from pg_roles r where r.rolname = ${input.roleName}`;
-      const readback = verification[0];
+  const [readback] = verification;
       if (readback === undefined) {
         throw new Error("Runtime database role readback was unavailable.");
       }

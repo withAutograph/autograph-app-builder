@@ -189,7 +189,7 @@ function propsForExport(
   checker: ts.TypeChecker,
 ): PublicExport {
   const type = checker.getTypeOfSymbolAtLocation(symbol, location);
-  const signature = checker.getSignaturesOfType(type, ts.SignatureKind.Call)[0];
+  const [signature] = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   const parameter = signature?.getParameters()[0];
   if (!parameter) return {};
   const propsType = checker.getTypeOfSymbolAtLocation(parameter, location);

@@ -665,7 +665,7 @@ describe("closed GitHub publication contract", () => {
       source: publicationContentSource(sourceBytes),
     });
     sourceBytes.fill(0);
-    const change = content.changes[0];
+    const [change] = content.changes;
     expect(change?.kind).toBe("added");
     if (change?.kind === "added")
       expect(change.after.bytes).toEqual(reviewedBytes);

@@ -120,7 +120,7 @@ function previewUrl(input: {
   if (!parsed.success) return undefined;
   let origin: string;
   try {
-    origin = new URL(input.requestUrl).origin;
+    ({ origin } = new URL(input.requestUrl));
   } catch {
     return undefined;
   }

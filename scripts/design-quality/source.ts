@@ -129,7 +129,7 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   if (!ts.isPropertyAccessExpression(tag)) return undefined;
   let {expression} = tag;
   while (ts.isPropertyAccessExpression(expression))
-    expression = expression.expression;
+    ({ expression } = expression);
   return ts.isIdentifier(expression) ? expression.text : undefined;
 }
 

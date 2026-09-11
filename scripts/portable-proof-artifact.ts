@@ -86,7 +86,7 @@ export function archiveFiles(archive: Uint8Array) {
       .replace(/\0.*$/u, "")
       .trim();
     const size = Number.parseInt(sizeText, 8);
-    const type = header[156];
+    const [type] = header.slice(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0)
       throw new Error("Archive entry name or size was invalid.");
     if (![0, "0".charCodeAt(0)].includes(type) || files.has(name))

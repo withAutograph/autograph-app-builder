@@ -91,7 +91,7 @@ describe("PostgreSQL handoff renewal", () => {
     expect(test.set).toHaveBeenCalledExactlyOnceWith({
       expiresAt: renewal.expiresAt,
     });
-    const query = test.updateWhere.mock.calls[0][0];
+    const [[query]] = test.updateWhere.mock.calls;
     for (const column of [
       "issuer",
       "audience",
@@ -126,7 +126,7 @@ describe("PostgreSQL handoff renewal", () => {
     expect(
       await test.handoffs.renewExpired!({ ...renewal, now: timestamp }),
     ).toMatchObject({ disposition: "renewed" });
-    const query = test.updateWhere.mock.calls[0][0];
+    const [[query]] = test.updateWhere.mock.calls;
     // The SQL must compare expiry only against current time, not the lossy
     // readback. The stored .000789 timestamp is already before .001000.
     expect(query.sql.match(/"expires_at"/gu)).toHaveLength(1);

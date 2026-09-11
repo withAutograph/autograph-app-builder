@@ -983,7 +983,7 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
       throw new Error(
         "Branch-worktree publication does not materialize Git submodules.",
       );
-    const path = match[4];
+    const [, , , , path] = match;
     if (!safeSourcePath(path))
       throw new Error("The source tree contains an unsafe path.");
     const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
