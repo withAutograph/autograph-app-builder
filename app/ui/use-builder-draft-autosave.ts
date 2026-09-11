@@ -24,6 +24,8 @@ export type BuilderDraftSaveContext<T> = {
 export type BuilderDraftSaveAcknowledgement = {
   /** Must exactly match the dispatched mutation ID before the outbox is cleared. */
   mutationId: string;
+  /** The monotonic server revision that acknowledged this exact snapshot. */
+  revision: number;
   savedAt?: string;
 };
 
@@ -33,10 +35,14 @@ export type BuilderDraftAutosaveOptions<T> = {
     context: BuilderDraftSaveContext<T>,
   ): Promise<BuilderDraftSaveAcknowledgement>;
   debounceMs?: number;
+  /** Revision used as the base for snapshots queued immediately after mount. */
+  initialRevision?: number;
   /** Defaults to navigator.onLine when available. */
   isOnline?(): boolean;
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
   onVisibilityFlush?(reason: "visibilitychange" | "pagehide"): void;
+  /** Acknowledgements advance local revision knowledge but never reset the form. */
+  onAcknowledged?(acknowledgement: BuilderDraftSaveAcknowledgement): void;
 };
 
 export type BuilderDraftAutosave<T> = {
@@ -54,6 +60,12 @@ export type BuilderDraftAutosave<T> = {
   resumePending(): Promise<void>;
   /** Discards local work that a newer server revision has superseded. */
   discardPending(): Promise<void>;
+  /**
+   * Drops queued/outbox work based on an older revision before the owner resets
+   * its form to newer server state. A mutation already in flight is allowed to
+   * settle; the next poll remains authoritative.
+   */
+  discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -87,16 +99,24 @@ export function useBuilderDraftAutosave<T>(
   const queued = useRef<Pending<T> | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const draining = useRef<Promise<boolean> | undefined>(undefined);
+  const acknowledgedRevision = useRef(options.initialRevision ?? 0);
   const mounted = useRef(true);
   const save = useRef(options.save);
   const isOnline = useRef(options.isOnline);
   const onVisibilityFlush = useRef(options.onVisibilityFlush);
+  const onAcknowledged = useRef(options.onAcknowledged);
 
   useEffect(() => {
     save.current = options.save;
     isOnline.current = options.isOnline;
     onVisibilityFlush.current = options.onVisibilityFlush;
-  }, [options.isOnline, options.onVisibilityFlush, options.save]);
+    onAcknowledged.current = options.onAcknowledged;
+  }, [
+    options.isOnline,
+    options.onAcknowledged,
+    options.onVisibilityFlush,
+    options.save,
+  ]);
 
   const updateStatus = useCallback(
     (next: BuilderDraftAutosaveStatus, nextError?: Error) => {
@@ -139,7 +159,17 @@ export function useBuilderDraftAutosave<T>(
             });
             if (acknowledgement.mutationId !== current.mutationId)
               throw new Error("builder-draft-acknowledgement-mismatch");
-            await options.outbox.clearIfMutationId(current.mutationId);
+            acknowledgedRevision.current = Math.max(
+              acknowledgedRevision.current,
+              acknowledgement.revision,
+            );
+            if (options.outbox.clearIfAcknowledged)
+              await options.outbox.clearIfAcknowledged({
+                mutationId: current.mutationId,
+                revision: acknowledgement.revision,
+              });
+            else await options.outbox.clearIfMutationId(current.mutationId);
+            onAcknowledged.current?.(acknowledgement);
             if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
           } catch (caught) {
             if (!queued.current) queued.current = current;
@@ -187,6 +217,7 @@ export function useBuilderDraftAutosave<T>(
     (snapshot: T) => {
       const entry: Pending<T> = {
         version: 1,
+        baseRevision: acknowledgedRevision.current,
         mutationId: createMutationId(),
         snapshot: cloneSnapshot(snapshot),
         createdAt: Date.now(),
@@ -228,6 +259,28 @@ export function useBuilderDraftAutosave<T>(
     await options.outbox.clear();
     updateStatus("saved");
   }, [options.outbox, updateStatus]);
+
+  const discardSupersededByRemoteRevision = useCallback(
+    async (revision: number) => {
+      if (
+        !Number.isSafeInteger(revision) ||
+        revision <= acknowledgedRevision.current
+      )
+        return false;
+      acknowledgedRevision.current = revision;
+      if (
+        queued.current &&
+        (queued.current.baseRevision ?? 0) < revision
+      )
+        queued.current = undefined;
+      const pending = await options.outbox.read();
+      if (pending && (pending.baseRevision ?? 0) < revision)
+        await options.outbox.clearIfMutationId(pending.mutationId);
+      updateStatus("saved");
+      return true;
+    },
+    [options.outbox, updateStatus],
+  );
 
   useEffect(() => {
     const retryWhenOnline = () => void flush("flush");
@@ -271,5 +324,6 @@ export function useBuilderDraftAutosave<T>(
     restorePending,
     resumePending,
     discardPending,
+    discardSupersededByRemoteRevision,
   };
 }

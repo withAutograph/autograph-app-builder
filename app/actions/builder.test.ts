@@ -70,6 +70,7 @@ vi.mock("@/lib/handoff/deployment", () => ({
       expiresAt: "2026-09-11T00:00:00.000Z",
     });
   }),
+  getBuilderHandoffPageData: vi.fn(),
 }));
 
 import { continueBuilderHandoff } from "./builder";
@@ -77,7 +78,7 @@ import { continueBuilderHandoff } from "./builder";
 afterEach(() => calls.splice(0));
 
 describe("continueBuilderHandoff", () => {
-  it("keeps provider reservation, provisioning, and handoff creation ordered on the server", async () => {
+  it("reserves provisioning before creating the durable handoff", async () => {
     const result = await continueBuilderHandoff(undefined, {
       version: 1,
       requestId: "123e4567-e89b-42d3-a456-426614174000",
@@ -96,19 +97,13 @@ describe("continueBuilderHandoff", () => {
       },
     });
 
-    expect(calls).toEqual([
-      "reserve:github",
-      "run:github",
-      "reserve:vercel",
-      "run:vercel",
-      "handoff",
-    ]);
+    expect(calls).toEqual(["reserve:github", "handoff"]);
     expect(result).toMatchObject({
       status: "ready",
       handoff: { handoffId: "123e4567-e89b-42d3-a456-426614174001" },
       provisioning: {
         github: { status: "succeeded" },
-        vercel: { status: "succeeded" },
+        vercel: { status: "skipped" },
       },
     });
   });

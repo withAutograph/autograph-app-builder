@@ -1,4 +1,8 @@
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
+import {
+  builderProvisionProjectionSchema,
+  type BuilderProvisionProjection,
+} from "@/lib/provisioning/contracts";
 
 const encoder = new TextEncoder();
 const pollIntervalMs = 250;
@@ -32,15 +36,15 @@ export async function GET(request: Request) {
   const read = () =>
     handler(
       new Request(
-        `${source.origin}/api/builder/provision?requestId=${encodeURIComponent(requestId)}`,
+        `${source.origin}/api/builder/provision?projection=1&requestId=${encodeURIComponent(requestId)}`,
         { method: "GET", headers },
       ),
     );
 
   const first = await read();
   if (!first.ok) return first;
-  const initial = await first.json();
-  const lastEventId = request.headers.get("last-event-id");
+  const initial = builderProvisionProjectionSchema.parse(await first.json());
+  const lastEventId = Number(request.headers.get("last-event-id") ?? "0");
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastWrite = Date.now();
@@ -60,23 +64,24 @@ export async function GET(request: Request) {
       timer = undefined;
     },
     async start(controller) {
-      let lastUpdatedAt = lastEventId ?? "";
+      let lastRevision = Number.isSafeInteger(lastEventId) ? lastEventId : 0;
       const started = Date.now();
-      let current = initial as { status?: string; updatedAt?: string };
+      let current: BuilderProvisionProjection = initial;
       try {
         while (true) {
           if (cancelled) return;
-          const updatedAt = current.updatedAt ?? "";
-          if (updatedAt !== lastUpdatedAt) {
-            controller.enqueue(event(current, updatedAt));
-            lastUpdatedAt = updatedAt;
+          if (current.revision > lastRevision) {
+            controller.enqueue(event(current, String(current.revision)));
+            lastRevision = current.revision;
             lastWrite = Date.now();
           }
           if (
-            current.status === "settled" ||
+            current.provisioning.status === "settled" ||
             Date.now() - started >= maxStreamMs
           ) {
-            controller.enqueue(event(current, updatedAt || "end", "end"));
+            controller.enqueue(
+              event(current, String(current.revision), "end"),
+            );
             controller.close();
             return;
           }
@@ -94,7 +99,7 @@ export async function GET(request: Request) {
             controller.close();
             return;
           }
-          current = (await response.json()) as typeof current;
+          current = builderProvisionProjectionSchema.parse(await response.json());
         }
       } catch {
         if (!cancelled) {

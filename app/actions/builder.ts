@@ -1,10 +1,14 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
 
 import { readPreviewOAuthRuntimeConfig } from "@/lib/auth/preview-oauth-runtime";
-import { getBuilderHandoffDeploymentHandler } from "@/lib/handoff/deployment";
+import {
+  getBuilderHandoffDeploymentHandler,
+  getBuilderHandoffPageData,
+} from "@/lib/handoff/deployment";
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import {
   type BuilderProvisionResponse,
@@ -53,6 +57,17 @@ export type BuilderHandoffContinuationState =
       provisioning: BuilderProvisionResponse;
       handoff: { version: 1; handoffId: string; expiresAt: string };
     }
+  | { status: "error" };
+
+const handoffProvisioningContinuationInputSchema = z
+  .object({
+    handoffId: z.string().uuid(),
+    retryProvider: z.enum(["github", "vercel"]).optional(),
+  })
+  .strict();
+
+export type HandoffProvisioningContinuationState =
+  | { status: "updated" }
   | { status: "error" };
 
 function requestUrl(path: string) {
@@ -266,48 +281,81 @@ export async function continueBuilderHandoff(
       input.provisioningEnabled ? "provider_unavailable" : "feature_disabled",
     );
 
-    if (input.provisioningEnabled && input.retryProvider) {
-      provisioning = await provisionBuilderProvider(
-        provisioningInput(input, input.retryProvider),
-      );
-    } else if (input.provisioningEnabled) {
-      if (input.form.githubInstallationId) {
-        try {
-          await reserveBuilderProvider(provisioningInput(input, "github"));
-          provisioning = await provisionBuilderProvider(
-            provisioningInput(input, "github"),
-          );
-        } catch {
-          if (input.form.vercelInstallationId)
-            provisioning = {
-              ...provisioning,
-              vercel: {
-                status: "skipped",
-                code: "github_required",
-                retryable: false,
-              },
-            };
-        }
-      }
+    if (input.provisioningEnabled) {
+      const operation = input.form.githubInstallationId ? "github" : "vercel";
       if (
-        input.form.vercelInstallationId &&
-        (!input.form.githubInstallationId ||
-          provisioning.github.status === "succeeded")
+        (operation === "github" && input.form.githubInstallationId) ||
+        (operation === "vercel" && input.form.vercelInstallationId)
       ) {
-        try {
-          await reserveBuilderProvider(provisioningInput(input, "vercel"));
-          provisioning = await provisionBuilderProvider(
-            provisioningInput(input, "vercel"),
-          );
-        } catch {
-          // Preserve the most recent durable provisioning snapshot. The retry
-          // action can safely continue from this idempotent request later.
-        }
+        // Reserve once, before the handoff exists. The visible handoff route
+        // subsequently owns lease-safe provider continuation.
+        provisioning = await reserveBuilderProvider(
+          provisioningInput(input, operation),
+        );
       }
     }
 
     const handoff = await createContinuationHandoff(input, provisioning);
     return { status: "ready", provisioning, handoff };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/**
+ * Continues the durable provisioning record from its visible handoff route.
+ * The journal lease prevents concurrent tabs or devices from running the same
+ * provider work, and `refresh()` folds the new read model into the action
+ * response without a client-side status fetch.
+ */
+export async function continueHandoffProvisioning(
+  _previous: HandoffProvisioningContinuationState | undefined,
+  untrustedInput: { handoffId: string; retryProvider?: "github" | "vercel" },
+): Promise<HandoffProvisioningContinuationState> {
+  const parsed = handoffProvisioningContinuationInputSchema.safeParse(
+    untrustedInput,
+  );
+  if (!parsed.success) return { status: "error" };
+  try {
+    const data = await getBuilderHandoffPageData({
+      environment: process.env,
+      headers: await headers(),
+      handoffId: parsed.data.handoffId,
+    });
+    const requestId = data?.intent.provisioningRequestId;
+    const providers = data?.intent.providers;
+    if (!data || !requestId || !providers) return { status: "error" };
+
+    const run = async (operation: "github" | "vercel") => {
+      const selected =
+        operation === "github"
+          ? providers.githubInstallationId
+          : providers.vercelInstallationId;
+      if (!selected) return;
+      await provisionBuilderProvider({
+        version: 1,
+        requestId,
+        operation,
+        appName: data.intent.appName,
+        repository: {
+          name: data.intent.repository.requestedName,
+          private: data.intent.repository.private,
+        },
+        providers,
+      });
+    };
+
+    if (parsed.data.retryProvider) {
+      await run(parsed.data.retryProvider);
+    } else {
+      if (providers.githubInstallationId) await run("github");
+      // The Vercel operation durably records `github_required` when GitHub
+      // has not succeeded, so the journal settles instead of leaving an
+      // indefinite pending handoff. A later GitHub retry safely re-runs it.
+      if (providers.vercelInstallationId) await run("vercel");
+    }
+    refresh();
+    return { status: "updated" };
   } catch {
     return { status: "error" };
   }

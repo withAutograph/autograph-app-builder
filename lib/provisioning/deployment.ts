@@ -10,7 +10,10 @@ import {
 import { readVercelIntegrationEnvironment } from "../integrations/vercel-installation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
-import { builderProvisionRequestSchema } from "./contracts";
+import {
+  builderProvisionProjectionSchema,
+  builderProvisionRequestSchema,
+} from "./contracts";
 import { readGitHubProvisioningEnvironment } from "./github-provider";
 import { readGitHubUserCredentialEnvironment } from "./github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "./postgres-github-user-credential";
@@ -56,6 +59,24 @@ export function createBuilderProvisioningRouteHandler(input: {
           .string()
           .uuid()
           .parse(new URL(request.url).searchParams.get("requestId"));
+        if (new URL(request.url).searchParams.get("projection") === "1") {
+          const row = await input.dependencies.journal.read({
+            authority,
+            requestId,
+          });
+          return row
+            ? Response.json(
+                builderProvisionProjectionSchema.parse({
+                  revision: row.revision,
+                  provisioning: row.record.response,
+                }),
+                { headers: noStore },
+              )
+            : Response.json(
+                { error: "provisioning_not_found" },
+                { status: 404, headers: noStore },
+              );
+        }
         const result = await input.read({
           authority,
           requestId,

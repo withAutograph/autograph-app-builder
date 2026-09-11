@@ -187,6 +187,23 @@ export const builderProvisionResponseSchema = z
 export type BuilderProvisionResponse = z.infer<
   typeof builderProvisionResponseSchema
 >;
+
+/**
+ * The authenticated, durable journal read model used by route consumers and
+ * SSE. `revision` belongs to the journal row rather than the provider payload,
+ * which keeps it monotonic even when provider timestamps have limited clock
+ * precision.
+ */
+export const builderProvisionProjectionSchema = z
+  .object({
+    revision: z.number().int().positive(),
+    provisioning: builderProvisionResponseSchema,
+  })
+  .strict();
+
+export type BuilderProvisionProjection = z.infer<
+  typeof builderProvisionProjectionSchema
+>;
 export type GitHubProvisionResult = z.infer<typeof githubProvisionResultSchema>;
 export type VercelProvisionResult = z.infer<typeof vercelProvisionResultSchema>;
 

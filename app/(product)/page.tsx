@@ -26,6 +26,7 @@ import {
   saveActiveBuilderDraft,
 } from "../actions/builder-drafts";
 import { AppBuilder } from "../ui/app-builder";
+import { BuilderLoadingShell } from "../ui/builder-loading-shell";
 import type { BuilderDraft } from "../ui/builder-types";
 import { WorkspaceOnboarding } from "../ui/workspace-onboarding";
 
@@ -175,13 +176,9 @@ async function HomeContent({ searchParams }: PageProps) {
   );
 }
 
-function BuilderLoading() {
-  return <main id="main-content" aria-busy="true" />;
-}
-
 export default function Home(props: PageProps) {
   return (
-    <Suspense fallback={<BuilderLoading />}>
+    <Suspense fallback={<BuilderLoadingShell />}>
       <ViewTransition>
         <HomeContent {...props} />
       </ViewTransition>

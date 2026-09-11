@@ -192,7 +192,6 @@ const integrationState = {
 };
 
 const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
-const refreshedHandoffId = "123e4567-e89b-42d3-a456-426614174002";
 
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
@@ -468,38 +467,33 @@ describe("Vercel-faithful App Builder flow", () => {
   });
 
   it("places model controls directly after Build with for Web Chat only", async () => {
-    const resumeKey = "5f526ce7-04dc-47ff-a865-a89155d7d6bc";
-    sessionStorage.setItem(
-      `autograph-builder-draft:${resumeKey}`,
-      JSON.stringify({
-        version: 1,
-        form: {
-          appName: "Web Chat App",
-          repository: "web-chat-app",
-          brief: "Build this in Web Chat.",
-          privateRepository: true,
-          buildDestination: "web",
-          connections: [],
-          modelId: "openai/gpt-5.6-sol",
-        },
-        team: "",
-        gitScope: "",
-        model: "openai/gpt-5.6-sol",
-        zdrOnly: false,
-        showMoreConnections: false,
-        search: "",
-        connectedConnections: [],
-        focusOrigin: "vercel",
-        appNameEditedByUser: true,
-        repositoryEditedByUser: true,
-      }),
-    );
     const view = await render(
       <AppBuilderComponent
         authenticated
         comingSoonEnabled
-        providerResumeKey={resumeKey}
         integrations={integrationState}
+        initialDurableDraft={{
+          version: 1,
+          form: {
+            appName: "Web Chat App",
+            repository: "web-chat-app",
+            brief: "Build this in Web Chat.",
+            privateRepository: true,
+            buildDestination: "web",
+            connections: [],
+            modelId: "openai/gpt-5.6-sol",
+          },
+          team: "",
+          gitScope: "",
+          model: "openai/gpt-5.6-sol",
+          zdrOnly: false,
+          showMoreConnections: false,
+          search: "",
+          connectedConnections: [],
+          focusOrigin: "vercel",
+          appNameEditedByUser: true,
+          repositoryEditedByUser: true,
+        }}
       />,
     );
 
@@ -803,127 +797,7 @@ describe("Vercel-faithful App Builder flow", () => {
     });
   });
 
-  it("preserves a builder draft before a first-use provider connection", async () => {
-    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
-    const canonicalDraftId = "d1210e56-ded0-436d-a6b8-ae96ddec17e0";
-    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(resumeKey);
-    builderActions.saveActiveBuilderDraft.mockResolvedValueOnce({
-      draftId: canonicalDraftId,
-      revision: 1,
-      updatedAt: "2030-01-01T00:00:00.000Z",
-    });
-    const view = await render(
-      <AppBuilderComponent
-        authenticated
-        integrations={{
-          ...integrationState,
-          vercel: { status: "disconnected", scopes: [] },
-          github: { status: "disconnected", scopes: [] },
-        }}
-        saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
-        loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
-        clearBuilderDraftAction={builderActions.clearBuilderDraft}
-      />,
-    );
-    await fill(
-      view.querySelector<HTMLInputElement>("#app-name")!,
-      "Restored App",
-    );
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "# Restored App\n\nKeep this brief through the provider flow.",
-    );
-    await click(
-      view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
-    );
-    await click(
-      [...view.querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === "Connect to Vercel",
-      )!,
-    );
 
-    expect(navigation.push).toHaveBeenCalledWith(
-      `/vercel/installations?returnTo=%2F&resume=${canonicalDraftId}`,
-    );
-    expect(
-      sessionStorage.getItem(`autograph-builder-draft:${resumeKey}`),
-    ).toContain("Restored App");
-    expect(
-      sessionStorage.getItem(`autograph-builder-draft:${canonicalDraftId}`),
-    ).toContain("Restored App");
-    expect(builderActions.saveActiveBuilderDraft).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        record: expect.objectContaining({
-          draft: expect.objectContaining({
-            form: expect.objectContaining({
-              appName: "Restored App",
-              brief:
-                "# Restored App\n\nKeep this brief through the provider flow.",
-            }),
-            focusOrigin: "vercel",
-          }),
-        }),
-      }),
-    );
-  });
-
-  it("restores the draft, field focus, and actionable failure after provider return", async () => {
-    const resumeKey = "33d5a3b0-64d5-4cf2-b0f7-015ea9ae0b8d";
-    sessionStorage.setItem(
-      `autograph-builder-draft:${resumeKey}`,
-      JSON.stringify({
-        version: 1,
-        form: {
-          appName: "Restored App",
-          repository: "restored-app",
-          brief: "# Restored App\n\nKeep every field.",
-          privateRepository: false,
-          channelWeb: true,
-          channelSlack: false,
-          connections: ["QuickBooks"],
-          modelId: "openai/gpt-5.6-sol",
-        },
-        team: "",
-        gitScope: "",
-        model: "openai/gpt-5.6-sol",
-        zdrOnly: false,
-        showMoreConnections: true,
-        search: "quick",
-        connectedConnections: ["QuickBooks"],
-        deploymentProvider: "vercel",
-        focusOrigin: "vercel",
-        appNameEditedByUser: true,
-        repositoryEditedByUser: true,
-      }),
-    );
-    const view = await render(
-      <AppBuilderComponent
-        authenticated
-        connectionsEnabled
-        providerResumeKey={resumeKey}
-        providerNotices={[{ provider: "vercel", status: "failed" }]}
-        integrations={integrationState}
-      />,
-    );
-    await act(async () => new Promise(requestAnimationFrame));
-
-    expect(view.querySelector<HTMLInputElement>("#app-name")?.value).toBe(
-      "Restored App",
-    );
-    expect(view.querySelector("#repository-name")).toBeNull();
-    expect(view.querySelector<HTMLInputElement>("#vercel-team")).toBe(
-      document.activeElement,
-    );
-    expect(view.textContent).toContain("Vercel could not be connected");
-    expect(view.textContent).toContain("QuickBooks");
-    expect(
-      view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="codex"]',
-      )?.checked,
-    ).toBe(true);
-  });
 
   it("cycles app brief examples without repeating the current example", async () => {
     const view = await render(
@@ -1135,14 +1009,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(gitScope.value).toBe("withAutograph");
   });
 
-  it("launches a durable handoff from Create App", async () => {
-    vi.useFakeTimers();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
+  it("continues the durable handoff and routes to its server page", async () => {
     const view = await render(
       <AppBuilder
         authenticated
@@ -1168,11 +1035,18 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({
+        version: 1,
+        provisioningEnabled: false,
+        creationRequestId: expect.any(String),
+        requestId: expect.any(String),
         form: expect.objectContaining({
           appName: "support-app",
           buildDestination: "codex",
@@ -1181,493 +1055,15 @@ describe("Vercel-faithful App Builder flow", () => {
         }),
       }),
     );
-    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(view.textContent).toContain("Preparing secure handoff");
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
-    expect(view.textContent).toContain("Launch requested");
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
-    );
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Use the official Autograph App Builder plugin"),
-    );
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "codex plugin marketplace add withAutograph/marketplace --ref main",
-      ),
-    );
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(opaqueHandoffId),
-    );
-    const copiedPrompt = String(writeText.mock.calls[0]?.[0]);
-    expect(copiedPrompt).not.toContain("support-app");
-    expect(copiedPrompt).not.toContain("Help customers resolve");
-    expect(copiedPrompt).not.toMatch(
-      /Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
-    );
-    expect(open).toHaveBeenCalledWith(
-      expect.stringMatching(/^codex:\/\/new\?prompt=/u),
-      "_blank",
-      "noopener,noreferrer",
-    );
-    const initialUrl = open.mock.calls[1]?.[0] as string;
-    expect(new URL(initialUrl).searchParams.get("prompt")).toBe(copiedPrompt);
-
-    for (let index = 0; index < 6; index += 1) {
-      await act(async () => vi.advanceTimersByTimeAsync(700));
-    }
-    expect(view.textContent).toContain("App Brief Ready!");
-    expect(view.textContent).toContain("Open in ChatGPT / Codex");
-    expect(view.textContent).toContain(
-      "codex plugin add app-builder@autograph",
-    );
-    expect(view.textContent).not.toContain("npx plugins add");
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
-    );
-    expect(open).toHaveBeenCalledTimes(4);
-    expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
-    expect(view.textContent).not.toContain("deployed");
+    expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
+    expect(view.textContent).not.toContain("App Brief Ready!");
+    expect(view.textContent).not.toContain("Open in ChatGPT / Codex");
   });
 
-  it("retries a failed handoff with the same creation request and launches it", async () => {
-    vi.useFakeTimers();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    const creationRequestIds: string[] = [];
-    let attempts = 0;
-    builderActions.continueBuilderHandoff.mockImplementation(
-      async (_previous, input) => {
-        creationRequestIds.push(input.creationRequestId);
-        attempts += 1;
-        if (attempts === 1) return { status: "error" as const };
-        return {
-          status: "ready" as const,
-          provisioning: {
-            version: 1 as const,
-            requestId: input.requestId,
-            requestDigest: "0".repeat(64),
-            appId: "retry-safe-handoff",
-            status: "settled" as const,
-            github: {
-              status: "skipped" as const,
-              code: "not_selected" as const,
-              retryable: false,
-            },
-            vercel: {
-              status: "skipped" as const,
-              code: "not_selected" as const,
-              retryable: false,
-            },
-            updatedAt: "2026-08-30T12:00:00.000Z",
-          },
-          handoff: {
-            version: 1 as const,
-            handoffId: opaqueHandoffId,
-            expiresAt: "2026-09-08T12:00:00.000Z",
-          },
-        };
-      },
-    );
-    const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a retry-safe handoff.",
-    );
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
-    );
-    await act(async () => Promise.resolve());
-    expect(view.textContent).toContain(
-      "We couldn’t finish preparing this handoff.",
-    );
-    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
 
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Try again",
-      )!,
-    );
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(creationRequestIds).toHaveLength(2);
-    expect(new Set(creationRequestIds).size).toBe(1);
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open.mock.calls[1]?.[0]).toMatch(/^codex:\/\/new\?prompt=/u);
-    expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
-  });
 
-  it("settles GitHub then Vercel and launches the prepared handoff", async () => {
-    vi.useFakeTimers();
-    const requestId = "123e4567-e89b-42d3-a456-426614174000";
-    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
-    const events: string[] = [];
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const writeText = vi.fn(async (...values: [string]) => {
-      if (values.length === 1) events.push("clipboard");
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    const github = {
-      status: "succeeded" as const,
-      installationId: "101",
-      repositoryId: "202",
-      owner: "jasonmorganson",
-      name: "provider-app",
-      fullName: "jasonmorganson/provider-app",
-      url: "https://github.com/jasonmorganson/provider-app",
-      scope: { type: "user" as const, id: "77", login: "jasonmorganson" },
-      visibility: "private" as const,
-      defaultBranch: "main" as const,
-      headSha: "a".repeat(40),
-      headTree: "b".repeat(40),
-      starter: {
-        sourceSha: "c".repeat(40),
-        sourceTree: "b".repeat(40),
-        archiveSha256: "d".repeat(64),
-        archiveBytes: 100,
-        manifestSha256: "e".repeat(64),
-      },
-    };
-    const base = {
-      version: 1 as const,
-      requestId,
-      requestDigest: "f".repeat(64),
-      appId: "provider-app",
-      github,
-      updatedAt: "2026-08-30T12:00:00.000Z",
-    };
-    let handoffAttempts = 0;
-    builderActions.continueBuilderHandoff.mockImplementation(
-      async (_previous, input) => {
-        expect(input.requestId).toBe(requestId);
-        events.push(input.retryProvider ?? "continuation");
-        handoffAttempts += 1;
-        return {
-          status: "ready" as const,
-          provisioning: {
-            ...base,
-            status: "settled" as const,
-            vercel:
-              handoffAttempts === 1
-                ? {
-                    status: "failed" as const,
-                    code: "provider_rejected" as const,
-                    retryable: true,
-                  }
-                : {
-                    status: "succeeded" as const,
-                    installationId: "vercel-pylee",
-                    projectId: "prj_303",
-                    name: "apps-provider-app",
-                    dashboardUrl: "https://vercel.com/pylee/apps-provider-app",
-                    scope: {
-                      type: "team" as const,
-                      id: "team_1",
-                      slug: "pylee",
-                    },
-                    framework: "nextjs" as const,
-                    rootDirectory: "apps/provider-app",
-                    linkedGitHubRepository: "jasonmorganson/provider-app",
-                  },
-          },
-          handoff: {
-            version: 1 as const,
-            handoffId:
-              handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
-            expiresAt: "2026-09-08T12:00:00.000Z",
-          },
-        };
-      },
-    );
-    const view = await render(
-      <AppBuilder
-        authenticated
-        provisioningEnabled
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-    await click(
-      view.querySelector<HTMLInputElement>(
-        'input[name="deployment-provider"][value="vercel"]',
-      )!,
-    );
-    await fill(
-      view.querySelector<HTMLInputElement>("#app-name")!,
-      "Provider App",
-    );
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a provider-linked app.",
-    );
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
-    );
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(events).toEqual(["continuation"]);
-    expect(view.textContent).toContain("jasonmorganson/provider-app");
-    expect(view.textContent).toContain("Vercel: the provider rejected");
-    expect(view.textContent).toContain("App created with an issue");
-    expect(view.textContent).toContain("Setup needs attention");
-    expect(view.textContent).toContain("Retry to finish setting up Vercel");
-    expect(open).toHaveBeenCalledTimes(2);
 
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Retry",
-      )!,
-    );
-    await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledTimes(2);
-    expect(events).toEqual(["continuation", "vercel"]);
-    expect(view.textContent).toContain("apps-provider-app");
-    expect(view.textContent).toContain("App Brief Ready!");
-    expect(view.textContent).not.toContain("Setup needs attention");
-    expect(open).toHaveBeenCalledTimes(2);
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
-    );
-    expect(open).toHaveBeenCalledTimes(3);
-    expect(writeText.mock.calls.at(-1)?.[0]).toContain(refreshedHandoffId);
-    expect(writeText.mock.calls.at(-1)?.[0]).not.toContain("Project ID");
-  });
 
-  it("restores a settled request on Ready without relaunching the client", async () => {
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const requestId = "123e4567-e89b-42d3-a456-426614174000";
-    sessionStorage.setItem(
-      "autograph-builder-active-provisioning",
-      JSON.stringify({
-        version: 1,
-        requestId,
-        handoffCreationRequestId: "123e4567-e89b-42d3-a456-426614174003",
-        phase: "ready",
-        form: {
-          appName: "Restored App",
-          repository: "restored-app",
-          brief: "Restore this exact handoff.",
-          privateRepository: true,
-          buildDestination: "codex",
-          connections: [],
-          githubInstallationId: "101",
-          modelId: "openai/gpt-5.6-sol",
-        },
-        provisioning: {
-          version: 1,
-          requestId,
-          requestDigest: "0".repeat(64),
-          appId: "restored-app",
-          status: "settled",
-          github: {
-            status: "failed",
-            code: "provider_unavailable",
-            retryable: true,
-          },
-          vercel: {
-            status: "skipped",
-            code: "not_selected",
-            retryable: false,
-          },
-          updatedAt: "2026-08-30T12:00:00.000Z",
-        },
-        handoff: {
-          version: 1,
-          handoffId: opaqueHandoffId,
-          expiresAt: "2026-09-08T12:00:00.000Z",
-        },
-      }),
-    );
-    const view = await render(
-      <AppBuilder
-        authenticated
-        provisioningEnabled
-        user={{ name: "", email: "" }}
-      />,
-    );
-    await act(async () => new Promise(requestAnimationFrame));
-    expect(view.textContent).toContain("App created with an issue");
-    expect(view.textContent).toContain("Restored App");
-    expect(navigation.replace).toHaveBeenCalledWith(
-      `/handoff/${opaqueHandoffId}`,
-    );
-    expect(view.textContent).toContain(
-      "GitHub: the provider could not be reached",
-    );
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("opens Cursor when it is selected as the build destination", async () => {
-    vi.useFakeTimers();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a billing dashboard in Cursor.",
-    );
-    await click(
-      view.querySelector<HTMLInputElement>(
-        'input[name="build-destination"][value="cursor"]',
-      )!,
-    );
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
-    );
-
-    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
-      undefined,
-      expect.objectContaining({
-        form: expect.objectContaining({ buildDestination: "cursor" }),
-      }),
-    );
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in Cursor",
-      )!,
-    );
-    expect(open).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u,
-      ),
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(opaqueHandoffId),
-    );
-    const copiedPrompt = writeText.mock.calls[0]?.[0];
-    expect(copiedPrompt).not.toContain("codex plugin");
-    expect(view.textContent).not.toContain("codex plugin");
-    const initialUrl = open.mock.calls[1]?.[0] as string;
-    expect(new URL(initialUrl).searchParams.get("text")).toBe(copiedPrompt);
-
-    for (let index = 0; index < 6; index += 1) {
-      await act(async () => vi.advanceTimersByTimeAsync(700));
-    }
-    expect(view.textContent).toContain("Open in Cursor");
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in Cursor",
-      )!,
-    );
-    expect(open).toHaveBeenCalledTimes(4);
-    expect(open.mock.calls[3]?.[0]).toBe(initialUrl);
-  });
-
-  it("keeps the Ready fallback actionable when launching and copying fail", async () => {
-    vi.useFakeTimers();
-    vi.spyOn(window, "open").mockImplementation(() => {
-      throw new Error("Custom protocol blocked");
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) },
-    });
-    const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "Build a fallback status test.",
-    );
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
-    );
-    for (let index = 0; index < 6; index += 1) {
-      await act(async () => vi.advanceTimersByTimeAsync(700));
-    }
-
-    expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
-    );
-    expect(view.textContent).toContain("The browser blocked ChatGPT / Codex.");
-    expect(view.textContent).toContain("Clipboard access was blocked.");
-    expect(view.textContent).toContain("Open in ChatGPT / Codex");
-  });
-
-  it("keeps a large brief out of the fixed-size opaque handoff URL", async () => {
-    vi.useFakeTimers();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    const view = await render(
-      <AppBuilder
-        authenticated
-        user={{ name: "Taylor", email: "taylor@example.com" }}
-      />,
-    );
-
-    await fill(
-      view.querySelector<HTMLTextAreaElement>("#app-brief")!,
-      "A".repeat(8_000),
-    );
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Create App",
-      )!,
-    );
-    for (let index = 0; index < 6; index += 1) {
-      await act(async () => vi.advanceTimersByTimeAsync(700));
-    }
-
-    expect(open).toHaveBeenCalledTimes(2);
-    await click(
-      [...view.querySelectorAll("button")].find(
-        (button) => button.textContent === "Open in ChatGPT / Codex",
-      )!,
-    );
-    expect(open).toHaveBeenCalledTimes(3);
-    const launchedUrl = open.mock.calls[1]?.[0] as string;
-    expect(launchedUrl.length).toBeLessThan(8_000);
-    expect(decodeURIComponent(launchedUrl)).not.toContain("A".repeat(100));
-    expect(view.textContent).toContain("Open in ChatGPT / Codex");
-  });
 
   it("renders the Better Auth account trigger without the legacy menu", async () => {
     const view = await render(
