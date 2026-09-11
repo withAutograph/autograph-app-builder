@@ -1148,10 +1148,6 @@ export function Builder({
   // runs. Remember its expected revision so that update is treated as an ack,
   // never as a form replacement.
   const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
-  // A Server Action response can refresh route props after its promise has
-  // settled. Track revisions initiated by this tab so those props are only
-  // treated as acknowledgements, never as form replacements.
-  const localActionRevisions = useRef(new Set<number>());
   const focusOrigin = useRef<ProviderField>(
     initialDraft?.focusOrigin ?? "github",
   );
@@ -1262,10 +1258,8 @@ export function Builder({
           draft: snapshot,
         } satisfies BuilderDraftRecord,
       };
-      if (!keepalive) {
+      if (!keepalive)
         pendingActionExpectedRevision.current = input.expectedRevision;
-        localActionRevisions.current.add(input.expectedRevision + 1);
-      }
       try {
         const saved = keepalive
           ? await fetch("/api/builder/draft", {
@@ -1289,7 +1283,6 @@ export function Builder({
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
-        if (!keepalive) localActionRevisions.current.add(saved.revision);
         return {
           mutationId,
           revision: saved.revision,
@@ -1617,17 +1610,14 @@ export function Builder({
       draftUpdatedAt.current = durableDraftUpdatedAt;
       return;
     }
-    if (localActionRevisions.current.delete(durableDraftRevision)) {
-      activeDraftId.current = durableDraftId;
-      draftRevision.current = durableDraftRevision;
-      draftUpdatedAt.current = durableDraftUpdatedAt;
-      return;
-    }
-    // Route props are commonly re-rendered by this tab's Server Action before
-    // its acknowledgement continuation runs. A foreign revision is instead
-    // loaded through the revision poller, which snapshots local edit state
-    // before reading and can safely replace only a stable RHF form.
+    void applyAuthoritativeDraft({
+      draftId: durableDraftId,
+      revision: durableDraftRevision,
+      updatedAt: durableDraftUpdatedAt,
+      record: { version: 1, draft: initialDraft },
+    });
   }, [
+    applyAuthoritativeDraft,
     durableDraftId,
     durableDraftRevision,
     durableDraftUpdatedAt,
