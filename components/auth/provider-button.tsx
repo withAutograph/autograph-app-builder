@@ -29,6 +29,7 @@ import { LastUsedBadge } from "./last-login-method/last-used-badge";
 export type ProviderButtonProps = {
   provider: AuthSocialProvider;
   display?: "full" | "name" | "icon";
+  isReady?: boolean;
   view?: AuthView;
 } & Omit<ComponentProps<typeof Button>, "onClick" | "children" | "disabled">;
 
@@ -41,6 +42,7 @@ export type ProviderButtonProps = {
 export function ProviderButton({
   provider,
   display = "full",
+  isReady = true,
   view = "signIn",
   variant = "outline",
   className,
@@ -99,7 +101,7 @@ export function ProviderButton({
     <Button
       type="button"
       variant={variant}
-      disabled={isPending}
+      disabled={!isReady || isPending}
       onClick={handleSignIn}
       className={cn("relative overflow-visible", className)}
       {...props}

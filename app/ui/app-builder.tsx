@@ -1187,9 +1187,10 @@ export function Builder({
   const repositoryEditedByUser = useRef(
     initialDraft?.repositoryEditedByUser ?? false,
   );
-  const activeDraftId = useRef(
-    resumeKey ?? durableDraftId ?? crypto.randomUUID(),
+  const [initialDraftId] = useState(
+    () => resumeKey ?? durableDraftId ?? crypto.randomUUID(),
   );
+  const activeDraftId = useRef(initialDraftId);
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
   );
@@ -1238,9 +1239,9 @@ export function Builder({
   const draftOutbox = useMemo(
     () =>
       createBuilderDraftOutbox<BuilderDraft>({
-        key: `active:${activeDraftId.current}`,
+        key: `active:${initialDraftId}`,
       }),
-    [],
+    [initialDraftId],
   );
   const saveDraft = useCallback(
     async ({

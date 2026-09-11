@@ -128,6 +128,12 @@ export async function signOut(page: Page) {
   await expect.poll(() => currentSession(page)).toBeNull();
 }
 
+export async function waitForSocialSignInReady(page: Page) {
+  await expect(
+    page.locator('[data-auth-social-ready="true"]').first(),
+  ).toBeAttached();
+}
+
 export async function finishOAuth(
   page: Page,
   provider: EmulatedProvider,
@@ -136,6 +142,7 @@ export async function finishOAuth(
   await page.goto(
     `/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`,
   );
+  await waitForSocialSignInReady(page);
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect(page).toHaveURL(
     new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`),
