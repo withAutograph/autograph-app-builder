@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense, ViewTransition } from "react";
 
@@ -16,6 +17,7 @@ import {
   builderResourceProvisioningFlag,
 } from "@/lib/feature-flags";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
+import { findAuthenticatedPendingBuilderHandoff } from "@/lib/handoff/deployment";
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 import { parseProviderConnectionFailureReason } from "@/lib/integrations/provider-connection-status";
 import type { ProviderConnectionNotice } from "@/lib/integrations/provider-connection-status";
@@ -129,6 +131,14 @@ async function HomeContent({ searchParams }: PageProps) {
 
   const authenticated = user.status === "ready";
   const resumeKey = parseProviderResumeKey(query.resume);
+  if (authenticated && mode !== "anonymous" && !resumeKey) {
+    const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
+      environment: process.env,
+      headers: await headers(),
+    });
+    if (pendingHandoff)
+      redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
+  }
   const durableDraft = authenticated
     ? resumeKey
       ? await readAuthenticatedBuilderDraft({

@@ -389,6 +389,22 @@ export async function getBuilderHandoffPageData(input: {
   };
 }
 
+/**
+ * Finds only a still-pending, owner-scoped provisioning handoff. The builder
+ * uses this to resume durable provider work; settled and provider-less
+ * handoffs deliberately return users to a fresh builder.
+ */
+export async function findAuthenticatedPendingBuilderHandoff(input: {
+  environment: Environment;
+  headers: Headers;
+}): Promise<{ handoffId: string } | undefined> {
+  const context = deploymentContext(input.environment);
+  const authority = await context.authorityForHeaders(input.headers);
+  if (!authority) return undefined;
+  const record = await context.handoffs.findLatestPending({ authority });
+  return record ? { handoffId: record.handoffId } : undefined;
+}
+
 export function getBuilderHandoffStatusDeploymentHandler(
   environment: Environment,
 ) {

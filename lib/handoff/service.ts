@@ -23,6 +23,13 @@ export interface BuilderHandoffStore {
     authority: Authority;
     handoffId: string;
   }): Promise<BuilderHandoffRecord | undefined>;
+  /**
+   * Returns the most recently updated handoff whose durable provisioning
+   * journal remains pending for this exact tenant authority.
+   */
+  findLatestPending?(input: {
+    authority: Authority;
+  }): Promise<BuilderHandoffRecord | undefined>;
   renewExpired?(input: {
     authority: Authority;
     handoffId: string;
@@ -130,6 +137,15 @@ export function createBuilderHandoffService(input: {
   const service = {
     // Owner reads intentionally survive expiry; starting still uses resolve.
     read,
+
+    async findLatestPending(value: { authority: Authority }) {
+      const authority = hostedTenantAuthoritySchema.parse(value.authority);
+      if (!input.store.findLatestPending) return undefined;
+      const stored = await input.store.findLatestPending({ authority });
+      return stored
+        ? requireOwnedRecord(stored, { authority })
+        : undefined;
+    },
 
     async status(value: { authority: Authority; handoffId: string }) {
       const record = await read(value);

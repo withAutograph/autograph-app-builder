@@ -6,6 +6,7 @@ import {
 } from "./contracts";
 import { BuilderHandoffUnavailableError } from "./service";
 import {
+  findAuthenticatedPendingBuilderHandoff,
   getBuilderHandoffPageData,
   getBuilderHandoffStatusDeploymentHandler,
 } from "./deployment";
@@ -13,6 +14,7 @@ import {
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   read: vi.fn(),
+  findLatestPending: vi.fn(),
   cursorReady: vi.fn(),
   database: {},
 }));
@@ -34,7 +36,10 @@ vi.mock("../auth/cursor-client", () => ({
   isCursorClientReady: mocks.cursorReady,
 }));
 vi.mock("./postgres-store", () => ({
-  createPostgresBuilderHandoffStore: () => ({ read: mocks.read }),
+  createPostgresBuilderHandoffStore: () => ({
+    read: mocks.read,
+    findLatestPending: mocks.findLatestPending,
+  }),
 }));
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
@@ -82,6 +87,7 @@ describe("owner-only handoff browser data", () => {
       user: { id: authority.ownerUserId },
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
+    mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
     mocks.read
       .mockReset()
       .mockImplementation(
@@ -133,6 +139,28 @@ describe("owner-only handoff browser data", () => {
     );
     expect(response.status).toBe(401);
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("returns only an owner-scoped pending handoff ID for builder resume", async () => {
+    mocks.findLatestPending.mockResolvedValue(prepared);
+    await expect(
+      findAuthenticatedPendingBuilderHandoff({
+        environment: pageInput.environment,
+        headers: pageInput.headers,
+      }),
+    ).resolves.toEqual({ handoffId });
+    expect(mocks.findLatestPending).toHaveBeenCalledWith({ authority });
+  });
+
+  it("does not expose pending handoffs without an authenticated authority", async () => {
+    mocks.session.mockResolvedValue(undefined);
+    await expect(
+      findAuthenticatedPendingBuilderHandoff({
+        environment: pageInput.environment,
+        headers: pageInput.headers,
+      }),
+    ).resolves.toBeUndefined();
+    expect(mocks.findLatestPending).not.toHaveBeenCalled();
   });
 
   it.each(["other-owner", "other-workspace", "missing", "invalid-id"])(
