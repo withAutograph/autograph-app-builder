@@ -1149,10 +1149,9 @@ export function Builder({
   // never as a form replacement.
   const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
   // A Server Action response can refresh route props after its promise has
-  // settled. Keep the local edit version for the response revision so that an
-  // older snapshot acknowledgement never replaces edits made while it was in
-  // flight.
-  const localActionMutationVersions = useRef(new Map<number, number>());
+  // settled. Track revisions initiated by this tab so those props are only
+  // treated as acknowledgements, never as form replacements.
+  const localActionRevisions = useRef(new Set<number>());
   const focusOrigin = useRef<ProviderField>(
     initialDraft?.focusOrigin ?? "github",
   );
@@ -1265,10 +1264,7 @@ export function Builder({
       };
       if (!keepalive) {
         pendingActionExpectedRevision.current = input.expectedRevision;
-        localActionMutationVersions.current.set(
-          input.expectedRevision + 1,
-          localFormMutationVersion.current,
-        );
+        localActionRevisions.current.add(input.expectedRevision + 1);
       }
       try {
         const saved = keepalive
@@ -1293,6 +1289,7 @@ export function Builder({
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
+        if (!keepalive) localActionRevisions.current.add(saved.revision);
         return {
           mutationId,
           revision: saved.revision,
@@ -1611,9 +1608,6 @@ export function Builder({
   useEffect(() => {
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
-    const actionMutationVersion = localActionMutationVersions.current.get(
-      durableDraftRevision,
-    );
     if (
       pendingActionExpectedRevision.current !== undefined &&
       durableDraftRevision === pendingActionExpectedRevision.current + 1
@@ -1623,26 +1617,17 @@ export function Builder({
       draftUpdatedAt.current = durableDraftUpdatedAt;
       return;
     }
-    if (
-      actionMutationVersion !== undefined &&
-      localFormMutationVersion.current !== actionMutationVersion
-    ) {
+    if (localActionRevisions.current.delete(durableDraftRevision)) {
       activeDraftId.current = durableDraftId;
       draftRevision.current = durableDraftRevision;
       draftUpdatedAt.current = durableDraftUpdatedAt;
-      localActionMutationVersions.current.delete(durableDraftRevision);
       return;
     }
-    if (actionMutationVersion !== undefined)
-      localActionMutationVersions.current.delete(durableDraftRevision);
-    void applyAuthoritativeDraft({
-      draftId: durableDraftId,
-      revision: durableDraftRevision,
-      updatedAt: durableDraftUpdatedAt,
-      record: { version: 1, draft: initialDraft },
-    });
+    // Route props are commonly re-rendered by this tab's Server Action before
+    // its acknowledgement continuation runs. A foreign revision is instead
+    // loaded through the revision poller, which snapshots local edit state
+    // before reading and can safely replace only a stable RHF form.
   }, [
-    applyAuthoritativeDraft,
     durableDraftId,
     durableDraftRevision,
     durableDraftUpdatedAt,
