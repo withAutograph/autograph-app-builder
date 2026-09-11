@@ -65,7 +65,10 @@ export async function readAuthenticatedBuilderDraft(input: {
   const context = await getAuthenticatedBuilderDraftContext(input);
   if (!context) return undefined;
   const row = await context.drafts.read(context.authority, input.draftId);
-  return row?.status === "active" ? pageData(row) : undefined;
+  // An opaque, tenant-authorized draft ID is used for provider-return
+  // recovery. It must remain readable after the active draft has been
+  // archived by a handoff; only the active-draft query filters by status.
+  return pageData(row);
 }
 
 /** Scheduled-maintenance entry point. Do not invoke from actions or requests. */
