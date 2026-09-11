@@ -88,6 +88,7 @@ for (const provider of emulatedProviders) {
     // exercises recovery, rather than racing React's input event with the
     // navigation click.
     await expect(page.getByLabel("App Name")).toHaveValue(`${provider} Restored App`);
+    await expect(page.getByRole("status")).toContainText("Draft saved", { timeout: 30_000 });
 
     await installProvider(page, provider);
     await expect(page.getByLabel("App Name")).toHaveValue(`${provider} Restored App`);
