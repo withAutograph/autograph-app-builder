@@ -6,6 +6,7 @@ import {
   finishOAuth,
   registerPasskey,
   resetApplicationState,
+  waitForAnonymousBuilderReady,
 } from "../support/harness";
 
 test.beforeEach(async () => resetApplicationState());
@@ -29,6 +30,7 @@ test("anonymous brief continues through passkey signup into the builder", async 
 
   const continueButton = page.getByRole("button", { name: "Continue" });
   await expect(continueButton).toBeDisabled();
+  await waitForAnonymousBuilderReady(page);
   await page
     .getByLabel("What should this app do?")
     .fill("Build a customer renewal dashboard.");
@@ -104,6 +106,7 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   }) => {
     const brief = `Build a ${provider} operations dashboard.`;
     await page.goto("/");
+    await waitForAnonymousBuilderReady(page);
     await page.getByLabel("What should this app do?").fill(brief);
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/auth\/sign-in/u);

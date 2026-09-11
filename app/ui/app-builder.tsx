@@ -1008,6 +1008,12 @@ export function AnonymousBuilder({
   onContinue: (brief: string) => void;
 }) {
   const [brief, setBrief] = useState("");
+  const isInteractive = useSyncExternalStore(
+    subscribeToClientSnapshot,
+    () => true,
+    () => false,
+  );
+
   return (
     <main className={styles.anonymousPage} id="main-content">
       <a className={styles.skipLink} href="#anonymous-brief">
@@ -1035,13 +1041,14 @@ export function AnonymousBuilder({
             id="anonymous-brief"
             name="app-brief"
             autoComplete="off"
+            disabled={!isInteractive}
             value={brief}
             onChange={(event) => setBrief(event.target.value)}
             placeholder="Help me create a customer portal, build an internal dashboard, or launch a new workflow…"
           />
           <button
             type="button"
-            disabled={!brief.trim()}
+            disabled={!isInteractive || !brief.trim()}
             onClick={() => onContinue(brief)}
           >
             Continue
