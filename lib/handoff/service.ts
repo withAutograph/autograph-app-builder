@@ -22,14 +22,14 @@ export interface BuilderHandoffStore {
   read: (input: {
     authority: Authority;
     handoffId: string;
-  }): Promise<BuilderHandoffRecord | undefined>;
+  }) => Promise<BuilderHandoffRecord | undefined>;
   /**
    * Returns the most recently updated handoff whose durable provisioning
    * journal remains pending for this exact tenant authority.
    */
-  findLatestPending?(input: {
+  findLatestPending?: (input: {
     authority: Authority;
-  }): Promise<BuilderHandoffRecord | undefined>;
+  }) => Promise<BuilderHandoffRecord | undefined>;
   renewExpired?: (input: {
     authority: Authority;
     handoffId: string;
