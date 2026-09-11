@@ -279,7 +279,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(passkeyButton).toContain(
       "useAddPasskey(authClient, { retry: false })",
     );
-    expect(passkeyButton).toContain("await signInPasskey.mutateAsync");
+    expect(passkeyButton).toContain("await awaitPasskeyResponse(");
+    expect(passkeyButton).toContain("signInPasskey.mutateAsync({");
     expect(passkeyButton).toContain("await addPasskey.mutateAsync");
     expect(passkeyButton).toContain("passkeyClientError(result)");
     expect(passkeyButton).toContain('"Passkey failed (try again)"');

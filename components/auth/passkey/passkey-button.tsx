@@ -28,6 +28,25 @@ export type PasskeyButtonProps = {
 
 type OnboardingResponse = { context?: unknown };
 
+const passkeyResponseTimeoutMs = 3_000;
+
+async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
+  let timeout: number | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timeout = window.setTimeout(
+          () => reject(new Error("Passkey verification timed out.")),
+          passkeyResponseTimeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) window.clearTimeout(timeout);
+  }
+}
+
 /**
  * "Continue with Passkey" button rendered alongside the password sign-in form.
  *
@@ -81,10 +100,12 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     );
 
     try {
-      const result = await signInPasskey.mutateAsync({
-        autoFill: false,
-        returnWebAuthnResponse: true,
-      });
+      const result = await awaitPasskeyResponse(
+        signInPasskey.mutateAsync({
+          autoFill: false,
+          returnWebAuthnResponse: true,
+        }),
+      );
       const resultError = passkeyClientError(result);
       if (resultError) throw resultError;
       navigate({ to: resolvedRedirectTo });
