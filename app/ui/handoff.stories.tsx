@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn, waitFor, within } from "storybook/test";
 import {
   storyForm,
   storyHandoff,
@@ -15,7 +15,11 @@ const meta = {
     requestId: storyProvisioning.requestId,
     handoffCreationRequestId: "123e4567-e89b-42d3-a456-426614174002",
     provisioningEnabled: false,
-    createHandoffTask: fn(async () => storyHandoff),
+    continuationAction: fn(async () => ({
+      status: "ready" as const,
+      provisioning: storyProvisioning,
+      handoff: storyHandoff,
+    })),
     onReady: fn(),
   },
   parameters: { layout: "fullscreen" },
@@ -27,8 +31,10 @@ export const ProvisioningDisabled: Story = {
     await expect(
       within(canvasElement).getByRole("heading", { name: "Handoff" }),
     ).toBeVisible();
-    await expect(within(canvasElement).getByRole("status")).toHaveTextContent(
-      "Your secure handoff is ready. Opening your selected client.",
+    await waitFor(() =>
+      expect(within(canvasElement).getByRole("status")).toHaveTextContent(
+        "Your secure handoff is ready. Opening your selected client.",
+      ),
     );
   },
 };

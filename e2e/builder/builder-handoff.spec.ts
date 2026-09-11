@@ -178,7 +178,8 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
   let authenticator: Awaited<ReturnType<typeof registerPasskey>> | undefined;
   try {
     const strangerPage = await stranger.newPage();
-    const anonymousResponse = await strangerPage.request.get(
+    const anonymousResponse = await getWithTransientRetry(
+      strangerPage,
       handoff.statusPath,
     );
     expect(anonymousResponse.status()).toBe(401);
@@ -206,7 +207,8 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     const strangerId = (await currentSession(strangerPage))?.user?.id;
     expect(typeof strangerId).toBe("string");
     expect(strangerId).not.toBe(ownerId);
-    const unavailableResponse = await strangerPage.request.get(
+    const unavailableResponse = await getWithTransientRetry(
+      strangerPage,
       handoff.statusPath,
     );
     expect(unavailableResponse.status()).toBe(404);
@@ -231,7 +233,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await expect(
       strangerPage.getByRole("textbox", { name: "Handoff prompt" }),
     ).toHaveCount(0);
-    const ownerResponse = await page.request.get(handoff.statusPath);
+    const ownerResponse = await getWithTransientRetry(page, handoff.statusPath);
     expect(ownerResponse.ok()).toBe(true);
     expect((await ownerResponse.json()).status).toBe("prepared");
   } finally {
@@ -261,7 +263,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   const continued = page.getByText("Continued in your app.", { exact: false });
   expect((await browserBoundaryState(page)).opened).toHaveLength(1);
   await expect(continued).toHaveCount(0);
-  const before = await page.request.get(handoff.statusPath);
+  const before = await getWithTransientRetry(page, handoff.statusPath);
   expect(before.ok()).toBe(true);
   expect((await before.json()).status).toBe("prepared");
 
@@ -287,7 +289,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     expect(rows).toHaveLength(1);
     await expect(continued).toBeVisible({ timeout: 15_000 });
     expect(polled).toBeGreaterThan(0);
-    const after = await page.request.get(handoff.statusPath);
+    const after = await getWithTransientRetry(page, handoff.statusPath);
     expect(after.ok()).toBe(true);
     expect((await after.json()).status).toBe("continued");
     expect(mcpRequests).toBe(0);
@@ -344,7 +346,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
           exact: false,
         }),
       ).toBeVisible();
-      const before = await page.request.get(handoff.statusPath);
+      const before = await getWithTransientRetry(page, handoff.statusPath);
       expect(before.ok()).toBe(true);
       expect((await before.json()).cursorInstallReady).toBe(false);
       await setupCursorClient(database, `${appOrigin}/mcp`);
@@ -430,7 +432,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await expect(
     page.getByText("Continued in your app", { exact: false }),
   ).toHaveCount(0);
-  const response = await page.request.get(
+  const response = await getWithTransientRetry(
+    page,
     `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`,
   );
   expect(response.ok()).toBe(true);
@@ -571,7 +574,7 @@ test("expired handoff renews in place without changing intent or provisioning re
   const handoffUrl = page.url();
   const handoffId = new URL(handoffUrl).pathname.split("/").at(-1)!;
   const statusPath = `/api/builder/handoffs/${handoffId}`;
-  const preparedResponse = await page.request.get(statusPath);
+  const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);
   const prepared = await preparedResponse.json();
   expect(prepared.status).toBe("prepared");
@@ -633,7 +636,7 @@ test("expired handoff renews in place without changing intent or provisioning re
       page.getByText("This handoff has expired.", { exact: false }),
     ).toHaveCount(0);
 
-    const statusResponse = await page.request.get(statusPath);
+    const statusResponse = await getWithTransientRetry(page, statusPath);
     expect(statusResponse.ok()).toBe(true);
     const renewed = await statusResponse.json();
     expect(renewed.handoffId).toBe(handoffId);

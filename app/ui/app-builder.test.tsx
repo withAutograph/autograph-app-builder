@@ -11,9 +11,7 @@ const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 const builderActions = vi.hoisted(() => ({
-  createBuilderHandoff: vi.fn(),
-  provisionBuilderProvider: vi.fn(),
-  reserveBuilderProvider: vi.fn(),
+  continueBuilderHandoff: vi.fn(),
   saveActiveBuilderDraft: vi.fn(
     async (input: { draftId: string; expectedRevision: number }) => ({
       draftId: input.draftId,
@@ -24,6 +22,64 @@ const builderActions = vi.hoisted(() => ({
   loadActiveBuilderDraft: vi.fn(async () => undefined),
   clearBuilderDraft: vi.fn(),
 }));
+
+async function defaultContinuation(
+  _previous: unknown,
+  input: {
+    requestId: string;
+    provisioningEnabled: boolean;
+    form: {
+      appName: string;
+      githubInstallationId?: string;
+      vercelInstallationId?: string;
+    };
+  },
+) {
+  return {
+    status: "ready" as const,
+    provisioning: {
+      version: 1 as const,
+      requestId: input.requestId,
+      requestDigest: "0".repeat(64),
+      appId: input.form.appName.toLowerCase().replaceAll(/\s+/gu, "-"),
+      status: "settled" as const,
+      github: input.form.githubInstallationId
+        ? {
+            status: "skipped" as const,
+            code: (input.provisioningEnabled
+              ? "not_selected"
+              : "feature_disabled") as "not_selected" | "feature_disabled",
+            retryable: false,
+          }
+        : {
+            status: "skipped" as const,
+            code: "not_selected" as const,
+            retryable: false,
+          },
+      vercel: input.form.vercelInstallationId
+        ? {
+            status: "skipped" as const,
+            code: (input.provisioningEnabled
+              ? "not_selected"
+              : "feature_disabled") as "not_selected" | "feature_disabled",
+            retryable: false,
+          }
+        : {
+            status: "skipped" as const,
+            code: "not_selected" as const,
+            retryable: false,
+          },
+      updatedAt: "2026-08-30T12:00:00.000Z",
+    },
+    handoff: {
+      version: 1 as const,
+      handoffId: "123e4567-e89b-42d3-a456-426614174001",
+      expiresAt: "2026-09-08T12:00:00.000Z",
+    },
+  };
+}
+
+builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
 const draftFetch = vi.hoisted(() =>
   vi.fn(async (_url: string, init?: RequestInit) => {
     const input = JSON.parse(String(init?.body)) as {
@@ -218,9 +274,8 @@ afterEach(async () => {
   navigation.push.mockReset();
   navigation.refresh.mockReset();
   navigation.replace.mockReset();
-  builderActions.createBuilderHandoff.mockReset();
-  builderActions.provisionBuilderProvider.mockReset();
-  builderActions.reserveBuilderProvider.mockReset();
+  builderActions.continueBuilderHandoff.mockReset();
+  builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
   builderActions.loadActiveBuilderDraft.mockReset();
   draftFetch.mockClear();
 });
@@ -706,7 +761,7 @@ describe("Vercel-faithful App Builder flow", () => {
       updatedAt: string;
     }) => void;
     builderActions.saveActiveBuilderDraft.mockImplementationOnce(
-      (input: { draftId: string }) =>
+      () =>
         new Promise((resolve) => {
           resolveSave = resolve;
         }),
@@ -1088,11 +1143,6 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
-    builderActions.createBuilderHandoff.mockResolvedValue({
-      version: 1,
-      handoffId: opaqueHandoffId,
-      expiresAt: "2026-09-08T12:00:00.000Z",
-    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1119,12 +1169,16 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     await act(async () => Promise.resolve());
-    expect(builderActions.createBuilderHandoff).toHaveBeenCalledOnce();
-    expect(builderActions.createBuilderHandoff).toHaveBeenCalledWith(
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
+      undefined,
       expect.objectContaining({
-        appName: "support-app",
-        destination: "codex",
-        repository: { name: "support-app", private: true },
+        form: expect.objectContaining({
+          appName: "support-app",
+          buildDestination: "codex",
+          repository: "support-app",
+          privateRepository: true,
+        }),
       }),
     );
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
@@ -1190,16 +1244,39 @@ describe("Vercel-faithful App Builder flow", () => {
     });
     const creationRequestIds: string[] = [];
     let attempts = 0;
-    builderActions.createBuilderHandoff.mockImplementation(async (input) => {
-      creationRequestIds.push(input.creationRequestId);
-      attempts += 1;
-      if (attempts === 1) throw new Error("handoff_unavailable");
-      return {
-        version: 1,
-        handoffId: opaqueHandoffId,
-        expiresAt: "2026-09-08T12:00:00.000Z",
-      };
-    });
+    builderActions.continueBuilderHandoff.mockImplementation(
+      async (_previous, input) => {
+        creationRequestIds.push(input.creationRequestId);
+        attempts += 1;
+        if (attempts === 1) return { status: "error" as const };
+        return {
+          status: "ready" as const,
+          provisioning: {
+            version: 1 as const,
+            requestId: input.requestId,
+            requestDigest: "0".repeat(64),
+            appId: "retry-safe-handoff",
+            status: "settled" as const,
+            github: {
+              status: "skipped" as const,
+              code: "not_selected" as const,
+              retryable: false,
+            },
+            vercel: {
+              status: "skipped" as const,
+              code: "not_selected" as const,
+              retryable: false,
+            },
+            updatedAt: "2026-08-30T12:00:00.000Z",
+          },
+          handoff: {
+            version: 1 as const,
+            handoffId: opaqueHandoffId,
+            expiresAt: "2026-09-08T12:00:00.000Z",
+          },
+        };
+      },
+    );
     const view = await render(
       <AppBuilder
         authenticated
@@ -1276,56 +1353,49 @@ describe("Vercel-faithful App Builder flow", () => {
       github,
       updatedAt: "2026-08-30T12:00:00.000Z",
     };
-    let vercelAttempts = 0;
     let handoffAttempts = 0;
-    builderActions.provisionBuilderProvider.mockImplementation(
-      async (input) => {
-        events.push(input.operation);
+    builderActions.continueBuilderHandoff.mockImplementation(
+      async (_previous, input) => {
         expect(input.requestId).toBe(requestId);
-        if (input.operation === "github")
-          return {
-            ...base,
-            status: "pending",
-            vercel: {
-              status: "failed",
-              code: "provider_unavailable",
-              retryable: true,
-            },
-          };
-        vercelAttempts += 1;
+        events.push(input.retryProvider ?? "continuation");
+        handoffAttempts += 1;
         return {
-          ...base,
-          status: "settled",
-          vercel:
-            vercelAttempts === 1
-              ? {
-                  status: "failed",
-                  code: "provider_rejected",
-                  retryable: true,
-                }
-              : {
-                  status: "succeeded",
-                  installationId: "vercel-pylee",
-                  projectId: "prj_303",
-                  name: "apps-provider-app",
-                  dashboardUrl: "https://vercel.com/pylee/apps-provider-app",
-                  scope: { type: "team", id: "team_1", slug: "pylee" },
-                  framework: "nextjs",
-                  rootDirectory: "apps/provider-app",
-                  linkedGitHubRepository: "jasonmorganson/provider-app",
-                },
+          status: "ready" as const,
+          provisioning: {
+            ...base,
+            status: "settled" as const,
+            vercel:
+              handoffAttempts === 1
+                ? {
+                    status: "failed" as const,
+                    code: "provider_rejected" as const,
+                    retryable: true,
+                  }
+                : {
+                    status: "succeeded" as const,
+                    installationId: "vercel-pylee",
+                    projectId: "prj_303",
+                    name: "apps-provider-app",
+                    dashboardUrl: "https://vercel.com/pylee/apps-provider-app",
+                    scope: {
+                      type: "team" as const,
+                      id: "team_1",
+                      slug: "pylee",
+                    },
+                    framework: "nextjs" as const,
+                    rootDirectory: "apps/provider-app",
+                    linkedGitHubRepository: "jasonmorganson/provider-app",
+                  },
+          },
+          handoff: {
+            version: 1 as const,
+            handoffId:
+              handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
+            expiresAt: "2026-09-08T12:00:00.000Z",
+          },
         };
       },
     );
-    builderActions.createBuilderHandoff.mockImplementation(async () => {
-      events.push("handoff");
-      handoffAttempts += 1;
-      return {
-        version: 1,
-        handoffId: handoffAttempts === 1 ? opaqueHandoffId : refreshedHandoffId,
-        expiresAt: "2026-09-08T12:00:00.000Z",
-      };
-    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1352,7 +1422,7 @@ describe("Vercel-faithful App Builder flow", () => {
       )!,
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
-    expect(events).toEqual(["github", "vercel", "handoff"]);
+    expect(events).toEqual(["continuation"]);
     expect(view.textContent).toContain("jasonmorganson/provider-app");
     expect(view.textContent).toContain("Vercel: the provider rejected");
     expect(view.textContent).toContain("App created with an issue");
@@ -1365,8 +1435,9 @@ describe("Vercel-faithful App Builder flow", () => {
         (button) => button.textContent === "Retry",
       )!,
     );
-    expect(builderActions.provisionBuilderProvider).toHaveBeenCalledTimes(3);
-    expect(builderActions.createBuilderHandoff).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledTimes(2);
+    expect(events).toEqual(["continuation", "vercel"]);
     expect(view.textContent).toContain("apps-provider-app");
     expect(view.textContent).toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Setup needs attention");
@@ -1453,11 +1524,6 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText },
     });
-    builderActions.createBuilderHandoff.mockResolvedValue({
-      version: 1,
-      handoffId: opaqueHandoffId,
-      expiresAt: "2026-09-08T12:00:00.000Z",
-    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1481,8 +1547,11 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(builderActions.createBuilderHandoff).toHaveBeenCalledWith(
-      expect.objectContaining({ destination: "cursor" }),
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        form: expect.objectContaining({ buildDestination: "cursor" }),
+      }),
     );
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(navigation.push).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
@@ -1529,11 +1598,6 @@ describe("Vercel-faithful App Builder flow", () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) },
     });
-    builderActions.createBuilderHandoff.mockResolvedValue({
-      version: 1,
-      handoffId: opaqueHandoffId,
-      expiresAt: "2026-09-08T12:00:00.000Z",
-    });
     const view = await render(
       <AppBuilder
         authenticated
@@ -1571,11 +1635,6 @@ describe("Vercel-faithful App Builder flow", () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    builderActions.createBuilderHandoff.mockResolvedValue({
-      version: 1,
-      handoffId: opaqueHandoffId,
-      expiresAt: "2026-09-08T12:00:00.000Z",
     });
     const view = await render(
       <AppBuilder

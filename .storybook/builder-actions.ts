@@ -18,3 +18,7 @@ export async function reserveBuilderProvider(): Promise<never> {
 export async function createBuilderHandoff(): Promise<never> {
   return unavailable();
 }
+
+export async function continueBuilderHandoff(): Promise<never> {
+  return unavailable();
+}

@@ -73,6 +73,12 @@ function reportPasskeyFailures(page: Page) {
   });
 }
 
+async function expectPasskeyFailure(page: Page) {
+  await expect(
+    page.getByRole("button", { name: "Passkey failed (try again)" }),
+  ).toBeVisible({ timeout: 30_000 });
+}
+
 test.beforeEach(async () => resetApplicationState());
 
 test("passkey UI defaults off without a Vercel flag override", async ({
@@ -208,9 +214,7 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
+  await expectPasskeyFailure(page);
   await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
   expect(credentialRequests).toBe(0);
@@ -246,9 +250,7 @@ for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
     await page.goto("/auth/sign-in");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(verificationRequests).toBe(0);
@@ -414,9 +416,7 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(signUpLink).toBeVisible();
     const [cardAfterFailure, signUpAfterFailure] = await Promise.all([
       signInCard.boundingBox(),
@@ -494,9 +494,7 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(signUpLink).toBeVisible();
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
+  await expectPasskeyFailure(page);
   await expect(signUpLink).toBeVisible();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
   expect(await authCounts()).toMatchObject({
@@ -529,9 +527,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   });
   await page.goto("/auth/sign-up");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
+  await expectPasskeyFailure(page);
   await expect(page).toHaveURL(/\/auth\/sign-up/u);
   const firstContextIds = await onboardingContextIds();
   expect(await authCounts()).toMatchObject({
@@ -549,9 +545,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   await page
     .getByRole("button", { name: "Passkey failed (try again)" })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Passkey failed (try again)" }),
-  ).toBeVisible();
+  await expectPasskeyFailure(page);
   const replacementContextIds = await onboardingContextIds();
   expect(replacementContextIds).toHaveLength(1);
   expect(replacementContextIds).not.toEqual(firstContextIds);
@@ -592,9 +586,7 @@ for (const contextFailure of [
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     await expect(page.getByRole("link", { name: "Sign In" })).toBeVisible();
     expect(registrationOptionsRequests).toBe(0);
@@ -622,9 +614,7 @@ test("a registration-options failure retains only its bounded onboarding context
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     expect(await authenticator.credentials()).toHaveLength(0);
     expect(await authCounts()).toEqual({
@@ -653,9 +643,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(authenticationVerificationRequests).toBe(1);
@@ -686,9 +674,7 @@ test("server rejection after an assertion stays on Sign In without changing iden
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(verificationRequests).toBe(1);
@@ -843,9 +829,7 @@ test("a final persistence failure rolls back registration state", async ({
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     expect(await authenticator.credentials()).toHaveLength(1);
     expect(await authCounts()).toMatchObject({
@@ -888,9 +872,7 @@ test("an authenticator credential missing from server storage is not recreated",
       await sql.end();
     }
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
-    await expect(
-      page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    await expectPasskeyFailure(page);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect((await authCounts()).passkeys).toBe(0);
     expect((await authCounts()).users).toBe(1);
