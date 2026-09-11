@@ -132,7 +132,10 @@ export function waitForDevelopmentRuntimeChange(input: {
       if (debounce !== undefined) clearTimeout(debounce);
       debounce = setTimeout(() => void check(), input.debounceMs ?? 150);
     };
-    if (input.signal?.aborted) return finish(false);
+    if (input.signal?.aborted) {
+      finish(false);
+      return;
+    }
     input.signal?.addEventListener("abort", aborted, { once: true });
     try {
       watcher = watch(input.repositoryRoot, { recursive: true }, schedule);

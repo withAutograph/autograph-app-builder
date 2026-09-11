@@ -12,7 +12,9 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
     response.writeHead(404);
     response.end();
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   try {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("No listener");
@@ -25,7 +27,9 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
       }),
     ).rejects.toThrow("Preview returned HTTP 404");
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
   }
 });
 // Authored calibration candidates, not human-validated aesthetic gold labels.

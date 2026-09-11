@@ -209,7 +209,9 @@ export function createServicePrototypePreviewResolver(input: {
       const result = await service.get({ sessionId, cursor: 0, limit: 1 });
       if (result.prototype !== undefined) return result.prototype;
       if (attempt < 4)
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
     }
     return undefined;
   };

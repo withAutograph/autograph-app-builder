@@ -55,7 +55,9 @@ async function getWithTransientRetry(page: Page, path: string) {
       const message = error instanceof Error ? error.message : String(error);
       const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
       if (!retryable || attempt >= 2) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 250 * 2 ** attempt);
+      });
     }
   }
 }

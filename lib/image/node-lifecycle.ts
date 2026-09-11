@@ -272,11 +272,12 @@ export async function withLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await new Promise<void>((resolveClose, rejectClose) =>
-      server.close((error) =>
-        error === undefined ? resolveClose() : rejectClose(error),
-      ),
-    );
+    await new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => {
+        if (error === undefined) resolveClose();
+        else rejectClose(error);
+      });
+    });
   }
 }
 

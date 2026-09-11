@@ -637,9 +637,9 @@ async function pollUntilSettled(input: {
         responseBatchCount,
         approvalPhases,
       };
-    await new Promise((resolve) =>
-      setTimeout(resolve, input.scenario.pollIntervalMs),
-    );
+    await new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), input.scenario.pollIntervalMs);
+    });
   }
   throw new Error(
     "Hosted session did not settle within the bounded poll window.",

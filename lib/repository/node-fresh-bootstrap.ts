@@ -722,7 +722,9 @@ async function acquireLease(
     helperError = `${helperError}${chunk}`.slice(-2_000);
   });
   let resolveExit!: () => void;
-  const exited = new Promise<void>((resolve) => (resolveExit = resolve));
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
   holder.once("error", (error) => {
     terminal = error;
     resolveExit();
@@ -829,7 +831,9 @@ async function quiesceAbandonedLease(
   holder.stderr.setEncoding("utf8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   let resolveExit!: () => void;
-  const exited = new Promise<void>((resolve) => (resolveExit = resolve));
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
   holder.once("exit", resolveExit);
   await new Promise<void>((resolveReady, rejectReady) => {
     const timeout = setTimeout(() => {

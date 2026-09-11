@@ -213,7 +213,7 @@ describe("local Eve acceptance", () => {
   it("still bounds a model turn after its response iterator closes", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
@@ -409,7 +409,9 @@ describe("local Eve acceptance", () => {
           type: "step.started",
           data: { turnId: "turn-before-restart" },
         } as MessageStreamEvent;
-        await new Promise<void>((resolve) => (keepOldResponseOpen = resolve));
+        await new Promise<void>((resolve) => {
+          keepOldResponseOpen = resolve;
+        });
       },
     };
     const resumedEvents = [
@@ -662,7 +664,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("returns one stable public handle without waiting for the active turn", async () => {
-    const never = new Promise<void>(() => undefined);
+    const never = new Promise<void>(() => {});
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
@@ -684,9 +686,11 @@ describe("local Eve acceptance", () => {
 
     const first = await Promise.race([
       service.start({ prompt: "Build", clientRequestId: "prompt-return-1" }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("start blocked")), 100),
-      ),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("start blocked"));
+        }, 100);
+      }),
     ]);
     const retry = await service.start({
       prompt: "Build",
@@ -706,7 +710,7 @@ describe("local Eve acceptance", () => {
   it("cancels one stalled model turn and exposes a retryable paused result", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
@@ -900,7 +904,7 @@ describe("local Eve acceptance", () => {
   it("bounds a local cancel when the current Eve response cannot settle", async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<void>(() => undefined);
+      const never = new Promise<void>(() => {});
       const response = {
         cancel: vi.fn(() => never),
         async *[Symbol.asyncIterator]() {
@@ -943,7 +947,7 @@ describe("local Eve acceptance", () => {
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        await new Promise<void>(() => undefined);
+        await new Promise<void>(() => {});
         yield {} as MessageStreamEvent;
       },
     };

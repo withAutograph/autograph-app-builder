@@ -245,9 +245,11 @@ export async function settleFiniteMotion(page: Page) {
   await page.evaluate(async () => {
     // Let hydration/class updates start their CSS transitions before taking the
     // animation snapshot. A second frame is enough without adding a timer gate.
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
     const finite = document.getAnimations().filter((motion) => {
       if (motion.playState !== "running" && !motion.pending) return false;
       const timing = motion.effect?.getComputedTiming();

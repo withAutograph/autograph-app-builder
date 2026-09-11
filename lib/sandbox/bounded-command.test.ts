@@ -74,7 +74,7 @@ describe("bounded sandbox command", () => {
     const process = {
       stdout: idle(),
       stderr: idle(),
-      wait: () => new Promise<never>(() => undefined),
+      wait: () => new Promise<never>(() => {}),
       kill,
     } as unknown as SandboxProcess;
     await expect(
@@ -99,7 +99,7 @@ describe("bounded sandbox command", () => {
     const process = {
       stdout: oneThenIdle(),
       stderr: idle(),
-      wait: () => new Promise<never>(() => undefined),
+      wait: () => new Promise<never>(() => {}),
       kill,
     } as unknown as SandboxProcess;
     await expect(
@@ -114,7 +114,7 @@ describe("bounded sandbox command", () => {
 
   it("does not let a hung provider kill replace the original limit error", async () => {
     const fixture = processFixture(["too much output"]);
-    fixture.process.kill = vi.fn(() => new Promise<never>(() => undefined));
+    fixture.process.kill = vi.fn(() => new Promise<never>(() => {}));
     await expect(
       runBoundedSandboxCommand(
         { spawn: async () => fixture.process },

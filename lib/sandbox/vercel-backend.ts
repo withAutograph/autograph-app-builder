@@ -103,9 +103,9 @@ export function createProviderFetch(
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
           );
-          await new Promise((resolve) =>
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
-          );
+          await new Promise((resolve) => {
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
+          });
           continue;
         }
         return response;
@@ -121,9 +121,9 @@ export function createProviderFetch(
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
-          await new Promise((resolve) =>
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
-          );
+          await new Promise((resolve) => {
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
+          });
           continue;
         }
         console.warn(

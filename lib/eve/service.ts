@@ -494,7 +494,9 @@ export function createLocalEveSessionService(
           "working"
         )
           return;
-        await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 250);
+    });
       }
     })().finally(() => state.tailPumps.delete(sessionId));
     state.tailPumps.set(sessionId, pump);

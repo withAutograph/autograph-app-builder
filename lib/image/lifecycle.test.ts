@@ -1022,17 +1022,21 @@ wait
         attempts < 100 && !existsSync(descendant);
         attempts += 1
       )
-        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    await new Promise((resolveWait) => {
+      setTimeout(resolveWait, 10);
+    });
       expect(existsSync(descendant)).toBe(true);
       process.kill(-child.pid!, "SIGKILL");
-      await new Promise<void>((resolveClose) =>
-        child.once("close", () => resolveClose()),
-      );
+      await new Promise<void>((resolveClose) => {
+        child.once("close", () => resolveClose());
+      });
       const descendantPid = Number(readFileSync(descendant, "utf8").trim());
       for (let attempts = 0; attempts < 100; attempts += 1) {
         try {
           process.kill(descendantPid, 0);
-          await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    await new Promise((resolveWait) => {
+      setTimeout(resolveWait, 10);
+    });
         } catch {
           break;
         }
@@ -1653,7 +1657,9 @@ wait
       });
     });
     child.kill("SIGKILL");
-    await new Promise((resolveExit) => child.once("exit", resolveExit));
+    await new Promise((resolveExit) => {
+      child.once("exit", resolveExit);
+    });
     expect(readFileSync(interruptedPath)).toHaveLength(0);
     await withLifecycleLock(root, () => reconcileLifecycleTemps(root));
     expect(() => readFileSync(interruptedPath)).toThrow();
