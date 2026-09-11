@@ -3,9 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getBuilderHandoffPageData } from "../../../../lib/handoff/deployment";
-import { HandoffControls } from "../../../ui/handoff-controls";
 import { Header } from "../../../ui/builder-shell";
 import { CreateAnotherAppLink } from "../../../ui/create-another-app-link";
+import { HandoffControls } from "../../../ui/handoff-controls";
+
 import styles from "../../../ui/app-builder.module.css";
 import handoffStyles from "../../../ui/handoff.module.css";
 

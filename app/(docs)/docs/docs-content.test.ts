@@ -17,7 +17,7 @@ describe("documentation registry", () => {
       "troubleshooting",
     ]);
     expect(new Set(docs.map((document) => document.slug))).toHaveLength(
-      docs.length,
+      docs.length
     );
   });
 

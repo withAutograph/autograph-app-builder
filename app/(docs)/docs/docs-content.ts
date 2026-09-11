@@ -1,6 +1,5 @@
-import type { ComponentType } from "react";
-
 import type { MDXComponents } from "mdx/types";
+import type { ComponentType } from "react";
 
 import ConnectAccess from "@/content/docs/connect-access.mdx";
 import CreateAnApp from "@/content/docs/create-an-app.mdx";

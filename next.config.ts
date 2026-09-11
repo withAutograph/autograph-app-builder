@@ -1,5 +1,5 @@
-import createMDX from "@next/mdx";
 import { withEmulate } from "@emulators/adapter-next";
+import createMDX from "@next/mdx";
 import { withEve } from "eve/next";
 import type { NextConfig } from "next";
 

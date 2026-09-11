@@ -1,6 +1,5 @@
-import type { ReactNode } from "react";
-
 import type { MDXComponents } from "mdx/types";
+import type { ReactNode } from "react";
 
 function headingId(children: ReactNode) {
   return String(children)

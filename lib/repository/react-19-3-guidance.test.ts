@@ -10,7 +10,7 @@ const guidancePath = resolve(
 const homePagePath = resolve(repositoryRoot, "app/(product)/page.tsx");
 const handoffPagePath = resolve(
   repositoryRoot,
-  "app/(product)/handoff/[id]/page.tsx",
+  "app/(product)/handoff/[id]/page.tsx"
 );
 
 describe("React 19.3 generated-app guidance", () => {
