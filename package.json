@@ -22,7 +22,7 @@
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
     "test:hosted-sandbox": "mise run test:hosted-sandbox --",
     "test:auth-e2e": "mise run auth-e2e:test",
-    "check": "ultracite check",
+    "check": "mise run check",
     "configure": "mise run package:configure --",
     "validate:plugin": "mise run package:validate",
     "validate:release": "mise run package:validate-release",
@@ -37,7 +37,7 @@
     "storybook": "mise run storybook:dev",
     "build-storybook": "mise run storybook:build",
     "test-storybook": "mise run storybook:test",
-    "fix": "ultracite fix"
+    "fix": "mise run format"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
