@@ -37,7 +37,7 @@ export function prototypePreviewRequestUrl(input: {
   environment: Environment;
   requestUrl: string;
 }): string {
-  const environment = input.environment;
+  const {environment} = input;
   const exactDevelopmentAdapter =
     environment.APP_BUILDER_EXECUTION_MODE === "development" &&
     environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
@@ -120,7 +120,7 @@ function previewUrl(input: {
   if (!parsed.success) return undefined;
   let origin: string;
   try {
-    origin = new URL(input.requestUrl).origin;
+    ({ origin } = new URL(input.requestUrl));
   } catch {
     return undefined;
   }
@@ -196,7 +196,7 @@ export function createPrototypePreviewRequestHandler(input: {
 }
 
 export function createServicePrototypePreviewResolver(input: {
-  serviceForRequest(request: Request): Promise<EveSessionService | undefined>;
+  serviceForRequest: (request: Request) => Promise<EveSessionService | undefined>;
 }): PrototypePreviewResolver {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);
@@ -209,7 +209,9 @@ export function createServicePrototypePreviewResolver(input: {
       const result = await service.get({ sessionId, cursor: 0, limit: 1 });
       if (result.prototype !== undefined) return result.prototype;
       if (attempt < 4)
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
     }
     return undefined;
   };

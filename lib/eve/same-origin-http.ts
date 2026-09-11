@@ -81,7 +81,7 @@ const streamEnvelopeSchema = z
   .passthrough();
 
 export interface HostedWorkloadIdentity {
-  token(): Promise<string>;
+  token: () => Promise<string>;
 }
 
 function exactToken(value: string): string {

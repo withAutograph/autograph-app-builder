@@ -272,11 +272,12 @@ export async function withLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await new Promise<void>((resolveClose, rejectClose) =>
-      server.close((error) =>
-        error === undefined ? resolveClose() : rejectClose(error),
-      ),
-    );
+    await new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => {
+        if (error === undefined) resolveClose();
+        else rejectClose(error);
+      });
+    });
   }
 }
 
@@ -1038,7 +1039,7 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
     provenance,
   );
   const binding = currentGhcrCredentialBinding(provenance.builder.stateRoot);
-  const result = receipt.result;
+  const {result} = receipt;
   const expectedResultKeys = [
     "authenticationBoundary",
     "authenticationBoundaryDigest",
@@ -1082,7 +1083,7 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
     throw new Error(
       "GHCR login receipt does not match the current credential boundary.",
     );
-  const username = (result as { username: string }).username;
+  const {username} = (result as { username: string });
   assertGhcrUsername(username);
   return {
     receipt,

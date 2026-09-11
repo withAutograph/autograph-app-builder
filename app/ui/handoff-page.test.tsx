@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
 const server = vi.hoisted(() => ({
   load: vi.fn(),
   redirect: vi.fn((url: string) => {

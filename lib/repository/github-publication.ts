@@ -303,59 +303,43 @@ export type GitHubPublicationContent =
 
 /** Read-only access to the already-approved apply overlay. */
 export interface GitHubFreshRepositoryContentSource {
-  readFreshTree(): Promise<GitHubFreshRepositoryContent>;
+  readFreshTree: () => Promise<GitHubFreshRepositoryContent>;
 }
 
 export interface GitHubDraftPullRequestContentSource {
-  readFile(path: string): Promise<{
+  readFile: (path: string) => Promise<{
     mode: string;
     digest: Digest;
     bytes: Uint8Array;
-  } | null>;
+} | null>;
 }
 
 export type GitHubPublicationContentSource =
   GitHubFreshRepositoryContentSource & GitHubDraftPullRequestContentSource;
 
 export interface GitHubSourceResolutionAdapter {
-  inspectInstallation(
-    operation: GitHubOperation,
-  ): Promise<GitHubInstallationIdentity>;
-  inspectRepository(input: {
+  inspectInstallation: (operation: GitHubOperation) => Promise<GitHubInstallationIdentity>;
+  inspectRepository: (input: {
     operation: "resolve-existing-source" | "publish-draft-pull-request";
     repositoryId: string;
     ref: string;
-  }): Promise<GitHubRepositoryObservation>;
+}) => Promise<GitHubRepositoryObservation>;
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
-  inspectDestination(input: {
+  inspectDestination: (input: {
     owner: string;
     name: string;
-  }): Promise<"absent" | GitHubRepositoryObservation>;
-  inspectFreshRepositoryOutcome(
-    proposal: FreshRepositoryProposal,
-  ): Promise<FreshRepositoryReadBack | undefined>;
-  createPrivateFreshHistoryRepository(
-    proposal: FreshRepositoryProposal,
-    content: GitHubFreshRepositoryContent,
-  ): Promise<GitHubMutationAcknowledgement>;
-  inspectDraftPublication(
-    proposal: DraftPullRequestProposal,
-  ): Promise<DraftPublicationReadBack>;
-  publishDraftPullRequest(
-    proposal: DraftPullRequestProposal,
-    content: GitHubDraftPullRequestContent,
-  ): Promise<GitHubMutationAcknowledgement>;
+}) => Promise<"absent" | GitHubRepositoryObservation>;
+  inspectFreshRepositoryOutcome: (proposal: FreshRepositoryProposal) => Promise<FreshRepositoryReadBack | undefined>;
+  createPrivateFreshHistoryRepository: (proposal: FreshRepositoryProposal, content: GitHubFreshRepositoryContent) => Promise<GitHubMutationAcknowledgement>;
+  inspectDraftPublication: (proposal: DraftPullRequestProposal) => Promise<DraftPublicationReadBack>;
+  publishDraftPullRequest: (proposal: DraftPullRequestProposal, content: GitHubDraftPullRequestContent) => Promise<GitHubMutationAcknowledgement>;
 }
 
 export interface GitHubPublicationReceiptStore {
-  read(proposalDigest: string): Promise<GitHubMutationReceipt | undefined>;
-  compareAndSet(
-    proposalDigest: string,
-    expectedDigest: string | undefined,
-    receipt: GitHubMutationReceipt,
-  ): Promise<boolean>;
+  read: (proposalDigest: string) => Promise<GitHubMutationReceipt | undefined>;
+  compareAndSet: (proposalDigest: string, expectedDigest: string | undefined, receipt: GitHubMutationReceipt) => Promise<boolean>;
 }
 
 export class GitHubOutcomeUnknownError extends Error {
@@ -418,7 +402,11 @@ function safeBranch(value: unknown): value is string {
     !value.endsWith(".lock") &&
     !value.includes("..") &&
     !value.includes("@{") &&
-    !/[~^:?*[\\\s\x00-\x1f\x7f]/u.test(value) &&
+    !/[~^:?*[\\\s]/u.test(value) &&
+    !Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    }) &&
     value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
   );
 }
@@ -1254,7 +1242,10 @@ function safeTitle(value: string): boolean {
     value === value.trim() &&
     value.length > 0 &&
     value.length <= 120 &&
-    !/[\r\n\x00-\x1f\x7f]/u.test(value)
+    !Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
   );
 }
 

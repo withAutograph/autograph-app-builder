@@ -155,8 +155,8 @@ export async function provisionGitHubRepository(input: {
   source: StarterSource;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
-  persistCandidate(candidate: string): Promise<void>;
-  persistAbsent(candidate: string): Promise<void>;
+  persistCandidate: (candidate: string) => Promise<void>;
+  persistAbsent: (candidate: string) => Promise<void>;
   fetch?: typeof fetch;
   now?: () => number;
   generateSuffix?: () => string;
@@ -191,13 +191,13 @@ export async function provisionGitHubRepository(input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (status === 401) throw new Error("credential-rejected");
+      if (status === 401) throw new Error("credential-rejected", { cause: error });
       if (typeof status === "number" && args.expected.includes(status))
         return {
           status,
           body: record(response) ? response.data : undefined,
         };
-      throw new Error("provider-unavailable");
+      throw new Error("provider-unavailable", { cause: error });
     }
   }
 
@@ -280,9 +280,9 @@ export async function provisionGitHubRepository(input: {
             providerUserId: input.installation.accountId,
             now: new Date(now()),
           });
-          throw new Error("credential-unavailable");
+          throw new Error("credential-unavailable", { cause: error });
         }
-        throw new Error("provider-unavailable");
+        throw new Error("provider-unavailable", { cause: error });
       }
       const accessToken = stringProperty(authentication, "token");
       const refreshToken = stringProperty(authentication, "refreshToken");

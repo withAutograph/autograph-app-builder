@@ -1,6 +1,5 @@
 #!/bin/sh
-#MISE description="Lint repository sources with ESLint"
+#MISE description="Lint repository sources with Oxlint"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/eslint/bin/eslint.js .
+exec .config/mise/scripts/trusted-node-launcher "$(mise which pnpm)" exec oxlint --config oxlint.config.ts .

@@ -148,7 +148,7 @@ export function parseGhAuthStatus(
     Object.keys(parsed).join(",") !== "hosts"
   )
     throw new Error("GitHub authentication status was malformed.");
-  const hosts = (parsed as { hosts?: unknown }).hosts;
+  const {hosts} = (parsed as { hosts?: unknown });
   if (
     typeof hosts !== "object" ||
     hosts === null ||
@@ -159,7 +159,7 @@ export function parseGhAuthStatus(
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1)
     throw new Error("GitHub authentication status was ambiguous.");
-  const record = records[0];
+    const [record] = records;
   if (typeof record !== "object" || record === null || Array.isArray(record))
     throw new Error("GitHub authentication status was malformed.");
   const value = record as Record<string, unknown>;
@@ -537,7 +537,7 @@ async function writeVerifiedLogin(
 }
 
 async function run(): Promise<void> {
-  const mode = process.argv[2];
+  const [, , mode] = process.argv;
   if (process.argv.length !== 3 || (mode !== "get" && mode !== "verify-login"))
     throw new Error("Only the closed GHCR credential protocols are supported.");
   if (mode === "get") {

@@ -1,5 +1,13 @@
 "use client";
 
+import type {
+  BuilderDraft,
+  BuilderForm,
+  DeploymentProvider,
+  ProviderField,
+  StorageProvider,
+} from "./builder-types";
+
 import {
   Check,
   ChevronDown,
@@ -70,13 +78,6 @@ export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
 export { SearchCombobox, type ComboOption } from "./search-combobox";
-import type {
-  BuilderDraft,
-  BuilderForm,
-  DeploymentProvider,
-  ProviderField,
-  StorageProvider,
-} from "./builder-types";
 export type {
   BuilderDraft,
   BuilderForm,
@@ -1207,12 +1208,12 @@ export function Builder({
     new Map<
       string,
       {
-        resolve(saved: {
-          draftId: string;
-          revision: number;
-          updatedAt: string;
-        }): void;
-        reject(error: Error): void;
+        resolve: (saved: {
+    draftId: string;
+    revision: number;
+    updatedAt: string;
+}) => void;
+        reject: (error: Error) => void;
       }
     >(),
   );
@@ -1546,7 +1547,7 @@ export function Builder({
           void discardPendingDraft();
           return;
         }
-        const snapshot = entry.snapshot;
+        const {snapshot} = entry;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);

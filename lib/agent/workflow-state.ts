@@ -374,7 +374,7 @@ export function assertCurrentGitHubDraftProposal(input: {
   sourceReceiptDigest: string;
   githubSource: ImmutableGitHubSourceReceipt;
 }): DraftPullRequestProposal {
-  const binding = input.binding;
+  const {binding} = input;
   const proposal = binding?.proposal;
   if (
     binding === undefined ||

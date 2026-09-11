@@ -39,13 +39,13 @@ export type RepositoryAccessContinuation = z.infer<
 >;
 
 export interface RepositoryAccessContinuationStore {
-  create(record: RepositoryAccessContinuation): Promise<void>;
-  authorize(input: {
+  create: (record: RepositoryAccessContinuation) => Promise<void>;
+  authorize: (input: {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-  }): Promise<RepositoryAccessContinuation | undefined>;
-  consume(input: {
+}) => Promise<RepositoryAccessContinuation | undefined>;
+  consume: (input: {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     sessionId: string;
@@ -53,12 +53,12 @@ export interface RepositoryAccessContinuationStore {
     repository: RepositoryReference;
     selectedInstallationId?: string;
     now: Date;
-  }): Promise<RepositoryAccessContinuation | undefined>;
-  listAuthorizedForSession(input: {
+}) => Promise<RepositoryAccessContinuation | undefined>;
+  listAuthorizedForSession: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     sessionId: string;
     now: Date;
-  }): Promise<RepositoryAccessContinuation[]>;
+}) => Promise<RepositoryAccessContinuation[]>;
 }
 
 const continuationDigest = (continuationId: string) =>

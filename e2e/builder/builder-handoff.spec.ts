@@ -55,7 +55,9 @@ async function getWithTransientRetry(page: Page, path: string) {
       const message = error instanceof Error ? error.message : String(error);
       const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
       if (!retryable || attempt >= 2) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 250 * 2 ** attempt);
+      });
     }
   }
 }
@@ -75,7 +77,7 @@ async function prepareNamedHandoff(
   await expect(page.locator("#app-brief")).toHaveValue(brief);
   await completeHandoff(page);
   const url = page.url();
-  const pathname = new URL(url).pathname;
+  const {pathname} = new URL(url);
   const id = pathname.split("/").at(-1)!;
   return { url, pathname, id, statusPath: `/api/builder/handoffs/${id}` };
 }
@@ -271,7 +273,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   let polled = 0;
   let mcpRequests = 0;
   page.on("request", (request) => {
-    const pathname = new URL(request.url()).pathname;
+    const {pathname} = new URL(request.url());
     if (request.method() === "GET" && pathname === handoff.statusPath)
       polled += 1;
     if (pathname === "/mcp") mcpRequests += 1;

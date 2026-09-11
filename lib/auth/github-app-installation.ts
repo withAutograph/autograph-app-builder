@@ -201,24 +201,24 @@ export function readGitHubAppInstallationEnvironment(
 }
 
 export interface GitHubInstallationAuthorizationStateStore {
-  create(input: {
+  create: (input: {
     stateDigest: string;
     authority: HostedTenantAuthority;
     authorityDigest: string;
     createdAt: Date;
     expiresAt: Date;
     returnState: ProviderConnectionReturn;
-  }): Promise<void>;
-  consume(input: {
+}) => Promise<void>;
+  consume: (input: {
     stateDigest: string;
     authority: HostedTenantAuthority;
     authorityDigest: string;
     now: Date;
-  }): Promise<boolean>;
+}) => Promise<boolean>;
 }
 
 export interface GitHubInstallationMembershipAuthority {
-  isActiveMember(authority: HostedTenantAuthority): Promise<boolean>;
+  isActiveMember: (authority: HostedTenantAuthority) => Promise<boolean>;
 }
 
 type Fetch = typeof fetch;
@@ -1123,7 +1123,7 @@ export function createGitHubAppInstallationAuthorization(input: {
         };
       } catch (error) {
         if (error instanceof GitHubInstallationAuthorizationError) throw error;
-        throw new Error(FAILURE_MESSAGE);
+        throw new Error(FAILURE_MESSAGE, { cause: error });
       }
     },
   };

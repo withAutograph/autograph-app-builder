@@ -146,7 +146,7 @@ function importsFrom(content: string): string[] {
   const pattern =
     /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
   for (const match of content.matchAll(pattern)) {
-    const specifier = match[1];
+      const [, specifier] = match;
     if (specifier !== undefined) imports.add(specifier);
   }
   return [...imports].sort();

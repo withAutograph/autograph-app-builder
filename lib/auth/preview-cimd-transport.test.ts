@@ -141,7 +141,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       resolveHostname: vi.fn(
-        () => new Promise<LookupAddress[]>(() => undefined),
+        () => new Promise<LookupAddress[]>(() => {}),
       ),
       requestHttps,
       timeoutSignal,
@@ -162,7 +162,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       resolveHostname: vi.fn(
-        () => new Promise<LookupAddress[]>(() => undefined),
+        () => new Promise<LookupAddress[]>(() => {}),
       ),
       requestHttps,
     });

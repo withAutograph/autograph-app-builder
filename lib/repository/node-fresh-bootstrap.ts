@@ -81,8 +81,8 @@ type ExactFile = FreshBootstrapFile & { bytes: Buffer };
 
 export type FreshBootstrapSourceWorkspace = {
   files: readonly PreparedSourceFile[];
-  readSourceFile(path: string): Promise<Uint8Array | null>;
-  reverify(): Promise<void>;
+  readSourceFile: (path: string) => Promise<Uint8Array | null>;
+  reverify: () => Promise<void>;
 };
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
@@ -648,8 +648,8 @@ process.stdin.resume();
 type Lease = {
   pid: number;
   markerDigest: string;
-  assertHeld(): void;
-  release(): Promise<void>;
+  assertHeld: () => void;
+  release: () => Promise<void>;
 };
 
 async function acquireLease(
@@ -722,7 +722,9 @@ async function acquireLease(
     helperError = `${helperError}${chunk}`.slice(-2_000);
   });
   let resolveExit!: () => void;
-  const exited = new Promise<void>((resolve) => (resolveExit = resolve));
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
   holder.once("error", (error) => {
     terminal = error;
     resolveExit();
@@ -796,7 +798,7 @@ async function quiesceAbandonedLease(
   capability: FreshBootstrapCapability,
   path: string,
   expectedActiveDigest: string,
-): Promise<{ markerDigest: string; release(): Promise<void> }> {
+): Promise<{ markerDigest: string; release: () => Promise<void>; }> {
   await assertContainedStatePath(capability, path, "absent-or-file");
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
@@ -829,7 +831,9 @@ async function quiesceAbandonedLease(
   holder.stderr.setEncoding("utf8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   let resolveExit!: () => void;
-  const exited = new Promise<void>((resolve) => (resolveExit = resolve));
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
   holder.once("exit", resolveExit);
   await new Promise<void>((resolveReady, rejectReady) => {
     const timeout = setTimeout(() => {
@@ -970,7 +974,7 @@ async function exactResultTree(input: {
   capability: FreshBootstrapCapability;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactReviewedChangeSet(input.review);
@@ -1091,7 +1095,9 @@ async function inspectDestinationPrestate(input: {
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     if (input.expected !== "absent")
-      throw new Error("The expected empty destination is absent.");
+      throw new Error("The expected empty destination is absent.", {
+        cause: error,
+      });
     return { kind: "absent", destinationPath: destination, parent };
   }
   if (
@@ -1124,7 +1130,7 @@ export async function deriveFreshBootstrapProposal(input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   protectedPaths: readonly string[];
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<FreshBootstrapProposal> {
   const capability = await assertCapability(input.capability);
@@ -1226,7 +1232,7 @@ async function assertExactInputs(input: {
   proposal: FreshBootstrapProposal;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> {
   assertExactFreshBootstrapProposal(input.proposal);
@@ -1313,7 +1319,9 @@ async function assertPrestate(
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     if (proposal.destinationPrestate.kind !== "absent")
-      throw new Error("The approved empty destination disappeared.");
+      throw new Error("The approved empty destination disappeared.", {
+        cause: error,
+      });
     return;
   }
   if (proposal.destinationPrestate.kind !== "empty-directory")
@@ -1346,7 +1354,9 @@ async function createStage(
     await mkdir(proposal.stagingPath, { mode: 0o700 });
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST")
-      throw new Error("The deterministic bootstrap stage already exists.");
+      throw new Error("The deterministic bootstrap stage already exists.", {
+        cause: error,
+      });
     throw error;
   }
   const stageState = await lstat(proposal.stagingPath);
@@ -2129,7 +2139,7 @@ async function executeBootstrap(input: {
   review: ReviewedChangeSetReceipt;
   publishedByCallId: string;
   recoveryOfDigest?: string;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
   hooks?: FreshBootstrapFaultHooks;
 }): Promise<
@@ -2174,7 +2184,7 @@ async function executeBootstrap(input: {
       existingJournal !== undefined &&
       existingJournal.status !== "succeeded"
     ) {
-      const layout = existingJournal.layout;
+      const {layout} = existingJournal;
       if (layout.phase === "intent") {
         if ((await pathState(input.proposal.stagingPath)) !== "absent")
           throw new Error(
@@ -2529,6 +2539,7 @@ async function executeBootstrap(input: {
         if (durable === undefined)
           throw new Error(
             "The fresh-bootstrap lease was lost before durable intent; its quiesced marker requires a separate reset.",
+            { cause: error },
           );
         failure = failureReceipt({
           proposal: input.proposal,
@@ -2584,7 +2595,7 @@ export async function verifyFreshBootstrap(input: {
   receipt: FreshBootstrapSuccessReceipt;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
-  readOverlayFile(path: string): Promise<Uint8Array | null>;
+  readOverlayFile: (path: string) => Promise<Uint8Array | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<void> {
   const capability = await assertCapability(input.capability);

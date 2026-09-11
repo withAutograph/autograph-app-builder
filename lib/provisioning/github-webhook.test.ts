@@ -27,12 +27,12 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
 function database() {
   const updates: unknown[] = [];
   type FakeDatabase = {
-    update(table: unknown): {
-      set(): { where(): Promise<undefined> };
+    update: (table: unknown) => {
+      set: () => {
+        where: () => Promise<undefined>;
+      };
     };
-    transaction<T>(
-      operation: (transaction: FakeDatabase) => Promise<T>,
-    ): Promise<T>;
+    transaction: <T>(operation: (transaction: FakeDatabase) => Promise<T>) => Promise<T>;
   };
   const value: FakeDatabase = {
     update(table: unknown) {

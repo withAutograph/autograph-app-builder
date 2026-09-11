@@ -90,7 +90,7 @@ export async function runImageLifecycleTask(
   return proveSandboxImage(approval, image!);
 }
 
-const entrypoint = process.argv[1];
+  const [, entrypoint] = process.argv;
 if (
   entrypoint !== undefined &&
   import.meta.url === pathToFileURL(entrypoint).href

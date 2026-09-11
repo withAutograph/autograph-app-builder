@@ -34,15 +34,13 @@ type CommandAuthority = {
 };
 
 type RuntimeDependencies = {
-  enabled(environment: Readonly<Record<string, string | undefined>>): boolean;
-  store(
-    environment: Readonly<Record<string, string | undefined>>,
-  ): SandboxExecutionLeaseStore;
-  isMember(input: {
+  enabled: (environment: Readonly<Record<string, string | undefined>>) => boolean;
+  store: (environment: Readonly<Record<string, string | undefined>>) => SandboxExecutionLeaseStore;
+  isMember: (input: {
     principal: HostedPrincipal;
     workspaceId: string;
     environment: Readonly<Record<string, string | undefined>>;
-  }): Promise<boolean>;
+}) => Promise<boolean>;
 };
 
 const commandAuthorities = new Map<string, CommandAuthority>();

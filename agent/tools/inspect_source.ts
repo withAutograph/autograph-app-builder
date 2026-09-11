@@ -59,7 +59,7 @@ export default defineTool({
       });
     if (receipt === undefined && isHostedVercelRuntime(process.env)) {
       const selected = sourceWorkflowState.get();
-      if (selected.phase !== "empty") receipt = selected.receipt;
+    if (selected.phase !== "empty") ({ receipt } = selected);
     }
     if (
       receipt === undefined &&

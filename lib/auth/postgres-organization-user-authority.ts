@@ -81,7 +81,7 @@ function personalWorkspaceSlug(userId: string) {
 }
 
 function personalWorkspaceName(name: string) {
-  const firstName = name.trim().split(/\s+/u)[0];
+  const [firstName] = name.trim().split(/\s+/u);
   return firstName ? `${firstName}’s Workspace` : "My Workspace";
 }
 
@@ -121,7 +121,7 @@ export function createPostgresPreviewOrganizationAuthority(
           email_verified: boolean;
           banned: boolean | null;
         }>(userResult);
-        const user = users[0];
+    const [user] = users;
         if (users.length !== 1 || user === undefined) {
           throw new OrganizationProvisioningError("workspace-setup-failed");
         }
@@ -190,7 +190,7 @@ export function createPostgresPreviewOrganizationAuthority(
         if (invitations.length > 1) {
           throw new OrganizationProvisioningError("workspace-ambiguous");
         }
-        const invitation = invitations[0];
+    const [invitation] = invitations;
         if (invitation !== undefined) {
           const role = invitation.role ?? "member";
           if (!new Set(["owner", "admin", "member"]).has(role)) {

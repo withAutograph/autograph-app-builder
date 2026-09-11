@@ -213,7 +213,7 @@ function tarFiles(archive: Uint8Array) {
       header.subarray(100, 108).toString("ascii").replace(/\0.*$/u, "").trim(),
       8,
     );
-    const type = header[156];
+    const [type] = header.slice(156);
     if (
       !safeSourcePath(path) ||
       !Number.isSafeInteger(size) ||

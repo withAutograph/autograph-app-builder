@@ -73,13 +73,15 @@ export type GitHubPublicationFile = {
 };
 
 export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
-  inspectRepositoryByName(input: {
+  inspectRepositoryByName: (input: {
     owner: string;
     name: string;
-  }): Promise<unknown | undefined>;
-  acquireRepositoryReadCredential(input: {
+}) => Promise<unknown | undefined>;
+  acquireRepositoryReadCredential: (input: {
     repositoryId: string;
-  }): Promise<{ token: string }>;
+}) => Promise<{
+    token: string;
+}>;
 }
 
 type Fetch = typeof fetch;
@@ -211,8 +213,8 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key)))
     throw new Error("invalid-response");
-  const metadata = value.metadata;
-  const contents = value.contents;
+  const {metadata} = value;
+  const {contents} = value;
   const workflows = value.workflows ?? "none";
   const pullRequests = value.pull_requests ?? "none";
   const administration = value.administration ?? "none";
@@ -291,7 +293,7 @@ export function createGitHubAppHttpProvider(input: {
               : "github",
           ),
         };
-      throw new Error("github-request-failed");
+      throw new Error("github-request-failed", { cause: error });
     }
   }
 
@@ -845,7 +847,7 @@ export function createGitHubAppHttpProvider(input: {
       if (!Array.isArray(pulls.body)) throw new Error("invalid-response");
       const candidates = pulls.body;
       if (candidates.length > 1) throw new Error("invalid-response");
-      const pull = candidates[0];
+    const [pull] = candidates;
       const exactPull =
         pull !== undefined &&
         stringProperty(pull, "title") === proposal.title &&

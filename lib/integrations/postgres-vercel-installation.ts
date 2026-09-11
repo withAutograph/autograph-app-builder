@@ -50,7 +50,7 @@ export async function readActiveVercelInstallationToken(input: {
       ),
     )
     .limit(1);
-  const row = rows[0];
+  const [row] = rows;
   if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion)
     return undefined;
   return {

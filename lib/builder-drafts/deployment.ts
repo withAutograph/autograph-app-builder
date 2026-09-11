@@ -92,18 +92,15 @@ export async function deleteInactiveBuilderDraftsForMaintenance(input: {
 
 export function createBuilderDraftRouteHandler(input: {
   origin: string;
-  authorityForRequest(request: Request): Promise<
-    | {
-        issuer: string;
-        audience: string;
-        workspaceId: string;
-        ownerUserId: string;
-      }
-    | undefined
-  >;
+  authorityForRequest: (request: Request) => Promise<{
+    issuer: string;
+    audience: string;
+    workspaceId: string;
+    ownerUserId: string;
+} | undefined>;
   drafts: ReturnType<typeof createBuilderDraftService>;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   return async (request: Request) => {
     try {
       if (

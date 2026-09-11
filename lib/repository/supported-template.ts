@@ -457,7 +457,7 @@ function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
 function declaredMiseTasks(source: string): Map<string, number> {
   const tasks = new Map<string, number>();
   for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
-    const name = match[1];
+    const [, name] = match;
     if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
   }
   return tasks;
@@ -649,7 +649,7 @@ export function inspectSupportedTemplateSnapshot(
   input: SupportedTemplateSnapshot,
 ): EligibilityResult {
   const failures = [...(input.failures ?? [])];
-  const contents = input.contents;
+  const {contents} = input;
   const planningCompatibility = inspectPlanningCompatibility(contents);
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
     if (
@@ -1000,7 +1000,7 @@ async function verifyDevelopmentSandboxWorkspace(
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
   });
   const normalizedStdout = inspection.stdout
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||

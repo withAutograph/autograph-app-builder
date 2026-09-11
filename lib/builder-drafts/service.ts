@@ -23,30 +23,38 @@ export type BuilderDraftRow = {
 };
 
 export type BuilderDraftStore = {
-  read(input: {
+  read: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
-  }): Promise<BuilderDraftRow | undefined>;
-  readActive(input: {
+}) => Promise<BuilderDraftRow | undefined>;
+  readActive: (input: {
     authority: BuilderDraftAuthority;
-  }): Promise<BuilderDraftRow | undefined>;
-  saveActive(input: {
+}) => Promise<BuilderDraftRow | undefined>;
+  saveActive: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
     expectedRevision: number;
     clientMutationId: string;
     record: BuilderDraftRecord;
     now: Date;
-  }): Promise<
-    | { row: BuilderDraftRow; idempotent: true; concurrent: false }
-    | { row: BuilderDraftRow; idempotent: false; concurrent: boolean }
-  >;
-  archive(input: {
+}) => Promise<{
+    row: BuilderDraftRow;
+    idempotent: true;
+    concurrent: false;
+} | {
+    row: BuilderDraftRow;
+    idempotent: false;
+    concurrent: boolean;
+}>;
+  archive: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
     now: Date;
-  }): Promise<boolean>;
-  deleteInactiveSince(input: { now: Date; maxAgeMs?: number }): Promise<number>;
+}) => Promise<boolean>;
+  deleteInactiveSince: (input: {
+    now: Date;
+    maxAgeMs?: number;
+}) => Promise<number>;
 };
 
 export function createBuilderDraftService(input: {

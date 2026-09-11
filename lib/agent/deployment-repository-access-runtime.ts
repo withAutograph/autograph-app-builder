@@ -90,21 +90,23 @@ function exactPrincipal(
 }
 
 export interface RepositoryAccessRuntime {
-  classify(input: {
+  classify: (input: {
     repository: string;
     selectedInstallationId?: string;
-  }): Promise<RepositoryAccessResult>;
-  authorization(input: {
+}) => Promise<RepositoryAccessResult>;
+  authorization: (input: {
     repository: string;
     selectedInstallationId?: string;
     sessionId: string;
     requestId: string;
-  }): InteractiveAuthorizationDefinition<{ continuationId: string }>;
-  resumeAuthorizedForSession(input: {
+}) => InteractiveAuthorizationDefinition<{
+    continuationId: string;
+}>;
+  resumeAuthorizedForSession: (input: {
     sessionId: string;
     fetchImplementation?: typeof fetch;
-  }): Promise<number>;
-  prepareExistingSource(input: {
+}) => Promise<number>;
+  prepareExistingSource: (input: {
     repository: string;
     selectedInstallationId?: string;
     access: ReadyRepositoryAccess;
@@ -114,19 +116,21 @@ export interface RepositoryAccessRuntime {
     /** Resolves the Eve sandbox only after provider source is configured. */
     sandbox: SandboxSession | (() => Promise<SandboxSession>);
     currentGitHubSource?: ImmutableGitHubSourceReceipt;
-  }): Promise<{
+}) => Promise<{
     accessReceipt: RepositoryAccessReceipt;
     githubSource: ImmutableGitHubSourceReceipt;
     sourceReceipt: SourceReceipt;
     workspace: PreparedSandboxWorkspace;
-  }>;
+}>;
 }
 
 type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
   GitHubAppSourceResolutionProvider & {
-    acquireRepositoryReadCredential(input: {
-      repositoryId: string;
-    }): Promise<{ token: string }>;
+    acquireRepositoryReadCredential: (input: {
+    repositoryId: string;
+}) => Promise<{
+    token: string;
+}>;
   };
 
 function repositorySourceProvider(

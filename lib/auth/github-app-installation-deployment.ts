@@ -49,14 +49,14 @@ const noStoreHeaders = {
 
 export function createGitHubAppInstallationRouteHandlers(input: {
   origin: string;
-  authorityForRequest(request: Request): Promise<Authority | undefined>;
+  authorityForRequest: (request: Request) => Promise<Authority | undefined>;
   authorization: InstallationAuthorization;
-  onConnected?(input: {
+  onConnected?: (input: {
     authority: Authority;
     returnState: ProviderConnectionReturn;
-  }): Promise<string | undefined>;
+}) => Promise<string | undefined>;
 }) {
-  const origin = new URL(input.origin).origin;
+  const {origin} = new URL(input.origin);
   const redirect = (
     status: "connected" | "failed",
     reason?: ProviderConnectionFailureReason,

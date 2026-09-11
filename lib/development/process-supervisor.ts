@@ -4,8 +4,8 @@ import { createConnection } from "node:net";
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  once(signal: DevelopmentSignal, listener: () => void): unknown;
-  off(signal: DevelopmentSignal, listener: () => void): unknown;
+  once: (signal: DevelopmentSignal, listener: () => void) => unknown;
+  off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
 export function createDevelopmentShutdown(
@@ -104,9 +104,9 @@ export async function stopDevelopmentChild(
     // detached listener on port 2000 even after the wrapper is gone. The group
     // still belongs solely to this development cycle, so force it only after
     // a window longer than Eve's own backstop.
-    await new Promise((resolveWait) =>
-      setTimeout(resolveWait, gracefulTimeoutMs),
-    );
+    await new Promise<void>((resolveWait) => {
+      setTimeout(() => resolveWait(), gracefulTimeoutMs);
+    });
     signalProcessGroup("SIGKILL");
     if (!childExited) await exited;
     return;
@@ -115,9 +115,9 @@ export async function stopDevelopmentChild(
   if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
-    new Promise<false>((resolveWait) =>
-      setTimeout(() => resolveWait(false), gracefulTimeoutMs),
-    ),
+    new Promise<false>((resolveWait) => {
+      setTimeout(() => resolveWait(false), gracefulTimeoutMs);
+    }),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
@@ -143,7 +143,9 @@ export async function waitForDevelopmentPortRelease(
       socket.once("error", () => finish(false));
     });
     if (!occupied) return;
-    await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
+    await new Promise((resolveWait) => {
+      setTimeout(resolveWait, pollMs);
+    });
   }
   throw new Error(
     `Development Eve port ${port} was not released after shutdown.`,

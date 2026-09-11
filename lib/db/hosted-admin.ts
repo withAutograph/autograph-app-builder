@@ -140,33 +140,37 @@ export const hostedAdminReceiptSchema = z
 export type HostedAdminReceipt = z.infer<typeof hostedAdminReceiptSchema>;
 
 export interface HostedAdminStore {
-  seedMembership(input: {
+  seedMembership: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-  }): Promise<{ membershipRowsAffected: number }>;
-  revokeMembership(input: {
+}) => Promise<{
+    membershipRowsAffected: number;
+}>;
+  revokeMembership: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     now: Date;
-  }): Promise<{ membershipRowsAffected: number }>;
-  applyRetention(input: {
+}) => Promise<{
+    membershipRowsAffected: number;
+}>;
+  applyRetention: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     deleteBefore: Date;
-  }): Promise<{
+}) => Promise<{
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
     integrationRowsDeleted?: number;
     authorizationStateRowsDeleted?: number;
-  }>;
-  deleteTenant(input: {
+}>;
+  deleteTenant: (input: {
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
     membershipRevokedBefore: Date;
-  }): Promise<{
+}) => Promise<{
     membershipRowsDeleted: number;
     operationRowsDeleted: number;
     sessionRowsDeleted: number;
     integrationRowsDeleted?: number;
     authorizationStateRowsDeleted?: number;
-  }>;
+}>;
 }
 
 function canonicalRequest(request: HostedAdminPlanRequest): string {

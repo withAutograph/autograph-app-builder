@@ -332,7 +332,7 @@ export function parseSourceReceiptEvidence(
     throw new Error(
       "Source receipt evidence is invalid or has an unsupported schema.",
     );
-  const version = value.version;
+  const {version} = value;
   if (
     (version === LEGACY_SOURCE_RECEIPT_VERSION &&
       !hasExactKeys(value, legacySourceReceiptEvidenceKeys)) ||

@@ -12,7 +12,7 @@ const relayPath = path.join(stateDirectory, "relay-secret");
 const authSecretPath = path.join(stateDirectory, "better-auth-secret");
 const flagsSecretPath = path.join(stateDirectory, "flags-secret");
 
-const origin = process.argv[2];
+const [, , origin] = process.argv;
 if (!origin) throw new Error("Expected the local application origin.");
 const appOrigin = new URL(origin);
 const ciLoopback = process.env.CI === "true" && appOrigin.protocol === "http:";

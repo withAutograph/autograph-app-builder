@@ -25,8 +25,8 @@ export type LocalEveInvocation = Readonly<{
 type ForwardedSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  once(signal: ForwardedSignal, listener: () => void): unknown;
-  off(signal: ForwardedSignal, listener: () => void): unknown;
+  once: (signal: ForwardedSignal, listener: () => void) => unknown;
+  off: (signal: ForwardedSignal, listener: () => void) => unknown;
 }>;
 
 function required(environment: Environment, name: string) {

@@ -60,7 +60,7 @@ function wrapHandle<SO>(input: {
 /** Preserves tenant-bound command authority without replacing Vercel's transport. */
 export function createAuthorizedSandboxBackend<BO, SO>(input: {
   backend: SandboxBackend<BO, SO>;
-  authorizeSessionCommand(sessionId: string): Promise<unknown>;
+  authorizeSessionCommand: (sessionId: string) => Promise<unknown>;
 }): SandboxBackend<BO, SO> {
   return {
     name: `${input.backend.name}-authorized`,
@@ -72,7 +72,7 @@ export function createAuthorizedSandboxBackend<BO, SO>(input: {
       });
     },
     prewarm(prewarmInput) {
-      const bootstrap = prewarmInput.bootstrap;
+      const {bootstrap} = prewarmInput;
       return input.backend.prewarm({
         ...prewarmInput,
         bootstrap:

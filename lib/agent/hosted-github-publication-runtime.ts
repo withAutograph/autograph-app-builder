@@ -36,7 +36,7 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 }) => GitHubPublicationAdapter | Promise<GitHubPublicationAdapter>;
 
 export interface HostedGitHubPublicationRuntimeResolver {
-  resolve(sessionAuth: unknown): Promise<GitHubPublicationRuntime>;
+  resolve: (sessionAuth: unknown) => Promise<GitHubPublicationRuntime>;
 }
 
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
@@ -50,6 +50,7 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
           : error.code === "subject"
             ? "Hosted GitHub publication requires one exact forwarded user subject."
             : "Hosted GitHub publication requires exact forwarded user authority.",
+        { cause: error },
       );
     }
     throw error;
@@ -62,12 +63,11 @@ type PublicationStores = {
 };
 
 export type HostedGitHubPublicationRuntimeResolverDependencies = {
-  readPreparedHandoff(
-    sessionAuth: unknown,
-  ): Promise<
-    | (BuilderHandoffIntent & { providers?: { githubInstallationId?: string } })
-    | undefined
-  >;
+  readPreparedHandoff: (sessionAuth: unknown) => Promise<(BuilderHandoffIntent & {
+    providers?: {
+        githubInstallationId?: string;
+    };
+}) | undefined>;
   membership: (database: Database) => HostedWorkspaceMembership;
   installations: (database: Database) => HostedGitHubInstallationStore;
   publicationStores: (

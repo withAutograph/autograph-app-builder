@@ -27,7 +27,7 @@ export async function GET(
       referer.pathname !== `/local-oauth/${provider}/authorize`
     )
       throw new Error("Invalid approval referer.");
-    const searchParams = new URL(request.url).searchParams;
+    const {searchParams} = new URL(request.url);
     return completeAuthorization(
       { params: Promise.resolve({ provider }) },
       Object.fromEntries(

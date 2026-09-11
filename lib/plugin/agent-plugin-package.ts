@@ -277,7 +277,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       min: 1,
     });
   if ("metadata" in frontmatter) {
-    const metadata = frontmatter.metadata;
+    const {metadata} = frontmatter;
     if (
       metadata === null ||
       typeof metadata !== "object" ||

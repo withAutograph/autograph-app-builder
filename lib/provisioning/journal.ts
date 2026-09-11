@@ -79,22 +79,22 @@ export type BuilderProvisionJournalRow = {
 };
 
 export interface BuilderProvisionJournalStore {
-  reserve(input: {
+  reserve: (input: {
     authority: BuilderProvisionAuthority;
     request: BuilderProvisionRequest;
     now: Date;
-  }): Promise<BuilderProvisionJournalRow>;
-  read(input: {
+}) => Promise<BuilderProvisionJournalRow>;
+  read: (input: {
     authority: BuilderProvisionAuthority;
     requestId: string;
-  }): Promise<BuilderProvisionJournalRow | undefined>;
-  compareAndSet(input: {
+}) => Promise<BuilderProvisionJournalRow | undefined>;
+  compareAndSet: (input: {
     authority: BuilderProvisionAuthority;
     requestId: string;
     expectedRevision: number;
     record: BuilderProvisionJournalRecord;
     now: Date;
-  }): Promise<BuilderProvisionJournalRow | undefined>;
+}) => Promise<BuilderProvisionJournalRow | undefined>;
 }
 
 export function initialBuilderProvisionJournalRecord(

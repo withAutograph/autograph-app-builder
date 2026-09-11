@@ -64,9 +64,9 @@ export interface EnsuredOrganization {
  * one exact issuer/resource-bound membership.
  */
 export interface PreviewOrganizationUserAuthority {
-  ensureOrganizationForVerifiedUser(input: {
+  ensureOrganizationForVerifiedUser: (input: {
     userId: string;
-  }): Promise<EnsuredOrganization>;
+}) => Promise<EnsuredOrganization>;
 }
 
 function identityUnavailable() {

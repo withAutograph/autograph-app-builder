@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import * as axe from "axe-core";
+import axe from "axe-core";
 import { expect, test, type Page } from "playwright/test";
 
 import { vendorOnboardingPrototype } from "../../agent/agent";
@@ -34,20 +34,21 @@ test.beforeAll(async () => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(vendorOnboardingPrototype);
   });
-  await new Promise<void>((resolveServer) =>
-    prototypeServer?.listen(0, "127.0.0.1", resolveServer),
-  );
+  await new Promise<void>((resolveServer) => {
+    prototypeServer?.listen(0, "127.0.0.1", resolveServer);
+  });
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
 });
 
 test.afterAll(
   async () =>
-    await new Promise<void>((resolveServer, rejectServer) =>
-      prototypeServer?.close((error) =>
-        error === undefined ? resolveServer() : rejectServer(error),
-      ),
-    ),
+    await new Promise<void>((resolveServer, rejectServer) => {
+      prototypeServer?.close((error) => {
+        if (error === undefined) resolveServer();
+        else rejectServer(error);
+      });
+    }),
 );
 
 test.describe("recorded Vendor Onboarding prototype", () => {

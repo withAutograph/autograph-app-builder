@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveBuilderFlagsForStorybook } from "./main";
 
 const runs = vi.hoisted(() => ({
   connections: vi.fn(),
@@ -11,8 +12,6 @@ vi.mock("../lib/feature-flags.ts", () => ({
   builderComingSoonFlag: { run: runs.comingSoon },
   builderResourceProvisioningFlag: { run: runs.provisioning },
 }));
-
-import { resolveBuilderFlagsForStorybook } from "./main";
 
 describe("Storybook feature flags", () => {
   beforeEach(() => {

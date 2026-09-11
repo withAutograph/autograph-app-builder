@@ -144,14 +144,14 @@ export type ReadyRepositoryAccess = Extract<
 >;
 
 export interface GitHubRepositoryAccessProvider {
-  inspectInstallation(input: {
+  inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
-  }): Promise<unknown>;
-  inspectRepositoryByName(input: {
+}) => Promise<unknown>;
+  inspectRepositoryByName: (input: {
     owner: string;
     name: string;
-  }): Promise<unknown | undefined>;
+}) => Promise<unknown | undefined>;
 }
 
 export type GitHubRepositoryAccessProviderFactory = (input: {
@@ -278,7 +278,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       scopes: matches.map(({ binding }) => scope(binding)),
     });
   }
-  const match = matches[0];
+    const [match] = matches;
   if (match) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({

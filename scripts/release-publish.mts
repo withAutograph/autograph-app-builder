@@ -182,7 +182,7 @@ try {
       );
       metadataRaw = result.stdout;
     } catch (error) {
-      const stderr = (error as { stderr?: unknown }).stderr;
+      const {stderr} = (error as { stderr?: unknown });
       if (
         typeof stderr === "string" &&
         /release not found|could not resolve to a release/iu.test(stderr)

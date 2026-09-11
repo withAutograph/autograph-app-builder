@@ -23,7 +23,9 @@ export type ArrustedTemplateReaderConfig = {
 };
 
 export type ArrustedTemplateReader = {
-  acquire(): Promise<{ token: string }>;
+  acquire: () => Promise<{
+    token: string;
+}>;
 };
 
 function record(value: unknown): value is Record<string, unknown> {

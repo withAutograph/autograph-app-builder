@@ -139,7 +139,7 @@ function verifiedImplementationPlan(
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
-  const target = result.target;
+  const {target} = result;
   const requestedChanges = request.existingAppChanges;
   const iterationMatchesRequest =
     requestedChanges === undefined
@@ -224,7 +224,7 @@ export function latestInstalledImplementationPlan(
       continue;
 
     if (event.data.result.toolName === "record_prototype_artifact") {
-      const output = event.data.result.output;
+      const {output} = event.data.result;
       if (
         typeof output === "object" &&
         output !== null &&
@@ -236,7 +236,7 @@ export function latestInstalledImplementationPlan(
     }
     if (event.data.result.toolName !== "plan_app_creation") continue;
 
-    const callId = event.data.result.callId;
+    const {callId} = event.data.result;
     const input = requested.get(callId);
     if (input === undefined) continue;
     const plan = verifiedImplementationPlan(
@@ -302,7 +302,7 @@ export function latestInstalledPrototype(
     }
     if (event.data.result.toolName !== "record_prototype_artifact") continue;
 
-    const callId = event.data.result.callId;
+    const {callId} = event.data.result;
     const input = requested.get(callId);
     const output = prototypeResultSchema.safeParse(event.data.result.output);
     if (input === undefined || !output.success) continue;
@@ -500,7 +500,7 @@ export function projectInstalledEveEvent(
         },
       ];
     case "authorization.required":
-      const authorization = event.data.authorization;
+      const {authorization} = event.data;
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
         authorization === undefined
           ? undefined

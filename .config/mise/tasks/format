@@ -1,6 +1,5 @@
 #!/bin/sh
-#MISE description="Format explicitly selected repository sources with oxfmt"
+#MISE description="Format repository sources with Oxfmt"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which pnpm)" exec oxfmt --write "$@"
+exec .config/mise/scripts/trusted-node-launcher "$(mise which pnpm)" exec oxfmt . "$@"

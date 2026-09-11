@@ -139,11 +139,11 @@ export function createGitHubOAuthApp(input: {
         if (error instanceof SyntaxError) {
           const parsed = new URLSearchParams(init.body);
           if (parsed.has("code_verifier"))
-            throw new Error("github-oauth-request-invalid");
+            throw new Error("github-oauth-request-invalid", { cause: error });
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {
-          throw new Error("github-oauth-request-invalid");
+          throw new Error("github-oauth-request-invalid", { cause: error });
         }
       }
       return request(resource, { ...init, body });

@@ -14,7 +14,7 @@ export type ClassTokenEvidence = {
 };
 
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
-  const initializer = attribute.initializer;
+  const {initializer} = attribute;
   if (!initializer) return undefined;
   if (ts.isStringLiteral(initializer)) return initializer.text;
   if (

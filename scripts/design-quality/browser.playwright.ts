@@ -1,13 +1,20 @@
 import { expect, test } from "playwright/test";
 import { capturePreview, measurePage, measureStyles } from "./browser";
 import { createServer } from "node:http";
+import {
+  collectClassTokenEvidence,
+  collectIntrinsicClassSignatures,
+} from "./class-evidence";
+import { collectCssRuleEvidence } from "./css-evidence";
 
 test("an unavailable preview is not captured or scored as an empty design", async () => {
   const server = createServer((_request, response) => {
     response.writeHead(404);
     response.end();
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   try {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("No listener");
@@ -20,15 +27,11 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
       }),
     ).rejects.toThrow("Preview returned HTTP 404");
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
   }
 });
-import {
-  collectClassTokenEvidence,
-  collectIntrinsicClassSignatures,
-} from "./class-evidence";
-import { collectCssRuleEvidence } from "./css-evidence";
-
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({
   page,

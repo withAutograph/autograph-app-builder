@@ -189,7 +189,7 @@ export function recordPrototypeArtifactBundle(input: {
   reused: boolean;
 } {
   const appSpecMarkdown = normalizeBuildReadyAppSpec(input.appSpecMarkdown);
-  let artifacts = input.artifacts;
+  let {artifacts} = input;
   let reused = true;
   for (const artifact of [
     {
@@ -215,7 +215,7 @@ export function recordPrototypeArtifactBundle(input: {
       callId: input.callId,
       expectedAppId: input.expectedAppId,
     });
-    artifacts = recorded.artifacts;
+    ({ artifacts } = recorded);
     reused &&= recorded.reused;
   }
   const appSpec = completeBuildReadyPrototypeAppSpec({

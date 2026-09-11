@@ -78,7 +78,7 @@ function requestUrl(path: string) {
 async function sameOriginHeaders(contentType?: string) {
   const incoming = await headers();
   const forwarded = new Headers(incoming);
-  const origin = new URL(requestUrl("/")).origin;
+  const {origin} = new URL(requestUrl("/"));
   forwarded.set("origin", origin);
   if (contentType) forwarded.set("content-type", contentType);
   return forwarded;

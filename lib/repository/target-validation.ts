@@ -195,7 +195,7 @@ export function compilerDiagnostics(
     return true;
   };
   for (const sourceLine of output
-    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .split("\n")) {
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {

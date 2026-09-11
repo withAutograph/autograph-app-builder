@@ -31,16 +31,14 @@ export type BuilderDraftSaveAcknowledgement = {
 
 export type BuilderDraftAutosaveOptions<T> = {
   outbox: BuilderDraftOutbox<T>;
-  save(
-    context: BuilderDraftSaveContext<T>,
-  ): Promise<BuilderDraftSaveAcknowledgement>;
+  save: (context: BuilderDraftSaveContext<T>) => Promise<BuilderDraftSaveAcknowledgement>;
   debounceMs?: number;
   /** Revision used as the base for snapshots queued immediately after mount. */
   initialRevision?: number;
   /** Defaults to navigator.onLine when available. */
-  isOnline?(): boolean;
+  isOnline?: () => boolean;
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
-  onVisibilityFlush?(reason: "visibilitychange" | "pagehide"): void;
+  onVisibilityFlush?: (reason: "visibilitychange" | "pagehide") => void;
   /** Acknowledgements advance local revision knowledge but never reset the form. */
   onAcknowledged?(acknowledgement: BuilderDraftSaveAcknowledgement): void;
 };
@@ -49,23 +47,23 @@ export type BuilderDraftAutosave<T> = {
   status: BuilderDraftAutosaveStatus;
   error: Error | undefined;
   lastSavedAt: string | undefined;
-  schedule(snapshot: T): string;
-  flush(
-    reason?: Exclude<BuilderDraftAutosaveReason, "debounce">,
-  ): Promise<void>;
-  retry(): Promise<void>;
+  schedule: (snapshot: T) => string;
+  flush: (reason?: Exclude<BuilderDraftAutosaveReason, "debounce">) => Promise<void>;
+  retry: () => Promise<void>;
   /** Reads the recovery snapshot without dispatching it. */
-  restorePending(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
+  restorePending: () => Promise<BuilderDraftOutboxEntry<T> | undefined>;
   /** Reads, queues, and sends a recovery snapshot. */
-  resumePending(): Promise<void>;
+  resumePending: () => Promise<void>;
   /** Discards local work that a newer server revision has superseded. */
-  discardPending(): Promise<void>;
+  discardPending: () => Promise<void>;
   /**
    * Drops queued/outbox work based on an older revision before the owner resets
    * its form to newer server state. A mutation already in flight is allowed to
    * settle; the next poll remains authoritative.
    */
   discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
+  /** Drops queued work superseded by a newer remote revision. */
+  discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -77,8 +75,7 @@ function createMutationId() {
 }
 
 function cloneSnapshot<T>(snapshot: T): T {
-  if (typeof structuredClone === "function") return structuredClone(snapshot);
-  return JSON.parse(JSON.stringify(snapshot)) as T;
+  return structuredClone(snapshot);
 }
 
 function browserIsOnline() {
@@ -147,7 +144,7 @@ export function useBuilderDraftAutosave<T>(
             return false;
           }
 
-          const current = queued.current;
+          const {current} = queued;
           queued.current = undefined;
           updateStatus("saving");
           try {

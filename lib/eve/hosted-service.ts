@@ -37,8 +37,6 @@ import {
   projectHostedSnapshot,
   type HostedEngineSnapshot,
 } from "./hosted-projection";
-
-const projectSnapshot = projectHostedSnapshot;
 import {
   eveSessionResultSchema,
   publicInputRequestSchema,
@@ -60,6 +58,8 @@ import {
 import { recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
+const projectSnapshot = projectHostedSnapshot;
+
 export {
   HostedAdapterSessionUnavailableError,
   HostedCancellationUnsettledError,
@@ -76,41 +76,49 @@ export {
 export type { HostedEngineSnapshot } from "./hosted-projection";
 
 export interface HostedEveTransport {
-  start(input: {
+  start: (input: {
     principal: HostedPrincipal;
     operationId: string;
     prompt: string;
     sourceHandoffId?: string;
-  }): Promise<{ adapterSessionId: string; snapshot: HostedEngineSnapshot }>;
-  get(input: {
+}) => Promise<{
+    adapterSessionId: string;
+    snapshot: HostedEngineSnapshot;
+}>;
+  get: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
-  }): Promise<HostedEngineSnapshot>;
-  send(input: {
+}) => Promise<HostedEngineSnapshot>;
+  send: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     message: string;
     sourceHandoffId?: string;
-  }): Promise<HostedEngineSnapshot>;
-  respond(input: {
+}) => Promise<HostedEngineSnapshot>;
+  respond: (input: {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
     responses: Array<{
-      requestId: string;
-      response:
-        | { kind: "approve" }
-        | { kind: "deny" }
-        | { kind: "answer"; value: string; optionId?: string };
+        requestId: string;
+        response: {
+            kind: "approve";
+        } | {
+            kind: "deny";
+        } | {
+            kind: "answer";
+            value: string;
+            optionId?: string;
+        };
     }>;
     sourceHandoffId?: string;
-  }): Promise<HostedEngineSnapshot>;
-  cancel(input: {
+}) => Promise<HostedEngineSnapshot>;
+  cancel: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
     turnId?: string;
-  }): Promise<HostedEngineSnapshot>;
+}) => Promise<HostedEngineSnapshot>;
 }
 
 function assertNever(value: never): never {
@@ -200,7 +208,7 @@ function checkpointInputRequest(
       id,
       label: truncateUtf8(label, profile.optionLabelBytes),
     }));
-  const authorization = request.authorization;
+  const {authorization} = request;
   const repositoryAccess = authorization?.repositoryAccess;
   return publicInputRequestSchema.parse({
     requestId: request.requestId,
@@ -507,10 +515,10 @@ export function createHostedEveSessionService(input: {
     request: T;
     sessionId?: string;
     resumeSessionId?: string;
-    dispatch(operationId: string): Promise<{
-      result: EveSessionResult;
-      newSession?: z.infer<typeof hostedSessionRecordSchema>;
-    }>;
+    dispatch: (operationId: string) => Promise<{
+    result: EveSessionResult;
+    newSession?: z.infer<typeof hostedSessionRecordSchema>;
+}>;
   }): Promise<EveSessionResult> {
     const requestDigest = digest({
       kind: options.kind,
@@ -982,7 +990,7 @@ export function createHostedEveSessionService(input: {
       }
       if (request.prompt === undefined)
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
-      const prompt = request.prompt;
+      const {prompt} = request;
       return mutate({
         kind: "start",
         request,

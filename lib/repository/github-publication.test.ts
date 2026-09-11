@@ -422,9 +422,7 @@ describe("closed GitHub publication contract", () => {
         after: { mode: "644", digest: reviewedBytesDigest },
       },
     ]);
-    const roundTripped = JSON.parse(
-      JSON.stringify(canonicalReview),
-    ) as typeof canonicalReview;
+    const roundTripped = structuredClone(canonicalReview);
     const proposal = createDraftPullRequestProposal({
       installation: adapter.identities.publish,
       repository: adapter.publishRepo,
@@ -667,7 +665,7 @@ describe("closed GitHub publication contract", () => {
       source: publicationContentSource(sourceBytes),
     });
     sourceBytes.fill(0);
-    const change = content.changes[0];
+    const [change] = content.changes;
     expect(change?.kind).toBe("added");
     if (change?.kind === "added")
       expect(change.after.bytes).toEqual(reviewedBytes);

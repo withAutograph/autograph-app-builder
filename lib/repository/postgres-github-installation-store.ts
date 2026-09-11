@@ -71,17 +71,13 @@ const bindingSelection = {
 };
 
 export interface HostedGitHubInstallationStore {
-  read(
-    authority: HostedGitHubTenantAuthority,
-  ): Promise<HostedGitHubInstallationBinding | undefined>;
-  list?(
-    authority: HostedGitHubTenantAuthority,
-  ): Promise<HostedGitHubInstallationBinding[]>;
-  bind(input: {
+  read: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding | undefined>;
+  list?: (authority: HostedGitHubTenantAuthority) => Promise<HostedGitHubInstallationBinding[]>;
+  bind: (input: {
     authority: HostedGitHubTenantAuthority;
     binding: Omit<HostedGitHubInstallationBinding, "active" | "updatedAt">;
     now: Date;
-  }): Promise<HostedGitHubInstallationBinding>;
+}) => Promise<HostedGitHubInstallationBinding>;
 }
 
 export function createPostgresHostedGitHubInstallationStore(
@@ -135,7 +131,7 @@ export function createPostgresHostedGitHubInstallationStore(
           .from(hostedGitHubInstallations)
           .where(tenantPredicate(authority))
           .limit(1);
-        const legacy = legacyRows[0];
+    const [legacy] = legacyRows;
         if (legacy !== undefined) {
           await transaction
             .insert(hostedGitHubInstallationBindings)

@@ -15,41 +15,38 @@ import {
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export interface BuilderHandoffStore {
-  reserve(record: BuilderHandoffRecord): Promise<{
+  reserve: (record: BuilderHandoffRecord) => Promise<{
     disposition: "created" | "existing";
     record: BuilderHandoffRecord;
   }>;
-  read(input: {
+  read: (input: {
     authority: Authority;
     handoffId: string;
-  }): Promise<BuilderHandoffRecord | undefined>;
+  }) => Promise<BuilderHandoffRecord | undefined>;
   /**
    * Returns the most recently updated handoff whose durable provisioning
    * journal remains pending for this exact tenant authority.
    */
-  findLatestPending?(input: {
+  findLatestPending?: (input: {
     authority: Authority;
-  }): Promise<BuilderHandoffRecord | undefined>;
-  renewExpired?(input: {
+  }) => Promise<BuilderHandoffRecord | undefined>;
+  renewExpired?: (input: {
     authority: Authority;
     handoffId: string;
     requestDigest: string;
     now: Date;
     expiresAt: Date;
-  }): Promise<
-    | {
-        disposition: "renewed" | "existing";
-        record: BuilderHandoffRecord;
-      }
-    | undefined
-  >;
-  bindSession(input: {
+  }) => Promise<{
+    disposition: "renewed" | "existing";
+    record: BuilderHandoffRecord;
+  } | undefined>;
+  bindSession: (input: {
     authority: Authority;
     handoffId: string;
     requestDigest: string;
     sessionId: string;
     now: Date;
-  }): Promise<BuilderHandoffRecord | undefined>;
+  }) => Promise<BuilderHandoffRecord | undefined>;
 }
 
 export class BuilderHandoffUnavailableError extends Error {

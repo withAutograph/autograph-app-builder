@@ -118,10 +118,10 @@ export function parseStrictBearerAuthorization(
 }
 
 export interface HostedAccessTokenVerifier {
-  verify(input: {
+  verify: (input: {
     token: string;
     nowEpochSeconds: number;
-  }): Promise<VerifiedHostedClaims>;
+}) => Promise<VerifiedHostedClaims>;
 }
 
 const oauthScopeTokenPattern =

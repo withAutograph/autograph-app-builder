@@ -144,7 +144,7 @@ describe("test capability preload", () => {
     }
     const activeHandles = () =>
       (
-        process as unknown as { _getActiveHandles(): readonly unknown[] }
+        process as unknown as { _getActiveHandles: () => readonly unknown[]; }
       )._getActiveHandles();
     const isMessagePort = (handle: unknown) =>
       typeof handle === "object" &&
@@ -156,7 +156,9 @@ describe("test capability preload", () => {
       timeoutWorker.once("exit", resolveExit);
       timeoutWorker.once("error", reject);
     });
-    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    await new Promise((resolveWait) => {
+      setTimeout(resolveWait, 25);
+    });
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
     expect(afterPorts).toBeLessThanOrEqual(beforePorts);

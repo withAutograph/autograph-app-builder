@@ -70,10 +70,10 @@ const autographToolScopes = [
 ] as const;
 
 export interface HostedWorkspaceMembership {
-  isMember(input: {
+  isMember: (input: {
     principal: HostedPrincipal;
     workspaceId: string;
-  }): Promise<boolean>;
+}) => Promise<boolean>;
 }
 
 type HostedHandoffAuthority = Pick<
@@ -82,45 +82,46 @@ type HostedHandoffAuthority = Pick<
 >;
 
 export interface HostedBuilderHandoffRuntime {
-  resolve(input: {
+  resolve: (input: {
     authority: HostedHandoffAuthority;
     handoffId: string;
-  }): Promise<
-    | { status: "redeemed"; sessionId: string }
-    | {
-        status: "unredeemed";
-        prompt: string;
-        deterministicClientRequestId: string;
-        record: {
-          requestDigest: string;
-          intent: {
+}) => Promise<{
+    status: "redeemed";
+    sessionId: string;
+} | {
+    status: "unredeemed";
+    prompt: string;
+    deterministicClientRequestId: string;
+    record: {
+        requestDigest: string;
+        intent: {
             repository: {
-              requestedName: string;
-              resolvedFullName?: string;
+                requestedName: string;
+                resolvedFullName?: string;
             };
-          };
         };
-      }
-  >;
-  bindSession(input: {
+    };
+}>;
+  bindSession: (input: {
     authority: HostedHandoffAuthority;
     handoffId: string;
     requestDigest: string;
     sessionId: string;
-  }): Promise<unknown>;
-  recheckRepositoryAccess(input: {
+}) => Promise<unknown>;
+  recheckRepositoryAccess: (input: {
     principal: HostedPrincipal;
     repository: string;
     sourceHandoffId?: string;
-  }): Promise<
-    | { status: "ready" }
-    | {
-        status: "authorization-required";
-        action: "connect" | "update";
-      }
-    | { status: "scope-selection-required" }
-    | { status: "provider-unavailable" }
-  >;
+}) => Promise<{
+    status: "ready";
+} | {
+    status: "authorization-required";
+    action: "connect" | "update";
+} | {
+    status: "scope-selection-required";
+} | {
+    status: "provider-unavailable";
+}>;
 }
 
 export interface HostedMcpRuntime {

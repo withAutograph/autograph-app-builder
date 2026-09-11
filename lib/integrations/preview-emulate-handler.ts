@@ -74,7 +74,9 @@ export function createPreviewEmulateHandler(input: {
       while (stableTurns < 3) {
         const revision = persistenceRevision;
         await pendingPersistence;
-        await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
         stableTurns = revision === persistenceRevision ? stableTurns + 1 : 0;
       }
       return response;

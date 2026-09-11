@@ -141,14 +141,26 @@ export function getPreviewOAuthDeploymentSession(input: {
 
 interface PreviewSessionOrganizationAuth {
   api: {
-    getSession(input: { headers: Headers }): Promise<{
-      session: { activeOrganizationId?: string | null };
-      user: { id: string; name: string; email: string };
-    } | null>;
-    setActiveOrganization(input: {
-      headers: Headers;
-      body: { organizationId: string };
-    }): Promise<{ id: string } | null>;
+    getSession: (input: {
+    headers: Headers;
+}) => Promise<{
+    session: {
+        activeOrganizationId?: string | null;
+    };
+    user: {
+        id: string;
+        name: string;
+        email: string;
+    };
+} | null>;
+    setActiveOrganization: (input: {
+    headers: Headers;
+    body: {
+        organizationId: string;
+    };
+}) => Promise<{
+    id: string;
+} | null>;
   };
 }
 

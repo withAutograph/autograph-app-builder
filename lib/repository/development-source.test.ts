@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  canAutoSelectDevelopmentSource,
+  developmentSourceReceipt,
+} from "./development-source";
+import type { SourceKind } from "./source-receipt";
 
 const inspectSourceReceipt = vi.hoisted(() => vi.fn());
 
@@ -10,12 +15,6 @@ vi.mock("./source-receipt", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./source-receipt")>()),
   inspectSourceReceipt,
 }));
-
-import {
-  canAutoSelectDevelopmentSource,
-  developmentSourceReceipt,
-} from "./development-source";
-import type { SourceKind } from "./source-receipt";
 
 const roots: string[] = [];
 

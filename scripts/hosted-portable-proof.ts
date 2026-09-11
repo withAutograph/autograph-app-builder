@@ -84,7 +84,7 @@ export const hostedProofScenarioSchema = z
         message: "Each approval phase is required exactly once.",
       });
     for (const expected of scenario.approvalReceipts) {
-      const receipt = expected.receipt;
+      const {receipt} = expected;
       if (
         receipt.repositoryId !== scenario.target.repositoryId ||
         receipt.repository !== scenario.target.repository ||
@@ -543,7 +543,7 @@ function responseFor(
       throw new Error(
         "Question did not match exactly one title-bound response.",
       );
-    const match = matches[0];
+    const [match] = matches;
     return {
       response: {
         kind: "answer" as const,
@@ -584,7 +584,7 @@ async function pollUntilSettled(input: {
   permitApprovals: boolean;
   requestPrefix: string;
 }) {
-  let cursor = input.cursor;
+  let {cursor} = input;
   let allText = "";
   let responseCount = 0;
   let responseBatchCount = 0;
@@ -598,7 +598,7 @@ async function pollUntilSettled(input: {
         limit: 250,
       }),
     );
-    cursor = page.cursor;
+    ({ cursor } = page);
     allText += `\n${assistantText(page)}`;
     const responses = (page.inputRequests ?? []).map((request) => {
       const selected = responseFor(
@@ -637,9 +637,9 @@ async function pollUntilSettled(input: {
         responseBatchCount,
         approvalPhases,
       };
-    await new Promise((resolve) =>
-      setTimeout(resolve, input.scenario.pollIntervalMs),
-    );
+    await new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), input.scenario.pollIntervalMs);
+    });
   }
   throw new Error(
     "Hosted session did not settle within the bounded poll window.",

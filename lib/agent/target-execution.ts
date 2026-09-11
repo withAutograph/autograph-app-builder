@@ -230,7 +230,7 @@ export async function inspectTargetExecutionReadiness(input: {
     cache,
   });
   const image = resolvedExecutionEnvironment.imageDigest;
-  const backend = resolvedExecutionEnvironment.backend;
+  const {backend} = resolvedExecutionEnvironment;
   const required = (
     Object.keys(requiredToolVersions) as Array<
       keyof typeof requiredToolVersions
