@@ -20,7 +20,7 @@ function isLoopbackHostname(hostname: string): boolean {
 export const publicAuthorizationUrlSchema = z
   .string()
   .url()
-  .max(2048)
+  .max(2_048)
   .superRefine((value, context) => {
     const url = new URL(value);
     if (
@@ -28,88 +28,86 @@ export const publicAuthorizationUrlSchema = z
       url.password ||
       (url.protocol !== "https:" &&
         !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
-    ) {
+    )
       context.addIssue({
         code: "custom",
         message:
           "Authorization requires credential-free HTTPS or loopback URL.",
       });
-    }
   });
 
 export const inputPresentationSchema = z
   .object({
-    control: z.enum(["choice", "provider", "approval"]),
     section: z.enum(["build-with", "store-in", "deploy-to", "connections"]),
+    control: z.enum(["choice", "provider", "approval"]),
   })
   .strict();
 
 export const publicAuthorizationChallengeSchema = z
   .object({
-    displayName: z.string().min(1).max(200).optional(),
-    expiresAt: z.iso.datetime().optional(),
-    instructions: z.string().min(1).max(2_000).optional(),
-    repositoryAccess: githubRepositoryAccessSchema.optional(),
     url: publicAuthorizationUrlSchema.optional(),
     userCode: z.string().min(1).max(200).optional(),
+    expiresAt: z.iso.datetime().optional(),
+    instructions: z.string().min(1).max(2_000).optional(),
+    displayName: z.string().min(1).max(200).optional(),
+    repositoryAccess: githubRepositoryAccessSchema.optional(),
   })
   .strict();
 
 export const publicInputRequestSchema = z
   .object({
-    allowFreeform: z.boolean(),
-    authorization: publicAuthorizationChallengeSchema.optional(),
-    description: z.string().optional(),
+    requestId: z.string().min(1),
     kind: z.enum(["approval", "question", "authorization"]),
+    title: z.string().min(1),
+    description: z.string().optional(),
     options: z
       .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
       .optional(),
+    allowFreeform: z.boolean(),
     presentation: inputPresentationSchema.optional(),
-    requestId: z.string().min(1),
-    title: z.string().min(1),
+    authorization: publicAuthorizationChallengeSchema.optional(),
   })
   .strict()
   .superRefine((request, context) => {
-    if (request.kind !== "authorization" && request.authorization) {
+    if (request.kind !== "authorization" && request.authorization)
       context.addIssue({
         code: "custom",
         path: ["authorization"],
         message: "Only authorization requests may include a challenge.",
       });
-    }
   });
 
 export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
 
 export const publicEveEventSchema = z.discriminatedUnion("type", [
   z.object({
-    index: z.number().int().nonnegative(),
-    text: z.string(),
-    turnId: z.string(),
     type: z.literal("assistant_message"),
+    index: z.number().int().nonnegative(),
+    turnId: z.string(),
+    text: z.string(),
   }),
   z.object({
+    type: z.literal("progress"),
     index: z.number().int().nonnegative(),
+    turnId: z.string().optional(),
     label: z.string(),
     state: z.enum(["started", "completed", "failed"]),
-    turnId: z.string().optional(),
-    type: z.literal("progress"),
   }),
   z.object({
+    type: z.literal("input_required"),
     index: z.number().int().nonnegative(),
     request: publicInputRequestSchema,
-    type: z.literal("input_required"),
   }),
   z.object({
+    type: z.literal("status"),
     index: z.number().int().nonnegative(),
     status: sessionStatusSchema,
-    type: z.literal("status"),
   }),
   z.object({
-    code: z.string(),
-    index: z.number().int().nonnegative(),
-    message: z.string(),
     type: z.literal("error"),
+    index: z.number().int().nonnegative(),
+    code: z.string(),
+    message: z.string(),
   }),
 ]);
 
@@ -120,7 +118,7 @@ const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const publicPrototypePreviewUrlSchema = z
   .string()
   .url()
-  .max(1024)
+  .max(1_024)
   .superRefine((value, context) => {
     const url = new URL(value);
     if (
@@ -131,7 +129,7 @@ export const publicPrototypePreviewUrlSchema = z
       (url.protocol !== "https:" &&
         !(url.protocol === "http:" && isLoopbackHostname(url.hostname))) ||
       !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(
-        url.pathname
+        url.pathname,
       )
     ) {
       context.addIssue({
@@ -144,6 +142,10 @@ export const publicPrototypePreviewUrlSchema = z
 
 export const publicPrototypeSchema = z
   .object({
+    path: z
+      .string()
+      .regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+    mediaType: z.literal("text/html"),
     content: z
       .string()
       .min(1)
@@ -151,15 +153,11 @@ export const publicPrototypeSchema = z
       .refine(
         (content) =>
           new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
-        "Prototype HTML must be at most 8 MiB."
+        "Prototype HTML must be at most 8 MiB.",
       ),
     digest: sha256DigestSchema,
-    mediaType: z.literal("text/html"),
-    path: z
-      .string()
-      .regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
-    previewUrl: publicPrototypePreviewUrlSchema.optional(),
     revision: sha256DigestSchema,
+    previewUrl: publicPrototypePreviewUrlSchema.optional(),
   })
   .strict();
 
@@ -169,11 +167,11 @@ export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
 export const publicUiPreviewSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    revision: sha256DigestSchema,
+    routes: z.array(z.string().startsWith("/")).min(1).max(16),
     fidelity: z.literal("arrusted-component-catalog"),
     functionality: z.literal("fixtures-only"),
     previewUrl: publicPrototypePreviewUrlSchema.optional(),
-    revision: sha256DigestSchema,
-    routes: z.array(z.string().startsWith("/")).min(1).max(16),
   })
   .strict();
 
@@ -182,11 +180,11 @@ export type PublicUiPreview = z.infer<typeof publicUiPreviewSchema>;
 export const publicImplementationPlanSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    runtime: z.literal("nextjs"),
     packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
     projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
-    readOnly: z.literal(true),
     routes: z.array(z.string().startsWith("/")).min(1),
-    runtime: z.literal("nextjs"),
+    readOnly: z.literal(true),
   })
   .strict();
 
@@ -196,18 +194,18 @@ export type PublicImplementationPlan = z.infer<
 
 export const eveSessionResultSchema = z
   .object({
+    sessionId: z.string(),
+    status: sessionStatusSchema,
     cursor: z.number().int().nonnegative(),
+    events: z.array(publicEveEventSchema),
+    inputRequests: z.array(publicInputRequestSchema).optional(),
+    prototype: publicPrototypeSchema.optional(),
+    uiPreview: publicUiPreviewSchema.optional(),
+    implementationPlan: publicImplementationPlanSchema.optional(),
     error: z
       .object({ code: z.string(), message: z.string() })
       .strict()
       .optional(),
-    events: z.array(publicEveEventSchema),
-    implementationPlan: publicImplementationPlanSchema.optional(),
-    inputRequests: z.array(publicInputRequestSchema).optional(),
-    prototype: publicPrototypeSchema.optional(),
-    sessionId: z.string(),
-    status: sessionStatusSchema,
-    uiPreview: publicUiPreviewSchema.optional(),
   })
   .strict();
 
@@ -232,23 +230,23 @@ export const publicSessionResumabilitySchema = z.enum([
 
 export const publicSessionSummarySchema = z
   .object({
+    sessionId: z.string().min(1),
+    title: z.string().min(1).max(200),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .optional(),
-    resumability: publicSessionResumabilitySchema,
-    sessionId: z.string().min(1),
     stage: publicSessionStageSchema,
     status: sessionStatusSchema,
-    title: z.string().min(1).max(200),
+    resumability: publicSessionResumabilitySchema,
     updatedAt: z.iso.datetime(),
   })
   .strict();
 
 export const eveSessionListResultSchema = z
   .object({
-    cursor: z.number().int().nonnegative(),
     kind: z.literal("session_list"),
+    cursor: z.number().int().nonnegative(),
     sessions: z.array(publicSessionSummarySchema).max(250),
   })
   .strict();
@@ -263,72 +261,70 @@ export const eveGetResultSchema = z.union([
 
 export const eveStartInputSchema = z
   .object({
-    clientRequestId: z.string().min(1).max(200),
-    handoffId: z.string().uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
+    handoffId: z.string().uuid().optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
+    clientRequestId: z.string().min(1).max(200),
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
     if (
       [prompt, handoffId, resumeSessionId].filter(
-        (value) => value !== undefined
+        (value) => value !== undefined,
       ).length !== 1
-    ) {
+    )
       context.addIssue({
         code: "custom",
         message:
           "Provide exactly one of prompt, handoffId, or resumeSessionId.",
       });
-    }
   });
 export const eveGetInputSchema = z
   .object({
+    sessionId: z.string().min(1).max(200).optional(),
     cursor: z.number().int().nonnegative().default(0),
     limit: z.number().int().min(1).max(250).default(100),
-    sessionId: z.string().min(1).max(200).optional(),
   })
   .strict();
 export const eveSendInputSchema = z.object({
-  clientRequestId: z.string().min(1).max(200),
-  message: z.string().trim().min(1).max(32_000),
   sessionId: z.string().min(1),
+  message: z.string().trim().min(1).max(32_000),
+  clientRequestId: z.string().min(1).max(200),
 });
 export const eveResponseSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("approve") }),
   z.object({ kind: z.literal("deny") }),
   z.object({
     kind: z.literal("answer"),
-    optionId: z.string().optional(),
     value: z.string().max(16_000),
+    optionId: z.string().optional(),
   }),
 ]);
 
 export const eveRespondInputSchema = z
   .object({
-    clientRequestId: z.string().min(1).max(200),
+    sessionId: z.string().min(1),
     responses: z
       .array(
         z.object({
           requestId: z.string().min(1),
           response: eveResponseSchema,
-        })
+        }),
       )
       .min(1)
       .max(32),
-    sessionId: z.string().min(1),
+    clientRequestId: z.string().min(1).max(200),
   })
   .strict()
   .superRefine(({ responses }, context) => {
     const seen = new Set<string>();
     for (const [index, { requestId }] of responses.entries()) {
-      if (seen.has(requestId)) {
+      if (seen.has(requestId))
         context.addIssue({
           code: "custom",
           path: ["responses", index, "requestId"],
           message: "Each requestId must appear exactly once.",
         });
-      }
       seen.add(requestId);
     }
   });

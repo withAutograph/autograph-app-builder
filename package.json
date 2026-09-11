@@ -1,8 +1,8 @@
 {
   "name": "autograph-app-builder",
   "version": "0.2.12",
-  "private": true,
   "description": "Autograph App Builder designs and creates apps in supported repositories.",
+  "private": true,
   "license": "MIT",
   "scripts": {
     "dev": "mise run dev --",
@@ -21,7 +21,7 @@
     "test:sandbox-toolchain": "mise run test:sandbox-toolchain",
     "test:hosted-sandbox": "mise run test:hosted-sandbox --",
     "test:auth-e2e": "mise run auth-e2e:test",
-    "check": "ultracite check",
+    "check": "mise run check",
     "configure": "mise run package:configure --",
     "validate:plugin": "mise run package:validate",
     "validate:release": "mise run package:validate-release",
@@ -35,8 +35,7 @@
     "test:portable-plugin": "mise run package:test-portable",
     "storybook": "mise run storybook:dev",
     "build-storybook": "mise run storybook:build",
-    "test-storybook": "mise run storybook:test",
-    "fix": "ultracite fix"
+    "test-storybook": "mise run storybook:test"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -105,27 +104,28 @@
     "ajv": "8.20.0",
     "axe-core": "4.13.0",
     "emulate": "0.10.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.4",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-storybook": "^10.6.0",
     "fflate": "0.8.3",
     "jsdom": "26.1.0",
     "just-bash": "3.4.2",
     "microsandbox": "0.5.10",
-    "oxfmt": "latest",
-    "oxlint": "latest",
+    "oxfmt": "0.67.0",
     "playwright": "latest",
     "postcss": "8.5.28",
-    "prettier": "3.9.6",
     "storybook": "^10.6.0",
     "tailwindcss": "4.3.3",
     "tar": "7.5.22",
     "tsx": "4.23.13",
     "typescript": "6.0.3",
-    "ultracite": "7.11.1",
     "vite": "latest",
     "vitest": "4.1.10",
     "yaml": "2.9.0"
   },
+  "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": "24.x"
-  },
-  "packageManager": "pnpm@11.7.0"
+  }
 }

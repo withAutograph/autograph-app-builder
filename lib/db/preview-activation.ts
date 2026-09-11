@@ -18,24 +18,24 @@ const passwordSchema = z
   .refine((value) => !/[\0\r\n]/u.test(value));
 
 const common = {
-  requestedAt: instantSchema,
   version: z.literal(1),
+  requestedAt: instantSchema,
 };
 
 const invitedUserSchema = z
   .object({
     ...common,
     action: z.literal("invited-user.provision"),
+    issuer: httpsUrlSchema,
+    resource: httpsUrlSchema,
+    userId: identifierSchema,
+    workspaceId: identifierSchema,
     email: z
       .string()
       .email()
       .transform((value) => value.toLowerCase()),
     githubAccountId: githubAccountIdSchema,
     githubLogin: githubLoginSchema,
-    issuer: httpsUrlSchema,
-    resource: httpsUrlSchema,
-    userId: identifierSchema,
-    workspaceId: identifierSchema,
   })
   .strict();
 
@@ -43,8 +43,8 @@ const runtimeRoleSchema = z
   .object({
     ...common,
     action: z.literal("runtime-role.configure"),
-    password: passwordSchema,
     roleName: roleSchema,
+    password: passwordSchema,
   })
   .strict();
 
@@ -52,13 +52,13 @@ const oauthInitializeSchema = z
   .object({
     ...common,
     action: z.literal("oauth.initialize"),
+    issuer: httpsUrlSchema,
+    resource: httpsUrlSchema,
     authSecret: z
       .string()
       .min(32)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    issuer: httpsUrlSchema,
-    resource: httpsUrlSchema,
   })
   .strict();
 
@@ -69,9 +69,7 @@ export const previewActivationPlanRequestSchema = z
     oauthInitializeSchema,
   ])
   .superRefine((request, context) => {
-    if (request.action === "runtime-role.configure") {
-      return;
-    }
+    if (request.action === "runtime-role.configure") return;
     const issuer = new URL(request.issuer);
     const resource = new URL(request.resource);
     if (
@@ -103,34 +101,38 @@ export const previewActivationApplyRequestSchema = z.union([
 
 const effectsSchema = z
   .object({
+    userRowsAffected: z.number().int().min(0).max(1),
     accountRowsAffected: z.number().int().min(0).max(1),
-    jwksRowsAfter: z.number().int().min(0).max(100),
-    jwksRowsBefore: z.number().int().min(0).max(100),
     membershipRowsAffected: z.number().int().min(0).max(1),
-    resourceRowsAfter: z.number().int().min(0).max(1),
     resourceRowsBefore: z.number().int().min(0).max(1),
-    runtimeRoleAttributesExact: z.boolean(),
-    runtimeRoleCanConnect: z.boolean(),
-    runtimeRoleCanCreateSchemaObjects: z.literal(false),
-    runtimeRoleCanUseSchema: z.boolean(),
+    resourceRowsAfter: z.number().int().min(0).max(1),
+    jwksRowsBefore: z.number().int().min(0).max(100),
+    jwksRowsAfter: z.number().int().min(0).max(100),
     runtimeRoleCreated: z.boolean(),
     runtimeRoleLogin: z.boolean(),
-    runtimeRoleMembershipCount: z.literal(0),
-    runtimeRoleSequencePrivilegesExact: z.boolean(),
+    runtimeRoleCanConnect: z.boolean(),
+    runtimeRoleCanUseSchema: z.boolean(),
+    runtimeRoleCanCreateSchemaObjects: z.literal(false),
     runtimeRoleTablePrivilegesExact: z.boolean(),
-    userRowsAffected: z.number().int().min(0).max(1),
+    runtimeRoleSequencePrivilegesExact: z.boolean(),
+    runtimeRoleAttributesExact: z.boolean(),
+    runtimeRoleMembershipCount: z.literal(0),
   })
   .strict();
 
 export const previewActivationReceiptSchema = z
   .object({
+    version: z.literal(1),
     action: z.enum([
       "invited-user.provision",
       "runtime-role.configure",
       "oauth.initialize",
     ]),
-    appliedAt: instantSchema,
+    status: z.enum(["applied", "no-op"]),
+    requestDigest: sha256Schema,
     authorityDigest: sha256Schema,
+    appliedAt: instantSchema,
+    effects: effectsSchema,
     database: z
       .object({
         dialect: z.literal("postgresql"),
@@ -138,10 +140,6 @@ export const previewActivationReceiptSchema = z
         maxConnections: z.literal(1),
       })
       .strict(),
-    effects: effectsSchema,
-    requestDigest: sha256Schema,
-    status: z.enum(["applied", "no-op"]),
-    version: z.literal(1),
   })
   .strict();
 
@@ -154,7 +152,7 @@ export interface PreviewActivationStore {
     input: Extract<
       PreviewActivationPlanRequest,
       { action: "invited-user.provision" }
-    >
+    >,
   ): Promise<
     Pick<
       z.infer<typeof effectsSchema>,
@@ -165,7 +163,7 @@ export interface PreviewActivationStore {
     input: Extract<
       PreviewActivationPlanRequest,
       { action: "runtime-role.configure" }
-    >
+    >,
   ): Promise<
     Pick<
       z.infer<typeof effectsSchema>,
@@ -181,7 +179,10 @@ export interface PreviewActivationStore {
     >
   >;
   initializeOAuth(
-    input: Extract<PreviewActivationPlanRequest, { action: "oauth.initialize" }>
+    input: Extract<
+      PreviewActivationPlanRequest,
+      { action: "oauth.initialize" }
+    >,
   ): Promise<
     Pick<
       z.infer<typeof effectsSchema>,
@@ -223,58 +224,58 @@ export function planPreviewActivation(input: unknown) {
       : request.action === "oauth.initialize"
         ? { issuer: request.issuer, resource: request.resource }
         : {
-            email: request.email,
-            githubAccountId: request.githubAccountId,
-            githubLogin: request.githubLogin,
             issuer: request.issuer,
             resource: request.resource,
             userId: request.userId,
             workspaceId: request.workspaceId,
+            email: request.email,
+            githubAccountId: request.githubAccountId,
+            githubLogin: request.githubLogin,
           };
   return {
-    action: request.action,
-    authorityDigest: digest(JSON.stringify(authority)),
-    requestDigest: digest(canonical),
-    requestedAt: request.requestedAt,
-    requiredConfirmationDigest: digest(`confirm\n${canonical}`),
     version: 1 as const,
+    action: request.action,
+    requestDigest: digest(canonical),
+    authorityDigest: digest(JSON.stringify(authority)),
+    requiredConfirmationDigest: digest(`confirm\n${canonical}`),
+    requestedAt: request.requestedAt,
   };
 }
 
 const emptyEffects: z.infer<typeof effectsSchema> = {
+  userRowsAffected: 0,
   accountRowsAffected: 0,
-  jwksRowsAfter: 0,
-  jwksRowsBefore: 0,
   membershipRowsAffected: 0,
-  resourceRowsAfter: 0,
   resourceRowsBefore: 0,
-  runtimeRoleAttributesExact: false,
-  runtimeRoleCanConnect: false,
-  runtimeRoleCanCreateSchemaObjects: false,
-  runtimeRoleCanUseSchema: false,
+  resourceRowsAfter: 0,
+  jwksRowsBefore: 0,
+  jwksRowsAfter: 0,
   runtimeRoleCreated: false,
   runtimeRoleLogin: false,
-  runtimeRoleMembershipCount: 0,
-  runtimeRoleSequencePrivilegesExact: false,
+  runtimeRoleCanConnect: false,
+  runtimeRoleCanUseSchema: false,
+  runtimeRoleCanCreateSchemaObjects: false,
   runtimeRoleTablePrivilegesExact: false,
-  userRowsAffected: 0,
+  runtimeRoleSequencePrivilegesExact: false,
+  runtimeRoleAttributesExact: false,
+  runtimeRoleMembershipCount: 0,
 };
 
 export const runtimeRoleReadbackSchema = z
   .object({
-    bypassRls: z.literal(false),
     canConnect: z.literal(true),
-    canCreateSchemaObjects: z.literal(false),
-    canLogin: z.literal(true),
     canUseSchema: z.literal(true),
+    canCreateSchemaObjects: z.literal(false),
+    tablePrivilegesExact: z.literal(true),
+    sequencePrivilegesExact: z.literal(true),
+    canLogin: z.literal(true),
+    inherits: z.literal(false),
+    superuser: z.literal(false),
     createDatabase: z.literal(false),
     createRole: z.literal(false),
-    inherits: z.literal(false),
-    membershipCount: z.literal(0),
     replication: z.literal(false),
-    sequencePrivilegesExact: z.literal(true),
-    superuser: z.literal(false),
-    tablePrivilegesExact: z.literal(true),
+    bypassRls: z.literal(false),
+    membershipCount: z.literal(0),
   })
   .strict();
 
@@ -289,7 +290,7 @@ export async function executePreviewActivation(input: {
 }): Promise<PreviewActivationReceipt> {
   const apply = previewActivationApplyRequestSchema.parse(input.request);
   const planInput = Object.fromEntries(
-    Object.entries(apply).filter(([key]) => key !== "confirmationDigest")
+    Object.entries(apply).filter(([key]) => key !== "confirmationDigest"),
   );
   const request = previewActivationPlanRequestSchema.parse(planInput);
   const plan = planPreviewActivation(request);
@@ -328,17 +329,17 @@ export async function executePreviewActivation(input: {
     effects.resourceRowsAfter > effects.resourceRowsBefore ||
     effects.jwksRowsAfter > effects.jwksRowsBefore;
   return previewActivationReceiptSchema.parse({
+    version: 1,
     action: request.action,
-    appliedAt: new Date(nowEpochMs).toISOString(),
+    status: changed ? "applied" : "no-op",
+    requestDigest: plan.requestDigest,
     authorityDigest: plan.authorityDigest,
+    appliedAt: new Date(nowEpochMs).toISOString(),
+    effects,
     database: {
       dialect: "postgresql",
-      maxConnections: 1,
       secretTransport: "owner-only-request-and-task-scoped-stdin",
+      maxConnections: 1,
     },
-    effects,
-    requestDigest: plan.requestDigest,
-    status: changed ? "applied" : "no-op",
-    version: 1,
   });
 }

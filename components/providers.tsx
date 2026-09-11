@@ -1,9 +1,9 @@
 "use client";
 
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider, useTheme } from "next-themes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ThemeProvider, useTheme } from "next-themes";
 import type { ReactNode } from "react";
 import { SiVercel } from "react-icons/si";
 
@@ -25,7 +25,7 @@ import { getQueryClient } from "@/lib/query-client";
 
 export function authPlugins(
   passkeysEnabled: boolean,
-  themeHook: typeof useTheme
+  themeHook: typeof useTheme,
 ) {
   return [
     {
@@ -43,8 +43,8 @@ export function authPlugins(
     })),
     {
       ...themePlugin({ useTheme: themeHook }),
-      accountCards: [Appearance],
       userMenuItems: [ThemeToggleItem],
+      accountCards: [Appearance],
     },
   ];
 }
@@ -84,7 +84,7 @@ export function Providers({
           redirectTo={DEFAULT_AUTH_REDIRECT_TO}
           socialProviders={[
             ...(vercelAuthEnabled
-              ? [{ icon: <SiVercel />, id: "vercel", label: "Vercel" }]
+              ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }]
               : []),
             ...(githubAuthEnabled ? (["github"] as const) : []),
           ]}

@@ -6,19 +6,19 @@ import {
 } from "./component-composition-policy";
 
 const manifest = JSON.stringify({
+  version: 1,
   kind: "arrusted-component-composition-v1",
-  providers: ["@autograph/components/providers"],
   publicImports: [
     "@autograph/components",
     "@autograph/compositions",
     "@autograph/icons",
   ],
+  tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+  providers: ["@autograph/components/providers"],
   routeGlue: {
     allowedFiles: ["app/layout.tsx", "app/page.tsx"],
     allowedStyleFiles: [],
   },
-  tokenEntrypoints: ["@autograph/design-system/tokens.css"],
-  version: 1,
 });
 
 function binding() {
@@ -27,18 +27,17 @@ function binding() {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
   });
-  if (result.status !== "available") {
+  if (result.status !== "available")
     throw new Error("Expected policy binding.");
-  }
   return result.binding;
 }
 
 describe("Arrusted component composition policy", () => {
   it("binds the target-owned manifest to the exact selected source", () => {
     expect(binding()).toMatchObject({
-      policy: { kind: "arrusted-component-composition-v1" },
       sourceSha: "a".repeat(40),
       sourceTree: "b".repeat(40),
+      policy: { kind: "arrusted-component-composition-v1" },
     });
   });
 
@@ -48,14 +47,14 @@ describe("Arrusted component composition policy", () => {
         content: null,
         sourceSha: "a".repeat(40),
         sourceTree: "b".repeat(40),
-      })
+      }),
     ).toMatchObject({ status: "unavailable" });
     expect(
       bindArrustedComponentCompositionPolicy({
         content: "{",
         sourceSha: "a".repeat(40),
         sourceTree: "b".repeat(40),
-      })
+      }),
     ).toMatchObject({ status: "unavailable" });
   });
 
@@ -66,12 +65,12 @@ describe("Arrusted component composition policy", () => {
         binding: binding(),
         files: [
           {
+            path: "apps/vendor-onboarding/app/page.tsx",
             content:
               'import { KpiCard } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\nexport default function Page() { return <KpiCard icon={Check} title="Ready" value={3} />; }\n',
-            path: "apps/vendor-onboarding/app/page.tsx",
           },
         ],
-      })
+      }),
     ).toMatchObject({ status: "passed" });
   });
 
@@ -98,13 +97,12 @@ describe("Arrusted component composition policy", () => {
     const result = auditAppliedAppComposition({
       appId: "vendor-onboarding",
       binding: binding(),
-      files: [{ content, path }],
+      files: [{ path, content }],
     });
     expect(result.status).toBe("failed");
-    if (result.status === "failed") {
+    if (result.status === "failed")
       expect(result.violations.map((violation) => violation.code)).toContain(
-        code
+        code,
       );
-    }
   });
 });

@@ -1,22 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { createPreviewEmulatePersistence } from "./preview-emulate-persistence";
-import type { PreviewEmulateStateStore } from "./preview-emulate-persistence";
+import {
+  createPreviewEmulatePersistence,
+  type PreviewEmulateStateStore,
+} from "./preview-emulate-persistence";
 
 function memoryStore(): PreviewEmulateStateStore & {
   states: Map<string, string>;
 } {
   const states = new Map<string, string>();
   return {
+    states,
     async read(namespace) {
       return states.get(namespace);
     },
-    async reset(namespace) {
-      return states.delete(namespace) ? 1 : 0;
-    },
-    states,
     async write(namespace, state) {
       states.set(namespace, state);
+    },
+    async reset(namespace) {
+      return states.delete(namespace) ? 1 : 0;
     },
   };
 }

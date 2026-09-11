@@ -12,11 +12,11 @@ export const hostedIdentifierSchema = z
  */
 export const verifiedHostedClaimsSchema = z
   .object({
-    audience: z.string().min(1).max(300),
     issuer: z.string().url(),
-    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+    audience: z.string().min(1).max(300),
     subject: hostedIdentifierSchema,
     workspaceId: hostedIdentifierSchema,
+    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
   })
   .strict();
 
@@ -24,22 +24,22 @@ export type VerifiedHostedClaims = z.infer<typeof verifiedHostedClaimsSchema>;
 
 export const hostedPrincipalSchema = z
   .object({
-    audience: z.string().min(1).max(300),
     issuer: z.string().url(),
+    audience: z.string().min(1).max(300),
+    workspaceId: hostedIdentifierSchema,
     ownerUserId: hostedIdentifierSchema,
     scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-    workspaceId: hostedIdentifierSchema,
   })
   .strict();
 
 export type HostedPrincipal = z.infer<typeof hostedPrincipalSchema>;
 
 export const hostedEveOperationScopes = {
-  cancel: "autograph:cancel",
-  get: "autograph:get",
-  respond: "autograph:respond",
-  send: "autograph:send",
   start: "autograph:start",
+  get: "autograph:get",
+  send: "autograph:send",
+  respond: "autograph:respond",
+  cancel: "autograph:cancel",
 } as const;
 
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;
@@ -82,11 +82,11 @@ export function authorizeHostedPrincipal(input: {
   }
 
   return hostedPrincipalSchema.parse({
-    audience: claims.audience,
     issuer: claims.issuer,
+    audience: claims.audience,
+    workspaceId: claims.workspaceId,
     ownerUserId: claims.subject,
     scopes,
-    workspaceId: claims.workspaceId,
   });
 }
 
@@ -101,7 +101,7 @@ export function tenantKeyFor(principal: HostedPrincipal): string {
 
 export function requireHostedOperationScope(
   principal: HostedPrincipal,
-  operation: HostedEveOperation
+  operation: HostedEveOperation,
 ): void {
   if (!principal.scopes.includes(hostedEveOperationScopes[operation])) {
     throw new HostedAuthorizationError("insufficient_scope");

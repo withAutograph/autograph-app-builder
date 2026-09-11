@@ -13,11 +13,11 @@ test("sign-up exposes its useful shell on the initial response", async ({
       await page.goto(signUpPath);
       await expect(page.getByRole("status")).toHaveText("Loading App Builder…");
     },
-    { baseURL }
+    { baseURL },
   );
 
   await expect(
-    page.getByRole("button", { name: "Continue with Passkey" })
+    page.getByRole("button", { name: "Continue with Passkey" }),
   ).toBeVisible();
 });
 
@@ -30,7 +30,7 @@ test("sign-up exposes its useful shell on client navigation", async ({
     await page.getByRole("link", { name: "Sign Up" }).click();
     await page.waitForURL((url) => url.pathname === "/auth/sign-up");
     await expect(
-      page.getByRole("button", { name: "Continue with Passkey" })
+      page.getByRole("button", { name: "Continue with Passkey" }),
     ).toBeVisible();
   });
 });

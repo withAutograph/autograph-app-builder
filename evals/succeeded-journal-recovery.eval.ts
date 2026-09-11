@@ -12,7 +12,7 @@ export default defineEval({
     await prepareReviewedWorkflow(
       t,
       repository,
-      "publication-success-recovery"
+      "publication-success-recovery",
     );
     await t.send("Publish reviewed change set locally.");
     t.requireInputRequest({ toolName: "publish_reviewed_change_set" });

@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-
 import { collectCssRuleEvidence, generatedCssRule } from "./css-evidence";
 
 describe("CSS rule evidence", () => {
   const generated = collectCssRuleEvidence([
     {
-      content: ".screen { color: var(--color-text-primary); }",
       path: "src/screen.css",
+      content: ".screen { color: var(--color-text-primary); }",
     },
   ]);
 
@@ -17,9 +16,9 @@ describe("CSS rule evidence", () => {
       ".screen",
       "color",
       "var(--color-text-primary)",
-      [{ name: "color", value: "var(--color-text-primary)" }]
+      [{ name: "color", value: "var(--color-text-primary)" }],
     );
-    expect(rule?.source).toMatchObject({ line: 1, path: "src/screen.css" });
+    expect(rule?.source).toMatchObject({ path: "src/screen.css", line: 1 });
   });
 
   it("rejects synthetic shorthand expansion unless the caller removes it", () => {
@@ -33,22 +32,22 @@ describe("CSS rule evidence", () => {
         [
           { name: "color", value: "var(--color-text-primary)" },
           { name: "color", value: "var(--color-text-primary)" },
-        ]
-      )
+        ],
+      ),
     ).toBeUndefined();
   });
 
   it("keeps copied, ambiguous, and absent source evidence unassigned", () => {
     const shared = collectCssRuleEvidence([
       {
-        content: ".screen { color: var(--color-text-primary); }",
         path: "packages/design-systems/shared.css",
+        content: ".screen { color: var(--color-text-primary); }",
       },
     ]);
     expect(
       generatedCssRule(generated, [], ".screen", "color", "#292929", [
         { name: "color", value: "#292929" },
-      ])
+      ]),
     ).toBeUndefined();
     expect(
       generatedCssRule(
@@ -57,8 +56,8 @@ describe("CSS rule evidence", () => {
         ".screen",
         "color",
         "var(--color-text-primary)",
-        [{ name: "color", value: "var(--color-text-primary)" }]
-      )
+        [{ name: "color", value: "var(--color-text-primary)" }],
+      ),
     ).toBeUndefined();
   });
 
@@ -67,28 +66,28 @@ describe("CSS rule evidence", () => {
       generatedCssRule(
         collectCssRuleEvidence([
           {
+            path: "src/conditional.css",
             content:
               "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
-            path: "src/conditional.css",
           },
         ]),
         [],
         ".screen",
         "color",
         "var(--color-text-primary)",
-        [{ name: "color", value: "var(--color-text-primary)" }]
-      )
+        [{ name: "color", value: "var(--color-text-primary)" }],
+      ),
     ).toBeUndefined();
     const strings = collectCssRuleEvidence([
       {
-        content: '.copy::before { content: "a b"; }',
         path: "src/strings.css",
+        content: '.copy::before { content: "a b"; }',
       },
     ]);
     expect(
       generatedCssRule(strings, [], ".copy::before", "content", '"a  b"', [
         { name: "content", value: '"a b"' },
-      ])
+      ]),
     ).toBeUndefined();
   });
 });

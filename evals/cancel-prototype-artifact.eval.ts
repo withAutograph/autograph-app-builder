@@ -14,7 +14,7 @@ export default defineEval({
     t.succeeded();
 
     await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
     );
     t.succeeded();
 

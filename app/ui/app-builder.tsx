@@ -11,9 +11,11 @@ import {
   Search,
   X,
 } from "@geist-ui/icons";
-import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
+import { useForm, useWatch } from "react-hook-form";
 import {
   startTransition,
   useActionState,
@@ -26,8 +28,6 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import {
   SiBitbucket,
   SiCloudflare,
@@ -39,39 +39,30 @@ import {
   SiXero,
 } from "react-icons/si";
 
-import {
-  continueBuilderHandoff,
-  type BuilderHandoffContinuationInput,
-} from "@/app/actions/builder";
+import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import {
   builderDraftFormSchema,
   type BuilderDraftRecord,
   type BuilderDraftPageData,
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
-import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-
-import autographIcon from "../../assets/autograph-icon.png";
-import { SectionShell } from "../../components/create-app/choice-card";
-import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
+import {
+  continueBuilderHandoff,
+  type BuilderHandoffContinuationInput,
+} from "@/app/actions/builder";
 import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,
 } from "../../lib/handoff/client";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
-import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
-import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import type { BuilderProvisionResponse } from "../../lib/provisioning/contracts";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
-import { AppDetailsSection } from "./builder-app-details";
-import { SearchCombobox, type ComboOption } from "./builder-combobox";
-import { BuildWithSection } from "./builder-destination";
-import { createBuilderDraftOutbox } from "./builder-draft-outbox";
-import { BuilderHandoffProgress } from "./builder-handoff-progress";
-import { InfoTooltip } from "./builder-info-tooltip";
-import { BuilderInstallInstructions } from "./builder-install-instructions";
-import { BuilderNextSteps } from "./builder-next-steps";
-import { BuilderProvisionedResources } from "./builder-provisioned-resources";
+import { SectionShell } from "../../components/create-app/choice-card";
+import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
+import styles from "./app-builder.module.css";
+import autographIcon from "../../assets/autograph-icon.png";
+import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
+import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import {
   activeProvisioningStorageKey,
   clearActiveProvisioning,
@@ -82,10 +73,17 @@ import {
   readBuilderDraftResume,
 } from "./builder-session";
 import { Header, ProviderNotices } from "./builder-shell";
+import { BuilderNextSteps } from "./builder-next-steps";
+import { BuilderProvisionedResources } from "./builder-provisioned-resources";
+import { BuilderInstallInstructions } from "./builder-install-instructions";
+import { BuilderHandoffProgress } from "./builder-handoff-progress";
 import { ProvisioningProgress } from "./provisioning-progress";
+import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
-
-import styles from "./app-builder.module.css";
+import { AppDetailsSection } from "./builder-app-details";
+import { BuildWithSection } from "./builder-destination";
+import { InfoTooltip } from "./builder-info-tooltip";
+import { SearchCombobox, type ComboOption } from "./builder-combobox";
 
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
@@ -117,10 +115,7 @@ export type {
 type Screen = "builder" | "handoff" | "ready";
 
 export type ConnectionStage = "connect" | "configure" | "customize";
-export interface ConnectionFlow {
-  name: string;
-  stage: ConnectionStage;
-}
+export type ConnectionFlow = { name: string; stage: ConnectionStage };
 
 const maximumHandoffUrlLength = 8_000;
 
@@ -134,8 +129,7 @@ function buildDestinationLabel(destination: BuildDestination) {
 function providerSetupMessage(
   provider: "GitHub" | "Vercel",
   result:
-    | BuilderProvisionResponse["github"]
-    | BuilderProvisionResponse["vercel"]
+    BuilderProvisionResponse["github"] | BuilderProvisionResponse["vercel"],
 ) {
   if (result.status === "succeeded" || result.code === "not_selected") return;
   const reason = {
@@ -161,7 +155,7 @@ function providerSetupMessage(
 function attemptAppHandoff(
   destination: BuildDestination,
   handoffId: string,
-  openedWindow?: Window | null
+  openedWindow?: Window | null,
 ): HandoffAttempt {
   if (destination === "web") return "blocked";
   const url = buildAppHandoffUrl(destination, handoffId);
@@ -339,7 +333,7 @@ export function appNameFromBrief(brief: string) {
     .map((word) =>
       word.length > 1
         ? `${word[0]?.toUpperCase()}${word.slice(1).toLowerCase()}`
-        : word.toUpperCase()
+        : word.toUpperCase(),
     )
     .join(" ")
     .slice(0, 120)
@@ -359,7 +353,7 @@ function randomAppName(seed?: string) {
   }
   const hash = [...seed].reduce(
     (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
-    0
+    0,
   );
   const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
   const noun =
@@ -727,7 +721,8 @@ export function ConnectionsSection({
       ? allConnectionNames
       : allConnectionNames.slice(0, 2)
   ).filter(
-    (name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch)
+    (name) =>
+      !normalizedSearch || name.toLowerCase().includes(normalizedSearch),
   );
   return (
     <SectionShell
@@ -824,10 +819,10 @@ export function ConnectionDrawer({
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [connectionName, setConnectionName] = useState(
-    flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")
+    flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-"),
   );
   const [description, setDescription] = useState(
-    connectionDescription(flow.name)
+    connectionDescription(flow.name),
   );
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
@@ -1099,7 +1094,7 @@ export function Builder({
   durableDraftRevision?: number;
   durableDraftUpdatedAt?: string;
   saveActiveBuilderDraftAction?: (
-    input: SaveActiveBuilderDraftInput
+    input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
   loadActiveBuilderDraftAction?: () => Promise<
     BuilderDraftPageData | undefined
@@ -1165,60 +1160,60 @@ export function Builder({
         });
       });
     },
-    [builderForm]
+    [builderForm],
   );
   const appNameEditedByUser = useRef(
-    initialDraft?.appNameEditedByUser ?? false
+    initialDraft?.appNameEditedByUser ?? false,
   );
   const repositoryEditedByUser = useRef(
-    initialDraft?.repositoryEditedByUser ?? false
+    initialDraft?.repositoryEditedByUser ?? false,
   );
   const [initialActiveDraftId] = useState(
-    () => resumeKey ?? durableDraftId ?? crypto.randomUUID()
+    () => resumeKey ?? durableDraftId ?? crypto.randomUUID(),
   );
   const activeDraftId = useRef(initialActiveDraftId);
   const resumedVercelConnection = providerNotices.some(
-    (notice) => notice.provider === "vercel" && notice.status === "connected"
+    (notice) => notice.provider === "vercel" && notice.status === "connected",
   );
   const resumedGitHubConnection = providerNotices.some(
-    (notice) => notice.provider === "github" && notice.status === "connected"
+    (notice) => notice.provider === "github" && notice.status === "connected",
   );
   const [team, setTeam] = useState(
     resumedVercelConnection
       ? (teamOptions[0]?.value ?? "")
-      : (initialDraft?.team ?? teamOptions[0]?.value ?? "")
+      : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
   );
   const [gitScope, setGitScope] = useState(
     resumedGitHubConnection
       ? (gitScopeOptions[0]?.value ?? "")
-      : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? "")
+      : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
   );
   const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
   const [showMoreConnections, setShowMoreConnections] = useState(
-    initialDraft?.showMoreConnections ?? false
+    initialDraft?.showMoreConnections ?? false,
   );
   const [search, setSearch] = useState(initialDraft?.search ?? "");
   const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
-    null
+    null,
   );
   const clientHydrated = useSyncExternalStore(
     subscribeToClientSnapshot,
     () => true,
-    () => false
+    () => false,
   );
   const [draftRecoveryComplete, setDraftRecoveryComplete] = useState(false);
   const interactive = clientHydrated && draftRecoveryComplete;
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
-    initialDraft?.connectedConnections ?? []
+    initialDraft?.connectedConnections ?? [],
   );
   const [storageProvider, setStorageProvider] =
     useState<StorageProvider | null>(
-      initialDraft?.storageProvider === null ? null : "github"
+      initialDraft?.storageProvider === null ? null : "github",
     );
   const [deploymentProvider, setDeploymentProvider] =
     useState<DeploymentProvider | null>(
-      initialDraft?.deploymentProvider === "vercel" ? "vercel" : null
+      initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
     );
   const draftRevision = useRef(durableDraftRevision);
   const draftUpdatedAt = useRef(durableDraftUpdatedAt);
@@ -1227,14 +1222,14 @@ export function Builder({
   // never as a form replacement.
   const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
   const focusOrigin = useRef<ProviderField>(
-    initialDraft?.focusOrigin ?? "github"
+    initialDraft?.focusOrigin ?? "github",
   );
   const draftOutbox = useMemo(
     () =>
       createBuilderDraftOutbox<BuilderDraft>({
         key: `active:${initialActiveDraftId}`,
       }),
-    [initialActiveDraftId]
+    [initialActiveDraftId],
   );
   type ServerSaveState =
     | {
@@ -1246,7 +1241,7 @@ export function Builder({
   const [serverSaveState, dispatchServerSave] = useActionState(
     async (
       _previous: ServerSaveState,
-      input: SaveActiveBuilderDraftInput
+      input: SaveActiveBuilderDraftInput,
     ): Promise<ServerSaveState> => {
       if (!saveActiveBuilderDraftAction)
         return {
@@ -1268,7 +1263,7 @@ export function Builder({
         };
       }
     },
-    undefined
+    undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<
@@ -1281,7 +1276,7 @@ export function Builder({
         }): void;
         reject(error: Error): void;
       }
-    >()
+    >(),
   );
   useEffect(() => {
     if (!serverSaveState) return;
@@ -1297,7 +1292,7 @@ export function Builder({
         waiter.reject(new Error("builder-draft-unmounted"));
       serverSaveWaiters.current.clear();
     },
-    []
+    [],
   );
   const requestServerSave = useCallback(
     (input: SaveActiveBuilderDraftInput) => {
@@ -1314,7 +1309,7 @@ export function Builder({
       startTransition(() => dispatchServerSave(input));
       return acknowledgement.promise;
     },
-    [dispatchServerSave]
+    [dispatchServerSave],
   );
   const saveDraft = useCallback(
     async ({
@@ -1356,7 +1351,7 @@ export function Builder({
           : saveActiveBuilderDraftAction
             ? await requestServerSave(input)
             : await Promise.reject(
-                new Error("builder-draft-action-unavailable")
+                new Error("builder-draft-action-unavailable"),
               );
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
@@ -1367,7 +1362,7 @@ export function Builder({
         pendingActionExpectedRevision.current = undefined;
       }
     },
-    [requestServerSave, saveActiveBuilderDraftAction]
+    [requestServerSave, saveActiveBuilderDraftAction],
   );
   const autosave = useBuilderDraftAutosave({
     outbox: draftOutbox,
@@ -1388,7 +1383,7 @@ export function Builder({
   // we intentionally queued instead; every actual field or local-control
   // change produces a distinct snapshot.
   const autosaveSnapshotFingerprint = useRef<string | undefined>(
-    initialDraft ? JSON.stringify(initialDraft) : undefined
+    initialDraft ? JSON.stringify(initialDraft) : undefined,
   );
   const visibleProviderNotices = providerNotices.filter(
     (notice) =>
@@ -1396,7 +1391,7 @@ export function Builder({
         notice.status === "failed" &&
         (notice.reason === "configuration-unavailable" ||
           notice.provider === "github")
-      )
+      ),
   );
   const draftSnapshot = useCallback(
     (origin = focusOrigin.current): BuilderDraft => ({
@@ -1430,7 +1425,7 @@ export function Builder({
       storageProvider,
       team,
       zdrOnly,
-    ]
+    ],
   );
   const applyAuthoritativeDraft = useCallback(
     async (remote: {
@@ -1474,14 +1469,14 @@ export function Builder({
       setStorageProvider,
       setTeam,
       setZdrOnly,
-    ]
+    ],
   );
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
         integrations.models.entries.some(
           (modelEntry) =>
-            modelEntry.id === option.value && modelEntry.zdr === "all"
-        )
+            modelEntry.id === option.value && modelEntry.zdr === "all",
+        ),
       )
     : allModelOptions;
   let validAppId = false;
@@ -1493,7 +1488,7 @@ export function Builder({
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
     (form.buildDestination !== "web" ||
-      (integrations.models.status === "ready" && model))
+      (integrations.models.status === "ready" && model)),
   );
   const submitGuidance =
     form.appName.trim() && !validAppId
@@ -1534,7 +1529,7 @@ export function Builder({
       connections: current.connections.filter((item) => item !== name),
     }));
     setConnectedConnections((current) =>
-      current.filter((item) => item !== name)
+      current.filter((item) => item !== name),
     );
   };
   const completeConnection = () => {
@@ -1542,7 +1537,7 @@ export function Builder({
     setConnectedConnections((current) =>
       current.includes(connectionFlow.name)
         ? current
-        : [...current, connectionFlow.name]
+        : [...current, connectionFlow.name],
     );
     setConnectionFlow(null);
   };
@@ -1559,7 +1554,7 @@ export function Builder({
             : undefined;
     if (!id) return;
     const frame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`#${id}`)?.focus();
+      document.getElementById(id)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
@@ -1710,7 +1705,7 @@ export function Builder({
     await autosave.flush();
     if (await autosave.restorePending()) {
       setDraftSaveError(
-        "We couldn’t save your form. Retry saving to connect a provider."
+        "We couldn’t save your form. Retry saving to connect a provider.",
       );
       return;
     }
@@ -1720,7 +1715,7 @@ export function Builder({
     // Server Action checkpoint has completed so a provider return can never
     // target a stale, non-authoritative draft.
     router.push(
-      `/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`
+      `/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`,
     );
   };
   async function submit(event: FormEvent) {
@@ -1730,7 +1725,7 @@ export function Builder({
       await autosave.flush();
       if (await autosave.restorePending()) {
         setDraftSaveError(
-          "We couldn’t save your form. Retry saving before creating your app."
+          "We couldn’t save your form. Retry saving before creating your app.",
         );
         return;
       }
@@ -1751,7 +1746,7 @@ export function Builder({
             : {}),
           modelId: preferredModelId,
         },
-        activeDraftId.current
+        activeDraftId.current,
       );
     }
   }
@@ -1817,10 +1812,10 @@ export function Builder({
             onBriefChange={updateBrief}
             onCycleBrief={() => {
               const currentIndex = briefExamples.indexOf(
-                form.brief as (typeof briefExamples)[number]
+                form.brief as (typeof briefExamples)[number],
               );
               const nextIndex =
-                currentIndex === -1
+                currentIndex < 0
                   ? 0
                   : (currentIndex + 1) % briefExamples.length;
               updateBrief(briefExamples[nextIndex]);
@@ -1847,7 +1842,7 @@ export function Builder({
                   if (
                     checked &&
                     !integrations.models.entries.some(
-                      (entry) => entry.id === model && entry.zdr === "all"
+                      (entry) => entry.id === model && entry.zdr === "all",
                     )
                   )
                     setModel("");
@@ -1867,7 +1862,7 @@ export function Builder({
             privateRepository={form.privateRepository}
             onProviderChange={(provider) => {
               setStorageProvider((current) =>
-                current === provider ? null : provider
+                current === provider ? null : provider,
               );
             }}
             onGitScopeChange={(value) => {
@@ -1891,7 +1886,7 @@ export function Builder({
             teamOptions={teamOptions}
             onProviderChange={(provider) => {
               setDeploymentProvider((current) =>
-                current === provider ? null : provider
+                current === provider ? null : provider,
               );
             }}
             onTeamChange={(value) => {
@@ -1945,7 +1940,7 @@ export function Builder({
           onClose={() => setConnectionFlow(null)}
           onStageChange={(stage) =>
             setConnectionFlow((current) =>
-              current ? { ...current, stage } : current
+              current ? { ...current, stage } : current,
             )
           }
           onConnected={completeConnection}
@@ -2002,7 +1997,7 @@ export function Handoff({
     setStep(0);
     setStreaming(
       provisioningEnabled &&
-        Boolean(form.githubInstallationId || form.vercelInstallationId)
+        Boolean(form.githubInstallationId || form.vercelInstallationId),
     );
     const input: BuilderHandoffContinuationInput = {
       version: 1,
@@ -2033,7 +2028,7 @@ export function Handoff({
     const handoffAttempt = attemptAppHandoff(
       form.buildDestination,
       continuation.handoff.handoffId,
-      openedWindow
+      openedWindow,
     );
     const timer = window.setTimeout(() => {
       if (!mounted.current) return;
@@ -2123,7 +2118,7 @@ codex plugin add app-builder@autograph`;
           ? Boolean(form.githubInstallationId)
           : Boolean(form.vercelInstallationId);
       return selected && provisioning[provider].status === "failed";
-    }
+    },
   );
   const continueState = retryFailed
     ? "failed"
@@ -2136,8 +2131,8 @@ codex plugin add app-builder@autograph`;
         .writeText(
           buildAppHandoffPrompt(
             handoff.handoffId,
-            form.buildDestination === "cursor" ? "cursor" : "codex"
-          )
+            form.buildDestination === "cursor" ? "cursor" : "codex",
+          ),
         )
         .then(() => setRetryClipboardState("copied"))
         .catch(() => setRetryClipboardState("failed"));
@@ -2145,7 +2140,7 @@ codex plugin add app-builder@autograph`;
       setRetryClipboardState("failed");
     }
     setHandoffAttempt(
-      attemptAppHandoff(form.buildDestination, handoff.handoffId)
+      attemptAppHandoff(form.buildDestination, handoff.handoffId),
     );
   };
   const retryProvider = (provider: "github" | "vercel") => {
@@ -2160,7 +2155,7 @@ codex plugin add app-builder@autograph`;
         provisioningEnabled,
         retryProvider: provider,
         form,
-      })
+      }),
     );
   };
   useEffect(() => {
@@ -2289,7 +2284,7 @@ export function AppBuilder({
   durableDraftRevision?: number;
   durableDraftUpdatedAt?: string;
   saveActiveBuilderDraftAction?: (
-    input: SaveActiveBuilderDraftInput
+    input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
   loadActiveBuilderDraftAction?: () => Promise<
     BuilderDraftPageData | undefined
@@ -2316,7 +2311,7 @@ export function AppBuilder({
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
       const active = parseActiveProvisioning(
-        sessionStorage.getItem(activeProvisioningStorageKey)
+        sessionStorage.getItem(activeProvisioningStorageKey),
       );
       if (active) {
         setSubmitted(active.form);
@@ -2330,12 +2325,12 @@ export function AppBuilder({
           if (active.provisioning.requestDigest !== "0".repeat(64))
             void fetch(
               `/api/builder/provision?requestId=${encodeURIComponent(active.requestId)}`,
-              { cache: "no-store" }
+              { cache: "no-store" },
             )
               .then(async (response) =>
                 response.ok
                   ? ((await response.json()) as BuilderProvisionResponse)
-                  : undefined
+                  : undefined,
               )
               .then((response) => {
                 if (!response) return;
@@ -2357,7 +2352,7 @@ export function AppBuilder({
     subscribeToClientSnapshot,
     () =>
       providerResumeKey ? readBuilderDraftResume(providerResumeKey) : undefined,
-    () => undefined
+    () => undefined,
   );
   const resumedDraft =
     localResume?.acknowledgedRevision !== undefined &&

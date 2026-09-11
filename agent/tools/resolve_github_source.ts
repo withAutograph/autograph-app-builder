@@ -3,8 +3,8 @@ import { never } from "eve/tools/approval";
 import { z } from "zod";
 
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
-import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
+import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import {
   APP_BUILDER_SOURCE_VERSION,
   sourceWorkflowState,
@@ -31,9 +31,10 @@ const inputSchema = z.strictObject({
 });
 
 export default defineTool({
-  approval: never(),
   description:
     "Automatically resolve and prepare one supported existing GitHub repository. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
+  inputSchema,
+  approval: never(),
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
@@ -61,14 +62,14 @@ export default defineTool({
     repositoryAccessReceiptState.update((current) => {
       if (current?.digest !== access.receipt.digest)
         throw new Error(
-          "Repository access changed concurrently during source preparation."
+          "Repository access changed concurrently during source preparation.",
         );
       return prepared.accessReceipt;
     });
     sourceWorkflowState.update((current) => {
       if (JSON.stringify(current) !== JSON.stringify(initialSource))
         throw new Error(
-          "The reviewed source changed concurrently during GitHub source preparation."
+          "The reviewed source changed concurrently during GitHub source preparation.",
         );
       if (current.phase !== "empty") {
         if (
@@ -76,7 +77,7 @@ export default defineTool({
           current.githubSource?.digest !== prepared.githubSource.digest
         )
           throw new Error(
-            "This app build already owns a different GitHub source binding."
+            "This app build already owns a different GitHub source binding.",
           );
         return current;
       }
@@ -91,7 +92,7 @@ export default defineTool({
       assertExactWorkflowState(
         current,
         initialWorkflow,
-        "GitHub source preparation"
+        "GitHub source preparation",
       );
       if (current.phase !== "empty") {
         if (
@@ -101,7 +102,7 @@ export default defineTool({
           current.githubSource?.digest !== prepared.githubSource.digest
         )
           throw new Error(
-            "This app build already owns a different GitHub source binding."
+            "This app build already owns a different GitHub source binding.",
           );
         return current;
       }
@@ -124,5 +125,4 @@ export default defineTool({
       workspace: prepared.workspace,
     };
   },
-  inputSchema,
 });

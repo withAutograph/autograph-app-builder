@@ -22,11 +22,10 @@ export default defineEval({
     if (
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
-        encoding: "utf-8",
+        encoding: "utf8",
       }) !== ""
-    ) {
+    )
       throw new Error("A canceled approval created a branch.");
-    }
 
     t.notCalledTool("recover_branch_worktree_publication");
     t.notCalledTool("bash");

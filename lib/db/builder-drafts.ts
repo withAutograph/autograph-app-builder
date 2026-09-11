@@ -21,26 +21,26 @@ function authorityPredicate(authorityInput: BuilderDraftAuthority) {
     eq(schema.builderDrafts.issuer, authority.issuer),
     eq(schema.builderDrafts.audience, authority.audience),
     eq(schema.builderDrafts.workspaceId, authority.workspaceId),
-    eq(schema.builderDrafts.ownerUserId, authority.ownerUserId)
+    eq(schema.builderDrafts.ownerUserId, authority.ownerUserId),
   );
 }
 
 function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
   return and(
     authorityPredicate(authority),
-    eq(schema.builderDrafts.draftId, draftId)
+    eq(schema.builderDrafts.draftId, draftId),
   );
 }
 
 function parseRow(
-  row: typeof schema.builderDrafts.$inferSelect
+  row: typeof schema.builderDrafts.$inferSelect,
 ): BuilderDraftRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
-      audience: row.audience,
       issuer: row.issuer,
-      ownerUserId: row.ownerUserId,
+      audience: row.audience,
       workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
     }),
     draftId: row.draftId,
     status: builderDraftStatusSchema.parse(row.status),
@@ -80,42 +80,14 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
       .where(
         and(
           authorityPredicate(authority),
-          eq(schema.builderDrafts.status, "active")
-        )
+          eq(schema.builderDrafts.status, "active"),
+        ),
       )
       .limit(1);
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
 
   return {
-    async archive({ authority, draftId, now }) {
-      const rows = await database
-        .update(schema.builderDrafts)
-        .set({ status: "archived", updatedAt: now })
-        .where(
-          and(
-            rowPredicate(authority, draftId),
-            eq(schema.builderDrafts.status, "active")
-          )
-        )
-        .returning({ draftId: schema.builderDrafts.draftId });
-      return rows.length > 0;
-    },
-    async deleteInactiveSince({ now, maxAgeMs }) {
-      const cutoff = new Date(
-        now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000)
-      );
-      const rows = await database
-        .delete(schema.builderDrafts)
-        .where(
-          and(
-            eq(schema.builderDrafts.status, "active"),
-            lt(schema.builderDrafts.updatedAt, cutoff)
-          )
-        )
-        .returning({ draftId: schema.builderDrafts.draftId });
-      return rows.length;
-    },
     read,
     readActive,
     async saveActive(input) {
@@ -140,8 +112,8 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
               and(
                 rowPredicate(authority, current.draftId),
                 eq(schema.builderDrafts.status, "active"),
-                eq(schema.builderDrafts.revision, current.revision)
-              )
+                eq(schema.builderDrafts.revision, current.revision),
+              ),
             )
             .returning();
           if (rows[0]) {
@@ -191,8 +163,8 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
             .where(
               and(
                 rowPredicate(authority, input.draftId),
-                eq(schema.builderDrafts.status, "archived")
-              )
+                eq(schema.builderDrafts.status, "archived"),
+              ),
             )
             .returning();
           if (restored[0]) {
@@ -207,6 +179,34 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
         }
       }
       throw new Error("builder-draft-contention");
+    },
+    async archive({ authority, draftId, now }) {
+      const rows = await database
+        .update(schema.builderDrafts)
+        .set({ status: "archived", updatedAt: now })
+        .where(
+          and(
+            rowPredicate(authority, draftId),
+            eq(schema.builderDrafts.status, "active"),
+          ),
+        )
+        .returning({ draftId: schema.builderDrafts.draftId });
+      return rows.length > 0;
+    },
+    async deleteInactiveSince({ now, maxAgeMs }) {
+      const cutoff = new Date(
+        now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000),
+      );
+      const rows = await database
+        .delete(schema.builderDrafts)
+        .where(
+          and(
+            eq(schema.builderDrafts.status, "active"),
+            lt(schema.builderDrafts.updatedAt, cutoff),
+          ),
+        )
+        .returning({ draftId: schema.builderDrafts.draftId });
+      return rows.length;
     },
   };
 }

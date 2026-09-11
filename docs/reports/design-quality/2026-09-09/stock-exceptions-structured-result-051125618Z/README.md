@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected record, evidence sections, and replenishment action form a clear task sequence. Selection highlighting and section dividers support scanning, though the two similarly styled notices in the mock-result state have weak semantic distinction. |
-| layout | 3/4 | The two-pane composition is consistently aligned and comfortably spaced at 1024–1920px, with concise 72px list rows and a well-contained detail panel. Empty, filtered, and expanded states remain orderly, but the constrained detail view retains a large filter block for a list that is no longer visible. |
-| typography | 3/4 | Headings, product names, field labels, and values use a consistent scale and predictable alignment. Numerous 10–12px muted labels, metadata lines, and status pills are visually faint; supplied audits repeatedly flag borderline or insufficient contrast, so some supporting information requires extra effort to read. |
-| responsive | 3/4 | The design successfully changes from side-by-side list/detail at 1024px and above to a detail-only composition with a Back control at 700px. Controls remain contained without horizontal overflow, but filters continue to affect hidden list selection in the constrained view, and the 700px mock-result page grows to 1149px with reset available only near the top. |
-| productClarity | 3/4 | Location and severity filtering, exception selection, stock and supplier review, empty-state recovery, and the mock replenishment action are all understandable. The result explicitly states that no order was placed, but its assumption and simulation notices resemble generic fields rather than clearly labeled explanatory messages. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected record, evidence sections, and replenishment action form a clear task sequence. Selection highlighting and section dividers support scanning, though the two similarly styled notices in the mock-result state have weak semantic distinction.                                                                         |
+| layout         | 3/4   | The two-pane composition is consistently aligned and comfortably spaced at 1024–1920px, with concise 72px list rows and a well-contained detail panel. Empty, filtered, and expanded states remain orderly, but the constrained detail view retains a large filter block for a list that is no longer visible.                                                           |
+| typography     | 3/4   | Headings, product names, field labels, and values use a consistent scale and predictable alignment. Numerous 10–12px muted labels, metadata lines, and status pills are visually faint; supplied audits repeatedly flag borderline or insufficient contrast, so some supporting information requires extra effort to read.                                               |
+| responsive     | 3/4   | The design successfully changes from side-by-side list/detail at 1024px and above to a detail-only composition with a Back control at 700px. Controls remain contained without horizontal overflow, but filters continue to affect hidden list selection in the constrained view, and the 700px mock-result page grows to 1149px with reset available only near the top. |
+| productClarity | 3/4   | Location and severity filtering, exception selection, stock and supplier review, empty-state recovery, and the mock replenishment action are all understandable. The result explicitly states that no order was placed, but its assumption and simulation notices resemble generic fields rather than clearly labeled explanatory messages.                              |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/228) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/130) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/228) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/130) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/228) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/130) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/190) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/474) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/221) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/96) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/103) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/96) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/228) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/276) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/130) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/276) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/276) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/190) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/474) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/221) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/96)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/103) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/96)  |
 
 ## Latest-run screenshots
 

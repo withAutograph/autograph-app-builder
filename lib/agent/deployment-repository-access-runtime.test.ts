@@ -1,31 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { BuilderHandoffIntent } from "../handoff/contracts";
-import type {
-  GitHubRepositoryAccessProvider,
-  GitHubRepositoryAccessProviderFactory,
-} from "../integrations/repository-access";
-import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
-import type {
-  RepositoryAccessContinuation,
-  RepositoryAccessContinuationStore,
-} from "../integrations/repository-access-continuation";
 import type {
   HostedGitHubInstallationBinding,
   HostedGitHubInstallationStore,
 } from "../repository/postgres-github-installation-store";
+import type {
+  GitHubRepositoryAccessProvider,
+  GitHubRepositoryAccessProviderFactory,
+} from "../integrations/repository-access";
+import {
+  createRepositoryAccessContinuationService,
+  type RepositoryAccessContinuation,
+  type RepositoryAccessContinuationStore,
+} from "../integrations/repository-access-continuation";
 import { createRepositoryAccessRuntime } from "./deployment-repository-access-runtime";
+import type { BuilderHandoffIntent } from "../handoff/contracts";
 
 const authority = {
-  audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
-  ownerUserId: "user-1",
+  audience: "https://builder.example/mcp",
   workspaceId: "workspace-1",
+  ownerUserId: "user-1",
 };
 const principal = {
+  type: "user" as const,
   id: authority.ownerUserId,
   issuer: authority.issuer,
-  type: "user" as const,
 };
 const connection = { url: authority.audience };
 const continuationId = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
@@ -42,13 +42,17 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
 } {
   const records: RepositoryAccessContinuation[] = [];
   return {
+    records,
+    async create(record) {
+      records.push(record);
+    },
     async authorize(input) {
       const record = records.find(
         (candidate) =>
           candidate.continuationDigest === input.continuationDigest &&
           sameAuthority(candidate.authority, input.authority) &&
           candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now
+          candidate.expiresAt > input.now,
       );
       if (!record) return undefined;
       record.authorizedAt ??= input.now;
@@ -65,14 +69,11 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.selectedInstallationId === input.selectedInstallationId &&
           candidate.authorizedAt !== undefined &&
           candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now
+          candidate.expiresAt > input.now,
       );
       if (!record) return undefined;
       record.consumedAt = input.now;
       return record;
-    },
-    async create(record) {
-      records.push(record);
     },
     async listAuthorizedForSession(input) {
       return records.filter(
@@ -81,29 +82,28 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.sessionId === input.sessionId &&
           candidate.authorizedAt !== undefined &&
           candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now
+          candidate.expiresAt > input.now,
       );
     },
-    records,
   };
 }
 
 const installation: HostedGitHubInstallationBinding = {
+  installationId: "10",
   accountId: "110",
   accountLogin: "withAutograph",
   accountType: "Organization",
   active: true,
-  installationId: "10",
   updatedAt: new Date("2026-09-01T12:00:00.000Z"),
 };
 
 function installationStore(
-  bindings: HostedGitHubInstallationBinding[]
+  bindings: HostedGitHubInstallationBinding[],
 ): HostedGitHubInstallationStore {
   return {
-    bind: vi.fn(),
-    list: vi.fn(async () => bindings),
     read: vi.fn(async () => undefined),
+    list: vi.fn(async () => bindings),
+    bind: vi.fn(),
   };
 }
 
@@ -111,27 +111,27 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
   const provider: GitHubRepositoryAccessProvider = {
     async inspectInstallation({ requestedPermissions }) {
       return {
+        installationId: installation.installationId,
         accountId: installation.accountId,
         accountLogin: installation.accountLogin,
         accountType: installation.accountType,
-        grantedPermissions: requestedPermissions,
-        installationId: installation.installationId,
         repositorySelection: "selected",
         selectedRepositoryIds: input.repositoryAvailable() ? ["200"] : [],
+        grantedPermissions: requestedPermissions,
       };
     },
     async inspectRepositoryByName() {
       return input.repositoryAvailable()
         ? {
+            repositoryId: "200",
+            owner: "withAutograph",
+            name: "app-builder-dogfood",
             archived: false,
+            visibility: "private",
             defaultBranch: "main",
             headSha: "1".repeat(40),
             headTree: "2".repeat(40),
-            name: "app-builder-dogfood",
-            owner: "withAutograph",
-            repositoryId: "200",
             repositoryVariableNames: [],
-            visibility: "private",
           }
         : undefined;
     },
@@ -146,26 +146,26 @@ function runtimeFixture(input?: {
   let available = input?.available ?? false;
   const continuationStore = memoryContinuationStore();
   const continuations = createRepositoryAccessContinuationService({
+    store: continuationStore,
     createId: () => continuationId,
     now: () => new Date("2026-09-01T12:00:00.000Z"),
-    store: continuationStore,
   });
   const runtime = createRepositoryAccessRuntime({
     authority,
-    continuations,
-    installations: installationStore(input?.bindings ?? [installation]),
     origin: "https://builder.example",
+    installations: installationStore(input?.bindings ?? [installation]),
     providerFactory: mutableProvider({
       repositoryAvailable: () => available,
     }),
+    continuations,
   });
   return {
-    continuationStore,
+    runtime,
     continuations,
+    continuationStore,
     makeAvailable: () => {
       available = true;
     },
-    runtime,
   };
 }
 
@@ -175,28 +175,28 @@ describe("deployment repository access authorization", () => {
       repositoryAvailable: () => true,
     });
     const preparedIntent = {
-      providers: { githubInstallationId: "10" },
       repository: {
-        private: true,
         requestedName: "app-builder-dogfood",
+        private: true,
         resolvedFullName: repository,
       },
+      providers: { githubInstallationId: "10" },
     } as unknown as BuilderHandoffIntent;
     const runtime = createRepositoryAccessRuntime({
       authority,
-      continuations: runtimeFixture().continuations,
+      origin: "https://builder.example",
       installations: installationStore([
         installation,
         { ...installation, installationId: "11" },
       ]),
-      origin: "https://builder.example",
-      preparedIntent,
       providerFactory,
+      continuations: runtimeFixture().continuations,
+      preparedIntent,
       returnTo: `/handoff/${continuationId}`,
     });
     expect(await runtime.classify({ repository })).toMatchObject({
-      scope: { installationId: "10" },
       status: "ready",
+      scope: { installationId: "10" },
     });
     expect(providerFactory).toHaveBeenCalledTimes(1);
     expect(providerFactory.mock.calls[0]?.[0]).toMatchObject({
@@ -205,22 +205,22 @@ describe("deployment repository access authorization", () => {
     });
     const authorization = runtime.authorization({
       repository,
-      requestId: "call_one",
       sessionId: "ses_one",
+      requestId: "call_one",
     });
     expect(
-      await authorization.getToken({ connection, principal })
+      await authorization.getToken({ principal, connection }),
     ).toHaveProperty("token");
     providerFactory.mockImplementation(
-      mutableProvider({ repositoryAvailable: () => false })
+      mutableProvider({ repositoryAvailable: () => false }),
     );
     const started = await authorization.startAuthorization({
-      callbackUrl,
-      connection,
       principal,
+      connection,
+      callbackUrl,
     });
     expect(new URL(started.challenge.url!).searchParams.get("returnTo")).toBe(
-      `/handoff/${continuationId}`
+      `/handoff/${continuationId}`,
     );
   });
 
@@ -235,44 +235,44 @@ describe("deployment repository access authorization", () => {
     async (status, headers, expected) => {
       const runtime = createRepositoryAccessRuntime({
         authority,
-        continuations: runtimeFixture().continuations,
-        installations: installationStore([installation]),
         origin: "https://builder.example",
+        installations: installationStore([installation]),
+        continuations: runtimeFixture().continuations,
         providerFactory: () => ({
           inspectInstallation: async () => {
-            throw new Error(JSON.stringify({ status, response: { headers } }));
+            throw { status, response: { headers } };
           },
           inspectRepositoryByName: async () => undefined,
         }),
       });
       expect(
-        await runtime.classify({ repository, selectedInstallationId: "10" })
+        await runtime.classify({ repository, selectedInstallationId: "10" }),
       ).toMatchObject({ status: expected });
-    }
+    },
   );
 
   it("emits the closed Store In presentation while retaining server authority", async () => {
     const fixture = runtimeFixture({ bindings: [] });
     const authorization = fixture.runtime.authorization({
       repository,
-      requestId: "call_one",
       sessionId: "ses_one",
+      requestId: "call_one",
     });
     const started = await authorization.startAuthorization({
-      callbackUrl,
-      connection,
       principal,
+      connection,
+      callbackUrl,
     });
     expect(started).toMatchObject({
       challenge: {
         displayName: "Connect GitHub",
         repositoryAccess: {
-          action: "connect",
           provider: "github",
+          action: "connect",
           repository: {
-            fullName: repository,
-            name: "app-builder-dogfood",
             owner: "withAutograph",
+            name: "app-builder-dogfood",
+            fullName: repository,
           },
           scopes: [],
         },
@@ -282,7 +282,7 @@ describe("deployment repository access authorization", () => {
     expect(started.challenge).not.toHaveProperty("version");
     expect(started.challenge.url).toContain("/github/installations?");
     expect(JSON.stringify(fixture.continuationStore.records)).not.toContain(
-      continuationId
+      continuationId,
     );
   });
 
@@ -290,26 +290,26 @@ describe("deployment repository access authorization", () => {
     const fixture = runtimeFixture();
     const authorization = fixture.runtime.authorization({
       repository,
-      requestId: "call_one",
       selectedInstallationId: "10",
       sessionId: "ses_one",
+      requestId: "call_one",
     });
     const started = await authorization.startAuthorization({
-      callbackUrl,
-      connection,
       principal,
+      connection,
+      callbackUrl,
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const complete = () =>
       authorization.completeAuthorization({
+        principal,
+        connection,
+        callbackUrl,
+        resume: started.resume,
         callback: {
           method: "GET",
           params: { provider: "github", status: "connected" },
         },
-        callbackUrl,
-        connection,
-        principal,
-        resume: started.resume,
       });
 
     await expect(complete()).rejects.toMatchObject({
@@ -323,7 +323,7 @@ describe("deployment repository access authorization", () => {
       token: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(
-      Date
+      Date,
     );
   });
 
@@ -331,43 +331,43 @@ describe("deployment repository access authorization", () => {
     const fixture = runtimeFixture();
     const authorization = fixture.runtime.authorization({
       repository,
-      requestId: "call_one",
       sessionId: "ses_one",
+      requestId: "call_one",
     });
     await authorization.startAuthorization({
-      callbackUrl,
-      connection,
       principal,
+      connection,
+      callbackUrl,
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const fetchImplementation = vi.fn(
       async (
         resource: Parameters<typeof fetch>[0],
-        init?: Parameters<typeof fetch>[1]
+        init?: Parameters<typeof fetch>[1],
       ) => {
         void resource;
         void init;
         return new Response(null, { status: 204 });
-      }
+      },
     );
 
     await expect(
       fixture.runtime.resumeAuthorizedForSession({
-        fetchImplementation,
         sessionId: "ses_one",
-      })
+        fetchImplementation,
+      }),
     ).resolves.toBe(0);
     expect(fetchImplementation).not.toHaveBeenCalled();
 
     fixture.makeAvailable();
     await expect(
       fixture.runtime.resumeAuthorizedForSession({
-        fetchImplementation,
         sessionId: "ses_one",
-      })
+        fetchImplementation,
+      }),
     ).resolves.toBe(1);
     expect(fetchImplementation.mock.calls[0]?.[0]?.toString()).toBe(
-      `${callbackUrl}?provider=github&status=connected`
+      `${callbackUrl}?provider=github&status=connected`,
     );
     expect(fetchImplementation.mock.calls[0]?.[1]).toMatchObject({
       method: "GET",

@@ -11,7 +11,7 @@ export default async function globalSetup(config: FullConfig) {
     ? dirname(config.configFile)
     : process.cwd();
   const secret = (
-    await readFile(resolve(projectRoot, ".emulate/flags-secret"), "utf-8")
+    await readFile(resolve(projectRoot, ".emulate/flags-secret"), "utf8")
   ).trim();
   const override = await encryptOverrides({ passkeys: true }, secret, "1h");
   const storageStatePath = resolve(projectRoot, flagsStorageState);
@@ -22,18 +22,18 @@ export default async function globalSetup(config: FullConfig) {
     JSON.stringify({
       cookies: [
         {
+          name: "vercel-flag-overrides",
+          value: override,
           domain: "localhost",
+          path: "/",
           expires: -1,
           httpOnly: true,
-          name: "vercel-flag-overrides",
-          path: "/",
-          sameSite: "Lax",
           secure: true,
-          value: override,
+          sameSite: "Lax",
         },
       ],
       origins: [],
     }),
-    { mode: 0o600 }
+    { mode: 0o600 },
   );
 }

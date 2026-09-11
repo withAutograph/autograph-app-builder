@@ -10,7 +10,7 @@ import {
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey
-  .export({ format: "pem", type: "pkcs8" })
+  .export({ type: "pkcs8", format: "pem" })
   .toString();
 
 afterEach(() => {
@@ -29,11 +29,11 @@ function readerFetch(input?: {
   totalCount?: number;
   status?: number;
 }) {
-  const calls: { url: string; init: RequestInit }[] = [];
+  const calls: Array<{ url: string; init: RequestInit }> = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
-    calls.push({ init, url });
-    if (url.endsWith("/app/installations/456/access_tokens")) {
+    calls.push({ url, init });
+    if (url.endsWith("/app/installations/456/access_tokens"))
       return json(
         {
           token: "ghs_reader_token_that_is_only_for_this_acquisition",
@@ -48,10 +48,9 @@ function readerFetch(input?: {
             input?.tokenRepositoryIds ?? [ARRUSTED_TEMPLATE_REPOSITORY_ID]
           ).map((id) => ({ id })),
         },
-        input?.status ?? 201
+        input?.status ?? 201,
       );
-    }
-    if (url.includes("/installation/repositories?")) {
+    if (url.includes("/installation/repositories?"))
       return json({
         total_count: input?.totalCount ?? 1,
         repositories: [
@@ -62,7 +61,6 @@ function readerFetch(input?: {
           },
         ],
       });
-    }
     throw new Error(`Unexpected GitHub request: ${url}`);
   };
   return { calls, implementation };
@@ -72,8 +70,8 @@ function reader(fetch: typeof globalThis.fetch) {
   return createArrustedTemplateReader({
     config: {
       appId: "123",
-      installationId: "456",
       privateKey: privateKeyPem,
+      installationId: "456",
     },
     fetch,
   });
@@ -87,26 +85,26 @@ describe("Arrusted private template reader", () => {
     });
 
     const tokenCall = mock.calls.find(({ url }) =>
-      url.endsWith("/app/installations/456/access_tokens")
+      url.endsWith("/app/installations/456/access_tokens"),
     );
     expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
-      permissions: { checks: "read", contents: "read" },
+      permissions: { contents: "read", checks: "read" },
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });
     expect(
       mock.calls.filter(({ url }) =>
-        url.includes("/installation/repositories?")
-      )
+        url.includes("/installation/repositories?"),
+      ),
     ).toHaveLength(1);
   });
 
   it("accepts additional read-only permissions on a repository-scoped token", async () => {
     const mock = readerFetch({
       permissions: {
-        checks: "read",
-        contents: "read",
-        issues: "read",
         metadata: "read",
+        contents: "read",
+        checks: "read",
+        issues: "read",
       },
     });
 
@@ -120,14 +118,14 @@ describe("Arrusted private template reader", () => {
     const mock = readerFetch({ status: 403 });
 
     await expect(reader(mock.implementation).acquire()).rejects.toThrow(
-      "template reader is unavailable"
+      "template reader is unavailable",
     );
 
     expect(warning).toHaveBeenCalledWith(
       JSON.stringify({
         event: "autograph.template-reader.failed",
         stage: "token_mint",
-      })
+      }),
     );
     expect(JSON.stringify(warning.mock.calls)).not.toContain(privateKeyPem);
     expect(JSON.stringify(warning.mock.calls)).not.toContain("ghs_");
@@ -136,24 +134,24 @@ describe("Arrusted private template reader", () => {
   it.each([
     {
       permissions: {
-        checks: "read",
-        contents: "read",
-        issues: "write",
         metadata: "read",
+        contents: "read",
+        checks: "read",
+        issues: "write",
       },
     },
     { tokenRepositoryIds: [101] },
     {
       repository: {
-        full_name: "withAutograph/another-private-repository",
         id: 101,
+        full_name: "withAutograph/another-private-repository",
         private: true,
       },
     },
     {
       repository: {
-        full_name: "withAutograph/arrusted-development",
         id: ARRUSTED_TEMPLATE_REPOSITORY_ID + 1,
+        full_name: "withAutograph/arrusted-development",
         private: true,
       },
     },
@@ -163,22 +161,22 @@ describe("Arrusted private template reader", () => {
     async (input) => {
       const mock = readerFetch(input);
       await expect(reader(mock.implementation).acquire()).rejects.toThrow(
-        "template reader is unavailable"
+        "template reader is unavailable",
       );
-    }
+    },
   );
 
   it("fails closed when the deployment-owned reader configuration is absent", () => {
     expect(() => readDeploymentArrustedTemplateReaderConfig({})).toThrow(
-      "template reader is unavailable"
+      "template reader is unavailable",
     );
     expect(() =>
       readDeploymentArrustedTemplateReaderConfig({
-        APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID: "456",
         GITHUB_APP_ID: "123",
         GITHUB_APP_PRIVATE_KEY: privateKeyPem,
+        APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID: "456",
         GITHUB_TOKEN: "forbidden-ambient-token",
-      })
+      }),
     ).not.toThrow();
   });
 });

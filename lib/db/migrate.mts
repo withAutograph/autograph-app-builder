@@ -4,8 +4,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 import { readPrivateDatabaseUrl } from "./private-database-url";
+import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 
 if (
   process.argv.length !== 4 ||

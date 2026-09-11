@@ -1,31 +1,30 @@
-import { Suspense } from "react";
-import { SiVercel } from "react-icons/si";
-
-import {
-  ProviderConnection,
-  ProviderConnectionNotice,
-} from "@/app/ui/provider-connection";
-import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
 import {
   parseProviderConnectionFailureReason,
   providerConnectionFailureMessage,
 } from "@/lib/integrations/provider-connection-status";
+import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
+import {
+  ProviderConnection,
+  ProviderConnectionNotice,
+} from "@/app/ui/provider-connection";
+import { Suspense } from "react";
+import { SiVercel } from "react-icons/si";
 
-interface Props {
+type Props = {
   searchParams: Promise<{
     status?: string | string[];
     reason?: string | string[];
     returnTo?: string | string[];
     resume?: string | string[];
   }>;
-}
+};
 
 async function VercelInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
-    resumeKey: resume,
     returnTo,
+    resumeKey: resume,
   });
   return (
     <ProviderConnection

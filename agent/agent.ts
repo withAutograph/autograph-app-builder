@@ -1,11 +1,12 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
+
 import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
-import { activeBuilderModelId } from "@/lib/integrations/active-model";
-import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { activeBuilderModelId } from "@/lib/integrations/active-model";
 
 export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
@@ -185,15 +186,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("component-backed renewal review ui")) {
     const path = lastUserMessage?.match(
-      /supported repository at (\/\S+)/iu
+      /supported repository at (\/\S+)/iu,
     )?.[1];
-    if (path === undefined) {
+    if (path === undefined)
       return "I need the supported project location before I can shape the renewal review.";
-    }
     const inspection = toolResults.find(
-      ({ name }) => name === "inspect_source"
+      ({ name }) => name === "inspect_source",
     );
-    if (inspection === undefined) {
+    if (inspection === undefined)
       return {
         toolCalls: [
           {
@@ -205,11 +205,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const preparation = toolResults.find(
-      ({ name }) => name === "prepare_workspace"
+      ({ name }) => name === "prepare_workspace",
     );
-    if (preparation === undefined) {
+    if (preparation === undefined)
       return {
         toolCalls: [
           {
@@ -218,11 +217,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const preview = toolResults.find(
-      ({ name }) => name === "record_ui_preview"
+      ({ name }) => name === "record_ui_preview",
     );
-    if (preview === undefined) {
+    if (preview === undefined)
       return {
         toolCalls: [
           {
@@ -231,32 +229,26 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (preview.isError) {
+    if (preview.isError)
       return "I couldn't produce a reliable renewal review preview.";
-    }
     return "I shaped **Renewal Review** around a prioritized 90-day queue using the existing table and review components. The preview is ready to explore; the intervention-owner choice remains open, and no functionality or live data has been planned yet.";
   }
-  if (message.includes("uncertain vendor workflow brief")) {
+  if (message.includes("uncertain vendor workflow brief"))
     return "These lead to meaningfully different products. Which outcome should lead the first version: getting each new vendor approved once (recommended, because it delivers the fastest operational value), or continuously monitoring vendors after approval (broader scope with recurring compliance work)?";
-  }
-  if (message.includes("anonymous public vendor portal")) {
+  if (message.includes("anonymous public vendor portal"))
     return "An anonymous public vendor portal is unavailable in this product path. The recommended alternative is an internal **Vendor Intake** experience with an operations review queue and vendor detail panel, paired with secure upload requests sent through your existing intake channel.";
-  }
-  if (message.includes("full-page step-by-step form")) {
+  if (message.includes("full-page step-by-step form"))
     return "I’ll call this **Vendor Onboarding** and use the requested full-page step-by-step form for a single requester. The conditional Finance review appears only when tax information makes it relevant.";
-  }
   if (message.includes("internal vendor-onboarding workflow")) {
     const path = lastUserMessage?.match(
-      /supported repository at (\/\S+)/iu
+      /supported repository at (\/\S+)/iu,
     )?.[1];
-    if (path === undefined) {
+    if (path === undefined)
       return "I need the supported project location before I can start this prototype.";
-    }
     const inspection = toolResults.find(
-      ({ name }) => name === "inspect_source"
+      ({ name }) => name === "inspect_source",
     );
-    if (inspection === undefined) {
+    if (inspection === undefined)
       return {
         toolCalls: [
           {
@@ -268,57 +260,53 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (inspection.isError) {
+    if (inspection.isError)
       return "I couldn't use this project because it is not currently eligible for app creation.";
-    }
     const source = inspection.output as { digest?: string } | undefined;
     const preparation = toolResults.find(
-      ({ name }) => name === "prepare_workspace"
+      ({ name }) => name === "prepare_workspace",
     );
     if (preparation === undefined) {
-      if (source?.digest === undefined) {
+      if (source?.digest === undefined)
         return "I couldn't verify this project for app creation.";
-      }
       return {
         toolCalls: [
           {
-            input: {},
             name: "prepare_workspace",
+            input: {},
           },
         ],
       };
     }
-    if (preparation.isError) {
+    if (preparation.isError)
       return "The project changed while I was getting it ready, so I stopped before designing against stale information.";
-    }
     const artifacts = toolResults.filter(
-      ({ name }) => name === "record_prototype_artifact"
+      ({ name }) => name === "record_prototype_artifact",
     );
     const recordedPaths = new Set(
       artifacts.flatMap((artifact) => {
         const path = (artifact.output as { path?: string } | undefined)?.path;
         return artifact.isError || path === undefined ? [] : [path];
-      })
+      }),
     );
     const missingArtifact = [
       {
-        content: vendorOnboardingPrototype,
-        mediaType: "text/html" as const,
         path: "prototype/vendor-onboarding/index.html",
+        mediaType: "text/html" as const,
+        content: vendorOnboardingPrototype,
       },
       {
-        content: vendorOnboardingDecisions,
-        mediaType: "text/markdown" as const,
         path: "prototype/vendor-onboarding/decisions.md",
+        mediaType: "text/markdown" as const,
+        content: vendorOnboardingDecisions,
       },
       {
-        content: vendorOnboardingAppSpec,
-        mediaType: "text/markdown" as const,
         path: "prototype/vendor-onboarding/app-spec.md",
+        mediaType: "text/markdown" as const,
+        content: vendorOnboardingAppSpec,
       },
     ].find(({ path: artifactPath }) => !recordedPaths.has(artifactPath));
-    if (missingArtifact !== undefined) {
+    if (missingArtifact !== undefined)
       return {
         toolCalls: [
           {
@@ -327,35 +315,32 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (artifacts.some(({ isError }) => isError)) {
+    if (artifacts.some(({ isError }) => isError))
       return "I couldn't finish the first prototype artifact, so I stopped without treating it as reviewable.";
-    }
     const appSpecArtifacts = artifacts.filter(
       (artifact) =>
         (artifact.output as { path?: string } | undefined)?.path ===
-        "prototype/vendor-onboarding/app-spec.md"
+        "prototype/vendor-onboarding/app-spec.md",
     );
     const acceptanceResults = toolResults.filter(
-      ({ name }) => name === "accept_app_spec"
+      ({ name }) => name === "accept_app_spec",
     );
     const latestAcceptance = acceptanceResults.at(-1);
     const repairDiagnostic = (() => {
       if (
         latestAcceptance?.isError !== true ||
         typeof latestAcceptance.output !== "string"
-      ) {
+      )
         return undefined;
-      }
       try {
         return JSON.parse(
-          latestAcceptance.output.replace(/^Error:\s*/u, "")
+          latestAcceptance.output.replace(/^Error:\s*/u, ""),
         ) as {
           code?: string;
           issues?: { code?: string }[];
         };
       } catch {
-        return;
+        return undefined;
       }
     })();
     if (
@@ -363,11 +348,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       repairDiagnostic?.code === "app_spec_invalid" &&
       repairDiagnostic.issues?.some(
         ({ code }) =>
-          code === "missing_heading" || code === "build_handoff_format"
+          code === "missing_heading" || code === "build_handoff_format",
       ) === true &&
       appSpecArtifacts.length === 1 &&
       acceptanceResults.length === 1
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -380,10 +365,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const currentAppSpec = appSpecArtifacts.at(-1)?.output as
-      | { digest?: string; revision?: string }
-      | undefined;
+      { digest?: string; revision?: string } | undefined;
     const workspace = preparation.output as
       | {
           sourceSha?: string;
@@ -400,7 +383,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       workspace.sourceTree !== undefined &&
       workspace.eligibilityDigest !== undefined &&
       workspace.workspaceDigest !== undefined
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -413,18 +396,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (latestAcceptance?.isError === true) {
+    if (latestAcceptance?.isError === true)
       return "One product decision is still too unclear to produce a reliable implementation plan.";
-    }
     const accepted = latestAcceptance?.output as
-      | { digest?: string }
-      | undefined;
-    if (accepted?.digest === undefined) {
+      { digest?: string } | undefined;
+    if (accepted?.digest === undefined)
       return "The product direction is not complete enough to plan reliably yet.";
-    }
     const plan = toolResults.find(({ name }) => name === "plan_app_creation");
-    if (plan === undefined) {
+    if (plan === undefined)
       return {
         toolCalls: [
           {
@@ -433,86 +412,79 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (plan.isError) {
+    if (plan.isError)
       return "A real project conflict prevents this product direction from becoming a reliable plan.";
-    }
     const planned = plan.output as { digest?: string } | undefined;
     const application = toolResults.find(
-      ({ name }) => name === "apply_app_creation"
+      ({ name }) => name === "apply_app_creation",
     );
     if (application === undefined) {
-      if (planned?.digest === undefined) {
+      if (planned?.digest === undefined)
         return "I couldn't safely prepare this product direction for review.";
-      }
       return {
         toolCalls: [
           {
+            name: "apply_app_creation",
             input: {
               productSummary:
                 "Build the operations review queue, vendor detail panel, and conditional Finance tax-verification workflow shown in the preview.",
             },
-            name: "apply_app_creation",
           },
         ],
       };
     }
-    if (application.isError) {
+    if (application.isError)
       return "I couldn't finish assembling this product direction for review.";
-    }
     const validation = toolResults.find(
-      ({ name }) => name === "validate_app_creation"
+      ({ name }) => name === "validate_app_creation",
     );
     if (validation === undefined) {
       return {
         toolCalls: [
           {
-            input: {},
             name: "validate_app_creation",
+            input: {},
           },
         ],
       };
     }
-    if (validation.isError) {
+    if (validation.isError)
       return "The assembled app needs another revision before it is ready to review.";
-    }
     const changeSet = toolResults.find(
-      ({ name }) => name === "change_set_status"
+      ({ name }) => name === "change_set_status",
     );
     if (changeSet === undefined) {
       return {
         toolCalls: [
           {
-            input: {},
             name: "change_set_status",
+            input: {},
           },
         ],
       };
     }
-    if (changeSet.isError) {
+    if (changeSet.isError)
       return "I couldn't prepare the completed app changes for review.";
-    }
     const review = toolResults.find(({ name }) => name === "accept_change_set");
     if (review === undefined) {
       return {
         toolCalls: [
           {
-            input: {},
             name: "accept_change_set",
+            input: {},
           },
         ],
       };
     }
-    if (review.isError) {
+    if (review.isError)
       return "I couldn't finish preparing the completed app for review.";
-    }
     return "I inferred **Vendor Onboarding** with app ID `vendor-onboarding`. The interactive prototype now covers an operations review queue, an in-context vendor detail panel, and a conditional Finance verification step for tax-reportable vendors. The implementation plan and complete app changes passed their checks and are ready to review. If you want to continue, I can prepare a draft pull request for the repository.";
   }
   if (message.includes("record three prototype artifacts in parallel")) {
     const recorded = toolResults.filter(
-      ({ name }) => name === "record_prototype_artifact"
+      ({ name }) => name === "record_prototype_artifact",
     );
-    if (recorded.length === 0) {
+    if (recorded.length === 0)
       return {
         toolCalls: [
           {
@@ -541,19 +513,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     return recorded.length === 3 && recorded.every(({ isError }) => !isError)
       ? "All three prototype artifacts were recorded."
       : "The parallel prototype artifact batch did not settle atomically.";
   }
   if (message.includes("github publication status")) {
     const result = toolResults.at(-1);
-    if (result?.name !== "github_publication_status") {
+    if (result?.name !== "github_publication_status")
       return { toolCalls: [{ name: "github_publication_status", input: {} }] };
-    }
-    if (result.isError) {
+    if (result.isError)
       return "The typed GitHub publication status could not be verified.";
-    }
     const status = result.output as
       | {
           enabled?: boolean;
@@ -572,19 +541,18 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   }
   if (message.includes("report artifact workflow status")) {
     const result = toolResults.at(-1);
-    if (result?.name !== "artifact_workflow_status") {
+    if (result?.name !== "artifact_workflow_status")
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
-    }
     return result.isError
       ? "The artifact workflow status could not be verified."
       : `Artifact workflow status: ${JSON.stringify(result.output)}`;
   }
   if (message.includes("inspect existing vendor application")) {
     const inspections = toolResults.filter(
-      ({ name }) => name === "inspect_existing_app"
+      ({ name }) => name === "inspect_existing_app",
     );
     const latest = inspections.at(-1);
-    if (latest === undefined) {
+    if (latest === undefined)
       return {
         toolCalls: [
           {
@@ -593,10 +561,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (latest.isError) {
+    if (latest.isError)
       return "The existing Vendor application could not be inspected safely.";
-    }
     const result = latest.output as
       | {
           availablePaths?: readonly string[];
@@ -605,22 +571,21 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       | undefined;
     if ((result?.files?.length ?? 0) === 0) {
       const candidates = result?.availablePaths?.filter((candidate) =>
-        /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate)
+        /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
       );
       const path =
         candidates?.find((candidate) =>
-          /(?:^|\/)page[.]tsx$/u.test(candidate)
+          /(?:^|\/)page[.]tsx$/u.test(candidate),
         ) ??
         candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
         candidates?.at(0);
-      if (path === undefined) {
+      if (path === undefined)
         return "The existing Vendor application has no bounded source file suitable for iteration.";
-      }
       return {
         toolCalls: [
           {
-            input: { appId: "vendor", paths: [path] },
             name: "inspect_existing_app",
+            input: { appId: "vendor", paths: [path] },
           },
         ],
       };
@@ -629,7 +594,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   }
   if (message.includes("retry target planning")) {
     const planResults = toolResults.filter(
-      ({ name }) => name === "plan_app_creation"
+      ({ name }) => name === "plan_app_creation",
     );
     const requiredResults = 2;
     const statusResult = [...toolResults]
@@ -639,17 +604,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       statusResult === undefined ||
       (planResults.length < requiredResults &&
         toolResults.at(-1)?.name === "plan_app_creation")
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = statusResult.output as
-      | { appSpec?: { digest?: string }; phase?: string }
-      | undefined;
-    if (status?.phase !== "planned" || status.appSpec?.digest === undefined) {
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase !== "planned" || status.appSpec?.digest === undefined)
       return "A completed target plan is required before retry.";
-    }
     const planResult = planResults.at(-1);
-    if (planResults.length < requiredResults) {
+    if (planResults.length < requiredResults)
       return {
         toolCalls: [
           {
@@ -658,13 +620,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (planResult === undefined) {
+    if (planResult === undefined)
       return "The target-planning retry result is unavailable.";
-    }
-    if (planResult.isError) {
+    if (planResult.isError)
       return "The target-planning retry failed; inspect its actual error.";
-    }
     const output = planResult.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
@@ -683,12 +642,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       (observedPhase !== "app_spec_accepted" &&
         observedPhase !== "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = statusResult.output as
-      | { appSpec?: { digest?: string }; phase?: string }
-      | undefined;
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
     if (status?.phase === "planned") {
       return lostResponse
         ? "The lost-response retry reused the exact durable dependency-preparation receipt."
@@ -697,17 +654,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       status?.phase !== "app_spec_accepted" &&
       status?.phase !== "dependencies_prepared"
-    ) {
+    )
       return "An accepted AppSpec is required before dependency preparation.";
-    }
-    if (status.appSpec?.digest === undefined) {
+    if (status.appSpec?.digest === undefined)
       return "The accepted AppSpec digest is unavailable.";
-    }
     const preparations = toolResults.filter(
-      ({ name }) => name === "prepare_target_dependencies"
+      ({ name }) => name === "prepare_target_dependencies",
     );
     const requiredResults = lostResponse ? 2 : 1;
-    if (preparations.length < requiredResults) {
+    if (preparations.length < requiredResults)
       return {
         toolCalls: [
           {
@@ -716,14 +671,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const preparation = preparations.at(-1);
-    if (preparation === undefined) {
+    if (preparation === undefined)
       return "The dependency-preparation result is unavailable.";
-    }
-    if (preparation.isError) {
+    if (preparation.isError)
       return "Dependency setup failed; inspect its actual error.";
-    }
     const output = preparation.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The lost-response retry reused the exact durable dependency-preparation receipt."
@@ -738,21 +690,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ((statusResult.output as { phase?: string } | undefined)?.phase !==
         "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = statusResult.output as
-      | { appSpec?: { digest?: string }; phase?: string }
-      | undefined;
-    if (status?.phase === "planned") {
+      { appSpec?: { digest?: string }; phase?: string } | undefined;
+    if (status?.phase === "planned")
       return "The app is ready in the private preview.";
-    }
     if (
       status?.phase !== "dependencies_prepared" ||
       status.appSpec?.digest === undefined
-    ) {
+    )
       return "Approved offline dependency preparation is required before target planning.";
-    }
     const latestResult = toolResults.at(-1);
     const planResult =
       latestResult?.name === "plan_app_creation" ? latestResult : undefined;
@@ -760,28 +708,27 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       const existing = [...toolResults]
         .reverse()
         .find(({ name }) => name === "inspect_existing_app")?.output as
-        | { files?: readonly { path: string; content: string }[] }
-        | undefined;
+        { files?: readonly { path: string; content: string }[] } | undefined;
       const existingAppChanges = existing?.files?.flatMap(
         ({ path, content }) => {
           const changed = content.replace(
             /(return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
             (opening) =>
-              `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`
+              `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
           );
-          return changed === content ? [] : [{ content: changed, path }];
-        }
+          return changed === content ? [] : [{ path, content: changed }];
+        },
       );
       return {
         toolCalls: [
           {
+            name: "plan_app_creation",
             input: {
               ...(existingAppChanges === undefined ||
               existingAppChanges.length === 0
                 ? {}
                 : { existingAppChanges }),
             },
-            name: "plan_app_creation",
           },
         ],
       };
@@ -798,30 +745,29 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale proposal digest");
     const lostResponse = message.includes("lost response");
     const applications = toolResults.filter(
-      ({ name }) => name === "apply_app_creation"
+      ({ name }) => name === "apply_app_creation",
     );
     const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
     const statusResults = toolResults.filter(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     const latestStatus = statusResults.at(-1);
     const latestApplyIndex = toolResults.findLastIndex(
-      ({ name }) => name === "apply_app_creation"
+      ({ name }) => name === "apply_app_creation",
     );
     const latestPlanIndex = toolResults.findLastIndex(
-      ({ name }) => name === "plan_app_creation"
+      ({ name }) => name === "plan_app_creation",
     );
     const latestStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     if (
       latestStatus === undefined ||
       latestPlanIndex > latestStatusIndex ||
       (applications.length >= requiredResults &&
         latestApplyIndex > latestStatusIndex)
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -833,33 +779,29 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "planned" &&
       status?.phase !== "apply_failed" &&
       status?.phase !== "applied"
-    ) {
+    )
       return "I need a complete implementation plan before I can prepare the app.";
-    }
     if (applications.length < requiredResults) {
       const proposalDigest = status.proposal?.digest;
-      if (proposalDigest === undefined) {
+      if (proposalDigest === undefined)
         return "I couldn't safely prepare the app from the current plan.";
-      }
       return {
         toolCalls: [
           {
+            name: "apply_app_creation",
             input: {
               expectedProposalDigest: stale ? "0".repeat(64) : proposalDigest,
             },
-            name: "apply_app_creation",
           },
         ],
       };
     }
     const result = applications.at(-1);
     if (result?.isError) {
-      if (stale) {
+      if (stale)
         return "The product plan changed, so I stopped before preparing the app.";
-      }
-      if (status.phase === "apply_failed") {
+      if (status.phase === "apply_failed")
         return "I couldn't finish preparing the app safely. The current plan remains available to review.";
-      }
       return "I couldn't safely prepare the app. The current plan remains available to review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
@@ -874,29 +816,26 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const content = "replacement artifact";
     const digest = sha256(content);
     const results = toolResults.filter(
-      ({ name }) => name === "record_prototype_artifact"
+      ({ name }) => name === "record_prototype_artifact",
     );
     const latest = results.at(-1);
     const matching = results.filter(
       (result) =>
         !result.isError &&
-        (result.output as { digest?: string } | undefined)?.digest === digest
+        (result.output as { digest?: string } | undefined)?.digest === digest,
     );
     const requiredMatches = message.includes("retry recording") ? 2 : 1;
     const failedRecordings = results.filter(({ isError }) => isError).length;
     if (
       latest?.isError &&
       (!message.includes("retry recording") || failedRecordings >= 2)
-    ) {
+    )
       return "Prototype artifact recording was canceled; durable state was not changed.";
-    }
     if (matching.length >= requiredMatches) {
       const output = matching.at(-1)?.output as
-        | { invalidated?: boolean; reused?: boolean }
-        | undefined;
-      if (output?.reused === true) {
+        { invalidated?: boolean; reused?: boolean } | undefined;
+      if (output?.reused === true)
         return "The retry reused the exact stored artifact revision without changing durable state.";
-      }
       return output?.invalidated === true
         ? "The new artifact revision invalidated the accepted AppSpec and proposal."
         : "The new artifact revision was recorded.";
@@ -904,12 +843,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return {
       toolCalls: [
         {
-          input: {
-            content,
-            mediaType: "text/markdown",
-            path: "prototype/expense-review/app-spec.md",
-          },
           name: "record_prototype_artifact",
+          input: {
+            path: "prototype/expense-review/app-spec.md",
+            mediaType: "text/markdown",
+            content,
+          },
         },
       ],
     };
@@ -922,26 +861,25 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale apply digest");
     const lostResponse = message.includes("lost response");
     const validations = toolResults.filter(
-      ({ name }) => name === "validate_app_creation"
+      ({ name }) => name === "validate_app_creation",
     );
     const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
     const statusResults = toolResults.filter(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     const latestStatus = statusResults.at(-1);
     const latestValidationIndex = toolResults.findLastIndex(
-      ({ name }) => name === "validate_app_creation"
+      ({ name }) => name === "validate_app_creation",
     );
     const latestStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     if (
       latestStatus === undefined ||
       (validations.length >= requiredResults &&
         latestValidationIndex > latestStatusIndex)
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -953,36 +891,31 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "validation_pending" &&
       status?.phase !== "validation_failed" &&
       status?.phase !== "validated"
-    ) {
+    )
       return "The app must be prepared before I can run its quality checks.";
-    }
     if (validations.length < requiredResults) {
       const applyDigest = status.apply?.digest;
-      if (applyDigest === undefined) {
+      if (applyDigest === undefined)
         return "I couldn't safely run checks against the current app.";
-      }
       return {
         toolCalls: [
           {
+            name: "validate_app_creation",
             input: {
               expectedApplyDigest: stale ? "0".repeat(64) : applyDigest,
             },
-            name: "validate_app_creation",
           },
         ],
       };
     }
     const result = validations.at(-1);
     if (result?.isError) {
-      if (stale) {
+      if (stale)
         return "The app changed before checks could start, so I stopped safely.";
-      }
-      if (status.phase === "validation_pending") {
+      if (status.phase === "validation_pending")
         return "The app checks did not finish, so the current preview still needs review.";
-      }
-      if (status.phase === "validation_failed") {
+      if (status.phase === "validation_failed")
         return "The app did not pass its quality checks and needs another revision.";
-      }
       return "I couldn't safely finish the app checks. The current preview still needs review.";
     }
     const output = result?.output as { reused?: boolean } | undefined;
@@ -999,26 +932,24 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale change set");
     const retry = message.includes("retry change-set acceptance");
     const accepted = toolResults.filter(
-      ({ name }) => name === "accept_change_set"
+      ({ name }) => name === "accept_change_set",
     );
     const requiredAccepts = stale ? 3 : retry ? 2 : 1;
     const status = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_status");
     const latestStatus = status?.output as
-      | { phase?: string; validation?: { digest?: string } }
-      | undefined;
+      { phase?: string; validation?: { digest?: string } } | undefined;
     if (
       status === undefined ||
       (latestStatus?.phase !== "validated" &&
         latestStatus?.phase !== "reviewed")
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const proposal = [...toolResults]
       .reverse()
       .find(({ name }) => name === "change_set_status");
-    if (proposal === undefined) {
+    if (proposal === undefined)
       return {
         toolCalls: [
           {
@@ -1029,11 +960,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     if (message.includes("inspect the validated change set")) {
-      if (proposal.isError) {
+      if (proposal.isError)
         return "I couldn't prepare the completed app changes for review.";
-      }
       const output = proposal.output as
         | {
             digest?: string;
@@ -1047,18 +976,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            input: {},
             name: "accept_change_set",
+            input: {},
           },
         ],
       };
     }
     const result = accepted.at(-1);
-    if (result?.isError) {
+    if (result?.isError)
       return stale
         ? "The app changed before review could finish, so I stopped safely."
         : "I couldn't safely prepare the completed app changes for review.";
-    }
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The same completed app changes remain ready for review. If you want to continue, I can prepare a draft pull request for the repository."
@@ -1069,26 +997,24 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("publish fresh repository bootstrap at ")
   ) {
     const destinationPath = lastUserMessage?.match(
-      /(?:inspect|publish) fresh repository bootstrap at (\/\S+)/iu
+      /(?:inspect|publish) fresh repository bootstrap at (\/\S+)/iu,
     )?.[1];
-    if (destinationPath === undefined) {
+    if (destinationPath === undefined)
       return "The fresh repository destination is missing.";
-    }
     const review = [...toolResults]
       .reverse()
       .find(({ name, isError }) => name === "accept_change_set" && !isError)
       ?.output as { digest?: string } | undefined;
-    if (review?.digest === undefined) {
+    if (review?.digest === undefined)
       return "An exact accepted fresh-template change set is required.";
-    }
     const statusResults = toolResults.filter(
-      ({ name }) => name === "fresh_bootstrap_status"
+      ({ name }) => name === "fresh_bootstrap_status",
     );
     const status = statusResults.at(-1);
     if (
       status === undefined ||
       (message.includes("stale review") && statusResults.length < 2)
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1112,15 +1038,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (status.isError) {
+    if (status.isError)
       return "Fresh repository bootstrap status was rejected without target mutation.";
-    }
-    if (message.includes("inspect fresh repository bootstrap")) {
+    if (message.includes("inspect fresh repository bootstrap"))
       return `Fresh repository bootstrap proposal: ${JSON.stringify(status.output)}. Publication requires a separate approval.`;
-    }
     const publications = toolResults.filter(
-      ({ name }) => name === "publish_fresh_repository"
+      ({ name }) => name === "publish_fresh_repository",
     );
     if (publications.length === 0) {
       const publication = { ...(status.output as Record<string, unknown>) };
@@ -1131,16 +1054,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            input: { publication },
             name: "publish_fresh_repository",
+            input: { publication },
           },
         ],
       };
     }
     const publication = publications.at(-1);
-    if (publication?.isError) {
+    if (publication?.isError)
       return "Fresh repository publication was canceled, stale, or recovery-required; no other publication tool was used.";
-    }
     return "The exact approved fresh-template result was atomically published as one parentless SHA-1 local repository with no remotes and release disabled.";
   }
   if (
@@ -1148,23 +1070,21 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("retry fresh repository recovery after a lost response")
   ) {
     const latestRecoveryIndex = toolResults.findLastIndex(
-      ({ name }) => name === "recover_fresh_repository"
+      ({ name }) => name === "recover_fresh_repository",
     );
     const latestStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "artifact_workflow_status"
+      ({ name }) => name === "artifact_workflow_status",
     );
     if (
       message.includes("lost response") &&
       latestRecoveryIndex > latestStatusIndex
-    ) {
+    )
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
-    }
     const status = [...toolResults]
       .reverse()
       .find(({ name }) => name === "artifact_workflow_status");
-    if (status === undefined) {
+    if (status === undefined)
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
-    }
     const workflow = status.output as
       | {
           phase?: string;
@@ -1174,20 +1094,18 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       workflow?.phase === "published_fresh_bootstrap" &&
       message.includes("lost response")
-    ) {
+    )
       return "The lost-response recovery retry reused the exact durable fresh-bootstrap success receipt without redispatching recovery or another publication tool.";
-    }
     if (
       workflow?.phase !== "fresh_bootstrap_failed" ||
       workflow.freshBootstrap?.digest === undefined ||
       workflow.freshBootstrap.proposalDigest === undefined
-    ) {
+    )
       return "An exact recovery-required fresh-bootstrap receipt is required.";
-    }
     const recoveries = toolResults.filter(
-      ({ name }) => name === "recover_fresh_repository"
+      ({ name }) => name === "recover_fresh_repository",
     );
-    if (recoveries.length === 0) {
+    if (recoveries.length === 0)
       return {
         toolCalls: [
           {
@@ -1199,20 +1117,18 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const recovery = recoveries.at(-1);
-    if (recovery?.isError) {
+    if (recovery?.isError)
       return "Fresh repository recovery was canceled or rejected; the exact recovery-required receipt remains authoritative.";
-    }
     return "The separately approved exact fresh-repository recovery completed without using another publication or mutation tool.";
   }
   if (
     message.includes("publish reviewed change set to a new branch worktree") ||
     message.includes(
-      "publish reviewed change set with stale branch preconditions"
+      "publish reviewed change set with stale branch preconditions",
     ) ||
     message.includes(
-      "retry branch worktree publication after a lost response"
+      "retry branch worktree publication after a lost response",
     ) ||
     message.includes("recover branch worktree publication")
   ) {
@@ -1221,39 +1137,37 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const status = [...toolResults]
       .reverse()
       .find(({ name }) => name === "artifact_workflow_status");
-    if (status === undefined) {
+    if (status === undefined)
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
-    }
     const reviewDigest = (
       status.output as { review?: { digest?: string } } | undefined
     )?.review?.digest;
-    if (reviewDigest === undefined) {
+    if (reviewDigest === undefined)
       return "An exact reviewed receipt is required before branch-worktree publication.";
-    }
     const publicationStatuses = toolResults.filter(
-      ({ name }) => name === "branch_worktree_publication_status"
+      ({ name }) => name === "branch_worktree_publication_status",
     );
     const latestMutation = [...toolResults]
       .reverse()
       .find(
         ({ name }) =>
           name === "publish_reviewed_change_set_to_branch_worktree" ||
-          name === "recover_branch_worktree_publication"
+          name === "recover_branch_worktree_publication",
       );
     const latestMutationIndex = toolResults.findLastIndex(
       ({ name }) =>
         name === "publish_reviewed_change_set_to_branch_worktree" ||
-        name === "recover_branch_worktree_publication"
+        name === "recover_branch_worktree_publication",
     );
     const latestBranchStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "branch_worktree_publication_status"
+      ({ name }) => name === "branch_worktree_publication_status",
     );
     const latestStatus = publicationStatuses.at(-1);
     if (
       latestStatus === undefined ||
       (latestMutation !== undefined &&
         latestBranchStatusIndex < latestMutationIndex)
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1262,17 +1176,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (latestStatus.isError || latestStatus.output === undefined) {
+    if (latestStatus.isError || latestStatus.output === undefined)
       return stale
         ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
         : "Branch-worktree publication preconditions were rejected without mutating the source checkout.";
-    }
     const output = latestStatus.output as Record<string, unknown>;
     const proposal = { ...output };
-    if (typeof proposal.proposalDigest === "string") {
+    if (typeof proposal.proposalDigest === "string")
       proposal.digest = proposal.proposalDigest;
-    }
     for (const key of [
       "workflowPhase",
       "transactionWindow",
@@ -1296,17 +1207,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       "worktreeRemoteDigest",
       "worktreeStatusDigest",
       "postconditionDigest",
-    ]) {
+    ])
       delete proposal[key];
-    }
     if (recover) {
-      if (output.status === "succeeded") {
+      if (output.status === "succeeded")
         return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
-      }
-      if (typeof output.digest !== "string") {
+      if (typeof output.digest !== "string")
         return "The exact durable recovery journal digest is unavailable.";
-      }
-      if (toolResults.at(-1)?.name !== "recover_branch_worktree_publication") {
+      if (toolResults.at(-1)?.name !== "recover_branch_worktree_publication")
         return {
           toolCalls: [
             {
@@ -1318,32 +1226,28 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             },
           ],
         };
-      }
       return latestMutation?.isError
         ? "Branch-worktree recovery was canceled or rejected; its exact durable receipt was preserved."
         : "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
     }
-    if (output.status === "succeeded") {
+    if (output.status === "succeeded")
       return message.includes("retry branch worktree publication")
         ? "The exact durable branch-worktree publication receipt was verified and reused; no operation was redispatched."
         : "The separately approved reviewed change set was applied only in a new deterministic branch worktree. The original checkout was unchanged, and no commit, push, GitHub, provider, deployment, or release operation ran.";
-    }
-    if (output.status === "pending" || output.status === "failed") {
+    if (output.status === "pending" || output.status === "failed")
       return message.includes("retry branch worktree publication")
         ? "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically."
         : output.status === "failed"
           ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
           : "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically.";
-    }
     if (
       latestMutation?.isError === true &&
       latestMutationIndex < latestBranchStatusIndex
-    ) {
+    )
       return stale
         ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
-    }
-    if (latestMutationIndex < latestBranchStatusIndex) {
+    if (latestMutationIndex < latestBranchStatusIndex)
       return {
         toolCalls: [
           {
@@ -1356,12 +1260,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
-    if (latestMutation?.isError) {
+    if (latestMutation?.isError)
       return stale
         ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
-    }
     const result = latestMutation?.output as { status?: string } | undefined;
     return result?.status === "failed"
       ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
@@ -1379,13 +1281,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       .reverse()
       .find(({ name }) => name === "workspace_status");
     const workflow = status?.output as
-      | { phase?: string; review?: { digest?: string } }
-      | undefined;
+      { phase?: string; review?: { digest?: string } } | undefined;
     const latestPublicationIndex = toolResults.findLastIndex(
-      ({ name }) => name === "publish_reviewed_change_set"
+      ({ name }) => name === "publish_reviewed_change_set",
     );
     const latestStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     if (
       status === undefined ||
@@ -1397,36 +1298,31 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         "publication_failed",
         "published_local",
       ].includes(workflow?.phase ?? "")
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const source = [...toolResults]
       .reverse()
       .find(({ name }) => name === "inspect_source");
     const destinationPath = (
       source?.output as { sourcePath?: string } | undefined
     )?.sourcePath;
-    if (
-      destinationPath === undefined ||
-      workflow.review?.digest === undefined
-    ) {
+    if (destinationPath === undefined || workflow.review?.digest === undefined)
       return "An exact reviewed receipt and explicitly inspected local checkout are required before local publication.";
-    }
     const reviewDigest = workflow.review.digest;
     const publicationResults = toolResults.filter(
-      ({ name }) => name === "publish_reviewed_change_set"
+      ({ name }) => name === "publish_reviewed_change_set",
     );
     const required = stale ? 4 : retry ? 3 : afterCancellation ? 2 : 1;
     const publicationStatuses = toolResults.filter(
-      ({ name }) => name === "local_publication_status"
+      ({ name }) => name === "local_publication_status",
     );
     const latestPublicationStatusIndex = toolResults.findLastIndex(
-      ({ name }) => name === "local_publication_status"
+      ({ name }) => name === "local_publication_status",
     );
     if (
       latestPublicationStatusIndex < latestStatusIndex ||
       latestPublicationStatusIndex < latestPublicationIndex
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1438,11 +1334,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     if (
       message.includes("dirty overlap") &&
       toolResults.at(-1)?.name !== "local_publication_status"
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1454,9 +1349,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const proposal = [...publicationStatuses].reverse().at(0);
-    if (proposal === undefined) {
+    if (proposal === undefined)
       return {
         toolCalls: [
           {
@@ -1468,11 +1362,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     if (proposal.isError || proposal.output === undefined) {
-      if (message.includes("dirty overlap")) {
+      if (message.includes("dirty overlap"))
         return "Local publication preconditions were rejected before approval or destination mutation.";
-      }
       return "Local publication could not be prepared; inspect the tool's actual error before retrying.";
     }
     const publicationState = proposal.output as {
@@ -1484,47 +1376,39 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     };
     const durableStatus = publicationState.status;
     const latestPublicationOutput = publicationResults.at(-1)?.output as
-      | { reused?: boolean; terminalizedFailure?: boolean }
-      | undefined;
+      { reused?: boolean; terminalizedFailure?: boolean } | undefined;
     if (
       publicationState.workflowPhase === "published_local" &&
       retry &&
       latestPublicationOutput?.reused === true
-    ) {
+    )
       return "The lost-response retry reused the exact durable local-publication receipt after postimage readback.";
-    }
     if (
       publicationState.workflowPhase === "published_local" &&
       !retry &&
       !stale
-    ) {
+    )
       return "The separately approved reviewed change set was applied only to the named existing local checkout. No commit, branch, GitHub publication, provider, deployment, or release action ran.";
-    }
     if (
       publicationState.workflowPhase === "publication_failed" &&
       latestPublicationOutput?.terminalizedFailure === true
-    ) {
+    )
       return "The exact durable local-publication failure was terminalized without redispatching destination mutation.";
-    }
-    if (publicationState.workflowPhase === "publication_failed") {
+    if (publicationState.workflowPhase === "publication_failed")
       return "The failed local-publication receipt is readable and was not redispatched automatically.";
-    }
-    if (publicationState.recoveryAllowed === true && !retry) {
+    if (publicationState.recoveryAllowed === true && !retry)
       return "The durable terminal local-publication journal awaits an explicit recovery request and was not redispatched automatically.";
-    }
     if (
       durableStatus === "pending" ||
       publicationState.transactionWindow === "before-journal" ||
       (durableStatus === "failed" && !publicationState.recoveryAllowed)
-    ) {
+    )
       return "The prior local-publication attempt is recovery-required and was not redispatched automatically.";
-    }
     const publicationProposal = {
       ...(proposal.output as Record<string, unknown>),
     };
-    if (typeof publicationProposal.proposalDigest === "string") {
+    if (typeof publicationProposal.proposalDigest === "string")
       publicationProposal.digest = publicationProposal.proposalDigest;
-    }
     delete publicationProposal.workflowPhase;
     delete publicationProposal.recoveryAllowed;
     delete publicationProposal.retryAllowed;
@@ -1551,7 +1435,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       publicationState.recoveryAllowed === true &&
       recoveryResult === undefined
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1560,11 +1444,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     if (
       publicationState.recoveryAllowed !== true &&
       publicationResults.length < required
-    ) {
+    )
       return {
         toolCalls: [
           {
@@ -1580,16 +1463,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     const result = recoveryResult ?? publicationResults.at(-1);
-    if (result?.isError) {
+    if (result?.isError)
       return stale
         ? "Stale local publication was rejected without changing the destination checkout."
         : "Local publication was canceled or rejected; the reviewed receipt was preserved.";
-    }
     const output = result?.output as
-      | { reused?: boolean; terminalizedFailure?: boolean }
-      | undefined;
+      { reused?: boolean; terminalizedFailure?: boolean } | undefined;
     return output?.terminalizedFailure === true
       ? "The exact durable local-publication failure was terminalized without redispatching destination mutation."
       : output?.reused === true
@@ -1601,24 +1481,20 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const recorded = [...toolResults]
       .reverse()
       .find(
-        ({ name, isError }) => name === "record_prototype_artifact" && !isError
+        ({ name, isError }) => name === "record_prototype_artifact" && !isError,
       );
-    if (recorded === undefined && !stale) {
+    if (recorded === undefined && !stale)
       return "Record a prototype artifact before reading it.";
-    }
     const artifact = recorded?.output as
-      | { path?: string; digest?: string }
-      | undefined;
+      { path?: string; digest?: string } | undefined;
     const read = [...toolResults]
       .reverse()
       .find(({ name }) => name === "get_prototype_artifact");
     if (read !== undefined && !(stale && !read.isError)) {
-      if (read.isError) {
+      if (read.isError)
         return "The prototype artifact digest was rejected as stale.";
-      }
       const output = read.output as
-        | { path?: string; digest?: string; content?: string }
-        | undefined;
+        { path?: string; digest?: string; content?: string } | undefined;
       return output?.path === artifact?.path &&
         output?.digest === artifact?.digest &&
         typeof output?.content === "string"
@@ -1628,13 +1504,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return {
       toolCalls: [
         {
+          name: "get_prototype_artifact",
           input: {
-            digest: stale ? "0".repeat(64) : artifact?.digest,
             path: stale
               ? "prototype/expense-review/app-spec.md"
               : artifact?.path,
+            digest: stale ? "0".repeat(64) : artifact?.digest,
           },
-          name: "get_prototype_artifact",
         },
       ],
     };
@@ -1646,27 +1522,23 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (
       status === undefined ||
       (status.output as { phase?: string }).phase === "empty"
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const readiness = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_readiness_status");
-    if (readiness === undefined) {
+    if (readiness === undefined)
       return { toolCalls: [{ name: "workspace_readiness_status", input: {} }] };
-    }
     return "The workspace readiness receipt is not ready for target execution, and no target command was run.";
   }
   if (message.includes("assess target command readiness")) {
     const statusResult = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_status");
-    if (statusResult === undefined) {
+    if (statusResult === undefined)
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = statusResult.output as
-      | { phase?: string; proposal?: { digest?: string } }
-      | undefined;
+      { phase?: string; proposal?: { digest?: string } } | undefined;
     if (
       status?.phase !== "planned" &&
       status?.phase !== "apply_failed" &&
@@ -1674,9 +1546,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "validation_pending" &&
       status?.phase !== "validation_failed" &&
       status?.phase !== "validated"
-    ) {
+    )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const readinessResult = [...toolResults]
       .reverse()
       .find(({ name }) => name === "target_execution_status");
@@ -1686,37 +1557,33 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       (staleRequest && !readinessResult.isError)
     ) {
       const digest = staleRequest ? "0".repeat(64) : status?.proposal?.digest;
-      if (digest === undefined) {
+      if (digest === undefined)
         return "A canonical proposal is required before target command readiness can be checked.";
-      }
       return {
         toolCalls: [
           {
-            input: { expectedProposalDigest: digest },
             name: "target_execution_status",
+            input: { expectedProposalDigest: digest },
           },
         ],
       };
     }
-    if (readinessResult.isError) {
+    if (readinessResult.isError)
       return "The target command readiness receipt rejected the stale proposal.";
-    }
     const readiness = readinessResult.output as
-      | { targetCommandReady?: boolean }
-      | undefined;
+      { targetCommandReady?: boolean } | undefined;
     return readiness?.targetCommandReady === true
       ? "The exact proposal is ready for a future typed target command."
       : "The exact proposal is not ready for a target command, and no target command was run.";
   }
   if (message.includes("inspect the sandbox toolchain")) {
     const result = toolResults.find(
-      ({ name }) => name === "inspect_sandbox_toolchain"
+      ({ name }) => name === "inspect_sandbox_toolchain",
     );
-    if (result === undefined) {
+    if (result === undefined)
       return {
         toolCalls: [{ name: "inspect_sandbox_toolchain", input: {} }],
       };
-    }
     return result.isError
       ? "Sandbox toolchain inspection failed."
       : `Sandbox toolchain receipt: ${JSON.stringify(result.output)}`;
@@ -1725,9 +1592,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const status = [...toolResults]
       .reverse()
       .find(({ name }) => name === "workspace_status");
-    if (status === undefined) {
+    if (status === undefined)
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const workflow = status.output as
       | {
           phase?: string;
@@ -1745,9 +1611,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         }
       | undefined;
     const attempts = toolResults.filter(
-      ({ name }) => name === "accept_app_spec"
+      ({ name }) => name === "accept_app_spec",
     );
-    if (attempts.length < 2) {
+    if (attempts.length < 2)
       return {
         toolCalls: [
           {
@@ -1764,26 +1630,23 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    }
     return attempts.at(-1)?.isError
       ? "AppSpec mutation was denied by the terminal publication workflow."
       : "AppSpec mutation unexpectedly succeeded.";
   }
   const appSpecMatch =
     /^accept build-ready appspec for ([a-z0-9-]+):\n([\s\S]+)$/iu.exec(
-      lastUserMessage ?? ""
+      lastUserMessage ?? "",
     );
   if (appSpecMatch !== null) {
     const [, appId, appSpec] = appSpecMatch;
-    if (appId === undefined || appSpec === undefined) {
+    if (appId === undefined || appSpec === undefined)
       return "The AppSpec request is malformed.";
-    }
     const statusResult = toolResults.find(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
-    if (statusResult === undefined) {
+    if (statusResult === undefined)
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    }
     const status = statusResult.output as
       | {
           workspace?: {
@@ -1796,13 +1659,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       | undefined;
     const workspace = status?.workspace;
     const acceptanceResult = toolResults.find(
-      ({ name }) => name === "accept_app_spec"
+      ({ name }) => name === "accept_app_spec",
     );
     if (acceptanceResult === undefined) {
       const artifactResult = [...toolResults]
         .reverse()
         .find(({ name }) => name === "record_prototype_artifact");
-      if (artifactResult === undefined) {
+      if (artifactResult === undefined)
         return {
           toolCalls: [
             {
@@ -1815,10 +1678,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             },
           ],
         };
-      }
       const artifact = artifactResult.output as
-        | { digest?: string; revision?: string }
-        | undefined;
+        { digest?: string; revision?: string } | undefined;
       if (
         workspace?.sourceSha === undefined ||
         workspace.sourceTree === undefined ||
@@ -1826,25 +1687,23 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         workspace.workspaceDigest === undefined ||
         artifact?.digest === undefined ||
         artifact.revision === undefined
-      ) {
+      )
         return "A verified prepared workspace is required before AppSpec acceptance.";
-      }
       return {
         toolCalls: [
           {
+            name: "accept_app_spec",
             input: {
               appId,
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
             },
-            name: "accept_app_spec",
           },
         ],
       };
     }
-    if (acceptanceResult.isError) {
+    if (acceptanceResult.isError)
       return "The AppSpec acceptance could not be recorded.";
-    }
     return "The product direction is complete and ready for automatic implementation planning.";
   }
   if (
@@ -1852,21 +1711,21 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("prepare fresh template at ")
   ) {
     const path = lastUserMessage?.match(
-      /prepare (?:supported repository|fresh template) at (\/\S+)/iu
+      /prepare (?:supported repository|fresh template) at (\/\S+)/iu,
     )?.[1];
     const sourceKind = message.includes("prepare fresh template at ")
       ? "fresh-template"
       : "existing-repository";
-    if (sourceKind === "existing-repository" && path === undefined) {
+    if (sourceKind === "existing-repository" && path === undefined)
       return "The configured test repository is missing.";
-    }
     const inspectionResult = toolResults.find(
-      ({ name }) => name === "inspect_source"
+      ({ name }) => name === "inspect_source",
     );
     if (inspectionResult === undefined) {
       return {
         toolCalls: [
           {
+            name: "inspect_source",
             input:
               sourceKind === "fresh-template"
                 ? {
@@ -1880,7 +1739,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
                     path: developmentInspectionPath({ requestedPath: path! }),
                     sourceKind,
                   },
-            name: "inspect_source",
           },
         ],
       };
@@ -1894,32 +1752,30 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return "The configured repository could not be inspected.";
     }
     const acquisitionResult = toolResults.find(
-      ({ name }) => name === "approve_source_acquisition"
+      ({ name }) => name === "approve_source_acquisition",
     );
     if (sourceKind === "fresh-template" && acquisitionResult === undefined) {
-      if (inspected?.digest === undefined) {
+      if (inspected?.digest === undefined)
         return "The configured source receipt is incomplete.";
-      }
       return {
         toolCalls: [
           {
-            input: { expectedSourceReceiptDigest: inspected.digest },
             name: "approve_source_acquisition",
+            input: { expectedSourceReceiptDigest: inspected.digest },
           },
         ],
       };
     }
     if (acquisitionResult?.isError) {
       const sourceStatus = toolResults.find(
-        ({ name }) => name === "source_status"
+        ({ name }) => name === "source_status",
       );
-      if (sourceStatus === undefined) {
+      if (sourceStatus === undefined)
         return { toolCalls: [{ name: "source_status", input: {} }] };
-      }
       return "Fresh-template acquisition was canceled or became stale; no workspace was materialized.";
     }
     const preparationResult = toolResults.find(
-      ({ name }) => name === "prepare_workspace"
+      ({ name }) => name === "prepare_workspace",
     );
     if (preparationResult === undefined) {
       if (inspected?.digest === undefined) {
@@ -1928,17 +1784,17 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            input: {},
             name: "prepare_workspace",
+            input: {},
           },
         ],
       };
     }
     const statusResult = toolResults.find(
-      ({ name }) => name === "workspace_status"
+      ({ name }) => name === "workspace_status",
     );
     if (statusResult === undefined) {
-      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
+      return { toolCalls: [{ name: "workspace_status", input: {} }] };
     }
     if (statusResult.isError) {
       return "The workspace status could not be verified.";
@@ -1973,9 +1829,8 @@ export default defineAgent({
     ],
   },
   model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
-  ...(hasTestCapability("mock-model")
-    ? {}
-    : {
+  ...(!hasTestCapability("mock-model")
+    ? {
         modelOptions: {
           providerOptions: {
             gateway: {
@@ -1984,7 +1839,8 @@ export default defineAgent({
             },
           },
         },
-      }),
+      }
+    : {}),
   modelContextWindowTokens: 128_000,
   reasoning: localDevelopmentAgent ? "low" : "high",
 });

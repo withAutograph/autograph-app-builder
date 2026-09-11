@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page title and purpose lead naturally into filters, the exception list, and the selected record. Selected-row tint, severity pills, stock-evidence heading, and the emphasized mock action make priorities immediately scannable across the supplied states. |
-| layout | 3/4 | The list-detail composition has consistent spacing, aligned evidence labels, and stable action footers. On 1440px and 1920px captures, however, the page heading begins noticeably left of the centered workspace, weakening the shared alignment and leaving the upper composition somewhat disconnected. |
-| typography | 4/4 | Type sizes, weights, and line spacing consistently distinguish page title, record title, section headings, labels, and values. Product names, quantities, supplier details, and explanatory simulation copy remain readable in all shown desktop widths. |
-| responsive | 3/4 | The composition remains usable at 1920×1080, 1440×900, and 1024×768, with constrained detail scrolling and accessible footer controls. At 700×900 it appropriately changes to detail-only navigation, but the initial capture opens on a preselected record, placing filtering and item selection behind an extra Back step. |
-| productClarity | 4/4 | The interface clearly communicates low-stock review, location and severity filtering, selected-item evidence, supplier facts, and the replenishment calculation. Confirmation and result states repeatedly state that the action is a simulation and that no order or inventory change occurred, while Cancel, Confirm mock, Reset mock, and Back affordances are unambiguous. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| hierarchy      | 4/4   | The page title and purpose lead naturally into filters, the exception list, and the selected record. Selected-row tint, severity pills, stock-evidence heading, and the emphasized mock action make priorities immediately scannable across the supplied states.                                                                                                               |
+| layout         | 3/4   | The list-detail composition has consistent spacing, aligned evidence labels, and stable action footers. On 1440px and 1920px captures, however, the page heading begins noticeably left of the centered workspace, weakening the shared alignment and leaving the upper composition somewhat disconnected.                                                                     |
+| typography     | 4/4   | Type sizes, weights, and line spacing consistently distinguish page title, record title, section headings, labels, and values. Product names, quantities, supplier details, and explanatory simulation copy remain readable in all shown desktop widths.                                                                                                                       |
+| responsive     | 3/4   | The composition remains usable at 1920×1080, 1440×900, and 1024×768, with constrained detail scrolling and accessible footer controls. At 700×900 it appropriately changes to detail-only navigation, but the initial capture opens on a preselected record, placing filtering and item selection behind an extra Back step.                                                   |
+| productClarity | 4/4   | The interface clearly communicates low-stock review, location and severity filtering, selected-item evidence, supplier facts, and the replenishment calculation. Confirmation and result states repeatedly state that the action is a simulation and that no order or inventory change occurred, while Cancel, Confirm mock, Reset mock, and Back affordances are unambiguous. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

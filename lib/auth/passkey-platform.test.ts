@@ -5,16 +5,16 @@ import { preferredPasskeyAuthenticatorAttachment } from "./passkey-platform";
 describe("preferredPasskeyAuthenticatorAttachment", () => {
   it("requests a platform authenticator when the browser reports one", async () => {
     const isUserVerifyingPlatformAuthenticatorAvailable = vi.fn(
-      async () => true
+      async () => true,
     );
 
     await expect(
       preferredPasskeyAuthenticatorAttachment({
         isUserVerifyingPlatformAuthenticatorAvailable,
-      })
+      }),
     ).resolves.toBe("platform");
     expect(
-      isUserVerifyingPlatformAuthenticatorAvailable
+      isUserVerifyingPlatformAuthenticatorAvailable,
     ).toHaveBeenCalledOnce();
   });
 
@@ -22,7 +22,7 @@ describe("preferredPasskeyAuthenticatorAttachment", () => {
     await expect(
       preferredPasskeyAuthenticatorAttachment({
         isUserVerifyingPlatformAuthenticatorAvailable: vi.fn(async () => false),
-      })
+      }),
     ).resolves.toBeUndefined();
   });
 
@@ -32,7 +32,7 @@ describe("preferredPasskeyAuthenticatorAttachment", () => {
         isUserVerifyingPlatformAuthenticatorAvailable: vi.fn(async () => {
           throw new DOMException("Unavailable", "NotSupportedError");
         }),
-      })
+      }),
     ).resolves.toBeUndefined();
   });
 
@@ -40,8 +40,8 @@ describe("preferredPasskeyAuthenticatorAttachment", () => {
     "keeps the unrestricted fallback when platform detection is unsupported",
     async (capability) => {
       await expect(
-        preferredPasskeyAuthenticatorAttachment(capability)
+        preferredPasskeyAuthenticatorAttachment(capability),
       ).resolves.toBeUndefined();
-    }
+    },
   );
 });

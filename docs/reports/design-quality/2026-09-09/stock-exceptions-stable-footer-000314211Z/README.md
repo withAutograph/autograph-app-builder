@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page establishes a clear sequence from title and review count to filters, severity-grouped products, selected-item details, and replenishment action. Selected rows, severity pills, cover values, section headings, and the suggested-order heading make priorities easy to scan. |
-| layout | 3/4 | The two-column review composition is consistently aligned and comfortably dense at 1440px and 1920px, with related labels and values grouped well. The completed-action footer becomes slightly compressed at 1024px, where the confirmation wraps beside the button rather than forming a clean footer row. |
-| typography | 4/4 | Heading sizes, bold product names, compact metadata, labels, and emphasized stock values form a consistent and readable type hierarchy. Longer delivery assumptions wrap cleanly without clipping in the supplied desktop widths. |
-| responsive | 4/4 | The composition scales from a centered wide layout to a tighter 1024px split view, then deliberately switches at 700px from master-detail to separate list and detail views with a visible Back to exceptions control. Filters and primary actions remain usable, and only modest document scrolling is reported at some 1024px states. |
-| productClarity | 4/4 | The interface directly supports filtering by location and severity, selecting an exception, reviewing stock or supplier details, and simulating replenishment. Copy such as Preview only · No supplier contacted and Order simulated. Stock levels are unchanged clearly distinguishes the mock action from a real order. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                  |
+| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page establishes a clear sequence from title and review count to filters, severity-grouped products, selected-item details, and replenishment action. Selected rows, severity pills, cover values, section headings, and the suggested-order heading make priorities easy to scan.                                                  |
+| layout         | 3/4   | The two-column review composition is consistently aligned and comfortably dense at 1440px and 1920px, with related labels and values grouped well. The completed-action footer becomes slightly compressed at 1024px, where the confirmation wraps beside the button rather than forming a clean footer row.                            |
+| typography     | 4/4   | Heading sizes, bold product names, compact metadata, labels, and emphasized stock values form a consistent and readable type hierarchy. Longer delivery assumptions wrap cleanly without clipping in the supplied desktop widths.                                                                                                       |
+| responsive     | 4/4   | The composition scales from a centered wide layout to a tighter 1024px split view, then deliberately switches at 700px from master-detail to separate list and detail views with a visible Back to exceptions control. Filters and primary actions remain usable, and only modest document scrolling is reported at some 1024px states. |
+| productClarity | 4/4   | The interface directly supports filtering by location and severity, selecting an exception, reviewing stock or supplier details, and simulating replenishment. Copy such as Preview only · No supplier contacted and Order simulated. Stock levels are unchanged clearly distinguishes the mock action from a real order.               |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/227) |
-| desktop-0 | typography | 0/0 | 0% (0/557) |
-| desktop-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/137) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/227) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/137) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/227) |
-| desktop-window-0 | typography | 0/0 | 0% (0/557) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/137) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/198) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/489) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/265) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/99) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/119) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/105) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/227) |
+| desktop-0                | typography | 0/0                         | 0% (0/557) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/137) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/227) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/227) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/198) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/489) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/265) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/99)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/119) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/105) |
 
 ## Latest-run screenshots
 

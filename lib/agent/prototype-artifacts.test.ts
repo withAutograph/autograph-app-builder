@@ -12,15 +12,15 @@ import {
 const sessionId = "session-1";
 
 function record(
-  input: Partial<Parameters<typeof recordPrototypeArtifactRevision>[0]> = {}
+  input: Partial<Parameters<typeof recordPrototypeArtifactRevision>[0]> = {},
 ) {
   return recordPrototypeArtifactRevision({
     artifacts: [],
-    callId: "call-1",
-    content: "first revision",
-    mediaType: "text/markdown",
     path: "prototype/expense-review/app-spec.md",
+    mediaType: "text/markdown",
+    content: "first revision",
     sessionId,
+    callId: "call-1",
     ...input,
   });
 }
@@ -28,15 +28,15 @@ function record(
 describe("prototype artifact receipts", () => {
   it("allows only the three exact files below one kebab-case app id", () => {
     expect(
-      parsePrototypeArtifactPath("prototype/expense-review/app-spec.md")
+      parsePrototypeArtifactPath("prototype/expense-review/app-spec.md"),
     ).toEqual({ appId: "expense-review", fileName: "app-spec.md" });
     expect(
       expectedPrototypeArtifactMediaType(
-        "prototype/expense-review/decisions.md"
-      )
+        "prototype/expense-review/decisions.md",
+      ),
     ).toBe("text/markdown");
     expect(
-      expectedPrototypeArtifactMediaType("prototype/expense-review/index.html")
+      expectedPrototypeArtifactMediaType("prototype/expense-review/index.html"),
     ).toBe("text/html");
     for (const path of [
       "prototype/Expense-review/app-spec.md",
@@ -44,34 +44,33 @@ describe("prototype artifact receipts", () => {
       "prototype/expense-review/pages/index.html",
       "prototype/expense-review/../app-spec.md",
       "/prototype/expense-review/app-spec.md",
-    ]) {
+    ])
       expect(() => parsePrototypeArtifactPath(path)).toThrow("not allowed");
-    }
   });
 
   it("reads back only the exact session, path, and digest", () => {
     const recorded = record();
     expect(
       exactPrototypeArtifact(recorded.artifacts, {
-        digest: recorded.artifact.digest,
         path: recorded.artifact.path,
+        digest: recorded.artifact.digest,
         revision: recorded.artifact.revision,
         sessionId,
-      })
+      }),
     ).toBe(recorded.artifact);
     expect(() =>
       exactPrototypeArtifact(recorded.artifacts, {
-        digest: "0".repeat(64),
         path: recorded.artifact.path,
+        digest: "0".repeat(64),
         sessionId,
-      })
+      }),
     ).toThrow("stale or unavailable");
     expect(() =>
       exactPrototypeArtifact(recorded.artifacts, {
-        digest: recorded.artifact.digest,
         path: recorded.artifact.path,
+        digest: recorded.artifact.digest,
         sessionId: "session-2",
-      })
+      }),
     ).toThrow("stale or unavailable");
   });
 
@@ -88,20 +87,20 @@ describe("prototype artifact receipts", () => {
     const first = record();
     const changedBytes = record({
       artifacts: first.artifacts,
-      callId: "call-2",
       content: "second revision",
+      callId: "call-2",
     });
     const changedPath = record({
       artifacts: changedBytes.artifacts,
-      callId: "call-3",
-      content: "second revision",
       path: "prototype/expense-review/decisions.md",
+      content: "second revision",
+      callId: "call-3",
     });
     expect(changedBytes.artifact.digest).not.toBe(first.artifact.digest);
     expect(changedBytes.artifact.revision).not.toBe(first.artifact.revision);
     expect(changedPath.artifact.digest).toBe(changedBytes.artifact.digest);
     expect(changedPath.artifact.revision).not.toBe(
-      changedBytes.artifact.revision
+      changedBytes.artifact.revision,
     );
   });
 
@@ -112,50 +111,50 @@ describe("prototype artifact receipts", () => {
       record({
         artifacts: first.artifacts,
         path: "prototype/vendor-review/app-spec.md",
-      })
+      }),
     ).toThrow("different prototype app");
   });
 
   it("recognizes only a complete, build-ready prototype bundle", () => {
     const index = record({
-      content: "<!doctype html><title>Expense review</title>",
-      mediaType: "text/html",
       path: "prototype/expense-review/index.html",
+      mediaType: "text/html",
+      content: "<!doctype html><title>Expense review</title>",
     });
     const decisions = record({
       artifacts: index.artifacts,
-      content: "# Decisions\n",
       path: "prototype/expense-review/decisions.md",
+      content: "# Decisions\n",
     });
     const incomplete = record({ artifacts: decisions.artifacts });
     expect(
       completeBuildReadyPrototypeAppSpec({
-        appId: "expense-review",
         artifacts: incomplete.artifacts,
-      })
+        appId: "expense-review",
+      }),
     ).toBeUndefined();
 
     const content = `## Status and prototype\n\nReady.\n\n## User and outcome\n\nA.\n\n## Interfaces and navigation\n\nA.\n\n## Controls and behavior\n\nA.\n\n## Data model\n\nA.\n\n## Integrations and reconciliation\n\nA.\n\n## Temporal semantics\n\nA.\n\n## Writes, review, and authority\n\nA.\n\n## Access and tenancy\n\nA.\n\n## Agent behavior\n\nA.\n\n## Operational states\n\nA.\n\n## Defaults, non-goals, and risks\n\nA.\n\n## Acceptance walkthrough\n\nA.\n\n## Build handoff\n\n\`\`\`json\n{\n  "status": "build-ready",\n  "owner": "operations",\n  "schema": { "kind": "none" },\n  "additionalPublicRoutes": [],\n  "optionalCapabilities": { "integrations": [], "hostedResources": [] }\n}\n\`\`\``;
     const complete = record({
       artifacts: incomplete.artifacts,
-      callId: "call-4",
       content,
+      callId: "call-4",
     });
     expect(
       completeBuildReadyPrototypeAppSpec({
-        appId: "expense-review",
         artifacts: complete.artifacts,
-      })
+        appId: "expense-review",
+      }),
     ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
 
     const bundle = recordPrototypeArtifactBundle({
-      appId: "expense-review",
-      appSpecMarkdown: content,
       artifacts: [],
-      callId: "call-bundle",
-      decisionsMarkdown: "# Decisions\n",
+      appId: "expense-review",
       indexHtml: "<!doctype html><title>Expense review</title>",
+      decisionsMarkdown: "# Decisions\n",
+      appSpecMarkdown: content,
       sessionId,
+      callId: "call-bundle",
     });
     expect(bundle.artifacts.map(({ path }) => path)).toEqual([
       "prototype/expense-review/app-spec.md",
@@ -165,25 +164,25 @@ describe("prototype artifact receipts", () => {
     expect(bundle.appSpec.path).toBe("prototype/expense-review/app-spec.md");
     expect(
       recordPrototypeArtifactBundle({
-        appId: "expense-review",
-        appSpecMarkdown: content,
         artifacts: bundle.artifacts,
-        callId: "call-bundle-retry",
-        decisionsMarkdown: "# Decisions\n",
+        appId: "expense-review",
         indexHtml: "<!doctype html><title>Expense review</title>",
+        decisionsMarkdown: "# Decisions\n",
+        appSpecMarkdown: content,
         sessionId,
-      }).reused
+        callId: "call-bundle-retry",
+      }).reused,
     ).toBe(true);
     let diagnostic: unknown;
     try {
       recordPrototypeArtifactBundle({
-        appId: "expense-review",
-        appSpecMarkdown: "Still exploring.",
         artifacts: [],
-        callId: "call-incomplete-bundle",
-        decisionsMarkdown: "# Decisions\n",
+        appId: "expense-review",
         indexHtml: "<!doctype html><title>Expense review</title>",
+        decisionsMarkdown: "# Decisions\n",
+        appSpecMarkdown: "Still exploring.",
         sessionId,
+        callId: "call-incomplete-bundle",
       });
     } catch (error) {
       diagnostic = JSON.parse((error as Error).message);
@@ -191,7 +190,7 @@ describe("prototype artifact receipts", () => {
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
       instruction: expect.stringContaining(
-        "replace the complete Markdown artifact"
+        "replace the complete Markdown artifact",
       ),
       issues: expect.arrayContaining([
         expect.objectContaining({ code: "missing_heading" }),

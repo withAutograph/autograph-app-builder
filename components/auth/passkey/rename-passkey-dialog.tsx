@@ -3,9 +3,7 @@
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useUpdatePasskey } from "@better-auth-ui/react/plugins/passkey";
-import { useState } from "react";
-import type { FormEvent } from "react";
-
+import { type FormEvent, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +17,6 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
-
 import type { ListedPasskey } from "./delete-passkey-dialog";
 
 export function RenamePasskeyDialog({
@@ -41,9 +38,7 @@ export function RenamePasskeyDialog({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextName = name.trim();
-    if (nextName) {
-      updatePasskey.mutate({ id: passkey.id, name: nextName });
-    }
+    if (nextName) updatePasskey.mutate({ id: passkey.id, name: nextName });
   };
 
   return (

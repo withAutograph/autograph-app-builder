@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected-product heading, stock facts, and replenishment action form a clear review sequence. Selected rows and severity labels are easy to locate, though supplier information is visually deferred to a collapsed section and therefore reads as secondary despite being part of the review task. |
-| layout | 3/4 | The 1440px and 1024px captures show consistent alignment, compact list rows, and a practical list-detail split. At 1920px the composition expands nearly edge to edge, creating very long panels and substantial unused space inside the detail area; a more constrained content measure would improve density. |
-| typography | 3/4 | Headings, labels, values, descriptions, and actions use a consistent and readable hierarchy. Some 10–12px muted metadata and colored status text are visually faint, as reflected by repeated contrast warnings; supported larger or stronger text treatments would improve readability without changing the Arrusted palette. |
-| responsive | 3/4 | The composition remains usable at 1920, 1440, 1024, and 700px. It appropriately changes from split view to a detail view with a Back action at 700px, with no horizontal overflow shown. However, filters remain above the detail-only view, where their effect is less apparent because the filtered list is hidden. |
-| productClarity | 3/4 | The interface clearly communicates low-stock review, location and severity filtering, selected inventory facts, supplier identity in the replenishment explanation, and a reversible mock action. Success and reset states are explicit. The supplied captures do not demonstrate an actual empty-filter result, and detailed supplier information remains collapsed in every visible state. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected-product heading, stock facts, and replenishment action form a clear review sequence. Selected rows and severity labels are easy to locate, though supplier information is visually deferred to a collapsed section and therefore reads as secondary despite being part of the review task.                                                 |
+| layout         | 3/4   | The 1440px and 1024px captures show consistent alignment, compact list rows, and a practical list-detail split. At 1920px the composition expands nearly edge to edge, creating very long panels and substantial unused space inside the detail area; a more constrained content measure would improve density.                                                                              |
+| typography     | 3/4   | Headings, labels, values, descriptions, and actions use a consistent and readable hierarchy. Some 10–12px muted metadata and colored status text are visually faint, as reflected by repeated contrast warnings; supported larger or stronger text treatments would improve readability without changing the Arrusted palette.                                                               |
+| responsive     | 3/4   | The composition remains usable at 1920, 1440, 1024, and 700px. It appropriately changes from split view to a detail view with a Back action at 700px, with no horizontal overflow shown. However, filters remain above the detail-only view, where their effect is less apparent because the filtered list is hidden.                                                                        |
+| productClarity | 3/4   | The interface clearly communicates low-stock review, location and severity filtering, selected inventory facts, supplier identity in the replenishment explanation, and a reversible mock action. Success and reset states are explicit. The supplied captures do not demonstrate an actual empty-filter result, and detailed supplier information remains collapsed in every visible state. |
 
 ## Strengths
 
@@ -50,32 +50,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/223) |
-| desktop-0 | typography | 0/0 | 0% (0/507) |
-| desktop-0 | spacing | 0/0 | 0% (0/280) |
-| desktop-0 | radius | 0/0 | 0% (0/115) |
-| desktop-0 | border | 0/0 | 0% (0/131) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/223) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/507) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/280) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/115) |
-| desktop-wide-0 | border | 0/0 | 0% (0/131) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/223) |
-| desktop-window-0 | typography | 0/0 | 0% (0/507) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/280) |
-| desktop-window-0 | radius | 0/0 | 0% (0/115) |
-| desktop-window-0 | border | 0/0 | 0% (0/131) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/178) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/447) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/215) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/91) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/97) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/91) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/223) |
+| desktop-0                | typography | 0/0                         | 0% (0/507) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/280) |
+| desktop-0                | radius     | 0/0                         | 0% (0/115) |
+| desktop-0                | border     | 0/0                         | 0% (0/131) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/223) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/507) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/280) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/115) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/131) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/223) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/507) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/280) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/115) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/131) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/178) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/447) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/215) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/91)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/97)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/91)  |
 
 ## Latest-run screenshots
 

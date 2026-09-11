@@ -42,22 +42,22 @@ describe("safe MCP tool errors", () => {
     const result = safeToolError(new AdapterNotConfiguredError());
     expect(result.content).toEqual([
       {
-        text: "Autograph App Builder is not connected to its production service yet.",
         type: "text",
+        text: "Autograph App Builder is not connected to its production service yet.",
       },
     ]);
     expect(result.structuredContent.error?.message).toBe(
-      "Autograph App Builder is not connected to its production service yet."
+      "Autograph App Builder is not connected to its production service yet.",
     );
   });
 
   it("makes a provider outage retryable without a new OAuth challenge", () => {
     const result = safeToolError(new McpProviderUnavailableError());
     expect(result.structuredContent.error?.message).toContain(
-      "Retry this same handoff"
+      "Retry this same handoff",
     );
     expect(result.structuredContent.error?.message).toContain(
-      "No provider login"
+      "No provider login",
     );
     expect(result._meta).toBeUndefined();
   });
@@ -65,7 +65,7 @@ describe("safe MCP tool errors", () => {
   it("gives same-account guidance without disclosing handoff ownership", () => {
     const result = safeToolError(new BuilderHandoffUnavailableError());
     expect(result.structuredContent.error?.message).toContain(
-      "same account used on the web"
+      "same account used on the web",
     );
     expect(result.structuredContent.error?.code).toBe("not_found");
   });
@@ -74,11 +74,11 @@ describe("safe MCP tool errors", () => {
     const challenge =
       'Bearer resource_metadata="https://new.autograph.so/.well-known/oauth-protected-resource", error="invalid_token", error_description="Sign in to continue"';
     const result = safeToolError(
-      new McpToolAuthenticationRequiredError(challenge)
+      new McpToolAuthenticationRequiredError(challenge),
     );
 
     expect(result.structuredContent.error?.code).toBe(
-      "authentication_required"
+      "authentication_required",
     );
     expect(result._meta).toEqual({ "mcp/www_authenticate": [challenge] });
     expect(result.isError).toBe(true);
@@ -89,12 +89,12 @@ describe("MCP App UI presentation", () => {
   it("keeps ordinary session results text-first", () => {
     const result = toolResult(
       {
-        cursor: 0,
-        events: [],
         sessionId: "session-one",
         status: "working",
+        cursor: 0,
+        events: [],
       },
-      "Autograph App Builder started the app build."
+      "Autograph App Builder started the app build.",
     );
 
     expect(result._meta).toBeUndefined();
@@ -103,6 +103,8 @@ describe("MCP App UI presentation", () => {
   it("offers Autograph App Builder progress for an outstanding input request", () => {
     const result = toolResult(
       {
+        sessionId: "session-one",
+        status: "input_required",
         cursor: 1,
         events: [],
         inputRequests: [
@@ -113,10 +115,8 @@ describe("MCP App UI presentation", () => {
             allowFreeform: false,
           },
         ],
-        sessionId: "session-one",
-        status: "input_required",
       },
-      "Autograph App Builder needs input."
+      "Autograph App Builder needs input.",
     );
 
     expect(result._meta).toEqual({
@@ -127,19 +127,19 @@ describe("MCP App UI presentation", () => {
   it("keeps prototype results out of the MCP App UI", () => {
     const result = toolResult(
       {
+        sessionId: "session-one",
+        status: "completed",
         cursor: 42,
         events: [],
         prototype: {
+          path: "prototype/vendor-onboarding/index.html",
+          mediaType: "text/html",
           content: "<!doctype html><html><body>Vendor queue</body></html>",
           digest: "a".repeat(64),
-          mediaType: "text/html",
-          path: "prototype/vendor-onboarding/index.html",
           revision: "b".repeat(64),
         },
-        sessionId: "session-one",
-        status: "completed",
       },
-      "Autograph App Builder returned the latest progress."
+      "Autograph App Builder returned the latest progress.",
     );
 
     expect(result._meta).toBeUndefined();

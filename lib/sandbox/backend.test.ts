@@ -9,31 +9,31 @@ describe("sandbox backend selection", () => {
       expect(
         sandboxBackendPlan({
           environment: {
-            EVE_HOSTED_ADAPTER: "1",
-            EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
             VERCEL: "1",
+            EVE_HOSTED_ADAPTER: "1",
             VERCEL_ENV: environmentName,
+            EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
           },
           fixture: false,
           localImageConfigured: true,
-        })
+        }),
       ).toEqual({
-        blockers: [],
         kind:
           environmentName === "preview"
             ? "vercel-preview"
             : "vercel-production",
+        blockers: [],
       });
-    }
+    },
   );
 
   it("does not bind the local microsandbox image into hosted execution", () => {
     const plan = sandboxBackendPlan({
       environment: {
-        EVE_HOSTED_ADAPTER: "1",
-        EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
         VERCEL: "1",
+        EVE_HOSTED_ADAPTER: "1",
         VERCEL_ENV: "preview",
+        EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
       },
       fixture: false,
       localImageConfigured: true,
@@ -46,15 +46,15 @@ describe("sandbox backend selection", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
           APP_BUILDER_EXECUTION_MODE: "development",
-          APP_BUILDER_SANDBOX_IMAGE: "retired-image",
+          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
           APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+          APP_BUILDER_SANDBOX_IMAGE: "retired-image",
         },
         fixture: false,
         localImageConfigured: true,
-      })
-    ).toEqual({ blockers: [], kind: "vercel-development" });
+      }),
+    ).toEqual({ kind: "vercel-development", blockers: [] });
   });
 
   it("rejects partial Development bindings instead of falling back", () => {
@@ -63,19 +63,19 @@ describe("sandbox backend selection", () => {
         environment: { APP_BUILDER_EXECUTION_MODE: "development" },
         fixture: false,
         localImageConfigured: false,
-      })
+      }),
     ).toEqual({
+      kind: "unsupported-development",
       blockers: [
         "Development execution requires the exact local Vercel Sandbox binding.",
       ],
-      kind: "unsupported-development",
     });
     expect(() =>
       selectSandboxDefinition("unsupported-development", {
         localMicrosandbox: () => "microsandbox",
         nonExecuting: () => "just-bash",
         vercelHosted: () => "vercel",
-      })
+      }),
     ).toThrow("unsupported");
   });
 
@@ -83,16 +83,16 @@ describe("sandbox backend selection", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          APP_BUILDER_EXECUTION_BUNDLE: "",
           APP_BUILDER_EXECUTION_MODE: "",
+          APP_BUILDER_EXECUTION_BUNDLE: "",
           APP_BUILDER_SANDBOX_PROVIDER: "",
         },
         fixture: false,
         localImageConfigured: false,
-      })
+      }),
     ).toEqual({
-      blockers: ["No immutable local sandbox image is configured."],
       kind: "local-just-bash",
+      blockers: ["No immutable local sandbox image is configured."],
     });
   });
 
@@ -105,7 +105,7 @@ describe("sandbox backend selection", () => {
         localMicrosandbox,
         nonExecuting,
         vercelHosted,
-      })
+      }),
     ).toBe("vercel");
     expect(vercelHosted).toHaveBeenCalledOnce();
     expect(localMicrosandbox).not.toHaveBeenCalled();
@@ -118,34 +118,34 @@ describe("sandbox backend selection", () => {
         environment: {},
         fixture: false,
         localImageConfigured: true,
-      })
-    ).toEqual({ blockers: [], kind: "local-microsandbox" });
+      }),
+    ).toEqual({ kind: "local-microsandbox", blockers: [] });
     expect(
       sandboxBackendPlan({
         environment: { VERCEL: "1", VERCEL_ENV: "production" },
         fixture: true,
         localImageConfigured: true,
-      })
-    ).toEqual({ blockers: [], kind: "fixture-just-bash" });
+      }),
+    ).toEqual({ kind: "fixture-just-bash", blockers: [] });
   });
 
   it("fails closed when Vercel and the configured environment disagree", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          EVE_HOSTED_ADAPTER: "1",
-          EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
           VERCEL: "1",
+          EVE_HOSTED_ADAPTER: "1",
           VERCEL_ENV: "production",
+          EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
         },
         fixture: false,
         localImageConfigured: false,
-      })
+      }),
     ).toEqual({
+      kind: "unsupported-vercel",
       blockers: [
         "The hosted App Builder sandbox requires an exact matching Preview or Production environment binding.",
       ],
-      kind: "unsupported-vercel",
     });
   });
 
@@ -163,7 +163,7 @@ describe("sandbox backend selection", () => {
         localMicrosandbox,
         nonExecuting,
         vercelHosted,
-      })
+      }),
     ).toBe("vercel");
     expect(vercelHosted).toHaveBeenCalledOnce();
     expect(localMicrosandbox).not.toHaveBeenCalled();

@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
+import * as databaseSchema from "../db/schema";
 import {
   hostedGitHubInstallationBindings,
   hostedGitHubInstallations,
@@ -16,13 +16,13 @@ export type HostedGitHubTenantAuthority = z.infer<
 
 export const hostedGitHubInstallationBindingSchema = z
   .object({
+    installationId: z.string().regex(/^[1-9][0-9]*$/u),
     accountId: z.string().regex(/^[1-9][0-9]*$/u),
     accountLogin: z
       .string()
       .regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
     accountType: z.enum(["Organization", "User"]),
     active: z.boolean(),
-    installationId: z.string().regex(/^[1-9][0-9]*$/u),
     updatedAt: z.date(),
   })
   .strict();
@@ -33,7 +33,7 @@ export type HostedGitHubInstallationBinding = z.infer<
 
 export function mergeHostedGitHubInstallationBindings(
   bindings: HostedGitHubInstallationBinding[],
-  legacy: HostedGitHubInstallationBinding | undefined
+  legacy: HostedGitHubInstallationBinding | undefined,
 ) {
   return legacy === undefined ||
     bindings.some((binding) => binding.installationId === legacy.installationId)
@@ -47,7 +47,7 @@ function tenantPredicate(authority: HostedGitHubTenantAuthority) {
     eq(hostedGitHubInstallations.issuer, parsed.issuer),
     eq(hostedGitHubInstallations.audience, parsed.audience),
     eq(hostedGitHubInstallations.workspaceId, parsed.workspaceId),
-    eq(hostedGitHubInstallations.ownerUserId, parsed.ownerUserId)
+    eq(hostedGitHubInstallations.ownerUserId, parsed.ownerUserId),
   );
 }
 
@@ -57,25 +57,25 @@ function bindingTenantPredicate(authority: HostedGitHubTenantAuthority) {
     eq(hostedGitHubInstallationBindings.issuer, parsed.issuer),
     eq(hostedGitHubInstallationBindings.audience, parsed.audience),
     eq(hostedGitHubInstallationBindings.workspaceId, parsed.workspaceId),
-    eq(hostedGitHubInstallationBindings.ownerUserId, parsed.ownerUserId)
+    eq(hostedGitHubInstallationBindings.ownerUserId, parsed.ownerUserId),
   );
 }
 
 const bindingSelection = {
+  installationId: hostedGitHubInstallationBindings.installationId,
   accountId: hostedGitHubInstallationBindings.accountId,
   accountLogin: hostedGitHubInstallationBindings.accountLogin,
   accountType: hostedGitHubInstallationBindings.accountType,
   active: hostedGitHubInstallationBindings.active,
-  installationId: hostedGitHubInstallationBindings.installationId,
   updatedAt: hostedGitHubInstallationBindings.updatedAt,
 };
 
 export interface HostedGitHubInstallationStore {
   read(
-    authority: HostedGitHubTenantAuthority
+    authority: HostedGitHubTenantAuthority,
   ): Promise<HostedGitHubInstallationBinding | undefined>;
   list?(
-    authority: HostedGitHubTenantAuthority
+    authority: HostedGitHubTenantAuthority,
   ): Promise<HostedGitHubInstallationBinding[]>;
   bind(input: {
     authority: HostedGitHubTenantAuthority;
@@ -85,9 +85,36 @@ export interface HostedGitHubInstallationStore {
 }
 
 export function createPostgresHostedGitHubInstallationStore(
-  database: Database
+  database: Database,
 ): HostedGitHubInstallationStore {
   return {
+    async read(authority) {
+      const rows = await database
+        .select({
+          installationId: hostedGitHubInstallations.installationId,
+          accountId: hostedGitHubInstallations.accountId,
+          accountLogin: hostedGitHubInstallations.accountLogin,
+          accountType: hostedGitHubInstallations.accountType,
+          active: hostedGitHubInstallations.active,
+          updatedAt: hostedGitHubInstallations.updatedAt,
+        })
+        .from(hostedGitHubInstallations)
+        .where(tenantPredicate(authority))
+        .limit(1);
+      return rows[0] === undefined
+        ? undefined
+        : hostedGitHubInstallationBindingSchema.parse(rows[0]);
+    },
+    async list(authority) {
+      const rows = await database
+        .select(bindingSelection)
+        .from(hostedGitHubInstallationBindings)
+        .where(bindingTenantPredicate(authority))
+        .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
+      return rows.map((row) =>
+        hostedGitHubInstallationBindingSchema.parse(row),
+      );
+    },
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const binding = hostedGitHubInstallationBindingSchema.parse({
@@ -132,7 +159,7 @@ export function createPostgresHostedGitHubInstallationStore(
           .returning(bindingSelection);
         if (bindingRows.length !== 1)
           throw new Error(
-            "Hosted GitHub installation binding was not durable."
+            "Hosted GitHub installation binding was not durable.",
           );
 
         // Maintain the original single publication binding as an explicit
@@ -155,33 +182,6 @@ export function createPostgresHostedGitHubInstallationStore(
           });
         return hostedGitHubInstallationBindingSchema.parse(bindingRows[0]);
       });
-    },
-    async list(authority) {
-      const rows = await database
-        .select(bindingSelection)
-        .from(hostedGitHubInstallationBindings)
-        .where(bindingTenantPredicate(authority))
-        .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
-      return rows.map((row) =>
-        hostedGitHubInstallationBindingSchema.parse(row)
-      );
-    },
-    async read(authority) {
-      const rows = await database
-        .select({
-          installationId: hostedGitHubInstallations.installationId,
-          accountId: hostedGitHubInstallations.accountId,
-          accountLogin: hostedGitHubInstallations.accountLogin,
-          accountType: hostedGitHubInstallations.accountType,
-          active: hostedGitHubInstallations.active,
-          updatedAt: hostedGitHubInstallations.updatedAt,
-        })
-        .from(hostedGitHubInstallations)
-        .where(tenantPredicate(authority))
-        .limit(1);
-      return rows[0] === undefined
-        ? undefined
-        : hostedGitHubInstallationBindingSchema.parse(rows[0]);
     },
   };
 }

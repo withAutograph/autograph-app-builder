@@ -9,7 +9,7 @@ type SignalTarget = Readonly<{
 }>;
 
 export function createDevelopmentShutdown(
-  target: SignalTarget = process
+  target: SignalTarget = process,
 ): Readonly<{
   signal: AbortSignal;
   exitCode: () => number;
@@ -28,38 +28,33 @@ export function createDevelopmentShutdown(
   target.once("SIGINT", interrupt);
   target.once("SIGTERM", terminate);
   return {
+    signal: controller.signal,
+    exitCode: () => exitCode,
     dispose: () => {
       target.off("SIGINT", interrupt);
       target.off("SIGTERM", terminate);
     },
-    exitCode: () => exitCode,
-    signal: controller.signal,
   };
 }
 
 export function waitForDevelopmentShutdown(
   signal: AbortSignal,
-  exitCode: () => number
+  exitCode: () => number,
 ) {
-  if (signal.aborted) {
+  if (signal.aborted)
     return Promise.resolve({ kind: "stop" as const, code: exitCode() });
-  }
   return new Promise<{ kind: "stop"; code: number }>((resolveStop) => {
     signal.addEventListener(
       "abort",
-      () => resolveStop({ code: exitCode(), kind: "stop" }),
-      { once: true }
+      () => resolveStop({ kind: "stop", code: exitCode() }),
+      { once: true },
     );
   });
 }
 
 export function developmentChildExit(child: ChildProcess) {
-  if (child.exitCode !== null) {
-    return Promise.resolve(child.exitCode);
-  }
-  if (child.signalCode !== null) {
-    return Promise.resolve(1);
-  }
+  if (child.exitCode !== null) return Promise.resolve(child.exitCode);
+  if (child.signalCode !== null) return Promise.resolve(1);
   return new Promise<number>((resolveExit, reject) => {
     child.once("error", reject);
     child.once("exit", (code, signal) => resolveExit(code ?? (signal ? 1 : 0)));
@@ -71,17 +66,15 @@ export async function stopDevelopmentChild(
   options: Readonly<{
     processGroup?: boolean;
     gracefulTimeoutMs?: number;
-  }> = {}
+  }> = {},
 ) {
   const childExited = child.exitCode !== null || child.signalCode !== null;
   // The wrapper can exit before Eve's local server finishes its shutdown
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
-  if (childExited && !options.processGroup) {
-    return;
-  }
+  if (childExited && !options.processGroup) return;
   const gracefulTimeoutMs =
-    options.gracefulTimeoutMs ?? (options.processGroup ? 1100 : 5000);
+    options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
     if (child.pid === undefined || process.platform === "win32") {
@@ -91,9 +84,7 @@ export async function stopDevelopmentChild(
     try {
       process.kill(-child.pid, value);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
     }
   };
   if (
@@ -105,11 +96,8 @@ export async function stopDevelopmentChild(
     // to Eve. Signalling the whole group here would also hit Eve directly,
     // making the wrapper's forward a second signal that bypasses Eve's orderly
     // shutdown and can orphan its separately detached local server.
-    if (childExited) {
-      signalProcessGroup("SIGTERM");
-    } else {
-      child.kill("SIGTERM");
-    }
+    if (childExited) signalProcessGroup("SIGTERM");
+    else child.kill("SIGTERM");
     // `eve dev` uses a separately detached local-server child. Its CLI sends
     // that child an IPC shutdown request and has a 900ms shutdown backstop.
     // Do not cut that handshake short: a premature group kill leaves the
@@ -117,22 +105,18 @@ export async function stopDevelopmentChild(
     // still belongs solely to this development cycle, so force it only after
     // a window longer than Eve's own backstop.
     await new Promise((resolveWait) =>
-      setTimeout(resolveWait, gracefulTimeoutMs)
+      setTimeout(resolveWait, gracefulTimeoutMs),
     );
     signalProcessGroup("SIGKILL");
-    if (!childExited) {
-      await exited;
-    }
+    if (!childExited) await exited;
     return;
   }
   child.kill("SIGTERM");
-  if (childExited) {
-    return;
-  }
+  if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
     new Promise<false>((resolveWait) =>
-      setTimeout(() => resolveWait(false), gracefulTimeoutMs)
+      setTimeout(() => resolveWait(false), gracefulTimeoutMs),
     ),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
@@ -143,9 +127,9 @@ export async function stopDevelopmentChild(
 
 export async function waitForDevelopmentPortRelease(
   port: number,
-  options: Readonly<{ timeoutMs?: number; pollMs?: number }> = {}
+  options: Readonly<{ timeoutMs?: number; pollMs?: number }> = {},
 ) {
-  const timeoutMs = options.timeoutMs ?? 5000;
+  const timeoutMs = options.timeoutMs ?? 5_000;
   const pollMs = options.pollMs ?? 50;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -158,12 +142,10 @@ export async function waitForDevelopmentPortRelease(
       socket.once("connect", () => finish(true));
       socket.once("error", () => finish(false));
     });
-    if (!occupied) {
-      return;
-    }
+    if (!occupied) return;
     await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
   }
   throw new Error(
-    `Development Eve port ${port} was not released after shutdown.`
+    `Development Eve port ${port} was not released after shutdown.`,
   );
 }

@@ -12,16 +12,16 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(result.plugins).toEqual([]);
     expect(result.summary).toEqual({
       enabled: false,
-      organizationAuthorityReady: true,
       plan: null,
+      organizationAuthorityReady: true,
     });
   });
 
   it("enables only the Starter dashboard after organization authority is ready", () => {
     const result = resolveBetterAuthInfrastructure({
       environment: {
-        BETTER_AUTH_API_KEY: "test-infrastructure-key",
         BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
+        BETTER_AUTH_API_KEY: "test-infrastructure-key",
       },
       organizationAuthorityReady: true,
     });
@@ -30,11 +30,11 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(result.plugins[0]?.id).toBe("dash");
     expect(result.summary).toEqual({
       enabled: true,
-      organizationAuthorityReady: true,
       plan: "starter",
+      organizationAuthorityReady: true,
     });
     expect(JSON.stringify(result.summary)).not.toContain(
-      "test-infrastructure-key"
+      "test-infrastructure-key",
     );
   });
 
@@ -42,11 +42,11 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(() =>
       resolveBetterAuthInfrastructure({
         environment: {
-          BETTER_AUTH_API_KEY: "test-infrastructure-key",
           BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
+          BETTER_AUTH_API_KEY: "test-infrastructure-key",
         },
         organizationAuthorityReady: false,
-      })
+      }),
     ).toThrow("organization authority migration is verified");
   });
 
@@ -57,17 +57,17 @@ describe("resolveBetterAuthInfrastructure", () => {
           BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
         },
         organizationAuthorityReady: true,
-      })
+      }),
     ).toThrow("BETTER_AUTH_API_KEY is required");
 
     expect(() =>
       resolveBetterAuthInfrastructure({
         environment: {
-          BETTER_AUTH_API_KEY: "test-infrastructure-key",
           BETTER_AUTH_INFRASTRUCTURE: "enabled",
+          BETTER_AUTH_API_KEY: "test-infrastructure-key",
         },
         organizationAuthorityReady: true,
-      })
+      }),
     ).toThrow("must be exactly starter-dashboard-v1");
   });
 });

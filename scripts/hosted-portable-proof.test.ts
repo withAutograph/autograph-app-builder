@@ -9,70 +9,70 @@ import {
 import { TOOL_NAMES } from "./portable-release";
 
 const target = {
-  appSpecDigest: "b".repeat(64),
+  repositoryId: "1234",
+  repository: "withAutograph/proof-target",
   baseRef: "refs/heads/main",
   baseSha: "a".repeat(40),
-  changeSetDigest: "c".repeat(64),
   headRef: "refs/heads/autograph/proof",
+  appSpecDigest: "b".repeat(64),
+  changeSetDigest: "c".repeat(64),
   proposalDigest: "d".repeat(64),
-  repository: "withAutograph/proof-target",
-  repositoryId: "1234",
 };
 const receipt = (phase: "appspec" | "change_set" | "publication") => ({
+  format: "autograph-eve-approval-receipt-v2" as const,
+  phase,
+  repositoryId: target.repositoryId,
+  repository: target.repository,
   baseRef: target.baseRef,
   baseSha: target.baseSha,
-  format: "autograph-eve-approval-receipt-v2" as const,
-  outcome:
-    phase === "appspec"
-      ? ("accept-appspec" as const)
-      : phase === "change_set"
-        ? ("accept-change-set" as const)
-        : ("create-draft-pr" as const),
-  phase,
-  repository: target.repository,
-  repositoryId: target.repositoryId,
   subjectDigest:
     phase === "appspec"
       ? target.appSpecDigest
       : phase === "change_set"
         ? target.changeSetDigest
         : target.proposalDigest,
+  outcome:
+    phase === "appspec"
+      ? ("accept-appspec" as const)
+      : phase === "change_set"
+        ? ("accept-change-set" as const)
+        : ("create-draft-pr" as const),
 });
 const scenario = hostedProofScenarioSchema.parse({
+  format: "autograph-hosted-client-proof-scenario-v2",
+  createPrompt: "Create a supported app and pause before publication.",
+  iterateMessage: "Iterate, validate, and publish the approved draft PR.",
+  cancelPrompt: "Begin a cancellable read-only design turn.",
+  target,
+  oauth: {
+    issuer: "https://issuer.autograph.dev",
+    audience: "https://preview.autograph.dev/mcp",
+    resource: "https://preview.autograph.dev/mcp",
+  },
+  questionResponses: [],
   approvalReceipts: (["appspec", "change_set", "publication"] as const).map(
     (phase) => ({
       requestTitle: `Approve ${phase}`,
       receipt: receipt(phase),
       response: "approve",
-    })
+    }),
   ),
-  cancelPrompt: "Begin a cancellable read-only design turn.",
-  createPrompt: "Create a supported app and pause before publication.",
-  format: "autograph-hosted-client-proof-scenario-v2",
-  iterateMessage: "Iterate, validate, and publish the approved draft PR.",
   maxPolls: 8,
-  oauth: {
-    audience: "https://preview.autograph.dev/mcp",
-    issuer: "https://issuer.autograph.dev",
-    resource: "https://preview.autograph.dev/mcp",
-  },
   pollIntervalMs: 100,
-  questionResponses: [],
-  target,
 });
 
 function jwt(subject: string, workspaceId: string) {
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
-    aud: scenario.oauth.audience,
-    exp: 2_100,
     iss: scenario.oauth.issuer,
-    nbf: 1_900,
-    scope:
-      "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
+    aud: scenario.oauth.audience,
     sub: subject,
     workspace_id: workspaceId,
+    scope:
+      "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
+    nbf: 1_900,
+    exp: 2_100,
   })}.signature`;
 }
 const primaryToken = jwt("proof-user-primary", "workspace-primary");
@@ -87,7 +87,7 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
           ...(id === undefined ? {} : { id }),
           result,
         }),
-    { headers: { "content-type": "application/json" }, status }
+    { status, headers: { "content-type": "application/json" } },
   );
 
 function session(
@@ -95,13 +95,13 @@ function session(
   status: "working" | "input_required" | "waiting" | "completed" | "cancelled",
   cursor: number,
   events: unknown[] = [],
-  inputRequests?: unknown[]
+  inputRequests?: unknown[],
 ) {
   return {
-    cursor,
-    events,
     sessionId,
     status,
+    cursor,
+    events,
     ...(inputRequests === undefined ? {} : { inputRequests }),
   };
 }
@@ -118,7 +118,7 @@ function hostedFixture(
       kind: "transport" | "http500" | "malformed";
     };
     discardedStartRetryDrift?: boolean;
-  } = {}
+  } = {},
 ) {
   const approved = new Set<string>();
   let createIterated = false;
@@ -126,7 +126,7 @@ function hostedFixture(
   let primaryStartCount = 0;
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
     const url = String(urlInput);
-    if (url.endsWith("/.well-known/oauth-protected-resource")) {
+    if (url.endsWith("/.well-known/oauth-protected-resource"))
       return Response.json({
         resource: options.metadataResource ?? scenario.oauth.resource,
         authorization_servers: [scenario.oauth.issuer],
@@ -140,13 +140,12 @@ function hostedFixture(
           "autograph:cancel",
         ],
       });
-    }
     const headers = new Headers(init?.headers);
     const authorization = headers.get("authorization");
     if (
       authorization === null ||
       authorization === "Bearer invalid-hosted-proof-token"
-    ) {
+    )
       return new Response("", {
         status: 401,
         headers: {
@@ -154,50 +153,38 @@ function hostedFixture(
             'Bearer error="invalid_token", resource_metadata="https://preview.autograph.dev/.well-known/oauth-protected-resource"',
         },
       });
-    }
     const secondary = authorization === `Bearer ${secondaryToken}`;
     const body = JSON.parse(String(init?.body));
-    if (body.method === "initialize") {
+    if (body.method === "initialize")
       return rpc(body.id, {
         protocolVersion: "2025-03-26",
         capabilities: {},
         serverInfo: { name: "fixture", version: "1" },
       });
-    }
-    if (body.method === "notifications/initialized") {
+    if (body.method === "notifications/initialized")
       return new Response(undefined, { status: 202 });
-    }
-    if (body.method === "tools/list") {
+    if (body.method === "tools/list")
       return rpc(body.id, { tools: TOOL_NAMES.map((name) => ({ name })) });
-    }
-    if (body.method !== "tools/call") {
-      return new Response("", { status: 400 });
-    }
+    if (body.method !== "tools/call") return new Response("", { status: 400 });
     const name = body.params.name as string;
     const args = body.params.arguments as Record<string, unknown>;
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (
-      direction: "primary-reads-secondary" | "secondary-reads-primary"
+      direction: "primary-reads-secondary" | "secondary-reads-primary",
     ) => {
-      if (options.denialFailure?.direction !== direction) {
-        return undefined;
-      }
-      if (options.denialFailure.kind === "transport") {
+      if (options.denialFailure?.direction !== direction) return undefined;
+      if (options.denialFailure.kind === "transport")
         throw new Error("fixture transport failure");
-      }
-      if (options.denialFailure.kind === "http500") {
+      if (options.denialFailure.kind === "http500")
         return new Response("", { status: 500 });
-      }
       return rpc(body.id, {
         isError: "not-a-boolean",
         structuredContent: session(String(args.sessionId), "working", 0),
       });
     };
     if (name === "autograph_start") {
-      if (!secondary) {
-        primaryStartCount += 1;
-      }
+      if (!secondary) primaryStartCount += 1;
       return tool(
         session(
           secondary
@@ -206,22 +193,20 @@ function hostedFixture(
               ? "discarded-session-a"
               : "primary-session",
           "working",
-          0
-        )
+          0,
+        ),
       );
     }
     if (name === "autograph_respond") {
-      if (!Array.isArray(args.responses) || args.responses.length === 0) {
+      if (!Array.isArray(args.responses) || args.responses.length === 0)
         return tool(session("primary-session", "working", 0), true);
-      }
       for (const response of args.responses) {
         if (
           response === null ||
           typeof response !== "object" ||
           typeof (response as { requestId?: unknown }).requestId !== "string"
-        ) {
+        )
           return tool(session("primary-session", "working", 0), true);
-        }
         approved.add((response as { requestId: string }).requestId);
       }
       return tool(session("primary-session", "working", 0));
@@ -234,18 +219,12 @@ function hostedFixture(
       cancelRequested = true;
       return tool(session("secondary-session", "working", 0));
     }
-    if (
-      name === "autograph_get" &&
-      String(args.sessionId).startsWith("stale-")
-    ) {
+    if (name === "autograph_get" && String(args.sessionId).startsWith("stale-"))
       return tool(session(String(args.sessionId), "working", 0), true);
-    }
     if (name === "autograph_get" && args.sessionId === "secondary-session") {
       if (!secondary) {
         const failure = denialFailure("primary-reads-secondary");
-        if (failure !== undefined) {
-          return failure;
-        }
+        if (failure !== undefined) return failure;
         return options.mutualDenial === false
           ? tool(session("secondary-session", "working", 0))
           : tool(session("secondary-session", "working", 0), true);
@@ -256,17 +235,15 @@ function hostedFixture(
           cancelRequested ? "cancelled" : "working",
           cancelRequested ? 1 : 0,
           cancelRequested
-            ? [{ index: 0, status: "cancelled", type: "status" }]
-            : []
-        )
+            ? [{ type: "status", index: 0, status: "cancelled" }]
+            : [],
+        ),
       );
     }
     if (name === "autograph_get" && args.sessionId === "primary-session") {
       if (secondary) {
         const failure = denialFailure("secondary-reads-primary");
-        if (failure !== undefined) {
-          return failure;
-        }
+        if (failure !== undefined) return failure;
         return options.mutualDenial === false
           ? tool(session("primary-session", "working", 0))
           : tool(session("primary-session", "working", 0), true);
@@ -284,11 +261,11 @@ function hostedFixture(
               ? { ...expected, subjectDigest: "d".repeat(64) }
               : expected;
           return {
-            allowFreeform: false,
-            description: JSON.stringify(described),
-            kind: "approval",
             requestId: `approve-${phase}`,
+            kind: "approval",
             title: `Approve ${phase}`,
+            description: JSON.stringify(described),
+            allowFreeform: false,
           };
         });
         return tool(
@@ -297,46 +274,45 @@ function hostedFixture(
             "input_required",
             approved.size + 1,
             requests.map((request, index) => ({
+              type: "input_required",
               index: approved.size + index,
               request,
-              type: "input_required",
             })),
-            requests
-          )
+            requests,
+          ),
         );
       }
-      if (!createIterated) {
+      if (!createIterated)
         return tool(
           session("primary-session", "waiting", 3, [
             { type: "status", index: 2, status: "waiting" },
-          ])
+          ]),
         );
-      }
       const draft = {
+        format: "autograph-draft-pr-publication-receipt-v1",
+        url: "https://github.com/withAutograph/proof-target/pull/42",
+        draft: true,
+        repository: target.repository,
         baseRef: target.baseRef,
         baseSha: target.baseSha,
+        headRef: target.headRef,
+        headSha: "d".repeat(40),
         changeSetDigest: options.draftDigestDrift
           ? "e".repeat(64)
           : target.changeSetDigest,
-        draft: true,
-        format: "autograph-draft-pr-publication-receipt-v1",
-        headRef: target.headRef,
-        headSha: "d".repeat(40),
         outcome: "draft-pr-created",
-        repository: target.repository,
-        url: "https://github.com/withAutograph/proof-target/pull/42",
       };
       const status = options.iterationStatus ?? "completed";
       return tool(
         session("primary-session", status, 5, [
           {
-            index: 3,
-            text: `AUTOGRAPH_DRAFT_PR_RECEIPT ${JSON.stringify(draft)}`,
-            turnId: "iterate",
             type: "assistant_message",
+            index: 3,
+            turnId: "iterate",
+            text: `AUTOGRAPH_DRAFT_PR_RECEIPT ${JSON.stringify(draft)}`,
           },
-          { index: 4, status, type: "status" },
-        ])
+          { type: "status", index: 4, status },
+        ]),
       );
     }
     return new Response("", { status: 400 });
@@ -344,16 +320,16 @@ function hostedFixture(
 }
 
 const proofInput = (fetcher: typeof fetch) => ({
-  crossTenantToken: secondaryToken,
   endpoint: scenario.oauth.resource,
-  fetcher,
-  nowEpochSeconds: 2_000,
-  permitApprovals: true,
-  releaseArchiveSha256: "1".repeat(64),
+  token: primaryToken,
+  crossTenantToken: secondaryToken,
   scenario,
   sourceSha: "f".repeat(40),
   sourceTree: "0".repeat(40),
-  token: primaryToken,
+  releaseArchiveSha256: "1".repeat(64),
+  permitApprovals: true,
+  nowEpochSeconds: 2_000,
+  fetcher,
 });
 
 describe("hosted portable fresh-client proof", () => {
@@ -361,41 +337,41 @@ describe("hosted portable fresh-client proof", () => {
     const sha256Target = { ...target, baseSha: "a".repeat(64) };
     const parsed = hostedProofScenarioSchema.parse({
       ...scenario,
+      target: sha256Target,
       approvalReceipts: scenario.approvalReceipts.map((approval) => ({
         ...approval,
         receipt: { ...approval.receipt, baseSha: sha256Target.baseSha },
       })),
-      target: sha256Target,
     });
     expect(parsed.target.baseSha).toHaveLength(64);
   });
 
   it("proves exact approvals, metadata, identities, publication, and five tools", async () => {
     const result = await runHostedProof(
-      proofInput(hostedFixture() as typeof fetch)
+      proofInput(hostedFixture() as typeof fetch),
     );
     expect(result.discoveredTools).toEqual(TOOL_NAMES);
     expect(result).toMatchObject({
-      cancellationProved: true,
-      discardedStartResponseRecovered: true,
-      idempotentStart: true,
-      invalidAuthRejected: true,
-      iterationProved: true,
       missingAuthRejected: true,
-      mutualWorkspaceDenial: true,
+      invalidAuthRejected: true,
       oauthMetadataBound: true,
+      idempotentStart: true,
+      discardedStartResponseRecovered: true,
+      responseCount: 3,
+      responseBatchCount: 2,
+      iterationProved: true,
+      publicationEvidenceProved: true,
+      staleSessionRejected: true,
+      mutualWorkspaceDenial: true,
+      cancellationProved: true,
+      publicResponsesScanned: expect.any(Number),
       publicResponseDisclosureScanDigest:
         expect.stringMatching(/^[a-f0-9]{64}$/u),
-      publicResponsesScanned: expect.any(Number),
-      publicationEvidenceProved: true,
-      responseBatchCount: 2,
-      responseCount: 3,
-      staleSessionRejected: true,
     });
     expect(
       Object.keys(result).some((key) =>
-        /discarded.*(?:digest|fingerprint)/iu.test(key)
-      )
+        /discarded.*(?:digest|fingerprint)/iu.test(key),
+      ),
     ).toBe(false);
   });
 
@@ -403,11 +379,11 @@ describe("hosted portable fresh-client proof", () => {
     await expect(
       runHostedProof(
         proofInput(
-          hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch
-        )
-      )
+          hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch,
+        ),
+      ),
     ).rejects.toThrow(
-      "Lost-response retry did not match the discarded hosted session result"
+      "Lost-response retry did not match the discarded hosted session result",
     );
   });
 
@@ -429,29 +405,31 @@ describe("hosted portable fresh-client proof", () => {
         result?: { structuredContent?: { events?: unknown[] } };
       };
       payload.result?.structuredContent?.events?.push({
-        index: 99,
-        text: `private ${primaryToken} wrun_PRIVATE`,
-        turnId: "leak",
         type: "assistant_message",
+        index: 99,
+        turnId: "leak",
+        text: `private ${primaryToken} wrun_PRIVATE`,
       });
       return Response.json(payload);
     };
     await expect(runHostedProof(proofInput(fetcher))).rejects.toThrow(
-      "disclosed private runtime material"
+      "disclosed private runtime material",
     );
   });
 
   it("rejects approval digest drift and missing approval authority", async () => {
     await expect(
       runHostedProof(
-        proofInput(hostedFixture({ approvalDigestDrift: true }) as typeof fetch)
-      )
+        proofInput(
+          hostedFixture({ approvalDigestDrift: true }) as typeof fetch,
+        ),
+      ),
     ).rejects.toThrow("exact digest-bound receipt");
     await expect(
       runHostedProof({
         ...proofInput(hostedFixture() as typeof fetch),
         permitApprovals: false,
-      })
+      }),
     ).rejects.toThrow("explicit --permit-approvals gate");
   });
 
@@ -459,17 +437,17 @@ describe("hosted portable fresh-client proof", () => {
     await expect(
       runHostedProof(
         proofInput(
-          hostedFixture({ iterationStatus: "waiting" }) as typeof fetch
-        )
-      )
+          hostedFixture({ iterationStatus: "waiting" }) as typeof fetch,
+        ),
+      ),
     ).rejects.toThrow("successful completed state");
     await expect(
       runHostedProof(
-        proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch)
-      )
+        proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch),
+      ),
     ).rejects.toThrow("approved target and change set");
     expect(() =>
-      verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario)
+      verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario),
     ).toThrow("Exactly one structural draft-PR receipt");
   });
 
@@ -479,41 +457,41 @@ describe("hosted portable fresh-client proof", () => {
         proofInput(
           hostedFixture({
             metadataResource: "https://wrong.autograph.dev/mcp",
-          }) as typeof fetch
-        )
-      )
+          }) as typeof fetch,
+        ),
+      ),
     ).rejects.toThrow("metadata binding drifted");
     expect(() =>
       verifyWorkspaceTokenPair({
-        nowEpochSeconds: 2_000,
         primary: primaryToken,
-        scenario,
         secondary: primaryToken,
-      })
+        scenario,
+        nowEpochSeconds: 2_000,
+      }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
       verifyWorkspaceTokenPair({
-        nowEpochSeconds: 2_000,
         primary: primaryToken,
-        scenario,
         secondary: jwt("proof-user-primary", "workspace-secondary"),
-      })
+        scenario,
+        nowEpochSeconds: 2_000,
+      }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
       verifyWorkspaceTokenPair({
-        nowEpochSeconds: 2_000,
         primary: primaryToken,
-        scenario,
         secondary: jwt("proof-user-secondary", "workspace-primary"),
-      })
+        scenario,
+        nowEpochSeconds: 2_000,
+      }),
     ).toThrow("two distinct subjects to two distinct workspaces");
   });
 
   it("requires mutual server-backed workspace denial", async () => {
     await expect(
       runHostedProof(
-        proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch)
-      )
+        proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch),
+      ),
     ).rejects.toThrow("not mutually isolated");
   });
 
@@ -540,10 +518,10 @@ describe("hosted portable fresh-client proof", () => {
           proofInput(
             hostedFixture({
               denialFailure: { direction, kind },
-            }) as typeof fetch
-          )
-        )
+            }) as typeof fetch,
+          ),
+        ),
       ).rejects.toThrow(expectedFailure);
-    }
+    },
   );
 });

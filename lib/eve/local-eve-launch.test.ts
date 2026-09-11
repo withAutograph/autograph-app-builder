@@ -1,8 +1,9 @@
-import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
@@ -14,7 +15,7 @@ import {
 
 function fixture() {
   const stateRoot = realpathSync(
-    mkdtempSync(join(tmpdir(), "app-builder-local-eve-"))
+    mkdtempSync(join(tmpdir(), "app-builder-local-eve-")),
   );
   chmodSync(stateRoot, 0o700);
   const repositoryRoot = join(stateRoot, "repository");
@@ -23,7 +24,7 @@ function fixture() {
   mkdirSync(runsRoot, { mode: 0o700 });
   const activeRun = realpathSync(mkdtempSync(join(runsRoot, "run-")));
   const supervisorRoot = realpathSync(
-    mkdtempSync(join(runsRoot, "supervisor-"))
+    mkdtempSync(join(runsRoot, "supervisor-")),
   );
   const cycleRoot = realpathSync(mkdtempSync(join(supervisorRoot, "cycle-")));
   const applicationRoot = join(cycleRoot, "eve-application/source");
@@ -37,37 +38,36 @@ function fixture() {
     runtimeHome,
     workflowData,
     destinationRoot,
-  ]) {
+  ])
     mkdirSync(path, { recursive: true, mode: 0o700 });
-  }
   mkdirSync(sourceRoot, { mode: 0o500 });
   const environment: Record<string, string> = {
-    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
-    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
-    APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "a".repeat(40),
-    APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "b".repeat(40),
-    APP_BUILDER_DEV_EVE_ROOT: realpathSync(applicationRoot),
     APP_BUILDER_DEV_RUNS_ROOT: realpathSync(runsRoot),
-    APP_BUILDER_DEV_RUNTIME_HOME: realpathSync(runtimeHome),
     APP_BUILDER_DEV_SUPERVISOR_ROOT: supervisorRoot,
+    APP_BUILDER_DEV_RUNTIME_HOME: realpathSync(runtimeHome),
+    APP_BUILDER_DEV_EVE_ROOT: realpathSync(applicationRoot),
     APP_BUILDER_EVE_PORT: "2000",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
-    APP_BUILDER_LOCAL_PUBLICATION: "0",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-    EVE_AGENT_HOST: "http://127.0.0.1:2000",
-    EVE_HOSTED_ADAPTER: "0",
-    REPOSITORY_LOCAL_ROOTS: realpathSync(sourceRoot),
-    REPOSITORY_WORKSPACE_ROOT: realpathSync(destinationRoot),
     WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:2000",
     WORKFLOW_LOCAL_DATA_DIR: realpathSync(workflowData),
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "a".repeat(40),
+    APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "b".repeat(40),
+    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
+    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_LOCAL_PUBLICATION: "0",
+    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
+    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    EVE_HOSTED_ADAPTER: "0",
+    EVE_AGENT_HOST: "http://127.0.0.1:2000",
+    REPOSITORY_LOCAL_ROOTS: realpathSync(sourceRoot),
+    REPOSITORY_WORKSPACE_ROOT: realpathSync(destinationRoot),
   };
   return { applicationRoot, environment, repositoryRoot };
 }
@@ -82,9 +82,7 @@ describe("closed local Eve launch", () => {
       signalCode: { value: null, writable: true },
     });
     child.kill = ((signal?: NodeJS.Signals | number) => {
-      if (typeof signal === "string") {
-        forwarded.push(signal);
-      }
+      if (typeof signal === "string") forwarded.push(signal);
       return true;
     }) as ChildProcess["kill"];
 
@@ -109,23 +107,23 @@ describe("closed local Eve launch", () => {
     const input = fixture();
     const sentinel = "oidc-sentinel-must-not-leak";
     const invocation = createLocalEveInvocation({
-      environment: input.environment,
+      repositoryRoot: input.repositoryRoot,
+      pinnedNode: "/mise/node/24.18.0/bin/node",
       eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
       oidcToken: sentinel,
-      pinnedNode: "/mise/node/24.18.0/bin/node",
-      repositoryRoot: input.repositoryRoot,
       vercelProject: { orgId: "team_example", projectId: "prj_example" },
+      environment: input.environment,
     });
 
     expect(invocation.cwd).toBe(realpathSync(input.applicationRoot));
     expect(invocation.environment.VERCEL_OIDC_TOKEN).toBe(sentinel);
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
     expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe(
-      "local-development"
+      "local-development",
     );
     expect(invocation.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
     expect(invocation.environment.WORKFLOW_LOCAL_BASE_URL).toBe(
-      "http://127.0.0.1:2000"
+      "http://127.0.0.1:2000",
     );
     expect(invocation.environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
     expect(invocation.environment.MSB_HOME).toBeUndefined();
@@ -141,13 +139,13 @@ describe("closed local Eve launch", () => {
 
     expect(() =>
       createLocalEveInvocation({
-        environment: input.environment,
+        repositoryRoot: input.repositoryRoot,
+        pinnedNode: "/mise/node/24.18.0/bin/node",
         eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
         oidcToken: "local-oidc-token",
-        pinnedNode: "/mise/node/24.18.0/bin/node",
-        repositoryRoot: input.repositoryRoot,
         vercelProject: { orgId: "team_example", projectId: "prj_example" },
-      })
+        environment: input.environment,
+      }),
     ).toThrow("Local Eve workflow queue binding was invalid.");
   });
 
@@ -162,13 +160,13 @@ describe("closed local Eve launch", () => {
     const input = fixture();
     expect(() =>
       createLocalEveInvocation({
-        environment: { ...input.environment, ...override },
+        repositoryRoot: input.repositoryRoot,
+        pinnedNode: "/mise/node/24.18.0/bin/node",
         eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
         oidcToken: "sentinel",
-        pinnedNode: "/mise/node/24.18.0/bin/node",
-        repositoryRoot: input.repositoryRoot,
         vercelProject: { orgId: "team_example", projectId: "prj_example" },
-      })
+        environment: { ...input.environment, ...override },
+      }),
     ).toThrow();
   });
 });

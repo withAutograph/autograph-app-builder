@@ -1,15 +1,14 @@
 "use client";
 
-import { useAuth } from "@better-auth-ui/react";
 import type { ComponentProps } from "react";
+import { useAuth } from "@better-auth-ui/react";
 
 import { cn } from "@/lib/utils";
-
 import { UserProfile } from "./user-profile";
 
-export interface AccountSettingsProps {
+export type AccountSettingsProps = {
   className?: string;
-}
+};
 
 /**
  * Renders the account settings layout.
@@ -39,13 +38,13 @@ export function AccountSettings({
         (plugin) =>
           plugin.securityCards?.map((SecurityCard, index) => (
             <SecurityCard key={`${plugin.id}-security-${index.toString()}`} />
-          )) ?? []
+          )) ?? [],
       )}
       {plugins.flatMap(
         (plugin) =>
           plugin.accountCards?.map((AccountCard, index) => (
             <AccountCard key={`${plugin.id}-account-${index.toString()}`} />
-          )) ?? []
+          )) ?? [],
       )}
     </div>
   );

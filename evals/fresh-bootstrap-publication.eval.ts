@@ -11,27 +11,27 @@ import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
+  tags: ["fresh-bootstrap-publication"],
   description:
     "Eve uses only the approval-bound fresh-bootstrap tools for an absent local destination.",
-  tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(
       t,
       repository,
       "fresh-eval",
-      "fresh-template"
+      "fresh-template",
     );
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = join(fixture.allowedRoot, "absent");
       await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination}.`)
+        t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       t.requireInputRequest({ toolName: "publish_fresh_repository" });
       t.event("input.requested", { count: 1 });
       await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.respondAll("approve")
+        t.respondAll("approve"),
       );
       t.succeeded();
       t.check(t.reply, includes("one parentless SHA-1 local repository"));

@@ -8,9 +8,7 @@ import type {
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useAddPasskey } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
-import { useRef } from "react";
-import type { SyntheticEvent } from "react";
-
+import { type SyntheticEvent, useRef } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,13 +23,12 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
-
 import { FreshSessionPrompt } from "../settings/security/fresh-session-prompt";
 
-export interface AddPasskeyDialogProps {
+export type AddPasskeyDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
+};
 
 export function AddPasskeyDialog({
   open,
@@ -86,9 +83,7 @@ export function AddPasskeyDialog({
             <FreshSessionPrompt
               onFresh={() => {
                 const request = pendingRequest.current;
-                if (request) {
-                  submitRequest(request);
-                }
+                if (request) submitRequest(request);
               }}
             />
           </>

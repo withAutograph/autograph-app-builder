@@ -3,8 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 import autographIcon from "@/assets/autograph-icon.png";
 
@@ -18,24 +17,24 @@ export function AuthContinuity({
   action?: "sign-in" | "sign-up";
 }) {
   const hasSavedBrief = useSyncExternalStore(
-    () => () => {},
+    () => () => undefined,
     () =>
       (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length >
       0,
-    () => false
+    () => false,
   );
 
   return (
     <div className="w-full max-w-sm">
       <Link
         href="/"
-        className="text-foreground focus-visible:ring-ring mx-auto flex w-fit items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-offset-4"
+        className="mx-auto flex w-fit items-center gap-2 rounded-md text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
         aria-label="Autograph App Builder home"
       >
         <Image src={autographIcon} alt="" width={32} height={32} priority />
         <span className="flex flex-col leading-none">
           <strong className="text-sm font-semibold">Autograph</strong>
-          <span className="text-muted-foreground mt-1 text-xs">
+          <span className="mt-1 text-xs text-muted-foreground">
             App Builder
           </span>
         </span>
@@ -43,7 +42,7 @@ export function AuthContinuity({
 
       {hasSavedBrief ? (
         <p
-          className="text-muted-foreground mt-4 text-center text-sm"
+          className="mt-4 text-center text-sm text-muted-foreground"
           role="status"
         >
           Your brief is saved. {action === "sign-in" ? "Sign in" : "Sign up"} to
@@ -56,7 +55,7 @@ export function AuthContinuity({
       <div className="mt-12 text-center">
         <Link
           href="/"
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm outline-none focus-visible:ring-2"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {hasSavedBrief ? "Back to edit your brief" : "Back to App Builder"}

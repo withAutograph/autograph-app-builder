@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, editable assumptions, package comparison, and next decision form a clear review sequence. Current and proposed totals are visually prominent, and recorded decision states add a clear banner. Hierarchy is weakened by giving “Recommend for planning” much stronger emphasis than the alternative before the reviewer has made a choice. |
-| layout | 3/4 | The two-column composition is aligned and well balanced at 1024, 1440, and 1920 pixels, with consistent card boundaries and field spacing. The long assumptions form leaves substantial unused space beneath the right column, while the post-decision banner increases document height from 910 to 1056 pixels, but neither issue prevents use. |
-| typography | 3/4 | Headings, labels, totals, and supporting copy use a consistent typographic system, and the bold package totals are easy to compare. Raw values such as “152000” and “7.65” are less scannable than formatted financial values, while several 12-pixel labels and captions were flagged as having marginal contrast in every capture. |
-| responsive | 3/4 | The desktop composition remains intact without clipping from 1024 through 1920 pixels; inputs contract from about 486 to 394 pixels and comparison content wraps cleanly. At the 1024×768 window the assumptions actions fall below the viewport and recorded states require a 1056-pixel document, but ordinary page scrolling remains usable and the comparison and decision stay visible. |
-| productClarity | 3/4 | The interface clearly identifies a synthetic draft, exposes base, bonus, benefits, employer-tax estimate, current versus proposed totals, and explicitly says decisions do not contact an approver or payroll. However, it does not clearly name the totals as illustrative employer cost or expose their formula, and band context is limited to a midpoint and dollar difference rather than a meaningful range or position. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| hierarchy      | 3/4   | The page title, editable assumptions, package comparison, and next decision form a clear review sequence. Current and proposed totals are visually prominent, and recorded decision states add a clear banner. Hierarchy is weakened by giving “Recommend for planning” much stronger emphasis than the alternative before the reviewer has made a choice.                                                                     |
+| layout         | 3/4   | The two-column composition is aligned and well balanced at 1024, 1440, and 1920 pixels, with consistent card boundaries and field spacing. The long assumptions form leaves substantial unused space beneath the right column, while the post-decision banner increases document height from 910 to 1056 pixels, but neither issue prevents use.                                                                               |
+| typography     | 3/4   | Headings, labels, totals, and supporting copy use a consistent typographic system, and the bold package totals are easy to compare. Raw values such as “152000” and “7.65” are less scannable than formatted financial values, while several 12-pixel labels and captions were flagged as having marginal contrast in every capture.                                                                                           |
+| responsive     | 3/4   | The desktop composition remains intact without clipping from 1024 through 1920 pixels; inputs contract from about 486 to 394 pixels and comparison content wraps cleanly. At the 1024×768 window the assumptions actions fall below the viewport and recorded states require a 1056-pixel document, but ordinary page scrolling remains usable and the comparison and decision stay visible.                                   |
+| productClarity | 3/4   | The interface clearly identifies a synthetic draft, exposes base, bonus, benefits, employer-tax estimate, current versus proposed totals, and explicitly says decisions do not contact an approver or payroll. However, it does not clearly name the totals as illustrative employer cost or expose their formula, and band context is limited to a midpoint and dollar difference rather than a meaningful range or position. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/168) |
-| desktop-0 | typography | 0/0 | 0% (0/412) |
-| desktop-0 | spacing | 0/0 | 0% (0/190) |
-| desktop-0 | radius | 0/0 | 0% (0/86) |
-| desktop-0 | border | 0/0 | 0% (0/101) |
-| desktop-0 | shadow | 0/0 | 0% (0/86) |
-| desktop-wide-0 | color | 0/0 | 0% (0/168) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/412) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/190) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/86) |
-| desktop-wide-0 | border | 0/0 | 0% (0/101) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/86) |
-| desktop-window-0 | color | 0/0 | 0% (0/168) |
-| desktop-window-0 | typography | 0/0 | 0% (0/412) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/190) |
-| desktop-window-0 | radius | 0/0 | 0% (0/86) |
-| desktop-window-0 | border | 0/0 | 0% (0/101) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/86) |
-| desktop-custom-1024x900-0 | color | 0/0 | 0% (0/168) |
-| desktop-custom-1024x900-0 | typography | 0/0 | 0% (0/412) |
-| desktop-custom-1024x900-0 | spacing | 0/0 | 0% (0/190) |
-| desktop-custom-1024x900-0 | radius | 0/0 | 0% (0/86) |
-| desktop-custom-1024x900-0 | border | 0/0 | 0% (0/101) |
-| desktop-custom-1024x900-0 | shadow | 0/0 | 0% (0/86) |
+| Viewport                  | Category   | Token references / assessed | Coverage   |
+| ------------------------- | ---------- | --------------------------- | ---------- |
+| desktop-0                 | color      | 0/0                         | 0% (0/168) |
+| desktop-0                 | typography | 0/0                         | 0% (0/412) |
+| desktop-0                 | spacing    | 0/0                         | 0% (0/190) |
+| desktop-0                 | radius     | 0/0                         | 0% (0/86)  |
+| desktop-0                 | border     | 0/0                         | 0% (0/101) |
+| desktop-0                 | shadow     | 0/0                         | 0% (0/86)  |
+| desktop-wide-0            | color      | 0/0                         | 0% (0/168) |
+| desktop-wide-0            | typography | 0/0                         | 0% (0/412) |
+| desktop-wide-0            | spacing    | 0/0                         | 0% (0/190) |
+| desktop-wide-0            | radius     | 0/0                         | 0% (0/86)  |
+| desktop-wide-0            | border     | 0/0                         | 0% (0/101) |
+| desktop-wide-0            | shadow     | 0/0                         | 0% (0/86)  |
+| desktop-window-0          | color      | 0/0                         | 0% (0/168) |
+| desktop-window-0          | typography | 0/0                         | 0% (0/412) |
+| desktop-window-0          | spacing    | 0/0                         | 0% (0/190) |
+| desktop-window-0          | radius     | 0/0                         | 0% (0/86)  |
+| desktop-window-0          | border     | 0/0                         | 0% (0/101) |
+| desktop-window-0          | shadow     | 0/0                         | 0% (0/86)  |
+| desktop-custom-1024x900-0 | color      | 0/0                         | 0% (0/168) |
+| desktop-custom-1024x900-0 | typography | 0/0                         | 0% (0/412) |
+| desktop-custom-1024x900-0 | spacing    | 0/0                         | 0% (0/190) |
+| desktop-custom-1024x900-0 | radius     | 0/0                         | 0% (0/86)  |
+| desktop-custom-1024x900-0 | border     | 0/0                         | 0% (0/101) |
+| desktop-custom-1024x900-0 | shadow     | 0/0                         | 0% (0/86)  |
 
 ## Latest-run screenshots
 

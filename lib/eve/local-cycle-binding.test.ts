@@ -1,6 +1,6 @@
 import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -13,13 +13,13 @@ const roots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true }))
+    roots.splice(0).map((root) => rm(root, { recursive: true })),
   );
 });
 
 async function privateRoot() {
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "autograph-eve-cycle-"))
+    await mkdtemp(join(tmpdir(), "autograph-eve-cycle-")),
   );
   roots.push(root);
   await chmod(root, 0o700);

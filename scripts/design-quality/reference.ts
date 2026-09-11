@@ -1,52 +1,48 @@
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
-
 import ts from "typescript";
 
-export interface PublicProp {
+export type PublicProp = {
   required: boolean;
   /** Literal values accepted by a union-typed prop, when TypeScript can prove them. */
   values?: string[];
   /** Broad primitive kinds proven by TypeScript; any and unknown are omitted. */
   primitiveKinds?: Array<"string" | "number" | "boolean">;
-}
+};
 
-export interface PublicExport {
+export type PublicExport = {
   props?: Record<string, PublicProp>;
-}
+};
 
 /** The target-owned public surface used by source evidence. */
-export interface Reference {
+export type Reference = {
   modules: Record<string, { exports: Record<string, PublicExport> }>;
   limitations: string[];
   arrustedRoot?: string;
-}
+};
 
-export interface TypedJsxAttribute {
+export type TypedJsxAttribute = {
   path: string;
   start: number;
   verdict: "conforming" | "nonconforming" | "unassessed";
   reason: string;
-}
-export interface ImplementationDiagnostic {
+};
+export type ImplementationDiagnostic = {
   path: string;
   line: number;
   column: number;
   code: number;
   message: string;
-}
+};
 
-interface PackageJson {
+type PackageJson = {
   name?: string;
   exports?: unknown;
   main?: string;
   types?: string;
-}
-interface EntryPoint {
-  module: string;
-  path: string;
-}
+};
+type EntryPoint = { module: string; path: string };
 
 const relevantModule = /^@autograph\/(?:components|compositions|icons)(?:$|\/)/;
 const sourceExtensions = [".tsx", ".ts", ".jsx", ".js", ".d.ts"];
@@ -60,35 +56,25 @@ async function walk(root: string, relative = ""): Promise<string[]> {
     return result;
   }
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name.startsWith(".")) {
-      continue;
-    }
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const path = join(relative, entry.name);
-    if (entry.isDirectory()) {
-      result.push(...(await walk(root, path)));
-    } else if (entry.isFile() && entry.name === "package.json") {
-      result.push(path);
-    }
+    if (entry.isDirectory()) result.push(...(await walk(root, path)));
+    else if (entry.isFile() && entry.name === "package.json") result.push(path);
   }
   return result;
 }
 
 function exportTargets(value: unknown): string[] {
-  if (typeof value === "string") {
-    return [value];
-  }
-  if (!value || typeof value !== "object") {
-    return [];
-  }
+  if (typeof value === "string") return [value];
+  if (!value || typeof value !== "object") return [];
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
 }
 
 function packageEntryPoints(
-  pkg: PackageJson
-): { suffix: string; target: string }[] {
-  if (typeof pkg.exports === "string") {
+  pkg: PackageJson,
+): Array<{ suffix: string; target: string }> {
+  if (typeof pkg.exports === "string")
     return [{ suffix: "", target: pkg.exports }];
-  }
   if (pkg.exports && typeof pkg.exports === "object") {
     const entries = Object.entries(pkg.exports as Record<string, unknown>)
       .filter(([key]) => key === "." || key.startsWith("./"))
@@ -96,15 +82,11 @@ function packageEntryPoints(
         exportTargets(value).map((target) => ({
           suffix: key === "." ? "" : key.slice(1),
           target,
-        }))
+        })),
       );
-    if (entries.length) {
-      return entries;
-    }
+    if (entries.length) return entries;
     const root = exportTargets(pkg.exports);
-    if (root.length) {
-      return root.map((target) => ({ suffix: "", target }));
-    }
+    if (root.length) return root.map((target) => ({ suffix: "", target }));
   }
   return pkg.types || pkg.main
     ? [{ suffix: "", target: pkg.types ?? pkg.main! }]
@@ -113,21 +95,19 @@ function packageEntryPoints(
 
 async function aliasEntryPoints(
   root: string,
-  limitations: string[]
+  limitations: string[],
 ): Promise<EntryPoint[]> {
   let parsed: ts.ParsedCommandLine;
   try {
     const config = ts.readConfigFile(
       join(root, "tsconfig.json"),
-      ts.sys.readFile
+      ts.sys.readFile,
     );
-    if (config.error) {
-      throw new Error();
-    }
+    if (config.error) throw new Error();
     parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   } catch {
     limitations.push(
-      "Could not read the selected Arrusted tsconfig paths; alias-backed public exports are unassessed."
+      "Could not read the selected Arrusted tsconfig paths; alias-backed public exports are unassessed.",
     );
     return [];
   }
@@ -140,13 +120,11 @@ async function aliasEntryPoints(
   ]) {
     const target = paths[moduleName]?.[0];
     const path = target && sourcePath(root, target);
-    if (path) {
-      entries.push({ module: moduleName, path });
-    } else if (target) {
+    if (path) entries.push({ module: moduleName, path });
+    else if (target)
       limitations.push(
-        `Could not resolve tsconfig path for ${moduleName}; its public types are unassessed.`
+        `Could not resolve tsconfig path for ${moduleName}; its public types are unassessed.`,
       );
-    }
   }
   return entries;
 }
@@ -157,27 +135,24 @@ function sourcePath(packageRoot: string, target: string): string | undefined {
     base,
     ...sourceExtensions.map((extension) => base + extension),
   ];
-  if (!extname(base)) {
+  if (!extname(base))
     possibilities.push(
-      ...sourceExtensions.map((extension) => join(base, `index${extension}`))
+      ...sourceExtensions.map((extension) => join(base, `index${extension}`)),
     );
-  }
   return possibilities.find(existsSync);
 }
 
 function literalValues(type: ts.Type): string[] | undefined {
   const members = (type.isUnion() ? type.types : [type]).filter(
-    (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null))
+    (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
   );
   const values = members
     .map((member) => {
-      if (member.flags & ts.TypeFlags.StringLiteral) {
+      if (member.flags & ts.TypeFlags.StringLiteral)
         return (member as ts.StringLiteralType).value;
-      }
-      if (member.flags & ts.TypeFlags.NumberLiteral) {
+      if (member.flags & ts.TypeFlags.NumberLiteral)
         return String((member as ts.NumberLiteralType).value);
-      }
-      return;
+      return undefined;
     })
     .filter((value): value is string => value !== undefined);
   return values.length === members.length && members.length
@@ -187,30 +162,23 @@ function literalValues(type: ts.Type): string[] | undefined {
 
 function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
   const members = (type.isUnion() ? type.types : [type]).filter(
-    (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null))
+    (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
   );
   if (
     !members.length ||
     members.some(
-      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
     )
-  ) {
+  )
     return undefined;
-  }
   const kinds = new Set<"string" | "number" | "boolean">();
   for (const member of members) {
-    if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) {
+    if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral))
       kinds.add("string");
-    } else if (
-      member.flags &
-      (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)
-    ) {
+    else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral))
       kinds.add("number");
-    } else if (member.flags & ts.TypeFlags.BooleanLike) {
-      kinds.add("boolean");
-    } else {
-      return undefined;
-    }
+    else if (member.flags & ts.TypeFlags.BooleanLike) kinds.add("boolean");
+    else return undefined;
   }
   return [...kinds].sort() as PublicProp["primitiveKinds"];
 }
@@ -218,14 +186,12 @@ function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
 function propsForExport(
   symbol: ts.Symbol,
   location: ts.Node,
-  checker: ts.TypeChecker
+  checker: ts.TypeChecker,
 ): PublicExport {
   const type = checker.getTypeOfSymbolAtLocation(symbol, location);
   const signature = checker.getSignaturesOfType(type, ts.SignatureKind.Call)[0];
   const parameter = signature?.getParameters()[0];
-  if (!parameter) {
-    return {};
-  }
+  if (!parameter) return {};
   const propsType = checker.getTypeOfSymbolAtLocation(parameter, location);
   const props: Record<string, PublicProp> = {};
   for (const property of checker.getPropertiesOfType(propsType)) {
@@ -233,7 +199,7 @@ function propsForExport(
       property.valueDeclaration ?? property.declarations?.[0] ?? location;
     const propertyType = checker.getTypeOfSymbolAtLocation(
       property,
-      declaration
+      declaration,
     );
     const values = literalValues(propertyType);
     const primitive = values ? undefined : primitiveKinds(propertyType);
@@ -259,13 +225,11 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
   for (const manifest of manifests) {
     let pkg: PackageJson;
     try {
-      pkg = JSON.parse(await readFile(join(arrustedRoot, manifest), "utf-8"));
+      pkg = JSON.parse(await readFile(join(arrustedRoot, manifest), "utf8"));
     } catch {
       continue;
     }
-    if (!pkg.name || !relevantModule.test(pkg.name)) {
-      continue;
-    }
+    if (!pkg.name || !relevantModule.test(pkg.name)) continue;
     const packageRoot = dirname(join(arrustedRoot, manifest));
     const entries = packageEntryPoints(pkg)
       .map(({ suffix, target }) => ({
@@ -275,7 +239,7 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
       .filter((entry): entry is EntryPoint => Boolean(entry.path));
     if (!entries.length) {
       limitations.push(
-        `Could not resolve a TypeScript public entry point for ${pkg.name}.`
+        `Could not resolve a TypeScript public entry point for ${pkg.name}.`,
       );
       continue;
     }
@@ -287,29 +251,22 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
         module: ts.ModuleKind.NodeNext,
         moduleResolution: ts.ModuleResolutionKind.NodeNext,
         skipLibCheck: true,
-      }
+      },
     );
     const checker = program.getTypeChecker();
     for (const entry of entries) {
       const source = program.getSourceFile(entry.path);
-      if (!source) {
-        continue;
-      }
+      if (!source) continue;
       const moduleSymbol = checker.getSymbolAtLocation(source);
-      if (!moduleSymbol) {
-        continue;
-      }
+      if (!moduleSymbol) continue;
       const exported: Record<string, PublicExport> = {};
-      for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+      for (const symbol of checker.getExportsOfModule(moduleSymbol))
         exported[symbol.getName()] = propsForExport(symbol, source, checker);
-      }
       modules[entry.module] = { exports: exported };
     }
   }
   for (const entry of entryPoints) {
-    if (modules[entry.module]) {
-      continue;
-    }
+    if (modules[entry.module]) continue;
     const program = ts.createProgram([entry.path], {
       jsx: ts.JsxEmit.Preserve,
       skipLibCheck: true,
@@ -319,59 +276,50 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
       source && program.getTypeChecker().getSymbolAtLocation(source);
     if (!source || !moduleSymbol) {
       limitations.push(
-        `Could not load TypeScript exports for ${entry.module}; its public types are unassessed.`
+        `Could not load TypeScript exports for ${entry.module}; its public types are unassessed.`,
       );
       continue;
     }
     const checker = program.getTypeChecker();
     const exported: Record<string, PublicExport> = {};
-    for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+    for (const symbol of checker.getExportsOfModule(moduleSymbol))
       exported[symbol.getName()] = propsForExport(symbol, source, checker);
-    }
     modules[entry.module] = { exports: exported };
   }
-  if (!Object.keys(modules).length) {
+  if (!Object.keys(modules).length)
     limitations.push(
-      "No public @autograph component, composition, or icon packages were found in the selected Arrusted checkout."
+      "No public @autograph component, composition, or icon packages were found in the selected Arrusted checkout.",
     );
-  }
-  return { arrustedRoot, limitations, modules };
+  return { modules, limitations, arrustedRoot };
 }
 
 function reliableExpressionType(
   type: ts.Type,
   checker: ts.TypeChecker,
   depth = 0,
-  seen = new Set<ts.Type>()
+  seen = new Set<ts.Type>(),
 ): boolean {
-  if (depth > 5 || seen.has(type)) {
-    return false;
-  }
+  if (depth > 5 || seen.has(type)) return false;
   if (
     type.flags &
     (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter)
-  ) {
+  )
     return false;
-  }
-  const nextSeen = new Set([...seen, type]);
-  if (type.isUnion() || type.isIntersection()) {
+  const nextSeen = new Set(seen);
+  nextSeen.add(type);
+  if (type.isUnion() || type.isIntersection())
     return type.types.every((member) =>
-      reliableExpressionType(member, checker, depth + 1, nextSeen)
+      reliableExpressionType(member, checker, depth + 1, nextSeen),
     );
-  }
-  if (checker.isArrayType(type) || checker.isTupleType(type)) {
+  if (checker.isArrayType(type) || checker.isTupleType(type))
     return checker
       .getTypeArguments(type as ts.TypeReference)
       .every((item) =>
-        reliableExpressionType(item, checker, depth + 1, nextSeen)
+        reliableExpressionType(item, checker, depth + 1, nextSeen),
       );
-  }
-  if (type.getCallSignatures().length || type.getConstructSignatures().length) {
+  if (type.getCallSignatures().length || type.getConstructSignatures().length)
     return false;
-  }
-  if (!(type.flags & ts.TypeFlags.Object)) {
-    return true;
-  }
+  if (!(type.flags & ts.TypeFlags.Object)) return true;
   return checker.getPropertiesOfType(type).every((property) => {
     const declaration = property.valueDeclaration ?? property.declarations?.[0];
     return (
@@ -380,7 +328,7 @@ function reliableExpressionType(
         checker.getTypeOfSymbolAtLocation(property, declaration!),
         checker,
         depth + 1,
-        nextSeen
+        nextSeen,
       )
     );
   });
@@ -389,25 +337,20 @@ function reliableExpressionType(
 function reliableExpectedAssignment(
   actual: ts.Type,
   expected: ts.Type,
-  checker: ts.TypeChecker
+  checker: ts.TypeChecker,
 ): boolean | undefined {
-  if (!expected.isUnion()) {
+  if (!expected.isUnion())
     return reliableExpressionType(expected, checker)
       ? checker.isTypeAssignableTo(actual, expected)
       : undefined;
-  }
   if (
     expected.types.some(
-      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+      (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
     )
-  ) {
+  )
     return undefined;
-  }
-  if (
-    expected.types.every((member) => reliableExpressionType(member, checker))
-  ) {
+  if (expected.types.every((member) => reliableExpressionType(member, checker)))
     return checker.isTypeAssignableTo(actual, expected);
-  }
   const primitiveActual = Boolean(
     actual.flags &
     (ts.TypeFlags.String |
@@ -415,20 +358,15 @@ function reliableExpectedAssignment(
       ts.TypeFlags.Number |
       ts.TypeFlags.NumberLiteral |
       ts.TypeFlags.Boolean |
-      ts.TypeFlags.BooleanLiteral)
+      ts.TypeFlags.BooleanLiteral),
   );
-  if (!primitiveActual) {
-    return undefined;
-  }
+  if (!primitiveActual) return undefined;
   const candidates = expected.types.filter((member) =>
-    reliableExpressionType(member, checker)
+    reliableExpressionType(member, checker),
   );
-  if (!candidates.length) {
-    return undefined;
-  }
-  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member))) {
+  if (!candidates.length) return undefined;
+  if (candidates.some((member) => checker.isTypeAssignableTo(actual, member)))
     return true;
-  }
   return undefined;
 }
 
@@ -443,14 +381,11 @@ function finiteLiteralEvidence(
   expected: ts.Type,
   checker: ts.TypeChecker,
   depth = 0,
-  seen = new Set<ts.Symbol>()
+  seen = new Set<ts.Symbol>(),
 ): true | undefined {
-  if (depth > 8) {
+  if (depth > 8) return undefined;
+  if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
     return undefined;
-  }
-  if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) {
-    return undefined;
-  }
   // A JSX element or fragment is a concrete expression with a compiler-owned
   // element type. Its descendants may still be dynamic, but that does not make
   // the outer prop callback-shaped or unresolved. Do not admit any/unknown
@@ -465,11 +400,10 @@ function finiteLiteralEvidence(
       actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
       (expected.isUnion() &&
         expected.types.some(
-          (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+          (member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown),
         ))
-    ) {
+    )
       return undefined;
-    }
     return checker.isTypeAssignableTo(actual, expected) ? true : undefined;
   }
   // A generated prop may name a local, immutable JSX literal. Follow only a
@@ -491,69 +425,61 @@ function finiteLiteralEvidence(
       !list ||
       !ts.isVariableDeclarationList(list) ||
       !(list.flags & ts.NodeFlags.Const)
-    ) {
+    )
       return undefined;
-    }
-    const nextSeen = new Set([...seen, symbol]);
+    const nextSeen = new Set(seen);
+    nextSeen.add(symbol);
     return finiteLiteralEvidence(
       declaration.initializer,
       expected,
       checker,
       depth + 1,
-      nextSeen
+      nextSeen,
     );
   }
   // A conditional is finite only when every possible branch is independently
   // finite. The condition itself may be runtime state; TypeScript remains the
   // authority for the conditional expression's final assignability.
-  if (ts.isConditionalExpression(expression)) {
+  if (ts.isConditionalExpression(expression))
     return finiteLiteralEvidence(
       expression.whenTrue,
       expected,
       checker,
       depth + 1,
-      seen
+      seen,
     ) === true &&
       finiteLiteralEvidence(
         expression.whenFalse,
         expected,
         checker,
         depth + 1,
-        seen
+        seen,
       ) === true
       ? true
       : undefined;
-  }
   if (expected.isUnion()) {
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
       (member) =>
         finiteLiteralEvidence(expression, member, checker, depth + 1, seen) &&
-        checker.isTypeAssignableTo(actual, member)
+        checker.isTypeAssignableTo(actual, member),
     )
       ? true
       : undefined;
   }
   if (ts.isArrayLiteralExpression(expression)) {
-    if (!checker.isArrayType(expected) && !checker.isTupleType(expected)) {
+    if (!checker.isArrayType(expected) && !checker.isTupleType(expected))
       return undefined;
-    }
-    if (!expression.elements.length) {
-      return true;
-    }
+    if (!expression.elements.length) return true;
     // Non-empty tuples need cardinality/rest handling; retain the conservative
     // existing path instead of approximating it here.
-    if (checker.isTupleType(expected)) {
-      return undefined;
-    }
+    if (checker.isTupleType(expected)) return undefined;
     const items = checker.getTypeArguments(expected as ts.TypeReference);
-    if (items.length !== 1) {
-      return undefined;
-    }
+    if (items.length !== 1) return undefined;
     return expression.elements.every((element) =>
       ts.isExpression(element)
         ? finiteLiteralEvidence(element, items[0], checker, depth + 1, seen)
-        : false
+        : false,
     )
       ? true
       : undefined;
@@ -564,43 +490,36 @@ function finiteLiteralEvidence(
       expected.isIntersection() ||
       expected.getCallSignatures().length ||
       expected.getConstructSignatures().length
-    ) {
+    )
       return undefined;
-    }
     for (const property of expression.properties) {
-      if (!ts.isPropertyAssignment(property) || !property.name) {
+      if (!ts.isPropertyAssignment(property) || !property.name)
         return undefined;
-      }
       const name = ts.isIdentifier(property.name)
         ? property.name.text
         : ts.isStringLiteral(property.name) ||
             ts.isNumericLiteral(property.name)
           ? property.name.text
           : undefined;
-      if (!name) {
-        return undefined;
-      }
+      if (!name) return undefined;
       const symbol = checker.getPropertyOfType(expected, name);
       const propertyType = symbol
         ? checker.getTypeOfSymbolAtLocation(
             symbol,
-            symbol.valueDeclaration ?? symbol.declarations?.[0] ?? property
+            symbol.valueDeclaration ?? symbol.declarations?.[0] ?? property,
           )
         : checker.getIndexTypeOfType(expected, ts.IndexKind.String);
-      if (!propertyType) {
-        return undefined;
-      }
+      if (!propertyType) return undefined;
       if (
         finiteLiteralEvidence(
           property.initializer,
           propertyType,
           checker,
           depth + 1,
-          seen
+          seen,
         ) !== true
-      ) {
+      )
         return undefined;
-      }
     }
     return true;
   }
@@ -626,15 +545,11 @@ function finiteLiteralEvidence(
 
 function jsxAttributeExpectedType(
   attribute: ts.JsxAttribute,
-  checker: ts.TypeChecker
+  checker: ts.TypeChecker,
 ): ts.Type | undefined {
   const opening = attribute.parent.parent;
-  if (
-    !ts.isJsxOpeningElement(opening) &&
-    !ts.isJsxSelfClosingElement(opening)
-  ) {
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening))
     return undefined;
-  }
   const symbol = checker.getSymbolAtLocation(opening.tagName);
   const component = symbol
     ? checker.getTypeOfSymbolAtLocation(symbol, opening.tagName)
@@ -642,9 +557,7 @@ function jsxAttributeExpectedType(
   const parameter = checker
     .getSignaturesOfType(component, ts.SignatureKind.Call)[0]
     ?.getParameters()[0];
-  if (!parameter) {
-    return undefined;
-  }
+  if (!parameter) return undefined;
   const props = checker.getTypeOfSymbolAtLocation(parameter, opening);
   const prop = checker.getPropertyOfType(props, attribute.name.getText());
   return prop ? checker.getTypeOfSymbolAtLocation(prop, attribute) : undefined;
@@ -652,11 +565,9 @@ function jsxAttributeExpectedType(
 
 function requiresFiniteIdentifierEvidence(
   expression: ts.Expression,
-  checker: ts.TypeChecker
+  checker: ts.TypeChecker,
 ): boolean {
-  if (!ts.isIdentifier(expression)) {
-    return false;
-  }
+  if (!ts.isIdentifier(expression)) return false;
   const actual = checker.getTypeAtLocation(expression);
   const members = actual.isUnion() ? actual.types : [actual];
   // Scalar values retain the existing reliable type-only path. JSX and object
@@ -675,7 +586,7 @@ export function checkJsxAttributes({
   files,
 }: {
   arrustedRoot: string;
-  files: { path: string; content: string }[];
+  files: Array<{ path: string; content: string }>;
 }): {
   attributes: TypedJsxAttribute[];
   limitations: string[];
@@ -684,9 +595,9 @@ export function checkJsxAttributes({
   const limitations: string[] = [];
   const config = ts.readConfigFile(
     join(arrustedRoot, "tsconfig.json"),
-    ts.sys.readFile
+    ts.sys.readFile,
   );
-  if (config.error) {
+  if (config.error)
     return {
       attributes: [],
       limitations: [
@@ -694,11 +605,10 @@ export function checkJsxAttributes({
       ],
       implementationDiagnostics: [],
     };
-  }
   const parsed = ts.parseJsonConfigFileContent(
     config.config,
     ts.sys,
-    arrustedRoot
+    arrustedRoot,
   );
   const virtual = new Map(
     files
@@ -706,11 +616,11 @@ export function checkJsxAttributes({
       .map((file) => [
         resolve(arrustedRoot, ".design-quality-virtual", file.path),
         file.content,
-      ])
+      ]),
   );
   const host = ts.createCompilerHost(
     { ...parsed.options, jsx: ts.JsxEmit.Preserve },
-    true
+    true,
   );
   const originalFileExists = host.fileExists.bind(host);
   const originalReadFile = host.readFile.bind(host);
@@ -726,23 +636,21 @@ export function checkJsxAttributes({
           content,
           languageVersion,
           true,
-          ts.ScriptKind.TSX
+          ts.ScriptKind.TSX,
         );
   };
   try {
     const program = ts.createProgram(
       [...virtual.keys()],
       { ...parsed.options, jsx: ts.JsxEmit.Preserve, noEmit: true },
-      host
+      host,
     );
     const checker = program.getTypeChecker();
     const attributes: TypedJsxAttribute[] = [];
     const implementationDiagnostics: ImplementationDiagnostic[] = [];
     for (const [path] of virtual) {
       const source = program.getSourceFile(path);
-      if (!source) {
-        continue;
-      }
+      if (!source) continue;
       const diagnostics = program.getSemanticDiagnostics(source);
       const visit = (node: ts.Node) => {
         if (
@@ -762,9 +670,8 @@ export function checkJsxAttributes({
           if (
             !expected ||
             expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
-          ) {
+          )
             expected = jsxAttributeExpectedType(node, checker);
-          }
           const key = {
             path:
               files.find(
@@ -772,8 +679,8 @@ export function checkJsxAttributes({
                   resolve(
                     arrustedRoot,
                     ".design-quality-virtual",
-                    file.path
-                  ) === path
+                    file.path,
+                  ) === path,
               )?.path ?? path,
             start: node.getStart(source),
           };
@@ -785,45 +692,52 @@ export function checkJsxAttributes({
             return start >= initializerStart && end <= initializerEnd;
           });
           const implementationOnlyDiagnostics = attributeDiagnostics.filter(
-            (item) => ![2322, 2353].includes(item.code)
+            (item) => ![2322, 2353].includes(item.code),
           );
           for (const item of implementationOnlyDiagnostics) {
             const position = source.getLineAndCharacterOfPosition(
-              item.start ?? 0
+              item.start ?? 0,
             );
             implementationDiagnostics.push({
-              code: item.code,
-              column: position.character + 1,
-              line: position.line + 1,
-              message: ts.flattenDiagnosticMessageText(item.messageText, " "),
               path: key.path,
+              line: position.line + 1,
+              column: position.character + 1,
+              code: item.code,
+              message: ts.flattenDiagnosticMessageText(item.messageText, " "),
             });
           }
           const safetyDiagnostics = implementationOnlyDiagnostics.filter(
-            (item) => [2531, 2532, 18_047, 18_048].includes(item.code)
+            (item) => [2531, 2532, 18047, 18048].includes(item.code),
           );
           const propDiagnostics = attributeDiagnostics.filter((item) =>
-            [2322, 2353].includes(item.code)
+            [2322, 2353].includes(item.code),
           );
-          if (safetyDiagnostics.length) {
+          if (safetyDiagnostics.length)
             attributes.push({
               ...key,
               verdict: "unassessed",
               reason:
                 "A generated-source TypeScript diagnostic affects this expression; prop assignability is unassessed.",
             });
-          } else if (propDiagnostics.length) {
+          else if (propDiagnostics.length)
             attributes.push({
               ...key,
               verdict: "nonconforming",
               reason: `TypeScript prop error: ${propDiagnostics
                 .slice(0, 3)
                 .map((item) =>
-                  ts.flattenDiagnosticMessageText(item.messageText, " ")
+                  ts.flattenDiagnosticMessageText(item.messageText, " "),
                 )
                 .join("; ")}`,
             });
-          } else if (expected) {
+          else if (!expected)
+            attributes.push({
+              ...key,
+              verdict: "unassessed",
+              reason:
+                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
+            });
+          else {
             const finite = finiteLiteralEvidence(expression, expected, checker);
             if (
               finite === undefined &&
@@ -862,31 +776,24 @@ export function checkJsxAttributes({
                           .map((item) =>
                             ts.flattenDiagnosticMessageText(
                               item.messageText,
-                              " "
-                            )
+                              " ",
+                            ),
                           )
                           .join("; ")}`
                       : "The static JSX expression is not assignable to the selected Arrusted prop type.",
                 });
             }
-          } else {
-            attributes.push({
-              ...key,
-              verdict: "unassessed",
-              reason:
-                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
-            });
           }
         }
         ts.forEachChild(node, visit);
       };
       visit(source);
     }
-    return { attributes, implementationDiagnostics, limitations };
+    return { attributes, limitations, implementationDiagnostics };
   } catch {
     limitations.push(
-      "Selected Arrusted TypeScript types could not be loaded for generated JSX; prop conformance is unassessed."
+      "Selected Arrusted TypeScript types could not be loaded for generated JSX; prop conformance is unassessed.",
     );
-    return { attributes: [], implementationDiagnostics: [], limitations };
+    return { attributes: [], limitations, implementationDiagnostics: [] };
   }
 }

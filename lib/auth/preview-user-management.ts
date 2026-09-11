@@ -6,12 +6,17 @@ import { organization } from "better-auth/plugins/organization";
 const identityCallbackPaths = new Set(["/callback/github", "/callback/vercel"]);
 
 const organizationAccess = createAccessControl({
-  invitation: ["create", "cancel"],
-  member: ["create", "update", "delete"],
   organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"],
 });
 
 const organizationRoles = {
+  owner: organizationAccess.newRole({
+    organization: ["update", "delete"],
+    member: ["create", "update", "delete"],
+    invitation: ["create", "cancel"],
+  }),
   admin: organizationAccess.newRole({
     organization: ["update"],
     member: ["create", "update", "delete"],
@@ -21,11 +26,6 @@ const organizationRoles = {
     organization: [],
     member: [],
     invitation: [],
-  }),
-  owner: organizationAccess.newRole({
-    organization: ["update", "delete"],
-    member: ["create", "update", "delete"],
-    invitation: ["create", "cancel"],
   }),
 };
 
@@ -86,46 +86,55 @@ function organizationError(cause: unknown) {
     });
   }
   switch (cause.reason) {
-    case "access-revoked": {
+    case "access-revoked":
       return APIError.from("FORBIDDEN", {
         code: "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED",
         message:
           "Your access to this Autograph workspace has been suspended or revoked.",
       });
-    }
-    case "signup-disabled": {
+    case "signup-disabled":
       return APIError.from("FORBIDDEN", {
         code: "AUTOGRAPH_SIGNUP_UNAVAILABLE",
         message: "New Autograph workspaces are not available yet.",
       });
-    }
-    case "verified-identity-required": {
+    case "verified-identity-required":
       return identityUnavailable();
-    }
-    case "workspace-ambiguous": {
+    case "workspace-ambiguous":
       return APIError.from("CONFLICT", {
         code: "AUTOGRAPH_WORKSPACE_AMBIGUOUS",
         message:
           "We found more than one workspace for this account. Choose an existing workspace or contact support.",
       });
-    }
-    case "workspace-setup-failed": {
+    case "workspace-setup-failed":
       return APIError.from("SERVICE_UNAVAILABLE", {
         code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
         message:
           "We couldn’t finish setting up your workspace. Try signing in again.",
       });
-    }
   }
 }
 
 export function createPreviewUserManagementLifecycle(
-  authority: PreviewOrganizationUserAuthority
+  authority: PreviewOrganizationUserAuthority,
 ) {
   return {
+    async beforeUserCreate(
+      user: PreviewVerifiedUser & Record<string, unknown>,
+      context: { path?: string } | null,
+    ) {
+      if (!identityCallbackPaths.has(context?.path ?? "")) return;
+      if (!user.emailVerified) throw identityUnavailable();
+      return {
+        data: {
+          ...user,
+          email: user.email.trim().toLowerCase(),
+        },
+      };
+    },
+
     async beforeSessionCreate<T extends { userId: string }>(
       session: T,
-      context?: { path?: string } | null
+      context?: { path?: string } | null,
     ) {
       // Passkey onboarding provisions its organization and activates it using
       // the same adapter transaction that creates the credential and session.
@@ -149,30 +158,16 @@ export function createPreviewUserManagementLifecycle(
               cause instanceof OrganizationProvisioningError
                 ? cause.reason
                 : "unexpected",
-          })
+          }),
         );
         throw organizationError(cause);
       }
-    },
-
-    async beforeUserCreate(
-      user: PreviewVerifiedUser & Record<string, unknown>,
-      context: { path?: string } | null
-    ) {
-      if (!identityCallbackPaths.has(context?.path ?? "")) return;
-      if (!user.emailVerified) throw identityUnavailable();
-      return {
-        data: {
-          ...user,
-          email: user.email.trim().toLowerCase(),
-        },
-      };
     },
   };
 }
 
 export function previewUserManagementPlugins(
-  authority: PreviewOrganizationUserAuthority
+  authority: PreviewOrganizationUserAuthority,
 ) {
   const lifecycle = createPreviewUserManagementLifecycle(authority);
   return [
@@ -191,30 +186,30 @@ export function previewUserManagementPlugins(
       schema: {
         organization: {
           additionalFields: {
-            audience: {
-              fieldName: "audience",
-              input: false,
-              required: true,
-              type: "string",
-            },
             issuer: {
-              fieldName: "issuer",
-              input: false,
-              required: true,
               type: "string",
+              required: true,
+              input: false,
+              fieldName: "issuer",
+            },
+            audience: {
+              type: "string",
+              required: true,
+              input: false,
+              fieldName: "audience",
             },
             workspaceId: {
-              input: false,
-              required: true,
               type: "string",
+              required: true,
+              input: false,
             },
           },
         },
       },
     }),
     admin({
-      adminRoles: ["admin"],
       defaultRole: "user",
+      adminRoles: ["admin"],
     }),
     {
       id: "autograph-self-serve-workspace",
@@ -222,14 +217,14 @@ export function previewUserManagementPlugins(
         return {
           options: {
             databaseHooks: {
-              session: {
-                create: {
-                  before: lifecycle.beforeSessionCreate,
-                },
-              },
               user: {
                 create: {
                   before: lifecycle.beforeUserCreate,
+                },
+              },
+              session: {
+                create: {
+                  before: lifecycle.beforeSessionCreate,
                 },
               },
             },

@@ -2,104 +2,103 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { hostedEveOperationScopes } from "./hosted-auth";
-import type { HostedPrincipal } from "./hosted-auth";
+import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
 import {
   parseHostedOperationRow,
   parseHostedSessionRow,
 } from "./postgres-hosted-store";
 
 const principal: HostedPrincipal = {
-  audience: "eve-hosted",
   issuer: "https://identity.example.test",
+  audience: "eve-hosted",
+  workspaceId: "workspace_1",
   ownerUserId: "user_1",
   scopes: Object.values(hostedEveOperationScopes),
-  workspaceId: "workspace_1",
 };
 
 const operationRecord = {
-  clientRequestId: "request_1",
-  createdAtEpochMs: 1_000,
-  kind: "start" as const,
+  version: 1 as const,
   operationId: "operation_1",
   principal,
+  kind: "start" as const,
+  clientRequestId: "request_1",
   requestDigest: `sha256:${"a".repeat(64)}`,
   state: "reserved" as const,
+  createdAtEpochMs: 1_000,
   updatedAtEpochMs: 1_000,
-  version: 1 as const,
 };
 
 const operationRow = {
-  audience: principal.audience,
-  clientRequestId: operationRecord.clientRequestId,
-  createdAt: new Date(1_000),
   issuer: principal.issuer,
-  kind: operationRecord.kind,
-  operationId: operationRecord.operationId,
-  ownerUserId: principal.ownerUserId,
-  record: operationRecord,
-  requestDigest: operationRecord.requestDigest,
-  sessionId: null,
-  state: operationRecord.state,
-  updatedAt: new Date(1_000),
+  audience: principal.audience,
   workspaceId: principal.workspaceId,
+  ownerUserId: principal.ownerUserId,
+  operationId: operationRecord.operationId,
+  sessionId: null,
+  kind: operationRecord.kind,
+  clientRequestId: operationRecord.clientRequestId,
+  requestDigest: operationRecord.requestDigest,
+  state: operationRecord.state,
+  record: operationRecord,
+  createdAt: new Date(1_000),
+  updatedAt: new Date(1_000),
 };
 
 const sessionRecord = {
-  adapterSessionId: "adapter_1",
-  createdAtEpochMs: 2_000,
-  principal,
-  sessionId: "session_1",
-  status: "waiting" as const,
-  updatedAtEpochMs: 2_000,
   version: 1 as const,
+  sessionId: "session_1",
+  principal,
+  adapterSessionId: "adapter_1",
+  status: "waiting" as const,
+  createdAtEpochMs: 2_000,
+  updatedAtEpochMs: 2_000,
 };
 
 const sessionRow = {
-  adapterGeneration: null,
-  adapterSessionId: sessionRecord.adapterSessionId,
+  issuer: principal.issuer,
   audience: principal.audience,
+  workspaceId: principal.workspaceId,
+  ownerUserId: principal.ownerUserId,
+  sessionId: sessionRecord.sessionId,
+  adapterSessionId: sessionRecord.adapterSessionId,
+  adapterGeneration: null,
+  title: null,
+  stage: null,
+  resumabilityState: null,
   checkpointDigest: null,
   checkpointProgressDigest: null,
-  createdAt: new Date(2_000),
-  issuer: principal.issuer,
-  lastProgressAt: null,
-  ownerUserId: principal.ownerUserId,
   parentSessionId: null,
+  lastProgressAt: null,
   record: sessionRecord,
-  resumabilityState: null,
-  sessionId: sessionRecord.sessionId,
-  stage: null,
-  title: null,
+  createdAt: new Date(2_000),
   updatedAt: new Date(2_000),
-  workspaceId: principal.workspaceId,
 };
 
 describe("PostgreSQL hosted Eve row authority", () => {
   it("accepts only an operation whose indexed authority matches its closed record", () => {
     expect(parseHostedOperationRow(operationRow)).toEqual(operationRecord);
     expect(() =>
-      parseHostedOperationRow({ ...operationRow, workspaceId: "workspace_2" })
+      parseHostedOperationRow({ ...operationRow, workspaceId: "workspace_2" }),
     ).toThrow("canonically bound");
     expect(() =>
       parseHostedOperationRow({
         ...operationRow,
         record: { ...operationRecord, untrustedRole: "admin" },
-      })
+      }),
     ).toThrow();
   });
 
   it("accepts only a session whose tenant and adapter index match its record", () => {
     expect(parseHostedSessionRow(sessionRow)).toEqual(sessionRecord);
     expect(() =>
-      parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" })
+      parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" }),
     ).toThrow("canonically bound");
   });
 
   it("keeps the checked-in migration tenant scoped and idempotency bound", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0001_hosted_eve_bridge.sql", import.meta.url),
-      "utf-8"
+      "utf8",
     );
     for (const required of [
       '"issuer" text NOT NULL',
@@ -115,10 +114,11 @@ describe("PostgreSQL hosted Eve row authority", () => {
     const journal = JSON.parse(
       await readFile(
         new URL("../../drizzle/meta/_journal.json", import.meta.url),
-        "utf-8"
-      )
+        "utf8",
+      ),
     ) as unknown;
     expect(journal).toEqual({
+      version: "7",
       dialect: "postgresql",
       entries: [
         {
@@ -269,14 +269,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           breakpoints: true,
         },
       ],
-      version: "7",
     });
   });
 
   it("adds bounded durable-session metadata without rewriting legacy rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0018_durable_session_resume.sql", import.meta.url),
-      "utf-8"
+      "utf8",
     );
     for (const required of [
       '"adapter_generation" integer',
@@ -285,32 +284,30 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"parent_session_id" text',
       '"last_progress_at" timestamptz',
       '"agent_session_recent_idx"',
-    ]) {
+    ])
       expect(migration).toContain(required);
-    }
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 
   it("adds opaque handoffs without rewriting existing rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0019_opaque_builder_handoff.sql", import.meta.url),
-      "utf-8"
+      "utf8",
     );
     for (const required of [
       'CREATE TABLE "builder_handoff"',
       '"builder_handoff_creation_uidx"',
       '"builder_handoff_expiry_idx"',
       '"builder_handoff_redemption_check"',
-    ]) {
+    ])
       expect(migration).toContain(required);
-    }
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 
   it("adds tenant-scoped durable drafts without rewriting existing rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0020_durable_builder_draft.sql", import.meta.url),
-      "utf-8"
+      "utf8",
     );
     for (const required of [
       'CREATE TABLE "builder_draft"',
@@ -318,9 +315,8 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"builder_draft_updated_idx"',
       '"builder_draft_revision_check"',
       '"builder_draft_record_check"',
-    ]) {
+    ])
       expect(migration).toContain(required);
-    }
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 });

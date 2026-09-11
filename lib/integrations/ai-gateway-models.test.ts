@@ -16,33 +16,33 @@ describe("AI Gateway model catalog", () => {
             id: "openai/gpt-5.6-terra",
             name: "GPT 5.6 Terra",
             owned_by: "openai",
-            tags: ["tool-use"],
             type: "language",
             zdr: "all",
+            tags: ["tool-use"],
           },
           {
             id: "openai/embedding",
             name: "Embedding",
             owned_by: "openai",
-            tags: [],
             type: "embedding",
             zdr: "all",
+            tags: [],
           },
         ],
-      })
+      }),
     );
     const result = await loadGatewayModels({
-      defaultModelId: "openai/gpt-5.6-terra",
       fetch: request,
+      defaultModelId: "openai/gpt-5.6-terra",
       now: () => 1,
     });
     expect(result.status).toBe("ready");
     expect(result.entries).toEqual([
       {
-        capabilities: ["tool-use"],
         id: "openai/gpt-5.6-terra",
         name: "GPT 5.6 Terra",
         provider: "openai",
+        capabilities: ["tool-use"],
         zdr: "all",
       },
     ]);
@@ -58,19 +58,19 @@ describe("AI Gateway model catalog", () => {
               id: "openai/gpt-5.6-terra",
               name: "GPT 5.6 Terra",
               owned_by: "openai",
-              tags: [],
               type: "language",
               zdr: "some",
+              tags: [],
             },
           ],
-        })
+        }),
       ),
       now: () => 1,
     });
     const result = await loadGatewayModels({
       fetch: vi.fn<typeof fetch>().mockRejectedValue(new Error("offline")),
-      force: true,
       now: () => 10_000_000,
+      force: true,
     });
     expect(result.status).toBe("ready");
     expect(result.cached).toBe(true);
@@ -83,9 +83,9 @@ describe("AI Gateway model catalog", () => {
         .mockResolvedValue(new Response(null, { status: 503 })),
     });
     expect(result).toEqual({
-      cached: false,
-      entries: [],
       status: "unavailable",
+      entries: [],
+      cached: false,
     });
   });
 });

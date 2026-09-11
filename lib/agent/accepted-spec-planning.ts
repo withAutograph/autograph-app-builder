@@ -8,8 +8,6 @@ export async function planAcceptedAppSpec<TPhase extends string>(input: {
   readonly planComplete: boolean;
   readonly plan: () => Promise<void>;
 }) {
-  if (input.planComplete) {
-    return;
-  }
+  if (input.planComplete) return;
   await input.plan();
 }

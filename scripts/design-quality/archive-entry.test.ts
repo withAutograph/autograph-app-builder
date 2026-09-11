@@ -1,9 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { expect, it } from "vitest";
-
 import { readArchivedReport } from "./archive-entry";
 
 it("ignores screenshot-only supplements but retains scored reports", async () => {

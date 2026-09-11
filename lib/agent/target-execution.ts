@@ -1,30 +1,30 @@
+import type {
+  AppBuilderWorkflowState,
+  AppCreationProposal,
+} from "./workflow-state";
 import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
 
-import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import {
   dependencyCacheReceiptDigest,
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   shouldPreferLiveTemplateDependencies,
+  type ObservedDependencyCache,
 } from "../repository/dependency-cache";
-import type { ObservedDependencyCache } from "../repository/dependency-cache";
+import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import {
   targetExecutionBinding,
   targetProposalSchema,
 } from "../repository/target-planning";
 import {
-  isHostedVercelSandboxBackend,
-  sandboxBackendPlan,
-} from "../sandbox/backend";
-import {
   configuredToolchainImage,
   requiredToolVersions,
 } from "../sandbox/toolchain";
-import { hasTestCapability } from "../testing/test-capability";
-import type {
-  AppBuilderWorkflowState,
-  AppCreationProposal,
-} from "./workflow-state";
+import {
+  isHostedVercelSandboxBackend,
+  sandboxBackendPlan,
+} from "../sandbox/backend";
 import {
   assertExactDependencyPreparationReceipt,
   sha256,
@@ -46,7 +46,7 @@ export type ProposalWorkflowState = Extract<
 
 export function plannedProposalForExecution(
   state: AppBuilderWorkflowState,
-  expectedProposalDigest: string
+  expectedProposalDigest: string,
 ): AppCreationProposal {
   if (
     state.phase !== "planned" &&
@@ -56,57 +56,53 @@ export function plannedProposalForExecution(
     state.phase !== "validation_failed" &&
     state.phase !== "validated" &&
     state.phase !== "reviewed"
-  ) {
+  )
     throw new Error(
-      "Derive a canonical AppSpec-bound proposal before checking target command readiness."
+      "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
     );
-  }
-  if (state.proposal.digest !== expectedProposalDigest) {
+  if (state.proposal.digest !== expectedProposalDigest)
     throw new Error(
-      "The canonical proposal changed before execution readiness."
+      "The canonical proposal changed before execution readiness.",
     );
-  }
   return state.proposal;
 }
 
 export function assertProposalExecutionBindings(
-  state: ProposalWorkflowState
+  state: ProposalWorkflowState,
 ): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
-  if (!target.success) {
+  if (!target.success)
     throw new Error(
-      "The planned proposal no longer matches its durable execution bindings."
+      "The planned proposal no longer matches its durable execution bindings.",
     );
-  }
-  if (target.data.blockers.length !== 0) {
+  if (target.data.blockers.length !== 0)
     throw new Error(
-      "The planned proposal still contains blockers and cannot be applied."
+      "The planned proposal still contains blockers and cannot be applied.",
     );
-  }
   const expected = {
+    sourceSha: state.workspace.sourceSha,
+    sourceTree: state.workspace.sourceTree,
+    sourceReceiptDigest: state.sourceReceipt.digest,
+    eligibilityDigest: state.workspace.eligibilityDigest,
+    workspaceDigest: state.workspace.workspaceDigest,
+    imageDigest: state.dependencyReceipt.imageDigest,
+    dependencyCacheDigest: state.dependencyReceipt.dependencyCacheDigest,
     appSpecDigest: state.appSpec.digest,
     appSpecPath: state.appSpec.artifactPath,
     artifactRevision: state.appSpec.artifactRevision,
-    dependencyCacheDigest: state.dependencyReceipt.dependencyCacheDigest,
-    eligibilityDigest: state.workspace.eligibilityDigest,
-    imageDigest: state.dependencyReceipt.imageDigest,
-    sourceReceiptDigest: state.sourceReceipt.digest,
-    sourceSha: state.workspace.sourceSha,
-    sourceTree: state.workspace.sourceTree,
-    workspaceDigest: state.workspace.workspaceDigest,
   };
   const actual = {
+    sourceSha: state.proposal.sourceSha,
+    sourceTree: state.proposal.sourceTree,
+    sourceReceiptDigest: state.proposal.sourceReceiptDigest,
+    eligibilityDigest: state.proposal.eligibilityDigest,
+    workspaceDigest: state.proposal.workspaceDigest,
+    imageDigest: state.proposal.imageDigest,
+    dependencyCacheDigest: state.proposal.dependencyCacheDigest,
     appSpecDigest: state.proposal.appSpecDigest,
     appSpecPath: state.proposal.target.contract.appSpec.path,
     artifactRevision: state.proposal.artifactRevision,
-    dependencyCacheDigest: state.proposal.dependencyCacheDigest,
-    eligibilityDigest: state.proposal.eligibilityDigest,
-    imageDigest: state.proposal.imageDigest,
-    sourceReceiptDigest: state.proposal.sourceReceiptDigest,
-    sourceSha: state.proposal.sourceSha,
-    sourceTree: state.proposal.sourceTree,
-    workspaceDigest: state.proposal.workspaceDigest,
   };
   if (
     JSON.stringify(actual) !== JSON.stringify(expected) ||
@@ -114,11 +110,10 @@ export function assertProposalExecutionBindings(
     target.data.contract.appId !== state.appSpec.appId ||
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
-  ) {
+  )
     throw new Error(
-      "The planned proposal no longer matches its durable execution bindings."
+      "The planned proposal no longer matches its durable execution bindings.",
     );
-  }
 }
 
 export function targetExecutionBlockers(input: {
@@ -127,14 +122,12 @@ export function targetExecutionBlockers(input: {
   capabilityBlockers?: readonly string[];
 }): string[] {
   const blockers: string[] = [...(input.capabilityBlockers ?? [])];
-  if (!input.imageConfigured) {
+  if (!input.imageConfigured)
     blockers.push("No immutable sandbox image is configured.");
-  }
-  if (!input.toolchainReady) {
+  if (!input.toolchainReady)
     blockers.push(
-      "The sandbox execution environment or a required command is unavailable."
+      "The sandbox execution environment or a required command is unavailable.",
     );
-  }
   return blockers;
 }
 
@@ -176,13 +169,13 @@ export async function inspectTargetExecutionReadiness(input: {
   const environment = input.environment ?? process.env;
   const proposal = plannedProposalForExecution(
     input.state,
-    input.expectedProposalDigest
+    input.expectedProposalDigest,
   );
   assertProposalExecutionBindings(input.state);
   await inspectSourceBoundSandboxWorkspace({
-    expectedWorkspace: input.state.workspace,
-    receipt: input.state.sourceReceipt,
     sandbox: input.sandbox,
+    receipt: input.state.sourceReceipt,
+    expectedWorkspace: input.state.workspace,
     ...(input.state.githubSource === undefined
       ? {}
       : { githubSource: input.state.githubSource }),
@@ -190,8 +183,8 @@ export async function inspectTargetExecutionReadiness(input: {
   const fixture = hasTestCapability("simulated-target", environment);
   const tools = fixture
     ? commands.map((command) => ({
-        available: true as const,
         command,
+        available: true as const,
         version:
           command in requiredToolVersions
             ? `fixture ${requiredToolVersions[command as keyof typeof requiredToolVersions].source}`
@@ -202,20 +195,19 @@ export async function inspectTargetExecutionReadiness(input: {
           const location = await input.sandbox.run({
             command: `command -v ${command}`,
           });
-          if (location.exitCode !== 0) {
+          if (location.exitCode !== 0)
             return { command, available: false as const, version: "" };
-          }
           const version = await input.sandbox.run({
             command: `${command} --version`,
           });
           return {
-            available: true as const,
             command,
+            available: true as const,
             version:
               (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
               "",
           };
-        })
+        }),
       );
   const executionEnvironment = resolveTargetExecutionEnvironment({
     environment,
@@ -228,26 +220,28 @@ export async function inspectTargetExecutionReadiness(input: {
         input.state.workspace,
         shouldPreferLiveTemplateDependencies(
           input.state.sourceReceipt.version,
-          environment
-        )
+          environment,
+        ),
       ).catch(() => undefined)
     : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
-    cache,
     environment,
     fixture,
+    cache,
   });
   const image = resolvedExecutionEnvironment.imageDigest;
-  const { backend } = resolvedExecutionEnvironment;
+  const backend = resolvedExecutionEnvironment.backend;
   const required = (
-    Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]
+    Object.keys(requiredToolVersions) as Array<
+      keyof typeof requiredToolVersions
+    >
   ).map((command) => {
     const observedTool = tools.find((tool) => tool.command === command);
     return {
-      available: observedTool?.available === true,
       command,
       expected: requiredToolVersions[command].source,
       version: observedTool?.version ?? "",
+      available: observedTool?.available === true,
     };
   });
   const toolchainReady =
@@ -255,37 +249,37 @@ export async function inspectTargetExecutionReadiness(input: {
     image !== undefined &&
     required.every((tool) => tool.available);
   const blockers = targetExecutionBlockers({
-    capabilityBlockers: backend.blockers,
     imageConfigured: image !== undefined,
     toolchainReady,
+    capabilityBlockers: backend.blockers,
   });
   const dependencyTarget =
     cache === undefined
       ? undefined
       : dependencyTargetForWorkspace(cache, input.state.workspace);
   const readiness = {
+    sourceSha: input.state.workspace.sourceSha,
+    sourceTree: input.state.workspace.sourceTree,
+    sourceReceiptDigest: input.state.sourceReceipt.digest,
+    eligibilityDigest: input.state.workspace.eligibilityDigest,
+    workspaceDigest: input.state.workspace.workspaceDigest,
     appSpecDigest: input.state.appSpec.digest,
     appSpecPath: input.state.appSpec.artifactPath,
     artifactRevision: input.state.appSpec.artifactRevision,
+    dependencyReceiptDigest: input.state.dependencyReceipt.digest,
+    identityDigest: input.state.identityReceipt.digest,
+    proposalDigest: proposal.digest,
+    imageDigest: image ?? "unconfigured",
     dependencyCacheDigest:
       cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
-    dependencyReceiptDigest: input.state.dependencyReceipt.digest,
-    eligibilityDigest: input.state.workspace.eligibilityDigest,
-    identityDigest: input.state.identityReceipt.digest,
-    imageDigest: image ?? "unconfigured",
-    proposalDigest: proposal.digest,
-    required,
-    sourceReceiptDigest: input.state.sourceReceipt.digest,
-    sourceSha: input.state.workspace.sourceSha,
-    sourceTree: input.state.workspace.sourceTree,
     targetSha: dependencyTarget?.sha ?? "unverified",
     targetTree: dependencyTarget?.tree ?? "unverified",
-    workspaceDigest: input.state.workspace.workspaceDigest,
+    required,
   };
   return {
     ...readiness,
     applyReadinessDigest: sha256(JSON.stringify(readiness)),
-    blockers,
     targetCommandReady: blockers.length === 0,
+    blockers,
   };
 }

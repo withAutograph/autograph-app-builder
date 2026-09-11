@@ -14,22 +14,19 @@ function canonicalCyclePath(path: string) {
 
 export function readLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
-  if (realpathSync(path) !== path) {
+  if (realpathSync(path) !== path)
     throw new Error("The local Eve cycle binding path was not canonical.");
-  }
   const info = lstatSync(path);
   if (
     !info.isFile() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o077) !== 0
-  ) {
+  )
     throw new Error("The local Eve cycle binding was not owner-only.");
-  }
-  const generation = readFileSync(path, "utf-8").trim();
-  if (!cyclePattern.test(generation)) {
+  const generation = readFileSync(path, "utf8").trim();
+  if (!cyclePattern.test(generation))
     throw new Error("The local Eve cycle binding was invalid.");
-  }
   return generation;
 }
 
@@ -43,16 +40,15 @@ export async function rotateLocalEveCycleBinding(path: string) {
     parentInfo.isSymbolicLink() ||
     parentInfo.uid !== process.getuid?.() ||
     (parentInfo.mode & 0o077) !== 0
-  ) {
+  )
     throw new Error(
-      "The local Eve cycle binding directory was not owner-only."
+      "The local Eve cycle binding directory was not owner-only.",
     );
-  }
   const generation = randomBytes(32).toString("hex");
   const temporary = `${path}.${process.pid}.${generation}.tmp`;
   try {
     await writeFile(temporary, `${generation}\n`, {
-      encoding: "utf-8",
+      encoding: "utf8",
       flag: "wx",
       mode: 0o600,
     });
@@ -60,8 +56,7 @@ export async function rotateLocalEveCycleBinding(path: string) {
   } finally {
     await rm(temporary, { force: true });
   }
-  if (readLocalEveCycleBinding(path) !== generation) {
+  if (readLocalEveCycleBinding(path) !== generation)
     throw new Error("The local Eve cycle binding could not be read back.");
-  }
   return generation;
 }

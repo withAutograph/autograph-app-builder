@@ -8,9 +8,9 @@ import {
 } from "./provider-emulation-seed";
 
 const input = {
+  origin: "https://app-git-feature-team.vercel.app",
   githubClientId: "github-client",
   githubClientSecret: "g".repeat(20),
-  origin: "https://app-git-feature-team.vercel.app",
   vercelClientId: "vercel-client",
   vercelClientSecret: "v".repeat(20),
 };
@@ -28,7 +28,7 @@ describe("provider emulation seed", () => {
     });
     expect(seed.vercel.teams?.[0]?.slug).toBe(EMULATED_VERCEL_TEAM_ID);
     expect(seed.vercel.integrations?.[0]?.redirect_uris).toContain(
-      "https://app-git-feature-team.vercel.app/api/auth/callback/vercel"
+      "https://app-git-feature-team.vercel.app/api/auth/callback/vercel",
     );
   });
 

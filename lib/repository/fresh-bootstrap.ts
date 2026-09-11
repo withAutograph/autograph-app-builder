@@ -1,27 +1,27 @@
 import { createHash } from "node:crypto";
 
+import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import {
   assertExactReviewedChangeSet,
   stableDigest,
 } from "./local-publication";
-import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { safeSourcePath } from "./source-path";
 import type { SourceReceipt } from "./source-receipt";
+import { safeSourcePath } from "./source-path";
 
 export const FRESH_BOOTSTRAP_VERSION = 3 as const;
 
-export interface PathIdentity {
+export type PathIdentity = {
   path: string;
   device: string;
   inode: string;
   uid: string;
   mode: string;
   nlink: string;
-}
+};
 
 export type ExecutableIdentity = PathIdentity & { sha256: string };
 
-export interface FreshBootstrapCapability {
+export type FreshBootstrapCapability = {
   kind: "fresh-bootstrap-local-v1";
   stateRoot: PathIdentity;
   allowedRoot: PathIdentity;
@@ -35,7 +35,7 @@ export interface FreshBootstrapCapability {
   lockHelper: string;
   lockHelperIdentity: ExecutableIdentity;
   authority: "configured-production" | "structural-test-injection";
-}
+};
 
 export type FreshBootstrapPrestate =
   | {
@@ -49,21 +49,21 @@ export type FreshBootstrapPrestate =
       parent: PathIdentity;
     };
 
-export interface FreshBootstrapIdentity {
+export type FreshBootstrapIdentity = {
   initialBranch: string;
   authorName: string;
   authorEmail: string;
   commitMessage: string;
   commitTimestamp: string;
-}
+};
 
-export interface FreshBootstrapFile {
+export type FreshBootstrapFile = {
   path: string;
   mode: "100644" | "100755";
   blob: string;
-}
+};
 
-export interface FreshBootstrapProposal {
+export type FreshBootstrapProposal = {
   version: typeof FRESH_BOOTSTRAP_VERSION;
   capability: {
     stateRoot: PathIdentity;
@@ -107,7 +107,7 @@ export interface FreshBootstrapProposal {
   githubOutcome: "unavailable";
   releaseEnabled: false;
   digest: string;
-}
+};
 
 type TerminalBase = Omit<FreshBootstrapProposal, "digest"> & {
   proposalDigest: string;
@@ -186,13 +186,10 @@ const sha1Object = (kind: "blob" | "tree" | "commit", bytes: Uint8Array) =>
     .update(bytes)
     .digest("hex");
 
-interface Tree {
-  files: FreshBootstrapFile[];
-  directories: Map<string, Tree>;
-}
+type Tree = { files: FreshBootstrapFile[]; directories: Map<string, Tree> };
 
 export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
-  const root: Tree = { directories: new Map(), files: [] };
+  const root: Tree = { files: [], directories: new Map() };
   const paths = new Set<string>();
   for (const file of files) {
     const components = file.path.split("/");
@@ -202,23 +199,22 @@ export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
       paths.has(file.path) ||
       components.some((component) =>
         [".git", ".repository-bootstrap-claim"].includes(
-          component.toLowerCase()
-        )
+          component.toLowerCase(),
+        ),
       ) ||
       components.some((_, index) =>
-        paths.has(components.slice(0, index + 1).join("/"))
+        paths.has(components.slice(0, index + 1).join("/")),
       ) ||
       [...paths].some((path) => path.startsWith(`${file.path}/`))
-    ) {
+    )
       throw new Error("The fresh-bootstrap tree contains an unsafe entry.");
-    }
     paths.add(file.path);
     const segments = components;
     let node = root;
     for (const segment of segments.slice(0, -1)) {
       const next = node.directories.get(segment) ?? {
-        directories: new Map(),
         files: [],
+        directories: new Map(),
       };
       node.directories.set(segment, next);
       node = next;
@@ -228,19 +224,19 @@ export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
   const walk = (node: Tree): string => {
     const entries = [
       ...node.files.map((file) => ({
-        mode: file.mode,
         name: file.path,
-        oid: file.blob,
         sort: file.path,
+        mode: file.mode,
+        oid: file.blob,
       })),
       ...[...node.directories].map(([name, child]) => ({
-        mode: "40000" as const,
         name,
-        oid: walk(child),
         sort: `${name}/`,
+        mode: "40000" as const,
+        oid: walk(child),
       })),
     ].toSorted((left, right) =>
-      Buffer.from(left.sort).compare(Buffer.from(right.sort))
+      Buffer.from(left.sort).compare(Buffer.from(right.sort)),
     );
     return sha1Object(
       "tree",
@@ -249,9 +245,9 @@ export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
           Buffer.concat([
             Buffer.from(`${mode} ${name}\0`),
             Buffer.from(oid, "hex"),
-          ])
-        )
-      )
+          ]),
+        ),
+      ),
     );
   };
   return walk(root);
@@ -270,14 +266,12 @@ function commitActor(identity: FreshBootstrapIdentity): string {
     !/^[^\s<>@]+@[^\s<>@]+$/u.test(identity.authorEmail) ||
     /[\0\r]/u.test(identity.commitMessage) ||
     identity.commitMessage.trim().length === 0
-  ) {
+  )
     throw new Error("The fresh-bootstrap Git identity is invalid.");
-  }
   const milliseconds = Date.parse(identity.commitTimestamp);
   const offset = /([+-])(\d{2}):(\d{2})$/u.exec(identity.commitTimestamp);
-  if (!Number.isFinite(milliseconds) || offset === null) {
+  if (!Number.isFinite(milliseconds) || offset === null)
     throw new Error("The fresh-bootstrap commit timestamp is invalid.");
-  }
   return `${identity.authorName} <${identity.authorEmail}> ${Math.floor(milliseconds / 1000)} ${offset[1]}${offset[2]}${offset[3]}`;
 }
 
@@ -292,32 +286,31 @@ export function initialCommitId(input: {
   return sha1Object(
     "commit",
     Buffer.from(
-      `tree ${input.tree}\nauthor ${actor}\ncommitter ${actor}\n\n${message}`
-    )
+      `tree ${input.tree}\nauthor ${actor}\ncommitter ${actor}\n\n${message}`,
+    ),
   );
 }
 
 function exactCapability(
-  capability: FreshBootstrapCapability
+  capability: FreshBootstrapCapability,
 ): FreshBootstrapProposal["capability"] {
   if (
     capability.authority !== "configured-production" &&
     capability.authority !== "structural-test-injection"
-  ) {
+  )
     throw new Error("Fresh local bootstrap capability is not authorized.");
-  }
   return {
-    allowedRoot: capability.allowedRoot,
-    lockHelper: capability.lockHelper,
-    lockHelperIdentity: capability.lockHelperIdentity,
-    lockStrategy: capability.lockStrategy,
     stateRoot: capability.stateRoot,
+    allowedRoot: capability.allowedRoot,
     systemGit: capability.systemGit,
+    systemPython: capability.systemPython,
     systemGitIdentity: capability.systemGitIdentity,
+    systemPythonIdentity: capability.systemPythonIdentity,
     systemNode: capability.systemNode,
     systemNodeIdentity: capability.systemNodeIdentity,
-    systemPython: capability.systemPython,
-    systemPythonIdentity: capability.systemPythonIdentity,
+    lockStrategy: capability.lockStrategy,
+    lockHelper: capability.lockHelper,
+    lockHelperIdentity: capability.lockHelperIdentity,
   };
 }
 
@@ -336,16 +329,14 @@ export function createFreshBootstrapProposal(input: {
   exactTree: readonly FreshBootstrapFile[];
 }): FreshBootstrapProposal {
   assertExactReviewedChangeSet(input.review);
-  if (input.sourceReceipt.sourceKind !== "fresh-template") {
+  if (input.sourceReceipt.sourceKind !== "fresh-template")
     throw new Error("Fresh bootstrap requires a fresh-template source.");
-  }
   if (
     input.review.sourceSha !== input.sourceReceipt.sourceSha ||
     input.review.sourceTree !== input.sourceReceipt.sourceTree ||
     input.review.repositoryContractDigest !== input.sourceReceipt.contractDigest
-  ) {
+  )
     throw new Error("The fresh-bootstrap source and review bindings differ.");
-  }
   const capability = exactCapability(input.capability);
   const destinationLockDigest = stableDigest({
     allowedRoot: capability.allowedRoot,
@@ -353,27 +344,38 @@ export function createFreshBootstrapProposal(input: {
   });
   const expectedGitTree = gitTreeId(input.exactTree);
   const publicationIdentityDigest = stableDigest({
-    allowedRoot: capability.allowedRoot,
     destinationPath: input.destinationPath,
     destinationPrestate: input.destinationPrestate,
+    stateRoot: capability.stateRoot,
+    allowedRoot: capability.allowedRoot,
+    sourceReceiptDigest: input.sourceReceipt.digest,
+    reviewDigest: input.review.digest,
     expectedGitTree,
     repositoryIdentity: input.repositoryIdentity,
-    reviewDigest: input.review.digest,
-    sourceReceiptDigest: input.sourceReceipt.digest,
-    stateRoot: capability.stateRoot,
   });
   const unsigned = {
+    version: FRESH_BOOTSTRAP_VERSION,
+    capability,
+    destinationPath: input.destinationPath,
+    stagingPath: input.stagingPath,
+    journalPath: input.journalPath,
+    lockPath: input.lockPath,
+    destinationLockDigest,
+    claimMarkerName: ".repository-bootstrap-claim" as const,
+    atomicAdapterDigest: input.atomicAdapterDigest,
+    materializeAdapterDigest: input.materializeAdapterDigest,
+    destinationPrestate: input.destinationPrestate,
+    sourceReceiptDigest: input.sourceReceipt.digest,
+    sourceSha: input.sourceReceipt.sourceSha,
+    sourceTree: input.sourceReceipt.sourceTree,
+    contractDigest: input.sourceReceipt.contractDigest,
+    reviewDigest: input.review.digest,
+    changeSetDigest: input.review.changeSetDigest,
     appSpecDigest: input.review.appSpecDigest,
     appSpecPath: input.review.appSpecPath,
     applyDigest: input.review.applyDigest,
-    atomicAdapterDigest: input.atomicAdapterDigest,
-    capability,
-    changeSetDigest: input.review.changeSetDigest,
-    claimMarkerName: ".repository-bootstrap-claim" as const,
-    contractDigest: input.sourceReceipt.contractDigest,
-    destinationLockDigest,
-    destinationPath: input.destinationPath,
-    destinationPrestate: input.destinationPrestate,
+    validationDigest: input.review.validationDigest,
+    repositoryIdentity: input.repositoryIdentity,
     exactTree: input.exactTree,
     exactTreeDigest: stableDigest(input.exactTree),
     expectedGitTree,
@@ -381,21 +383,10 @@ export function createFreshBootstrapProposal(input: {
       tree: expectedGitTree,
       identity: input.repositoryIdentity,
     }),
-    githubOutcome: "unavailable" as const,
-    intendedOutcome: "bootstrap-fresh-local-repository" as const,
-    journalPath: input.journalPath,
-    lockPath: input.lockPath,
-    materializeAdapterDigest: input.materializeAdapterDigest,
     publicationIdentityDigest,
+    intendedOutcome: "bootstrap-fresh-local-repository" as const,
+    githubOutcome: "unavailable" as const,
     releaseEnabled: false as const,
-    repositoryIdentity: input.repositoryIdentity,
-    reviewDigest: input.review.digest,
-    sourceReceiptDigest: input.sourceReceipt.digest,
-    sourceSha: input.sourceReceipt.sourceSha,
-    sourceTree: input.sourceReceipt.sourceTree,
-    stagingPath: input.stagingPath,
-    validationDigest: input.review.validationDigest,
-    version: FRESH_BOOTSTRAP_VERSION,
   };
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
@@ -426,9 +417,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPathIdentity(value: unknown): value is PathIdentity {
-  if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {
-    return false;
-  }
+  if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) return false;
   return (
     typeof value.path === "string" &&
     value.path.startsWith("/") &&
@@ -450,7 +439,7 @@ function isExecutableIdentity(value: unknown): value is ExecutableIdentity {
     isRecord(value) &&
     hasExactKeys(value, executableIdentityKeys) &&
     isPathIdentity(
-      Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]]))
+      Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]])),
     ) &&
     typeof value.sha256 === "string" &&
     /^[0-9a-f]{64}$/u.test(value.sha256)
@@ -458,7 +447,7 @@ function isExecutableIdentity(value: unknown): value is ExecutableIdentity {
 }
 
 export function assertExactFreshBootstrapProposal(
-  proposal: FreshBootstrapProposal
+  proposal: FreshBootstrapProposal,
 ): void {
   if (
     !isRecord(proposal) ||
@@ -479,9 +468,8 @@ export function assertExactFreshBootstrapProposal(
     !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
     (proposal.capability.lockStrategy !== "flock" &&
       proposal.capability.lockStrategy !== "lockf")
-  ) {
+  )
     throw new Error("The fresh-bootstrap proposal is not canonical V3.");
-  }
   if (
     !hasExactKeys(proposal, [
       "version",
@@ -547,7 +535,7 @@ export function assertExactFreshBootstrapProposal(
       proposal.destinationPrestate,
       proposal.destinationPrestate.kind === "absent"
         ? ["kind", "destinationPath", "parent"]
-        : ["kind", "destination", "parent"]
+        : ["kind", "destination", "parent"],
     ) ||
     !hasExactKeys(proposal.repositoryIdentity, [
       "initialBranch",
@@ -557,7 +545,7 @@ export function assertExactFreshBootstrapProposal(
       "commitTimestamp",
     ]) ||
     !proposal.exactTree.every((file) =>
-      hasExactKeys(file, ["path", "mode", "blob"])
+      hasExactKeys(file, ["path", "mode", "blob"]),
     ) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
@@ -577,13 +565,12 @@ export function assertExactFreshBootstrapProposal(
     proposal.expectedGitTree !== gitTreeId(proposal.exactTree) ||
     proposal.expectedInitialCommit !==
       initialCommitId({
-        identity: proposal.repositoryIdentity,
         tree: proposal.expectedGitTree,
+        identity: proposal.repositoryIdentity,
       }) ||
     proposal.digest !== stableDigest(canonicalProposal(proposal))
-  ) {
+  )
     throw new Error("The fresh-bootstrap proposal is not canonical V3.");
-  }
 }
 
 function dirnameForComparison(path: string): string {
@@ -595,7 +582,7 @@ export const freshBootstrapJournalDigest = (value: unknown) =>
   stableDigest(value);
 
 export function proposalFromFreshBootstrapJournal(
-  journal: FreshBootstrapJournal
+  journal: FreshBootstrapJournal,
 ): FreshBootstrapProposal {
   const candidate = { ...journal } as Record<string, unknown>;
   const digest = journal.proposalDigest;
@@ -622,14 +609,13 @@ export function proposalFromFreshBootstrapJournal(
     "worktreeDigest",
     "recoveryRequired",
     "digest",
-  ]) {
+  ])
     delete candidate[key];
-  }
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 }
 
 export function assertCanonicalFreshBootstrapJournal(
-  journal: FreshBootstrapJournal
+  journal: FreshBootstrapJournal,
 ): void {
   if (
     !isRecord(journal) ||
@@ -658,16 +644,15 @@ export function assertCanonicalFreshBootstrapJournal(
       ].includes(journal.reason) ||
         typeof journal.failureMessage !== "string" ||
         journal.failureMessage.length === 0 ||
-        journal.failureMessage.length > 4096)) ||
+        journal.failureMessage.length > 4_096)) ||
     (journal.status === "succeeded" &&
       (typeof journal.headReference !== "string" ||
         typeof journal.headCommit !== "string" ||
         typeof journal.headTree !== "string" ||
         typeof journal.remoteDigest !== "string" ||
         typeof journal.worktreeDigest !== "string"))
-  ) {
+  )
     throw new Error("The fresh-bootstrap journal is malformed.");
-  }
   const proposal = proposalFromFreshBootstrapJournal(journal);
   const proposalKeys = Object.keys(canonicalProposal(proposal));
   const lineageKeys = [
@@ -736,18 +721,15 @@ export function assertCanonicalFreshBootstrapJournal(
           (journal.swappedOldIdentity !== undefined))) ||
     digest !== freshBootstrapJournalDigest(unsigned) ||
     journal.proposalDigest !== proposal.digest
-  ) {
+  )
     throw new Error("The fresh-bootstrap journal is malformed.");
-  }
-  if (journal.status === "pending" || journal.status === "failed") {
+  if (journal.status === "pending" || journal.status === "failed")
     assertExactFreshBootstrapLayout(journal.layout);
-  }
   if (journal.status === "succeeded") {
     assertExactPathIdentity(journal.destinationIdentity, "destination");
     assertExactPathIdentity(journal.gitDirectoryIdentity, "Git directory");
-    if (journal.swappedOldIdentity !== undefined) {
+    if (journal.swappedOldIdentity !== undefined)
       assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");
-    }
     if (
       journal.headReference !==
         `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
@@ -755,9 +737,8 @@ export function assertCanonicalFreshBootstrapJournal(
       journal.headTree !== journal.expectedGitTree ||
       !/^[0-9a-f]{64}$/u.test(journal.remoteDigest) ||
       !/^[0-9a-f]{64}$/u.test(journal.worktreeDigest)
-    ) {
+    )
       throw new Error("The fresh-bootstrap success receipt is malformed.");
-    }
   }
   assertExactFreshBootstrapProposal(proposal);
 }
@@ -777,9 +758,8 @@ function assertExactFreshBootstrapLayout(layout: FreshBootstrapLayout): void {
                 : ["swappedOldIdentity"]),
             ]
           : [];
-  if (!hasExactKeys(layout, keys)) {
+  if (!hasExactKeys(layout, keys))
     throw new Error("The fresh-bootstrap layout receipt is malformed.");
-  }
   for (const value of [
     ...(layout.phase === "stage-owned" || layout.phase === "stage-ready"
       ? [layout.stageIdentity]
@@ -788,20 +768,18 @@ function assertExactFreshBootstrapLayout(layout: FreshBootstrapLayout): void {
     ...(layout.phase === "published" && layout.swappedOldIdentity !== undefined
       ? [layout.swappedOldIdentity]
       : []),
-  ]) {
+  ])
     assertExactPathIdentity(value, "layout");
-  }
 }
 
 function assertExactPathIdentity(value: PathIdentity, label: string): void {
-  if (!isPathIdentity(value)) {
+  if (!isPathIdentity(value))
     throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);
-  }
 }
 
 export function exactFreshBootstrapProposalMatch(
   left: FreshBootstrapProposal,
-  right: FreshBootstrapProposal
+  right: FreshBootstrapProposal,
 ): boolean {
   return (
     left.digest === right.digest &&

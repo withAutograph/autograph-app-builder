@@ -17,8 +17,8 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message: "Preview OAuth requires HTTPS or HTTP localhost.",
         path: ["issuer"],
+        message: "Preview OAuth requires HTTPS or HTTP localhost.",
       });
     }
     if (
@@ -30,8 +30,8 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
+        message: "Preview OAuth issuer must be the exact /api/auth URL.",
       });
     }
     if (
@@ -43,15 +43,15 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message: "Preview OAuth resource must be the exact /mcp URL.",
         path: ["resource"],
+        message: "Preview OAuth resource must be the exact /mcp URL.",
       });
     }
     if (issuer.origin !== resource.origin) {
       context.addIssue({
         code: "custom",
-        message: "Preview OAuth issuer and resource must share one origin.",
         path: ["resource"],
+        message: "Preview OAuth issuer and resource must share one origin.",
       });
     }
   });
@@ -109,10 +109,10 @@ export function buildPreviewMcpOAuthOptions(input: {
     refreshTokenExpiresIn: refreshTokenLifetimeSeconds,
     resources: [
       {
-        accessTokenTtl: 300,
-        allowedScopes: [...previewOAuthScopes],
         identifier: config.resource,
+        accessTokenTtl: 300,
         refreshTokenTtl: refreshTokenLifetimeSeconds,
+        allowedScopes: [...previewOAuthScopes],
         signingAlgorithm: "ES256",
       },
     ],
@@ -138,26 +138,26 @@ export function buildPreviewMcpOAuthOptions(input: {
       page: "/auth/consent",
       shouldRedirect: async ({ user }) => {
         const workspaceId = await input.membership.activeWorkspaceForUser({
-          audience: config.resource,
           issuer: config.issuer,
+          audience: config.resource,
           ownerUserId: user.id,
         });
         if (workspaceId === undefined) {
           throw new Error(
-            "Preview OAuth requires exactly one active workspace membership."
+            "Preview OAuth requires exactly one active workspace membership.",
           );
         }
         return false;
       },
       consentReferenceId: async ({ user }) => {
         const workspaceId = await input.membership.activeWorkspaceForUser({
-          audience: config.resource,
           issuer: config.issuer,
+          audience: config.resource,
           ownerUserId: user.id,
         });
         if (workspaceId === undefined) {
           throw new Error(
-            "Preview OAuth requires exactly one active workspace membership."
+            "Preview OAuth requires exactly one active workspace membership.",
           );
         }
         return workspaceId;
@@ -171,16 +171,16 @@ export function buildPreviewMcpOAuthOptions(input: {
         resources?.length !== 1 ||
         resources[0] !== config.resource ||
         !(await input.membership.isActiveMember({
-          audience: config.resource,
           issuer: config.issuer,
-          ownerUserId: user.id,
+          audience: config.resource,
           workspaceId: referenceId,
+          ownerUserId: user.id,
         }))
       ) {
         throw new Error("Preview OAuth membership is not active.");
       }
       return {
-        nbf: Math.floor(now() / 1000),
+        nbf: Math.floor(now() / 1_000),
         workspace_id: referenceId,
       };
     },
@@ -193,9 +193,7 @@ export function buildPreviewCimdOptions(input: {
   return {
     fetchClientMetadataResource: async (resource, init) => {
       const response = await input.fetchClientMetadataResource(resource, init);
-      if (!response.ok) {
-        return response;
-      }
+      if (!response.ok) return response;
 
       let document: unknown;
       try {
@@ -217,7 +215,7 @@ export function buildPreviewCimdOptions(input: {
       }
       if (record.token_endpoint_auth_method !== "none") {
         throw new Error(
-          "Preview CIMD clients must use token_endpoint_auth_method none."
+          "Preview CIMD clients must use token_endpoint_auth_method none.",
         );
       }
       return response;
@@ -227,7 +225,7 @@ export function buildPreviewCimdOptions(input: {
 }
 
 export function readPreviewOAuthContractConfig(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return previewOAuthConfigSchema.parse({
     issuer: environment.BETTER_AUTH_URL,

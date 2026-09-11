@@ -10,13 +10,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-export interface UserAvatarProps {
+export type UserAvatarProps = {
   className?: string;
   fallback?: ReactNode;
   isPending?: boolean;
   /** @remarks `User` */
   user?: User & { username?: string | null; displayUsername?: string | null };
-}
+};
 
 /**
  * Display a user's avatar using session information or an explicit user prop.
@@ -57,8 +57,8 @@ export function UserAvatar({
   return (
     <Avatar
       className={cn(
-        "bg-muted text-foreground size-8 rounded-full text-sm",
-        className
+        "size-8 bg-muted text-foreground text-sm rounded-full",
+        className,
       )}
     >
       <AvatarImage

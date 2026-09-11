@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 
 export type CreateAppSectionId =
-  | "app-details"
-  | "build-with"
-  | "store-in"
-  | "deploy-to"
-  | "connections";
+  "app-details" | "build-with" | "store-in" | "deploy-to" | "connections";
 
 export function ChoiceCard({
   badge,

@@ -3,33 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 
 const binding = {
-  audience: "https://new.autograph.so/mcp",
   issuer: "https://new.autograph.so/api/auth",
+  audience: "https://new.autograph.so/mcp",
 };
 
 const user = {
-  banned: false,
+  name: "Jason Morgan",
   email: "jason@example.com",
   email_verified: true,
-  name: "Jason Morgan",
+  banned: false,
 };
 
 const organization = {
   organization_id: "organization_one",
-  role: "owner",
   workspace_id: "workspace_one",
+  role: "owner",
 };
 
 function createDatabase(results: unknown[]) {
   const execute = vi.fn(async () => {
-    if (results.length === 0) {
-      throw new Error("Unexpected database query.");
-    }
-    return results.shift();
+    if (results.length === 0) throw new Error("Unexpected database query.");
+    return Promise.resolve(results.shift());
   });
   const transaction = vi.fn(
     async (callback: (database: { execute: typeof execute }) => unknown) =>
-      callback({ execute })
+      callback({ execute }),
   );
   return {
     database: { execute, transaction } as never,
@@ -47,11 +45,11 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      binding
+      binding,
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).resolves.toEqual({
       organizationId: "organization_one",
       workspaceId: "workspace_one",
@@ -78,8 +76,8 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [
         {
           organization_id: "organization_invited",
-          role: "member",
           workspace_id: "workspace_invited",
+          role: "member",
         },
       ],
     ]);
@@ -92,11 +90,11 @@ describe("PostgreSQL Better Auth organization authority", () => {
           .mockReturnValueOnce("organization_one")
           .mockReturnValueOnce("workspace_one")
           .mockReturnValueOnce("member_one"),
-      }
+      },
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).resolves.toEqual({
       organizationId: "organization_invited",
       workspaceId: "workspace_invited",
@@ -120,17 +118,17 @@ describe("PostgreSQL Better Auth organization authority", () => {
       state.database,
       binding,
       {
+        isSelfServiceSignupEnabled: vi.fn(async () => true),
         generateId: vi
           .fn()
           .mockReturnValueOnce("organization_one")
           .mockReturnValueOnce("workspace_one")
           .mockReturnValueOnce("member_one"),
-        isSelfServiceSignupEnabled: vi.fn(async () => true),
-      }
+      },
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).resolves.toEqual({
       organizationId: "organization_one",
       workspaceId: "workspace_one",
@@ -161,17 +159,17 @@ describe("PostgreSQL Better Auth organization authority", () => {
       state.database,
       binding,
       {
+        isSelfServiceSignupEnabled: vi.fn(async () => true),
         generateId: vi
           .fn()
           .mockReturnValueOnce("organization_one")
           .mockReturnValueOnce("workspace_one")
           .mockReturnValueOnce("member_one"),
-        isSelfServiceSignupEnabled: vi.fn(async () => true),
-      }
+      },
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).resolves.toEqual({
       organizationId: "organization_one",
       workspaceId: "workspace_one",
@@ -196,11 +194,11 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      binding
+      binding,
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason: "signup-disabled" });
     expect(state.execute).toHaveBeenCalledTimes(6);
   });
@@ -215,11 +213,11 @@ describe("PostgreSQL Better Auth organization authority", () => {
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      binding
+      binding,
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason: "signup-disabled" });
     expect(state.execute).toHaveBeenCalledTimes(5);
   });
@@ -239,11 +237,11 @@ describe("PostgreSQL Better Auth organization authority", () => {
         isSelfServiceSignupEnabled: vi.fn(async () => {
           throw new Error("feature flags unavailable");
         }),
-      }
+      },
     );
 
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason: "signup-disabled" });
     expect(state.execute).toHaveBeenCalledTimes(5);
   });
@@ -251,22 +249,21 @@ describe("PostgreSQL Better Auth organization authority", () => {
   it.each([
     {
       name: "an unverified user",
-      reason: "verified-identity-required",
       results: [[{ ...user, email_verified: false }], [], []],
+      reason: "verified-identity-required",
     },
     {
       name: "a suspended user",
-      reason: "access-revoked",
       results: [[{ ...user, banned: true }]],
+      reason: "access-revoked",
     },
     {
       name: "a user without a GitHub or Vercel account",
-      reason: "verified-identity-required",
       results: [[user], [], []],
+      reason: "verified-identity-required",
     },
     {
       name: "multiple exact memberships",
-      reason: "workspace-ambiguous",
       results: [
         [user],
         [{ provider_id: "github" }],
@@ -275,10 +272,10 @@ describe("PostgreSQL Better Auth organization authority", () => {
           { ...organization, organization_id: "organization_two" },
         ],
       ],
+      reason: "workspace-ambiguous",
     },
     {
       name: "multiple exact invitations",
-      reason: "workspace-ambiguous",
       results: [
         [user],
         [{ provider_id: "github" }],
@@ -298,10 +295,10 @@ describe("PostgreSQL Better Auth organization authority", () => {
           },
         ],
       ],
+      reason: "workspace-ambiguous",
     },
     {
       name: "a revoked personal workspace membership",
-      reason: "access-revoked",
       results: [
         [user],
         [{ provider_id: "github" }],
@@ -309,15 +306,16 @@ describe("PostgreSQL Better Auth organization authority", () => {
         [],
         [{ organization_id: "organization_one" }],
       ],
+      reason: "access-revoked",
     },
   ] as const)("fails closed for $name", async ({ results, reason }) => {
     const state = createDatabase([...results]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      binding
+      binding,
     );
     await expect(
-      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" })
+      authority.ensureOrganizationForVerifiedUser({ userId: "user_one" }),
     ).rejects.toMatchObject({ reason });
   });
 
@@ -325,31 +323,31 @@ describe("PostgreSQL Better Auth organization authority", () => {
     const state = createDatabase([[organization], [organization]]);
     const authority = createPostgresPreviewOrganizationAuthority(
       state.database,
-      binding
+      binding,
     );
 
     await expect(
       authority.activeWorkspaceForUser({
-        audience: binding.audience,
         issuer: binding.issuer,
+        audience: binding.audience,
         ownerUserId: "user_one",
-      })
+      }),
     ).resolves.toBe("workspace_one");
     await expect(
       authority.isActiveMember({
-        audience: binding.audience,
         issuer: binding.issuer,
-        ownerUserId: "user_one",
+        audience: binding.audience,
         workspaceId: "workspace_one",
-      })
+        ownerUserId: "user_one",
+      }),
     ).resolves.toBe(true);
     await expect(
       authority.isActiveMember({
-        audience: binding.audience,
         issuer: "https://other.example.test/api/auth",
-        ownerUserId: "user_one",
+        audience: binding.audience,
         workspaceId: "workspace_one",
-      })
+        ownerUserId: "user_one",
+      }),
     ).resolves.toBe(false);
     expect(state.execute).toHaveBeenCalledTimes(2);
   });

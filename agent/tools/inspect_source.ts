@@ -10,46 +10,13 @@ import {
   canAutoSelectDevelopmentSource,
   developmentSourceReceipt,
 } from "@/lib/repository/development-source";
-import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
-import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
+import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
 export default defineTool({
   description:
     "Inspect the exact preselected Development snapshot or an explicit allowlisted existing checkout, or clone the canonical Arrusted template once into this app build's workspace and record its exact release-disabled receipt. Acquisition never uses a caller-provided remote or ref.",
-  async execute({ sourceKind, path }, ctx) {
-    let receipt = await developmentSourceReceipt(sourceKind, path);
-    if (
-      receipt === undefined &&
-      sourceKind === "fresh-template" &&
-      !(hasTestCapability("simulated-target") && path !== undefined)
-    )
-      receipt = await acquireCanonicalArrustedTemplate({
-        sandbox: () => ctx.getSandbox(),
-        sessionId: ctx.session.id,
-        callId: ctx.callId,
-      });
-    if (receipt === undefined && isHostedVercelRuntime(process.env)) {
-      const selected = sourceWorkflowState.get();
-      if (selected.phase !== "empty") receipt = selected.receipt;
-    }
-    if (
-      receipt === undefined &&
-      path !== undefined &&
-      !isHostedVercelRuntime(process.env)
-    )
-      receipt = await inspectSourceReceipt(sourceKind, path);
-    if (receipt === undefined)
-      throw new Error(
-        "The selected source is not available in this app build session."
-      );
-    sourceWorkflowState.update(() => ({
-      version: APP_BUILDER_SOURCE_VERSION,
-      phase: "reviewed",
-      receipt,
-    }));
-    return receipt;
-  },
   inputSchema: z
     .object({
       sourceKind: z.enum(["existing-repository", "fresh-template"]),
@@ -78,4 +45,37 @@ export default defineTool({
             "Fresh templates are acquired from the canonical Arrusted remote.",
         });
     }),
+  async execute({ sourceKind, path }, ctx) {
+    let receipt = await developmentSourceReceipt(sourceKind, path);
+    if (
+      receipt === undefined &&
+      sourceKind === "fresh-template" &&
+      !(hasTestCapability("simulated-target") && path !== undefined)
+    )
+      receipt = await acquireCanonicalArrustedTemplate({
+        sandbox: () => ctx.getSandbox(),
+        sessionId: ctx.session.id,
+        callId: ctx.callId,
+      });
+    if (receipt === undefined && isHostedVercelRuntime(process.env)) {
+      const selected = sourceWorkflowState.get();
+      if (selected.phase !== "empty") receipt = selected.receipt;
+    }
+    if (
+      receipt === undefined &&
+      path !== undefined &&
+      !isHostedVercelRuntime(process.env)
+    )
+      receipt = await inspectSourceReceipt(sourceKind, path);
+    if (receipt === undefined)
+      throw new Error(
+        "The selected source is not available in this app build session.",
+      );
+    sourceWorkflowState.update(() => ({
+      version: APP_BUILDER_SOURCE_VERSION,
+      phase: "reviewed",
+      receipt,
+    }));
+    return receipt;
+  },
 });

@@ -13,7 +13,7 @@ const packages = ["github", "vercel"];
 
 for (const packageName of packages) {
   entrypoints.add(
-    fileURLToPath(import.meta.resolve(`@emulators/${packageName}`))
+    fileURLToPath(import.meta.resolve(`@emulators/${packageName}`)),
   );
 }
 
@@ -25,7 +25,7 @@ const pnpmDirectories = await readdir(join("node_modules", ".pnpm"));
 for (const packageName of packages) {
   const prefix = `@emulators+${packageName}@0.10.0`;
   for (const directory of pnpmDirectories.filter((name) =>
-    name.startsWith(prefix)
+    name.startsWith(prefix),
   )) {
     entrypoints.add(
       join(
@@ -36,20 +36,18 @@ for (const packageName of packages) {
         "@emulators",
         packageName,
         "dist",
-        "index.js"
-      )
+        "index.js",
+      ),
     );
   }
 }
 
 for (const entrypoint of entrypoints) {
-  const source = await readFile(entrypoint, "utf-8");
-  if (!source.includes(eagerAssets)) {
-    continue;
-  }
+  const source = await readFile(entrypoint, "utf8");
+  if (!source.includes(eagerAssets)) continue;
   await writeFile(entrypoint, source.replace(eagerAssets, ""));
 }
 
 console.log(
-  `Prepared ${entrypoints.size} Emulate provider runtime entrypoints.`
+  `Prepared ${entrypoints.size} Emulate provider runtime entrypoints.`,
 );

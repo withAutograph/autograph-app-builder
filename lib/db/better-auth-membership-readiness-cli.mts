@@ -10,7 +10,7 @@ if (
   process.argv[3] !== "0"
 ) {
   throw new Error(
-    "hosted:membership-migration-verify requires its private database URL fd."
+    "hosted:membership-migration-verify requires its private database URL fd.",
   );
 }
 
@@ -23,12 +23,12 @@ try {
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
     `;
     const activeLegacyRows = await transaction<
-      {
+      Array<{
         issuer: string;
         audience: string;
         workspaceId: string;
         userId: string;
-      }[]
+      }>
     >`
       SELECT
         issuer,
@@ -40,13 +40,13 @@ try {
       ORDER BY issuer, audience, workspace_id, owner_user_id
     `;
     const migratedRows = await transaction<
-      {
+      Array<{
         issuer: string;
         audience: string;
         workspaceId: string;
         userId: string;
         role: "owner";
-      }[]
+      }>
     >`
       SELECT
         organization.issuer,
@@ -66,12 +66,12 @@ try {
       ORDER BY issuer, audience, "workspaceId", "userId"
     `;
     const [counts] = await transaction<
-      {
+      Array<{
         inactiveLegacyCount: number;
         pendingInvitationCount: number;
         nativeOrganizationCount: number;
         orphanedActiveSessionCount: number;
-      }[]
+      }>
     >`
       SELECT
         (SELECT count(*)::int FROM hosted_workspace_membership
@@ -98,15 +98,15 @@ try {
       throw new Error("Better Auth membership counts were not readable.");
     }
     return {
+      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
       activeLegacyRows,
       migratedRows,
-      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
       ...counts,
     };
   });
   const receipt = verifyBetterAuthMembershipReadBack({
-    observedAt: new Date(),
     readBack,
+    observedAt: new Date(),
   });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 } finally {

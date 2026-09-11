@@ -2,9 +2,8 @@ import { Monitor } from "@geist-ui/icons";
 import type { ReactNode } from "react";
 
 import { SectionShell } from "../../components/create-app/choice-card";
-import type { BuildDestination } from "./builder-types";
-
 import styles from "./app-builder.module.css";
+import type { BuildDestination } from "./builder-types";
 
 function CursorMark() {
   return (

@@ -31,6 +31,10 @@ const sandboxOverviewPaths = [
 export default defineTool({
   description:
     "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
+  inputSchema: z.object({
+    path: z.string().min(1).default(developmentWorkspacePath),
+    paths: z.array(z.string().min(1)).optional(),
+  }),
   async execute({ path, paths }, ctx) {
     if (paths?.length) {
       const sandbox = await ctx.getSandbox();
@@ -39,7 +43,7 @@ export default defineTool({
       for (const requestedPath of paths) {
         const relativePath = requestedPath.replace(
           /^\/workspace\/repository\//u,
-          ""
+          "",
         );
         const content = await sandbox.readTextFile({
           path: `/workspace/repository/${relativePath}`,
@@ -66,7 +70,7 @@ export default defineTool({
           receipt.sourcePath,
           await ctx.getSandbox(),
           ctx.callId,
-          "planning"
+          "planning",
         );
         sourceWorkflowState.update(() => ({
           version: APP_BUILDER_SOURCE_VERSION,
@@ -107,8 +111,4 @@ export default defineTool({
       ...(missingPaths.length === 0 ? {} : { missingPaths }),
     };
   },
-  inputSchema: z.object({
-    path: z.string().min(1).default(developmentWorkspacePath),
-    paths: z.array(z.string().min(1)).optional(),
-  }),
 });

@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected item, evidence, and action form a clear progression. Selected-row treatment and severity pills aid scanning, but the mixed Critical/Low ordering and absence of a prominent calculated shortfall make urgency slightly slower to assess. |
-| layout | 3/4 | The list-detail alignment is orderly, field labels and values use consistent columns, and action footers remain well placed. At 1920×1080 the fixed-width composition leaves substantial unused space, while the 1024px layout becomes comparatively dense. |
-| typography | 4/4 | Headings, labels, values, metadata, and button text are consistently styled and readable across all captures. Bold weights distinguish product identity and field labels without creating visual noise, and long confirmation copy wraps cleanly. |
-| responsive | 4/4 | The composition remains usable at 1920, 1440, 1024, and 700px desktop windows. It transitions from simultaneous list-detail to a focused detail view with a Back affordance, preserves visible actions, and uses bounded panel scrolling for expanded evidence without document overflow. |
-| productClarity | 4/4 | The task is explicit: review low-stock evidence and model replenishment without changing inventory. Location and severity filters, selectable exceptions, supplier details, confirmation, result, reset, and repeated simulation-only messaging make the workflow and its non-destructive nature easy to understand. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                               |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected item, evidence, and action form a clear progression. Selected-row treatment and severity pills aid scanning, but the mixed Critical/Low ordering and absence of a prominent calculated shortfall make urgency slightly slower to assess.                           |
+| layout         | 3/4   | The list-detail alignment is orderly, field labels and values use consistent columns, and action footers remain well placed. At 1920×1080 the fixed-width composition leaves substantial unused space, while the 1024px layout becomes comparatively dense.                                                          |
+| typography     | 4/4   | Headings, labels, values, metadata, and button text are consistently styled and readable across all captures. Bold weights distinguish product identity and field labels without creating visual noise, and long confirmation copy wraps cleanly.                                                                    |
+| responsive     | 4/4   | The composition remains usable at 1920, 1440, 1024, and 700px desktop windows. It transitions from simultaneous list-detail to a focused detail view with a Back affordance, preserves visible actions, and uses bounded panel scrolling for expanded evidence without document overflow.                            |
+| productClarity | 4/4   | The task is explicit: review low-stock evidence and model replenishment without changing inventory. Location and severity filters, selectable exceptions, supplier details, confirmation, result, reset, and repeated simulation-only messaging make the workflow and its non-destructive nature easy to understand. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/526) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/526) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/526) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

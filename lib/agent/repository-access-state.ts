@@ -18,8 +18,8 @@ const repositoryPart = z
   .regex(/^[A-Za-z0-9_.-]+$/u);
 
 const repositoryAccessReceiptUnsignedSchema = z.strictObject({
-  confirmedByCallId: z.string().min(1).max(255),
-  providerAccessDigest: digest,
+  version: z.literal(REPOSITORY_ACCESS_RECEIPT_VERSION),
+  sessionId: z.string().min(1).max(255),
   repository: z.strictObject({
     repositoryId: decimal,
     owner: repositoryPart,
@@ -33,12 +33,12 @@ const repositoryAccessReceiptUnsignedSchema = z.strictObject({
     accountLogin: z.string().min(1).max(100),
     accountType: z.enum(["Organization", "User"]),
   }),
-  sessionId: z.string().min(1).max(255),
-  version: z.literal(REPOSITORY_ACCESS_RECEIPT_VERSION),
+  providerAccessDigest: digest,
+  confirmedByCallId: z.string().min(1).max(255),
 });
 
 const receiptDigest = (
-  value: z.infer<typeof repositoryAccessReceiptUnsignedSchema>
+  value: z.infer<typeof repositoryAccessReceiptUnsignedSchema>,
 ) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 export const repositoryAccessReceiptSchema =
@@ -46,13 +46,12 @@ export const repositoryAccessReceiptSchema =
     .extend({ digest })
     .superRefine((value, context) => {
       const { digest: actualDigest, ...unsigned } = value;
-      if (actualDigest !== receiptDigest(unsigned)) {
+      if (actualDigest !== receiptDigest(unsigned))
         context.addIssue({
           code: "custom",
           path: ["digest"],
           message: "Repository access receipt digest is invalid.",
         });
-      }
     });
 
 export type RepositoryAccessReceipt = z.infer<
@@ -68,18 +67,18 @@ function receiptObservation(input: {
   access: ReadyRepositoryAccess;
 }) {
   return {
-    providerAccessDigest: input.access.accessDigest,
+    version: REPOSITORY_ACCESS_RECEIPT_VERSION,
+    sessionId: input.sessionId,
     repository: {
+      repositoryId: input.access.repository.repositoryId,
+      owner: input.access.repository.owner,
+      name: input.access.repository.name,
       defaultBranch: input.access.repository.defaultBranch,
       headSha: input.access.repository.headSha,
       headTree: input.access.repository.headTree,
-      name: input.access.repository.name,
-      owner: input.access.repository.owner,
-      repositoryId: input.access.repository.repositoryId,
     },
     scope: input.access.scope,
-    sessionId: input.sessionId,
-    version: REPOSITORY_ACCESS_RECEIPT_VERSION,
+    providerAccessDigest: input.access.accessDigest,
   } as const;
 }
 
@@ -94,21 +93,19 @@ export function recordRepositoryAccessReceipt(input: {
     input.current === undefined
       ? undefined
       : repositoryAccessReceiptSchema.parse(input.current);
-  if (current !== undefined && current.sessionId !== input.sessionId) {
+  if (current !== undefined && current.sessionId !== input.sessionId)
     throw new Error("Repository access state belongs to a different session.");
-  }
   if (
     current !== undefined &&
     JSON.stringify({
-      providerAccessDigest: current.providerAccessDigest,
+      version: current.version,
+      sessionId: current.sessionId,
       repository: current.repository,
       scope: current.scope,
-      sessionId: current.sessionId,
-      version: current.version,
+      providerAccessDigest: current.providerAccessDigest,
     }) === JSON.stringify(observation)
-  ) {
+  )
     return current;
-  }
 
   const unsigned = repositoryAccessReceiptUnsignedSchema.parse({
     ...observation,
@@ -129,9 +126,8 @@ export function assertRepositoryAccessReceiptForSource(input: {
   expectedSha: string;
   expectedTree: string;
 }): RepositoryAccessReceipt {
-  if (input.receipt === undefined) {
+  if (input.receipt === undefined)
     throw new Error("No confirmed repository access receipt is available.");
-  }
   const receipt = repositoryAccessReceiptSchema.parse(input.receipt);
   if (
     receipt.digest !== input.expectedDigest ||
@@ -140,11 +136,10 @@ export function assertRepositoryAccessReceiptForSource(input: {
     `refs/heads/${receipt.repository.defaultBranch}` !== input.ref ||
     receipt.repository.headSha !== input.expectedSha ||
     receipt.repository.headTree !== input.expectedTree
-  ) {
+  )
     throw new Error(
-      "The repository access receipt does not match this session and source."
+      "The repository access receipt does not match this session and source.",
     );
-  }
   return receipt;
 }
 
@@ -153,7 +148,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
   source: ImmutableGitHubSourceReceipt;
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
-  const { repository } = input.source;
+  const repository = input.source.repository;
   if (
     repository.repositoryId !== access.repository.repositoryId ||
     repository.owner !== access.repository.owner ||
@@ -165,13 +160,12 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
       `refs/heads/${access.repository.defaultBranch}` ||
     input.source.resolvedSha !== access.repository.headSha ||
     input.source.resolvedTree !== access.repository.headTree
-  ) {
+  )
     throw new Error(
-      "The live GitHub source does not match the confirmed repository access receipt."
+      "The live GitHub source does not match the confirmed repository access receipt.",
     );
-  }
 }
 
 export const repositoryAccessReceiptState = defineState<
   RepositoryAccessReceipt | undefined
->("autograph-app-builder.repository-access.v1", () => {});
+>("autograph-app-builder.repository-access.v1", () => undefined);

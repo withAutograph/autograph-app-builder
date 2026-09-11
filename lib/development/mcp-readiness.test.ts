@@ -8,8 +8,8 @@ import {
 
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
-    headers: sessionId ? { "mcp-session-id": sessionId } : undefined,
     status,
+    headers: sessionId ? { "mcp-session-id": sessionId } : undefined,
   });
 }
 
@@ -22,19 +22,17 @@ describe("development MCP readiness", () => {
         method: string;
       };
       methods.push(request.method);
-      if (request.method === "initialize") {
+      if (request.method === "initialize")
         return response(
           { jsonrpc: "2.0", id: request.id, result: {} },
           200,
-          "dev-1"
+          "dev-1",
         );
-      }
-      if (request.method === "notifications/initialized") {
+      if (request.method === "notifications/initialized")
         return response(undefined, 202);
-      }
       return response({
-        id: request.id,
         jsonrpc: "2.0",
+        id: request.id,
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
     }) as typeof fetch;
@@ -42,7 +40,7 @@ describe("development MCP readiness", () => {
       developmentMcpToolNames({
         endpoint: "http://127.0.0.1:3210/mcp",
         fetcher,
-      })
+      }),
     ).resolves.toEqual([...TOOL_NAMES]);
     expect(methods).toEqual([
       "initialize",
@@ -58,22 +56,19 @@ describe("development MCP readiness", () => {
         id?: number;
         method: string;
       };
-      if (request.method === "initialize" && attempt++ === 0) {
+      if (request.method === "initialize" && attempt++ === 0)
         return response({ error: "starting" }, 503);
-      }
-      if (request.method === "initialize") {
+      if (request.method === "initialize")
         return response(
           { jsonrpc: "2.0", id: request.id, result: {} },
           200,
-          "dev-2"
+          "dev-2",
         );
-      }
-      if (request.method === "notifications/initialized") {
+      if (request.method === "notifications/initialized")
         return response(undefined, 202);
-      }
       return response({
-        id: request.id,
         jsonrpc: "2.0",
+        id: request.id,
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
     }) as typeof fetch;
@@ -83,7 +78,7 @@ describe("development MCP readiness", () => {
         fetcher,
         intervalMs: 1,
         timeoutMs: 100,
-      })
+      }),
     ).resolves.toEqual([...TOOL_NAMES]);
   });
 
@@ -93,19 +88,17 @@ describe("development MCP readiness", () => {
         id?: number;
         method: string;
       };
-      if (request.method === "initialize") {
+      if (request.method === "initialize")
         return response(
           { jsonrpc: "2.0", id: request.id, result: {} },
           200,
-          "dev-3"
+          "dev-3",
         );
-      }
-      if (request.method === "notifications/initialized") {
+      if (request.method === "notifications/initialized")
         return response(undefined, 202);
-      }
       return response({
-        id: request.id,
         jsonrpc: "2.0",
+        id: request.id,
         result: { tools: [{ name: "eve_start" }] },
       });
     }) as typeof fetch;
@@ -115,7 +108,7 @@ describe("development MCP readiness", () => {
         fetcher,
         intervalMs: 1,
         timeoutMs: 100,
-      })
+      }),
     ).rejects.toThrow("must expose exactly autograph_start");
   });
 });

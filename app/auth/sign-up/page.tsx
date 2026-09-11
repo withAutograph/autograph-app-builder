@@ -3,18 +3,18 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { AuthContinuity } from "@/components/auth/auth-continuity";
 import { SignUp } from "@/components/auth/sign-up";
-import {
-  DEFAULT_AUTH_REDIRECT_TO,
-  resolvePasskeyRedirectTo,
-  serializeAuthPageSearchParams,
-} from "@/lib/auth/preview-auth-ui";
-import type { AuthPageSearchParams } from "@/lib/auth/preview-auth-ui";
+import { AuthContinuity } from "@/components/auth/auth-continuity";
 import {
   getPreviewOAuthDeploymentOrigin,
   getPreviewOAuthDeploymentSession,
 } from "@/lib/auth/preview-oauth-deployment";
+import {
+  DEFAULT_AUTH_REDIRECT_TO,
+  resolvePasskeyRedirectTo,
+  serializeAuthPageSearchParams,
+  type AuthPageSearchParams,
+} from "@/lib/auth/preview-auth-ui";
 
 async function hasAuthenticatedVisitor() {
   "use cache: private";
@@ -34,9 +34,7 @@ async function RedirectAuthenticatedVisitor({
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
-  if (!(await hasAuthenticatedVisitor())) {
-    return null;
-  }
+  if (!(await hasAuthenticatedVisitor())) return null;
 
   const query = await searchParams;
   const origin = getPreviewOAuthDeploymentOrigin(process.env);
@@ -44,7 +42,7 @@ async function RedirectAuthenticatedVisitor({
   const signInRedirectTo = resolvePasskeyRedirectTo(
     DEFAULT_AUTH_REDIRECT_TO,
     search,
-    origin
+    origin,
   );
 
   redirect(signInRedirectTo);

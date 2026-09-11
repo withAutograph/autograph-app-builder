@@ -2,14 +2,33 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
-import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 import type { UiPreviewInput } from "@/lib/agent/ui-preview";
+import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import type {
+  TargetIdentity,
+  TargetProposal,
+} from "@/lib/repository/target-planning";
+import type {
+  TargetApplyFailureReceipt,
+  TargetApplyReceipt,
+} from "@/lib/repository/target-apply";
+import type {
+  TargetValidationAttemptReceipt,
+  TargetValidationFailureReceipt,
+  TargetValidationReceipt,
+} from "@/lib/repository/target-validation";
+import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
+import type { SourceReceipt } from "@/lib/repository/source-receipt";
+import type {
+  LocalPublicationFailureReceipt,
+  LocalPublicationProposal,
+  LocalPublicationSuccessReceipt,
+} from "@/lib/repository/local-publication";
 import type {
   BranchWorktreePublicationFailureReceipt,
   BranchWorktreePublicationProposal,
   BranchWorktreePublicationSuccessReceipt,
 } from "@/lib/repository/branch-worktree-publication";
-import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 import type {
   FreshBootstrapFailureReceipt,
   FreshBootstrapProposal,
@@ -19,33 +38,14 @@ import type {
   DraftPullRequestProposal,
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
-import type {
-  LocalPublicationFailureReceipt,
-  LocalPublicationProposal,
-  LocalPublicationSuccessReceipt,
-} from "@/lib/repository/local-publication";
-import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
-import type { SourceReceipt } from "@/lib/repository/source-receipt";
-import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
-import type {
-  TargetApplyFailureReceipt,
-  TargetApplyReceipt,
-} from "@/lib/repository/target-apply";
-import type {
-  TargetIdentity,
-  TargetProposal,
-} from "@/lib/repository/target-planning";
-import type {
-  TargetValidationAttemptReceipt,
-  TargetValidationFailureReceipt,
-  TargetValidationReceipt,
-} from "@/lib/repository/target-validation";
+import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
+import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY =
   "autograph-app-builder.workflow.v17" as const;
 
-export interface AcceptedAppSpec {
+export type AcceptedAppSpec = {
   appId: string;
   artifactPath: string;
   content: string;
@@ -55,9 +55,9 @@ export interface AcceptedAppSpec {
   approvalReceipt?: ApprovalReceipt;
   /** Exact UI revision accepted before this functional handoff, if any. */
   uiRevision?: string;
-}
+};
 
-export interface PrototypeArtifact {
+export type PrototypeArtifact = {
   appId: string;
   path: string;
   mediaType: "text/markdown" | "text/html";
@@ -66,14 +66,14 @@ export interface PrototypeArtifact {
   revision: string;
   sessionId: string;
   recordedByCallId: string;
-}
+};
 
 /**
  * A UI preview is source-first. The Browser HTML is a renderer output, never
  * the authored design input.  Keeping the small source set in durable state
  * lets a later functionality pass promote the exact reviewed UI.
  */
-export interface UiPreviewRevision {
+export type UiPreviewRevision = {
   appId: string;
   revision: string;
   sourceDigest: string;
@@ -86,9 +86,9 @@ export interface UiPreviewRevision {
   catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
   previewHtml: string;
   createdByCallId: string;
-}
+};
 
-interface TargetExecutionBinding {
+type TargetExecutionBinding = {
   sourceSha: string;
   sourceTree: string;
   sourceReceiptDigest: string;
@@ -98,7 +98,7 @@ interface TargetExecutionBinding {
   dependencyCacheDigest: string;
   appSpecDigest: string;
   artifactRevision: string;
-}
+};
 
 export type DependencyPreparationReceipt = TargetExecutionBinding & {
   version: 2;
@@ -113,7 +113,7 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
 
 /** Reject persisted V2 receipts whose durable fields no longer bind together. */
 export function assertExactDependencyPreparationReceipt(
-  receipt: DependencyPreparationReceipt
+  receipt: DependencyPreparationReceipt,
 ): void {
   const { digest, ...unsigned } = receipt;
   if (
@@ -121,9 +121,8 @@ export function assertExactDependencyPreparationReceipt(
     receipt.dependencyLayout === undefined ||
     !/^[0-9a-f]{64}$/u.test(digest) ||
     digest !== sha256(JSON.stringify(unsigned))
-  ) {
+  )
     throw new Error("The dependency preparation receipt is malformed.");
-  }
 }
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
@@ -142,21 +141,21 @@ export type AppCreationProposal = TargetExecutionBinding & {
   digest: string;
 };
 
-interface WorkspacePhase {
+type WorkspacePhase = {
   workspace: PreparedSandboxWorkspace;
   sourceReceipt: SourceReceipt;
   githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
   artifacts: readonly PrototypeArtifact[];
-}
+};
 
 type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
 
-export interface GitHubDraftProposalBinding {
+export type GitHubDraftProposalBinding = {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
   githubSourceDigest: string;
-}
+};
 
 type ReviewedPhase = WorkspacePhase & {
   appSpec: AcceptedAppSpec;
@@ -328,7 +327,7 @@ export type PublicationWorkflowPhase = Extract<
 >;
 
 export function isPublicationWorkflowPhase(
-  state: AppBuilderWorkflowState
+  state: AppBuilderWorkflowState,
 ): state is PublicationWorkflowPhase {
   return (
     state.phase === "publication_pending" ||
@@ -350,23 +349,21 @@ export function isPublicationWorkflowPhase(
  */
 export function assertUpstreamMutationAllowed(
   state: AppBuilderWorkflowState,
-  operation: string
+  operation: string,
 ): void {
-  if (isPublicationWorkflowPhase(state)) {
+  if (isPublicationWorkflowPhase(state))
     throw new Error(
-      `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`
+      `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`,
     );
-  }
 }
 
 export function assertExactWorkflowState(
   latest: AppBuilderWorkflowState,
   expected: AppBuilderWorkflowState,
-  operation: string
+  operation: string,
 ): void {
-  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected))) {
+  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
     throw new Error(`The workflow changed concurrently before ${operation}.`);
-  }
 }
 
 export function assertCurrentGitHubDraftProposal(input: {
@@ -377,7 +374,7 @@ export function assertCurrentGitHubDraftProposal(input: {
   sourceReceiptDigest: string;
   githubSource: ImmutableGitHubSourceReceipt;
 }): DraftPullRequestProposal {
-  const { binding } = input;
+  const binding = input.binding;
   const proposal = binding?.proposal;
   if (
     binding === undefined ||
@@ -391,11 +388,10 @@ export function assertCurrentGitHubDraftProposal(input: {
     proposal.owner !== input.githubSource.repository.owner ||
     proposal.name !== input.githubSource.repository.name ||
     proposal.baseBranch !== input.githubSource.repository.defaultBranch
-  ) {
+  )
     throw new Error(
-      "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow."
+      "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
     );
-  }
   return proposal;
 }
 
@@ -405,19 +401,18 @@ export function assertPublicationJournalStatus(
     | "publication_pending"
     | "publication_failed"
     | "published_local",
-  status: "pending" | "failed" | "succeeded" | undefined
+  status: "pending" | "failed" | "succeeded" | undefined,
 ): void {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {
-    publication_failed: [undefined, "failed"],
-    publication_pending: [undefined, "pending", "failed", "succeeded"],
-    published_local: ["succeeded"],
     reviewed: [undefined],
+    publication_pending: [undefined, "pending", "failed", "succeeded"],
+    publication_failed: [undefined, "failed"],
+    published_local: ["succeeded"],
   };
-  if (!allowed[phase].includes(status)) {
+  if (!allowed[phase].includes(status))
     throw new Error(
-      `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`
+      `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
     );
-  }
 }
 
 export function assertFreshBootstrapJournalStatus(
@@ -426,23 +421,22 @@ export function assertFreshBootstrapJournalStatus(
     | "fresh_bootstrap_pending"
     | "fresh_bootstrap_failed"
     | "published_fresh_bootstrap",
-  status: "pending" | "failed" | "succeeded" | undefined
+  status: "pending" | "failed" | "succeeded" | undefined,
 ): void {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {
-    fresh_bootstrap_failed: ["failed", "succeeded"],
-    fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
-    published_fresh_bootstrap: ["succeeded"],
     reviewed: [undefined, "pending", "failed"],
+    fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
+    fresh_bootstrap_failed: ["failed", "succeeded"],
+    published_fresh_bootstrap: ["succeeded"],
   };
-  if (!allowed[phase].includes(status)) {
+  if (!allowed[phase].includes(status))
     throw new Error(
-      `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`
+      `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`,
     );
-  }
 }
 
 export function workflowWorkspace(
-  state: AppBuilderWorkflowState
+  state: AppBuilderWorkflowState,
 ): PreparedSandboxWorkspace | undefined {
   return state.phase === "empty" ? undefined : state.workspace;
 }
@@ -457,7 +451,7 @@ export function validAppId(appId: string): boolean {
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
-  () => ({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION })
+  () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
 );
 
 /**

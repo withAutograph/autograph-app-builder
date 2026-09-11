@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page title, filters, exception count, severity groups, selected row, and detail card form a clear review sequence. Urgency is reinforced through Critical/Warning pills and days-of-cover values, while the replenishment action remains visually primary without overpowering stock and supplier information. |
-| layout | 3/4 | The two-column master-detail composition is consistently aligned at 1024, 1440, and 1920 widths, with balanced card spacing and clear section dividers. The narrow 700px composition sensibly separates list and detail views. Minor issues include an understated sorting note and desktop row-selection affordances that are less explicit than the narrow-width Review buttons. |
-| typography | 3/4 | Headings, product names, quantities, labels, and supporting text use a consistent and readable type hierarchy. Bold values make stock data easy to scan, though several small metadata labels and the passive sorting text have limited prominence relative to their operational importance. |
-| responsive | 4/4 | The composition adapts effectively across the supplied desktop widths: content is centered at 1920px, remains usable in two columns at 1024px, and switches to a focused list/detail flow at 700px with a clear Back to exceptions control. No clipping is visible; modest document scrolling at shorter windows is reasonable. |
-| productClarity | 4/4 | The interface clearly supports filtering by location and severity, reviewing stock and supplier details, and trying replenishment. Preview only · No supplier contacted, Stock unchanged, and Simulated — no order sent make the mock nature and outcome of the action unusually clear. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page title, filters, exception count, severity groups, selected row, and detail card form a clear review sequence. Urgency is reinforced through Critical/Warning pills and days-of-cover values, while the replenishment action remains visually primary without overpowering stock and supplier information.                                                                 |
+| layout         | 3/4   | The two-column master-detail composition is consistently aligned at 1024, 1440, and 1920 widths, with balanced card spacing and clear section dividers. The narrow 700px composition sensibly separates list and detail views. Minor issues include an understated sorting note and desktop row-selection affordances that are less explicit than the narrow-width Review buttons. |
+| typography     | 3/4   | Headings, product names, quantities, labels, and supporting text use a consistent and readable type hierarchy. Bold values make stock data easy to scan, though several small metadata labels and the passive sorting text have limited prominence relative to their operational importance.                                                                                       |
+| responsive     | 4/4   | The composition adapts effectively across the supplied desktop widths: content is centered at 1920px, remains usable in two columns at 1024px, and switches to a focused list/detail flow at 700px with a clear Back to exceptions control. No clipping is visible; modest document scrolling at shorter windows is reasonable.                                                    |
+| productClarity | 4/4   | The interface clearly supports filtering by location and severity, reviewing stock and supplier details, and trying replenishment. Preview only · No supplier contacted, Stock unchanged, and Simulated — no order sent make the mock nature and outcome of the action unusually clear.                                                                                            |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/228) |
-| desktop-0 | typography | 0/0 | 0% (0/564) |
-| desktop-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/136) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/228) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/564) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/136) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/228) |
-| desktop-window-0 | typography | 0/0 | 0% (0/564) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/136) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/234) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/594) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/272) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/134) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/228) |
+| desktop-0                | typography | 0/0                         | 0% (0/564) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/136) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/564) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/136) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/564) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/136) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/234) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/594) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/272) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/134) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

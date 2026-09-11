@@ -2,8 +2,7 @@
 export function captureFilename(name: string) {
   if (
     !/^(?:[a-z]+(?:-[a-z]+)*|desktop-custom-[1-9]\d*x[1-9]\d*)-\d+$/.test(name)
-  ) {
+  )
     throw new Error("Unexpected screenshot filename");
-  }
   return `${name}.png`;
 }

@@ -4,18 +4,18 @@ import type {
   BuilderDraftRecord,
   SaveActiveBuilderDraftInput,
 } from "./contracts";
-import { createBuilderDraftService } from "./service";
-import type {
-  BuilderDraftAuthority,
-  BuilderDraftRow,
-  BuilderDraftStore,
+import {
+  createBuilderDraftService,
+  type BuilderDraftAuthority,
+  type BuilderDraftRow,
+  type BuilderDraftStore,
 } from "./service";
 
 const authority: BuilderDraftAuthority = {
-  audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
-  ownerUserId: "user-one",
+  audience: "https://builder.example/mcp",
   workspaceId: "workspace-one",
+  ownerUserId: "user-one",
 };
 
 const otherAuthority: BuilderDraftAuthority = {
@@ -30,7 +30,7 @@ const secondMutation = "00000000-0000-4000-8000-000000000012";
 
 function sameAuthority(
   left: BuilderDraftAuthority,
-  right: BuilderDraftAuthority
+  right: BuilderDraftAuthority,
 ) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -41,34 +41,16 @@ function memoryStore(): BuilderDraftStore {
     rows.find(
       (row) =>
         sameAuthority(row.authority, input.authority) &&
-        row.draftId === input.draftId
+        row.draftId === input.draftId,
     );
   const findActive = (input: { authority: BuilderDraftAuthority }) =>
     rows.find(
       (row) =>
-        sameAuthority(row.authority, input.authority) && row.status === "active"
+        sameAuthority(row.authority, input.authority) &&
+        row.status === "active",
     );
 
   return {
-    async archive(input) {
-      const row = find(input);
-      if (!row || row.status !== "active") return false;
-      row.status = "archived";
-      row.updatedAt = input.now;
-      return true;
-    },
-    async deleteInactiveSince({ now, maxAgeMs }) {
-      const cutoff = now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1_000);
-      let deleted = 0;
-      for (let index = rows.length - 1; index >= 0; index -= 1) {
-        const row = rows[index];
-        if (row.status === "active" && row.updatedAt.getTime() < cutoff) {
-          rows.splice(index, 1);
-          deleted += 1;
-        }
-      }
-      return deleted;
-    },
     async read(input) {
       return find(input);
     },
@@ -104,36 +86,55 @@ function memoryStore(): BuilderDraftStore {
         concurrent: input.expectedRevision !== 0,
       };
     },
+    async archive(input) {
+      const row = find(input);
+      if (!row || row.status !== "active") return false;
+      row.status = "archived";
+      row.updatedAt = input.now;
+      return true;
+    },
+    async deleteInactiveSince({ now, maxAgeMs }) {
+      const cutoff = now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1_000);
+      let deleted = 0;
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        const row = rows[index];
+        if (row.status === "active" && row.updatedAt.getTime() < cutoff) {
+          rows.splice(index, 1);
+          deleted += 1;
+        }
+      }
+      return deleted;
+    },
   };
 }
 
 function record(brief = "A saved builder brief."): BuilderDraftRecord {
   return {
+    version: 1,
     draft: {
-      appNameEditedByUser: false,
-      connectedConnections: [],
-      deploymentProvider: "vercel",
-      focusOrigin: "github",
+      version: 1,
       form: {
         appName: "Vendor portal",
+        repository: "vendor-portal",
         brief,
+        privateRepository: true,
         buildDestination: "codex",
         connections: [],
         modelId: "gpt-5",
-        privateRepository: true,
-        repository: "vendor-portal",
       },
+      team: "",
       gitScope: "",
       model: "gpt-5",
-      repositoryEditedByUser: false,
-      search: "",
-      showMoreConnections: false,
-      storageProvider: "github",
-      team: "",
-      version: 1,
       zdrOnly: false,
+      showMoreConnections: false,
+      search: "",
+      connectedConnections: [],
+      storageProvider: "github",
+      deploymentProvider: "vercel",
+      focusOrigin: "github",
+      appNameEditedByUser: false,
+      repositoryEditedByUser: false,
     },
-    version: 1,
   };
 }
 
@@ -143,14 +144,14 @@ function saveInput(
     expectedRevision?: number;
     clientMutationId?: string;
     record?: BuilderDraftRecord;
-  } = {}
+  } = {},
 ): SaveActiveBuilderDraftInput {
   return {
-    clientMutationId: input.clientMutationId ?? firstMutation,
+    version: 1,
     draftId: input.draftId ?? draftId,
     expectedRevision: input.expectedRevision ?? 0,
+    clientMutationId: input.clientMutationId ?? firstMutation,
     record: input.record ?? record(),
-    version: 1,
   };
 }
 
@@ -172,17 +173,17 @@ describe("builder draft service", () => {
     const stale = await service.saveActive(
       authority,
       saveInput({
-        clientMutationId: secondMutation,
         draftId: otherDraftId,
+        clientMutationId: secondMutation,
         record: record("The later device save wins."),
-      })
+      }),
     );
-    expect(retry).toMatchObject({ concurrent: false, idempotent: true });
-    expect(stale).toMatchObject({ concurrent: true, idempotent: false });
+    expect(retry).toMatchObject({ idempotent: true, concurrent: false });
+    expect(stale).toMatchObject({ idempotent: false, concurrent: true });
     expect(stale.row).toMatchObject({
       draftId,
-      record: record("The later device save wins."),
       revision: 2,
+      record: record("The later device save wins."),
     });
   });
 
@@ -194,15 +195,15 @@ describe("builder draft service", () => {
     };
 
     await expect(
-      service.saveActive(authority, invalid as SaveActiveBuilderDraftInput)
+      service.saveActive(authority, invalid as SaveActiveBuilderDraftInput),
     ).rejects.toThrow();
   });
 
   it("scheduled cleanup removes only inactive active drafts", async () => {
     let time = new Date("2026-01-01T00:00:00.000Z");
     const service = createBuilderDraftService({
-      now: () => time,
       store: memoryStore(),
+      now: () => time,
     });
     await service.saveActive(authority, saveInput());
     time = new Date("2026-02-01T00:00:00.000Z");

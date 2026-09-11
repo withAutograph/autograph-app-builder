@@ -4,53 +4,55 @@ import { createVercelInstallationDeploymentHandler } from "./vercel-installation
 
 describe("Vercel installation deployment route", () => {
   it("returns a visible configuration failure when provider activation is absent", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const handler = createVercelInstallationDeploymentHandler("start", {
       APP_ORIGIN: "https://builder.example",
     });
     const response = await handler(
       new Request("https://builder.example/vercel/installations/start", {
-        body: "",
+        method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
           Origin: "https://builder.example",
+          "Content-Type": "application/x-www-form-urlencoded",
           "x-vercel-id": "iad1::safe-request-id",
         },
-        method: "POST",
-      })
+        body: "",
+      }),
     );
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/?vercel=failed&vercelReason=configuration-unavailable"
+      "https://builder.example/?vercel=failed&vercelReason=configuration-unavailable",
     );
     expect(error).toHaveBeenCalledOnce();
     expect(error.mock.calls[0]?.[0]).toContain(
-      '"reason":"configuration-unavailable"'
+      '"reason":"configuration-unavailable"',
     );
     expect(error.mock.calls[0]?.[0]).toContain(
-      '"requestId":"iad1::safe-request-id"'
+      '"requestId":"iad1::safe-request-id"',
     );
   });
 
   it("rejects a cross-origin start before initializing provider state", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const handler = createVercelInstallationDeploymentHandler("start", {
       APP_ORIGIN: "https://builder.example",
     });
     const response = await handler(
       new Request("https://builder.example/vercel/installations/start", {
-        body: "",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Origin: "https://attacker.example",
-        },
         method: "POST",
-      })
+        headers: {
+          Origin: "https://attacker.example",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      }),
     );
 
     expect(response.headers.get("location")).toBe(
-      "https://builder.example/?vercel=failed&vercelReason=request-invalid"
+      "https://builder.example/?vercel=failed&vercelReason=request-invalid",
     );
   });
 });

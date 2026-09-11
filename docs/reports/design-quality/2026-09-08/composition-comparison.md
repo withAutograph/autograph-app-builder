@@ -4,7 +4,12 @@ This is an advisory comparison, not a generation gate or a target score.
 
 ## Superseding product direction
 
-The user subsequently confirmed desktop-only apps and the existing Arrusted palette as authoritative. The primary Button adjustment and phone-only stacked table API from this experiment are reverted in the coordinated PRs. Mobile, tablet, touch-target and palette-change findings below are historical observations, not current requirements or a repair backlog. Current evaluation samples desktop windows/panels only. Preserve palette tokens and component variants verbatim.
+The user subsequently confirmed desktop-only apps and the existing Arrusted
+palette as authoritative. The primary Button adjustment and phone-only stacked
+table API from this experiment are reverted in the coordinated PRs. Mobile,
+tablet, touch-target and palette-change findings below are historical observations,
+not current requirements or a repair backlog. Current evaluation samples desktop
+windows/panels only. Preserve palette tokens and component variants verbatim.
 
 ## Changes exercised
 
@@ -12,11 +17,11 @@ The user subsequently confirmed desktop-only apps and the existing Arrusted pale
 - App Builder `04213e5` plus the subsequent type-import repair: capability-led composition guidance, chart initialization when used, and live-source snapshot support.
 - Both fresh runs used the local Builder and real Vercel Sandbox. They stopped at a Browser prototype and implementation plan; neither built or published an app.
 
-| Preview | Subjective score | Observations |
-| --- | --- | --- |
-| [Earlier Stock Exceptions](stock-exceptions-113904457Z/README.md) | 60 | Fixed-width mobile layout, weak selection and contrast. |
-| [New Stock Exceptions](stock-exceptions-155003870Z/README.md) | 75 | Visible selection, stacked mobile records, no horizontal overflow, clearer mock action. |
-| [Equipment Request, final](equipment-request-160006674Z/README.md) | 75 | Distinct form/review workflow, readable fields and clear actions; no horizontal overflow. |
+| Preview                                                            | Subjective score | Observations                                                                              |
+| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------- |
+| [Earlier Stock Exceptions](stock-exceptions-113904457Z/README.md)  | 60               | Fixed-width mobile layout, weak selection and contrast.                                   |
+| [New Stock Exceptions](stock-exceptions-155003870Z/README.md)      | 75               | Visible selection, stacked mobile records, no horizontal overflow, clearer mock action.   |
+| [Equipment Request, final](equipment-request-160006674Z/README.md) | 75               | Distinct form/review workflow, readable fields and clear actions; no horizontal overflow. |
 
 The [intermediate Equipment Request report](equipment-request-155646883Z/README.md) was captured before the agent finished its final revision. It is retained as history, not the final comparison.
 

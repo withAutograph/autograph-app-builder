@@ -2,5 +2,5 @@ import { createGitHubAppInstallationDeploymentHandler } from "@/lib/auth/github-
 
 export const POST = createGitHubAppInstallationDeploymentHandler(
   "start",
-  process.env
+  process.env,
 );

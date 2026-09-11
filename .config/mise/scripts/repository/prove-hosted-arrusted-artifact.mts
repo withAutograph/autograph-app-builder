@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -35,12 +35,9 @@ function parseArguments(args: readonly string[]) {
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
     const value = args[index + 1];
-    if (flag === undefined || value === undefined || !flag.startsWith("--")) {
+    if (flag === undefined || value === undefined || !flag.startsWith("--"))
       throw new Error("Arguments must be exact --name value pairs.");
-    }
-    if (values.has(flag)) {
-      throw new Error(`Duplicate argument ${flag}.`);
-    }
+    if (values.has(flag)) throw new Error(`Duplicate argument ${flag}.`);
     values.set(flag, value);
   }
   const miseBin = values.get("--mise-bin");
@@ -57,52 +54,47 @@ function parseArguments(args: readonly string[]) {
     artifact === undefined ||
     artifactSha256 === undefined ||
     values.size !== 0
-  ) {
+  )
     throw new Error(
-      "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>"
+      "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>",
     );
-  }
   return {
+    miseBin: realpathSync(miseBin),
     arrustedRoot: realpathSync(arrustedRoot),
     artifact: realpathSync(artifact),
     artifactSha256,
-    miseBin: realpathSync(miseBin),
   };
 }
 
 const input = parseArguments(process.argv.slice(2));
-if (!isAbsolute(input.miseBin) || basename(input.miseBin) !== "mise") {
+if (!isAbsolute(input.miseBin) || basename(input.miseBin) !== "mise")
   throw new Error("The mise executable must use an absolute canonical path.");
-}
 const miseStat = statSync(input.miseBin);
 if (
   !miseStat.isFile() ||
   (miseStat.mode & 0o022) !== 0 ||
   !/^[0-9a-f]{64}$/u.test(input.artifactSha256) ||
   sha256(readFileSync(input.artifact)) !== input.artifactSha256
-) {
+)
   throw new Error("The hosted dependency artifact binding is invalid.");
-}
 
 const git = (args: readonly string[]) =>
   execFileSync("/usr/bin/git", ["-C", input.arrustedRoot, ...args], {
-    encoding: "utf-8",
+    encoding: "utf8",
   }).trim();
 if (
   git(["rev-parse", "HEAD^{commit}"]) !== TARGET_SHA ||
   git(["rev-parse", "HEAD^{tree}"]) !== TARGET_TREE ||
   git(["status", "--porcelain=v1"]) !== ""
-) {
+)
   throw new Error("Arrusted source is not the exact clean supported target.");
-}
 
 const root = mkdtempSync(join(tmpdir(), "hosted-arrusted-proof."));
 try {
   extract({ cwd: root, file: input.artifact, sync: true });
   const seed = join(root, ".app-builder-hosted-seed");
-  if (existsSync(join(seed, "source-tree.tar.gz"))) {
+  if (existsSync(join(seed, "source-tree.tar.gz")))
     throw new Error("The hosted dependency artifact still embeds source.");
-  }
   const repository = join(root, "repository");
   mkdirSync(repository);
   const sourceTar = join(root, "canonical-source.tar");
@@ -116,12 +108,12 @@ try {
       `--output=${sourceTar}`,
       TARGET_SHA,
     ],
-    { stdio: "inherit" }
+    { stdio: "inherit" },
   );
   extract({ cwd: repository, file: sourceTar, sync: true });
   writeFileSync(
     join(repository, ".config", "mise", "config.app-builder.toml"),
-    APP_BUILDER_MISE_PROFILE
+    APP_BUILDER_MISE_PROFILE,
   );
   extract({
     cwd: repository,
@@ -132,7 +124,7 @@ try {
     repository,
     "prototype",
     "builder-proof",
-    "app-spec.md"
+    "app-spec.md",
   );
   mkdirSync(join(repository, "prototype", "builder-proof"), {
     recursive: true,
@@ -143,13 +135,13 @@ try {
   writeFileSync(
     contractPath,
     `${JSON.stringify({
+      version: 1,
       appId: "builder-proof",
       appSpec: {
         path: "prototype/builder-proof/app-spec.md",
         sha256: appSpecDigest,
       },
-      version: 1,
-    })}\n`
+    })}\n`,
   );
   const run = (args: readonly string[]) =>
     JSON.parse(
@@ -167,16 +159,16 @@ try {
         ],
         {
           cwd: repository,
-          encoding: "utf-8",
+          encoding: "utf8",
           env: {
             ...process.env,
+            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
             MISE_AUTO_INSTALL: "false",
             MISE_EXEC_AUTO_INSTALL: "false",
             MISE_TASK_RUN_AUTO_INSTALL: "false",
-            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
           },
-        }
-      )
+        },
+      ),
     ) as Record<string, unknown>;
   const identity = run(["app-identity.ts", "--app", "builder-proof"]);
   const proposal = run(["app-contract.ts", "--contract", contractPath]);
@@ -189,22 +181,21 @@ try {
     proposal.blockers.length !== 0 ||
     !Array.isArray(proposal.mutations) ||
     proposal.mutations.length !== 0
-  ) {
+  )
     throw new Error(
-      "The hosted dependency artifact returned an unexpected planning result."
+      "The hosted dependency artifact returned an unexpected planning result.",
     );
-  }
   process.stdout.write(
     `${JSON.stringify({
-      appId: identity.appId,
+      version: 2,
       artifactSha256: input.artifactSha256,
-      blockers: proposal.blockers,
-      futurePath: proposal.futurePath,
-      mutations: proposal.mutations,
       sourceSha: TARGET_SHA,
       sourceTree: TARGET_TREE,
-      version: 2,
-    })}\n`
+      appId: identity.appId,
+      futurePath: proposal.futurePath,
+      blockers: proposal.blockers,
+      mutations: proposal.mutations,
+    })}\n`,
   );
 } finally {
   rmSync(root, { force: true, recursive: true });

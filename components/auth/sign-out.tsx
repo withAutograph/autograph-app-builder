@@ -2,13 +2,12 @@
 
 import { useAuth, useSignOut } from "@better-auth-ui/react";
 import { useEffect, useRef } from "react";
-
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-export interface SignOutProps {
+export type SignOutProps = {
   className?: string;
-}
+};
 
 /**
  * Signs the current user out on mount and renders a centered spinner while the operation completes.
@@ -18,7 +17,7 @@ export interface SignOutProps {
  */
 export function SignOut({ className }: SignOutProps) {
   const { authClient, basePaths, viewPaths } = useAuth();
-  const signInHref = `${basePaths.auth}/${viewPaths.auth.signIn}`;
+  const signInHref = basePaths.auth + "/" + viewPaths.auth.signIn;
 
   const { mutate: signOut } = useSignOut(authClient, {
     onError: () => window.location.replace(signInHref),
@@ -28,9 +27,7 @@ export function SignOut({ className }: SignOutProps) {
   const hasSignedOut = useRef(false);
 
   useEffect(() => {
-    if (hasSignedOut.current) {
-      return;
-    }
+    if (hasSignedOut.current) return;
     hasSignedOut.current = true;
 
     signOut();

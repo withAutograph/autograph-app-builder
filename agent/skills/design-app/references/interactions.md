@@ -1,10 +1,17 @@
 # Prototype interactions
 
-Use this reference when wiring routes and actions and when verifying a material revision. A prototype must let the user evaluate the visible workflow, not just its static arrangement. Keep all behavior fixture-backed and in memory. Do not add network requests, persistence, providers, schemas, auth, security gates, or production authority.
+Use this reference when wiring routes and actions and when verifying a material
+revision. A prototype must let the user evaluate the visible workflow, not just
+its static arrangement. Keep all behavior fixture-backed and in memory. Do not
+add network requests, persistence, providers, schemas, auth, security gates, or
+production authority.
 
 ## Inventory the interaction contract
 
-Inventory every visible control in the AppSpec's existing Controls and behavior and Acceptance walkthrough sections before presenting the revision. Keep this as planning prose; do not invent new required preview-manifest fields. For each control, record:
+Inventory every visible control in the AppSpec's existing Controls and behavior
+and Acceptance walkthrough sections before presenting the revision. Keep this
+as planning prose; do not invent new required preview-manifest fields. For each
+control, record:
 
 - the control and where it appears;
 - any precondition for enabling it;
@@ -13,45 +20,105 @@ Inventory every visible control in the AppSpec's existing Controls and behavior 
 - its validation or error behavior; and
 - why it is unavailable, when the fixture cannot support it.
 
-Cover primary and secondary buttons, linked rows, navigation items, menus, dialogs, tabs, filters, selections, forms, and keyboard actions. An enabled control must produce a meaningful fixture-backed result. Disable unavailable actions and provide a product-facing reason. Never use no-op handlers, empty links, dead destinations, or fake success messages.
+Cover primary and secondary buttons, linked rows, navigation items, menus,
+dialogs, tabs, filters, selections, forms, and keyboard actions. An enabled
+control must produce a meaningful fixture-backed result. Disable unavailable
+actions and provide a product-facing reason. Never use no-op handlers, empty
+links, dead destinations, or fake success messages.
 
 ## Route and state behavior
 
-Register every destination used by a link or navigation control in the preview manifest. Link to the exact registered hash route expected by the renderer, preserving the preview's existing base URL. Do not replace the base URL or emit a path that bypasses the hash router.
+Register every destination used by a link or navigation control in the preview
+manifest. Link to the exact registered hash route expected by the renderer,
+preserving the preview's existing base URL. Do not replace the base URL or emit
+a path that bypasses the hash router.
 
-For the current renderer, use `location.hash = "/employees"` for a manifest route of `/employees`, or an anchor with `href="#/employees"`. Use `#/` when the registered overview route is `/`; a label such as Overview is not a route id. The renderer listens to `hashchange`. Calling `history.pushState` alone does not notify it, even if a tab's internal selection changes. Derive the selected tab from the active registered route rather than separate unsynchronized state.
+For the current renderer, use `location.hash = "/employees"` for a manifest
+route of `/employees`, or an anchor with `href="#/employees"`. Use `#/` when the
+registered overview route is `/`; a label such as Overview is not a route id.
+The renderer listens to `hashchange`. Calling `history.pushState` alone does not
+notify it, even if a tab's internal selection changes. Derive the selected tab
+from the active registered route rather than separate unsynchronized state.
 
-Keep the selected navigation item, visible page, URL, and in-memory state in agreement. Browser Back and Forward must restore the corresponding route and selection. A direct visit to any registered hash route must render the intended screen with coherent fixture state. Unknown routes may use the renderer's documented fallback; visible controls must never intentionally target one.
+Keep the selected navigation item, visible page, URL, and in-memory state in
+agreement. Browser Back and Forward must restore the corresponding route and
+selection. A direct visit to any registered hash route must render the intended
+screen with coherent fixture state. Unknown routes may use the renderer's
+documented fallback; visible controls must never intentionally target one.
 
-Use real public component or composition event APIs for links, menus, rows, dialogs, selection, and forms. Do not place an inert wrapper over a component to simulate interaction. Shared fixture state should live at the route shell or other common in-memory owner so related screens show the same facts. Check the renderer lifecycle: changing screen component types can remount a shell. Keep shared data in an owner that survives that transition rather than resetting each screen from its initial fixture.
+Use real public component or composition event APIs for links, menus, rows,
+dialogs, selection, and forms. Do not place an inert wrapper over a component to
+simulate interaction. Shared fixture state should live at the route shell or
+other common in-memory owner so related screens show the same facts. Check the
+renderer lifecycle: changing screen component types can remount a shell. Keep
+shared data in an owner that survives that transition rather than resetting
+each screen from its initial fixture.
 
-When an action changes data, update every dependent count, total, badge, table, summary, selection, recommendation, and next available action in the same interaction. Preserve those changes while the user moves among prototype routes during the current preview session. A toast, changed button label, or isolated confirmation is supplemental feedback, not the action result: the affected fixture rows and derived facts must visibly agree with it.
+When an action changes data, update every dependent count, total, badge, table,
+summary, selection, recommendation, and next available action in the same
+interaction. Preserve those changes while the user moves among prototype routes
+during the current preview session. A toast, changed button label, or isolated
+confirmation is supplemental feedback, not the action result: the affected
+fixture rows and derived facts must visibly agree with it.
 
 ## Forms and consequential actions
 
-Forms must accept input, validate required and invalid values, submit through the public component handler, and expose cancel behavior. A successful submit must cause a visible fixture change. Validation errors must identify the field or condition and keep the entered values available for correction. Cancel must dismiss or return predictably without committing the draft.
+Forms must accept input, validate required and invalid values, submit through
+the public component handler, and expose cancel behavior. A successful submit
+must cause a visible fixture change. Validation errors must identify the field
+or condition and keep the entered values available for correction. Cancel must
+dismiss or return predictably without committing the draft.
 
-Consequential actions remain simulations. Label their prototype result in product terms without claiming a provider call, durable save, notification, or approval occurred. Do not add production code or broaden Build or publication authority to make the prototype feel complete.
+Consequential actions remain simulations. Label their prototype result in
+product terms without claiming a provider call, durable save, notification, or
+approval occurred. Do not add production code or broaden Build or publication
+authority to make the prototype feel complete.
 
-Keep the resulting state semantically precise. Acknowledging an item may update its acknowledgement state and a related inbox count, but it must not silently resolve the item. Choosing a recommendation may mark that choice as selected, but it must not present the underlying record as resolved until the simulated resolution occurs. If an action changes the current-versus-proposed comparison, refresh its visible values and their bases together so the confirmation does not contradict the decision evidence.
+Keep the resulting state semantically precise. Acknowledging an item may update
+its acknowledgement state and a related inbox count, but it must not silently
+resolve the item. Choosing a recommendation may mark that choice as selected,
+but it must not present the underlying record as resolved until the simulated
+resolution occurs. If an action changes the current-versus-proposed comparison,
+refresh its visible values and their bases together so the confirmation does not
+contradict the decision evidence.
 
 Concrete compensation examples:
 
-- **Add employee:** submitting a valid employee adds the row, increments the employee total, and makes the new employee available to related selections. Cancel leaves the roster and total unchanged. Duplicate or missing required values show correctable validation.
-- **Create salary band:** submitting valid bounds adds the band to its list and updates any coverage count or unassigned-employee summary. Cancel preserves the prior bands. An inverted range shows a fixture-backed validation result rather than a success toast; apply other constraints only when the product defines them.
-- **Submit for approval:** when its fixture preconditions are met, submission changes the item to a pending state and updates the relevant queue or badge. A cancel or unavailable path leaves the item unchanged and explains what is required. Never imply that a real approver was contacted.
-- **Save import mapping:** saving a valid mapping updates the affected preview rows, mapped/unmapped or review counts, and the next available review action. A success toast alone while static rows still show the prior mapping is not a representative simulation.
+- **Add employee:** submitting a valid employee adds the row, increments the
+  employee total, and makes the new employee available to related selections.
+  Cancel leaves the roster and total unchanged. Duplicate or missing required
+  values show correctable validation.
+- **Create salary band:** submitting valid bounds adds the band to its list and
+  updates any coverage count or unassigned-employee summary. Cancel preserves
+  the prior bands. An inverted range shows a fixture-backed validation result
+  rather than a success toast; apply other constraints only when the product
+  defines them.
+- **Submit for approval:** when its fixture preconditions are met, submission
+  changes the item to a pending state and updates the relevant queue or badge.
+  A cancel or unavailable path leaves the item unchanged and explains what is
+  required. Never imply that a real approver was contacted.
+- **Save import mapping:** saving a valid mapping updates the affected preview
+  rows, mapped/unmapped or review counts, and the next available review action.
+  A success toast alone while static rows still show the prior mapping is not a
+  representative simulation.
 
 ## Browser acceptance
 
-Exercise every enabled control in the Browser preview, including secondary buttons, linked rows, menus, dialog confirm and cancel actions, and keyboard operation. Do not stop after checking only the primary happy path. Verify:
+Exercise every enabled control in the Browser preview, including secondary
+buttons, linked rows, menus, dialog confirm and cancel actions, and keyboard
+operation. Do not stop after checking only the primary happy path. Verify:
 
 1. each navigation action reaches its exact registered hash route;
 2. Back and Forward restore the expected page and selected navigation state;
 3. shared fixture changes and dependent totals remain consistent across routes;
 4. forms validate, submit, and cancel with the documented observable results;
-5. menus and dialogs open, move focus appropriately, and close by their public component behavior, including supported keyboard dismissal;
+5. menus and dialogs open, move focus appropriately, and close by their public
+   component behavior, including supported keyboard dismissal;
 6. error and unavailable states explain the next useful action; and
 7. no enabled control is inert, misleading, or dependent on a live system.
 
-A successful compile, static handler scan, or presence of an `onClick` is not proof that an interaction works. Behavior proof comes from exercising the rendered control and observing its result. If Browser acceptance is unavailable or a control cannot be exercised, report that limitation honestly and do not claim the material revision is behavior-verified.
+A successful compile, static handler scan, or presence of an `onClick` is not
+proof that an interaction works. Behavior proof comes from exercising the
+rendered control and observing its result. If Browser acceptance is unavailable
+or a control cannot be exercised, report that limitation honestly and do not
+claim the material revision is behavior-verified.

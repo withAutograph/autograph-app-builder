@@ -2,55 +2,50 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import type { ObservedDependencyCache } from "../repository/dependency-cache";
-import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  type AppCreationProposal,
+  type AppBuilderWorkflowState,
+  type DependencyPreparationReceipt,
+} from "./workflow-state";
 import {
   assertProposalExecutionBindings,
   plannedProposalForExecution,
   resolveTargetExecutionEnvironment,
   targetExecutionBlockers,
 } from "./target-execution";
-import { APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
-import type {
-  AppCreationProposal,
-  AppBuilderWorkflowState,
-  DependencyPreparationReceipt,
-} from "./workflow-state";
+import type { ObservedDependencyCache } from "../repository/dependency-cache";
+import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> =
   {
-    appSpecDigest: "e".repeat(64),
-    artifactRevision: "a".repeat(64),
-    cacheContentDigest: "3".repeat(64),
-    cacheManifestDigest: "2".repeat(64),
-    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-    dependencyLayout: {
-      kind: "fixture" as const,
-      roots: [],
-      version: 1 as const,
-      workspaceLinks: [],
-    },
-    eligibilityDigest: "d".repeat(64),
-    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-    preparedByCallId: "dependency-call",
-    sourceReceiptDigest: "f".repeat(64),
+    version: 2 as const,
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
+    sourceReceiptDigest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
+    workspaceDigest: "c".repeat(64),
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
+    appSpecDigest: "e".repeat(64),
+    artifactRevision: "a".repeat(64),
     targetSha: "a".repeat(40),
     targetTree: "b".repeat(40),
-    version: 2 as const,
-    workspaceDigest: "c".repeat(64),
+    cacheManifestDigest: "2".repeat(64),
+    cacheContentDigest: "3".repeat(64),
+    dependencyLayout: {
+      version: 1 as const,
+      kind: "fixture" as const,
+      roots: [],
+      workspaceLinks: [],
+    },
+    preparedByCallId: "dependency-call",
   };
 
 const state = {
-  appSpec: {
-    acceptedByCallId: "call",
-    appId: "expense-review",
-    artifactPath: "prototype/expense-review/app-spec.md",
-    artifactRevision: "a".repeat(64),
-    content: "accepted",
-    digest: "e".repeat(64),
-  },
+  version: APP_BUILDER_WORKFLOW_VERSION,
+  phase: "planned",
+  preparedByCallId: "prepare-call",
   artifacts: [
     {
       appId: "expense-review",
@@ -63,6 +58,36 @@ const state = {
       recordedByCallId: "artifact-call",
     },
   ],
+  workspace: {
+    workspaceId: "sandbox",
+    workspacePath: "/workspace/repository",
+    sourcePath: "/source",
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    workspaceDigest: "c".repeat(64),
+    adapter: "arrusted-development-v0",
+    eligibilityDigest: "d".repeat(64),
+  },
+  sourceReceipt: {
+    version: 3,
+    sourceKind: "existing-repository",
+    sourcePath: "/source",
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    adapter: "arrusted-development-v0",
+    eligibilityDigest: "d".repeat(64),
+    contractDigest: "e".repeat(64),
+    releaseEnabled: false,
+    digest: "f".repeat(64),
+  },
+  appSpec: {
+    appId: "expense-review",
+    artifactPath: "prototype/expense-review/app-spec.md",
+    content: "accepted",
+    digest: "e".repeat(64),
+    acceptedByCallId: "call",
+    artifactRevision: "a".repeat(64),
+  },
   dependencyReceipt: {
     ...dependencyReceiptUnsigned,
     digest: createHash("sha256")
@@ -70,102 +95,77 @@ const state = {
       .digest("hex"),
   },
   identityReceipt: {
+    version: 1,
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+    sourceReceiptDigest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
+    workspaceDigest: "c".repeat(64),
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
     appSpecDigest: "e".repeat(64),
     artifactRevision: "a".repeat(64),
-    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-    digest: "1".repeat(64),
-    eligibilityDigest: "d".repeat(64),
     identity: {
       appId: "expense-review",
-      appSpecPath: "prototype/expense-review/app-spec.md",
-      baseRoutes: ["/expense-review", "/expense-review/:path*"],
-      contractPath: "apps/expense-review/app.contract.json",
-      kernelSchemaPath: "apps/expense-review/schema/expense-review-schema.json",
+      workspacePath: "apps/expense-review",
       packageName: "@autograph/expense-review",
       projectName: "apps-expense-review",
-      workspacePath: "apps/expense-review",
+      baseRoutes: ["/expense-review", "/expense-review/:path*"],
+      appSpecPath: "prototype/expense-review/app-spec.md",
+      contractPath: "apps/expense-review/app.contract.json",
+      kernelSchemaPath: "apps/expense-review/schema/expense-review-schema.json",
     },
-    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
     resolvedByCallId: "identity-call",
-    sourceReceiptDigest: "f".repeat(64),
+    digest: "1".repeat(64),
+  },
+  proposal: {
+    version: 1,
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    version: 1,
+    sourceReceiptDigest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
     workspaceDigest: "c".repeat(64),
-  },
-  phase: "planned",
-  preparedByCallId: "prepare-call",
-  proposal: {
+    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
     appSpecDigest: "e".repeat(64),
     artifactRevision: "a".repeat(64),
-    contractDigest: "2".repeat(64),
-    dependencyCacheDigest: `sha256:${"2".repeat(64)}`,
-    digest: "f".repeat(64),
-    eligibilityDigest: "d".repeat(64),
     identityDigest: "1".repeat(64),
-    imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-    plannedByCallId: "plan-call",
-    sourceReceiptDigest: "f".repeat(64),
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
+    contractDigest: "2".repeat(64),
     target: {} as AppCreationProposal["target"],
-    version: 1,
-    workspaceDigest: "c".repeat(64),
-  },
-  sourceReceipt: {
-    adapter: "arrusted-development-v0",
-    contractDigest: "e".repeat(64),
+    plannedByCallId: "plan-call",
     digest: "f".repeat(64),
-    eligibilityDigest: "d".repeat(64),
-    releaseEnabled: false,
-    sourceKind: "existing-repository",
-    sourcePath: "/source",
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    version: 3,
-  },
-  version: APP_BUILDER_WORKFLOW_VERSION,
-  workspace: {
-    adapter: "arrusted-development-v0",
-    eligibilityDigest: "d".repeat(64),
-    sourcePath: "/source",
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    workspaceDigest: "c".repeat(64),
-    workspaceId: "sandbox",
-    workspacePath: "/workspace/repository",
   },
 } satisfies AppBuilderWorkflowState;
 
 describe("target command readiness", () => {
   const cache = {
-    contentDigest: "3".repeat(64),
     manifest: { target: { sha: "f".repeat(40), tree: "0".repeat(40) } },
     manifestDigest: "2".repeat(64),
+    contentDigest: "3".repeat(64),
   } as ObservedDependencyCache;
 
   it("uses the hosted execution artifact and inspected cache in Vercel Preview", () => {
     const environment = {
-      EVE_HOSTED_ADAPTER: "1",
-      EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
       VERCEL: "1",
       VERCEL_ENV: "preview",
+      EVE_HOSTED_ADAPTER: "1",
+      EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
     };
     expect(
-      resolveTargetExecutionEnvironment({ environment, fixture: false })
+      resolveTargetExecutionEnvironment({ environment, fixture: false }),
     ).toMatchObject({
-      backend: { blockers: [], kind: "vercel-preview" },
+      backend: { kind: "vercel-preview", blockers: [] },
       cacheInspectable: true,
       imageDigest: undefined,
     });
     expect(
       resolveTargetExecutionEnvironment({
-        cache,
         environment,
         fixture: false,
-      })
+        cache,
+      }),
     ).toMatchObject({
-      backend: { blockers: [], kind: "vercel-preview" },
+      backend: { kind: "vercel-preview", blockers: [] },
       cacheInspectable: true,
       imageDigest: hostedExecutionArtifactDigest(),
     });
@@ -174,10 +174,10 @@ describe("target command readiness", () => {
   it("does not infer hosted readiness for an unsupported Vercel binding", () => {
     expect(
       resolveTargetExecutionEnvironment({
-        cache,
         environment: { VERCEL: "1", VERCEL_ENV: "preview" },
         fixture: false,
-      })
+        cache,
+      }),
     ).toMatchObject({
       backend: { kind: "unsupported-vercel" },
       cacheInspectable: false,
@@ -189,12 +189,12 @@ describe("target command readiness", () => {
     const localImage = `ghcr.io/withautograph/app-builder@sha256:${"a".repeat(64)}`;
     expect(
       resolveTargetExecutionEnvironment({
-        cache,
         environment: { APP_BUILDER_SANDBOX_IMAGE: localImage },
         fixture: false,
-      })
+        cache,
+      }),
     ).toMatchObject({
-      backend: { blockers: [], kind: "local-microsandbox" },
+      backend: { kind: "local-microsandbox", blockers: [] },
       cacheInspectable: true,
       imageDigest: localImage,
     });
@@ -202,13 +202,13 @@ describe("target command readiness", () => {
 
   it("requires the exact planned proposal receipt", () => {
     expect(plannedProposalForExecution(state, state.proposal.digest)).toBe(
-      state.proposal
+      state.proposal,
     );
     expect(() => plannedProposalForExecution(state, "0".repeat(64))).toThrow(
-      "proposal changed"
+      "proposal changed",
     );
     expect(() => assertProposalExecutionBindings(state)).toThrow(
-      "durable execution bindings"
+      "durable execution bindings",
     );
   });
 
@@ -217,20 +217,20 @@ describe("target command readiness", () => {
       targetExecutionBlockers({
         imageConfigured: false,
         toolchainReady: false,
-      })
+      }),
     ).toEqual([
       "No immutable sandbox image is configured.",
       "The sandbox execution environment or a required command is unavailable.",
     ]);
     expect(
-      targetExecutionBlockers({ imageConfigured: true, toolchainReady: true })
+      targetExecutionBlockers({ imageConfigured: true, toolchainReady: true }),
     ).toEqual([]);
     expect(
       targetExecutionBlockers({
-        capabilityBlockers: ["Hosted artifact is unavailable."],
         imageConfigured: false,
         toolchainReady: false,
-      })
+        capabilityBlockers: ["Hosted artifact is unavailable."],
+      }),
     ).toEqual([
       "Hosted artifact is unavailable.",
       "No immutable sandbox image is configured.",

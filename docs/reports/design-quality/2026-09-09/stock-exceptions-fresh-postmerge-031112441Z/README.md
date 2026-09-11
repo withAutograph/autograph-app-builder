@@ -20,13 +20,13 @@ This report evaluates a fresh generated component-backed preview; evaluation its
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page establishes a clear sequence from title and filters to the selectable exception list, selected-product detail, and replenishment action. Selection tint, severity pills, section headings, and the modal give strong state cues, though tiny sales/coverage metadata and low-emphasis field labels are easy to overlook. |
-| layout | 3/4 | The list-detail composition is consistently aligned and comfortably spaced at 1024–1920px, while the replenishment modal is compact and well organized. At 1920px the filter container has substantial unused vertical space, and at 700px the stacked list and detail create a long journey to the primary action. |
-| typography | 2/4 | Product names, section headings, values, and action labels are consistent and readable, but important supporting text is frequently only 10–12px. Automated evidence repeatedly flags weak contrast for muted labels, row metadata, status text, and detail labels; the palette should remain unchanged, but supported typography roles could provide stronger emphasis. |
-| responsive | 2/4 | The two-column workspace scales cleanly between 1024px and 1920px, the modal remains usable at 700px, and no horizontal overflow is shown. However, the 700px state becomes a 1505px document with the selected detail and action far below the list, while the 1024×768 modal state shifts the underlying page header and filters above the viewport; these behaviors weaken continuity across resized desktop windows. |
-| productClarity | 3/4 | The purpose, location/severity filters, result count, selectable products, stock-versus-reorder values, supplier details, and explicitly non-destructive simulation are readily understandable. Passed interaction checks support the represented selection, filtering, empty-state, modal, and prepared-simulation states. The main ambiguity is that a zero-result filter retains the previously selected product detail and an enabled replenishment action, making the relationship between filters and the active record unclear. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page establishes a clear sequence from title and filters to the selectable exception list, selected-product detail, and replenishment action. Selection tint, severity pills, section headings, and the modal give strong state cues, though tiny sales/coverage metadata and low-emphasis field labels are easy to overlook.                                                                                                                                                                                                      |
+| layout         | 3/4   | The list-detail composition is consistently aligned and comfortably spaced at 1024–1920px, while the replenishment modal is compact and well organized. At 1920px the filter container has substantial unused vertical space, and at 700px the stacked list and detail create a long journey to the primary action.                                                                                                                                                                                                                    |
+| typography     | 2/4   | Product names, section headings, values, and action labels are consistent and readable, but important supporting text is frequently only 10–12px. Automated evidence repeatedly flags weak contrast for muted labels, row metadata, status text, and detail labels; the palette should remain unchanged, but supported typography roles could provide stronger emphasis.                                                                                                                                                               |
+| responsive     | 2/4   | The two-column workspace scales cleanly between 1024px and 1920px, the modal remains usable at 700px, and no horizontal overflow is shown. However, the 700px state becomes a 1505px document with the selected detail and action far below the list, while the 1024×768 modal state shifts the underlying page header and filters above the viewport; these behaviors weaken continuity across resized desktop windows.                                                                                                               |
+| productClarity | 3/4   | The purpose, location/severity filters, result count, selectable products, stock-versus-reorder values, supplier details, and explicitly non-destructive simulation are readily understandable. Passed interaction checks support the represented selection, filtering, empty-state, modal, and prepared-simulation states. The main ambiguity is that a zero-result filter retains the previously selected product detail and an enabled replenishment action, making the relationship between filters and the active record unclear. |
 
 ## Strengths
 
@@ -51,32 +51,32 @@ This report evaluates a fresh generated component-backed preview; evaluation its
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/231) |
-| desktop-0 | typography | 0/0 | 0% (0/594) |
-| desktop-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-0 | radius | 0/0 | 0% (0/120) |
-| desktop-0 | border | 0/0 | 0% (0/135) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/231) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/594) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/120) |
-| desktop-wide-0 | border | 0/0 | 0% (0/135) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/231) |
-| desktop-window-0 | typography | 0/0 | 0% (0/594) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-window-0 | radius | 0/0 | 0% (0/120) |
-| desktop-window-0 | border | 0/0 | 0% (0/135) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/232) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/594) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/283) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/135) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/231) |
+| desktop-0                | typography | 0/0                         | 0% (0/594) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/293) |
+| desktop-0                | radius     | 0/0                         | 0% (0/120) |
+| desktop-0                | border     | 0/0                         | 0% (0/135) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/231) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/594) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/293) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/135) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/231) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/594) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/293) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/135) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/232) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/594) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/283) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/135) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

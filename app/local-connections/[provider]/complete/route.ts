@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-
 import { signLocalVercelRelay } from "@/lib/integrations/local-oauth-relay";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import { providerEmulationFetch } from "@/lib/integrations/provider-emulation-fetch";
@@ -18,13 +17,8 @@ function validEmulatorRedirect(input: {
   state: string;
 }) {
   const location = input.response.headers.get("location");
-  if (
-    !location ||
-    input.response.status < 300 ||
-    input.response.status >= 400
-  ) {
+  if (!location || input.response.status < 300 || input.response.status >= 400)
     return undefined;
-  }
   const destination = new URL(location);
   if (
     destination.origin !== input.origin ||
@@ -32,15 +26,14 @@ function validEmulatorRedirect(input: {
     destination.searchParams.getAll("code").length !== 1 ||
     destination.searchParams.getAll("state").length !== 1 ||
     destination.searchParams.get("state") !== input.state
-  ) {
+  )
     return undefined;
-  }
   return destination;
 }
 
 export async function POST(
   request: Request,
-  context: { params: Promise<{ provider: string }> }
+  context: { params: Promise<{ provider: string }> },
 ) {
   const { provider } = await context.params;
   let emulation;
@@ -54,9 +47,8 @@ export async function POST(
     !emulation ||
     !allowed.has(provider) ||
     request.headers.get("origin") !== origin
-  ) {
+  )
     return new Response("Not found", { status: 404 });
-  }
   const form = await request.formData();
   const state = form.get("state");
   const phase = form.get("phase");
@@ -65,53 +57,49 @@ export async function POST(
     state.length < 20 ||
     state.length > 2048 ||
     (phase !== null && phase !== "authorize")
-  ) {
+  )
     return new Response("Invalid request", { status: 400 });
-  }
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
-    if (phase !== null) {
-      return new Response("Invalid request", { status: 400 });
-    }
+    if (phase !== null) return new Response("Invalid request", { status: 400 });
     const relay = signLocalVercelRelay(
       {
+        state,
         configurationId:
           process.env.EMULATE_VERCEL_CONFIGURATION_ID ??
           EMULATED_VERCEL_CONFIGURATION_ID,
-        expiresAt: Date.now() + 600_000,
-        origin,
-        state,
         teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
+        origin,
+        expiresAt: Date.now() + 600_000,
       },
-      emulation.relaySecret
+      emulation.relaySecret,
     );
     const redirectUri = `${origin}/local-connections/vercel/oauth-callback`;
     const response = await providerEmulationFetch(
       new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`),
       {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           username: "autograph-dev",
           client_id: emulation.vercelClientId,
           redirect_uri: redirectUri,
           state: relay,
         }),
-        cache: "no-store",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        method: "POST",
         redirect: "manual",
+        cache: "no-store",
       },
-      emulation
+      emulation,
     );
     const destination = validEmulatorRedirect({
+      response,
       origin,
       path: "/local-connections/vercel/oauth-callback",
-      response,
       state: relay,
     });
-    if (!destination) {
+    if (!destination)
       return new Response("Invalid emulated Vercel approval", { status: 400 });
-    }
     return NextResponse.redirect(destination, { status: 303 });
   }
 
@@ -126,12 +114,13 @@ export async function POST(
       typeof codeChallenge !== "string" ||
       !/^[A-Za-z0-9_-]{43}$/u.test(codeChallenge) ||
       codeChallengeMethod !== "S256"
-    ) {
+    )
       return new Response("Invalid request", { status: 400 });
-    }
     const response = await providerEmulationFetch(
       new URL(`${emulation.githubOrigin}/login/oauth/callback`),
       {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           login: "autograph-dev",
           client_id: clientId,
@@ -140,22 +129,19 @@ export async function POST(
           code_challenge: codeChallenge,
           code_challenge_method: codeChallengeMethod,
         }),
-        cache: "no-store",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        method: "POST",
         redirect: "manual",
+        cache: "no-store",
       },
-      emulation
+      emulation,
     );
     const destination = validEmulatorRedirect({
+      response,
       origin,
       path: "/github/installations/callback",
-      response,
       state,
     });
-    if (!destination) {
+    if (!destination)
       return new Response("Invalid emulated GitHub approval", { status: 400 });
-    }
     return NextResponse.redirect(destination, { status: 303 });
   }
 
@@ -163,7 +149,7 @@ export async function POST(
     callback.searchParams.set(
       "installation_id",
       process.env.EMULATE_GITHUB_INSTALLATION_ID ??
-        String(EMULATED_GITHUB_INSTALLATION_ID)
+        String(EMULATED_GITHUB_INSTALLATION_ID),
     );
     callback.searchParams.set("setup_action", "install");
   }

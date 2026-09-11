@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
 import { expect, test, type Page } from "playwright/test";
 import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { eq } from "drizzle-orm";
 
 import {
   cursorClientId,
   setupCursorClient,
 } from "../../lib/auth/cursor-client";
 import * as schema from "../../lib/db/schema";
+
 import {
   browserBoundaryState,
   appOrigin,
@@ -42,7 +42,7 @@ async function completeHandoff(page: import("playwright/test").Page) {
     timeout: 30_000,
   });
   await expect(
-    page.getByRole("region", { name: "Continue your app" })
+    page.getByRole("region", { name: "Continue your app" }),
   ).toBeVisible();
 }
 
@@ -63,7 +63,7 @@ async function prepareNamedHandoff(
   page: Page,
   appName: string,
   brief: string,
-  destination: "Codex" | "Cursor" = "Codex"
+  destination: "Codex" | "Cursor" = "Codex",
 ) {
   await page.goto("/");
   await waitForBuilderReady(page);
@@ -88,7 +88,7 @@ test("multiple handoffs reload independently without replacing saved app context
   const first = await prepareNamedHandoff(
     page,
     "First Console",
-    "Keep the first prepared app independent."
+    "Keep the first prepared app independent.",
   );
   const otherPage = await context.newPage();
   try {
@@ -96,7 +96,7 @@ test("multiple handoffs reload independently without replacing saved app context
       otherPage,
       "Second Console",
       "Keep the second prepared app independent.",
-      "Cursor"
+      "Cursor",
     );
     expect(first.id).not.toBe(second.id);
     for (const [
@@ -128,16 +128,16 @@ test("multiple handoffs reload independently without replacing saved app context
       await activePage.reload();
       await expect(activePage).toHaveURL(handoff.url);
       await expect(
-        activePage.getByRole("heading", { name, exact: true })
+        activePage.getByRole("heading", { name, exact: true }),
       ).toBeVisible();
       await activePage.getByText("Prepared brief", { exact: true }).click();
       await expect(activePage.getByText(brief, { exact: true })).toBeVisible();
       await expect(
-        activePage.getByRole("radio", { name: destination, exact: true })
+        activePage.getByRole("radio", { name: destination, exact: true }),
       ).toBeChecked();
       const response = await getWithTransientRetry(
         activePage,
-        handoff.statusPath
+        handoff.statusPath,
       );
       expect(response.ok()).toBe(true);
       const status = await response.json();
@@ -168,7 +168,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
   const handoff = await prepareNamedHandoff(
     page,
     "Owner Private Console",
-    "This prepared brief belongs only to its owner."
+    "This prepared brief belongs only to its owner.",
   );
   const stranger = await browser.newContext({
     baseURL: appOrigin,
@@ -180,7 +180,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     const strangerPage = await stranger.newPage();
     const anonymousResponse = await getWithTransientRetry(
       strangerPage,
-      handoff.statusPath
+      handoff.statusPath,
     );
     expect(anonymousResponse.status()).toBe(401);
     const anonymousBody = await anonymousResponse.json();
@@ -190,17 +190,17 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await strangerPage.goto(handoff.url);
     await expect(strangerPage).toHaveURL(/\/auth\/sign-in\?/u);
     expect(new URL(strangerPage.url()).searchParams.get("callbackURL")).toBe(
-      handoff.pathname
+      handoff.pathname,
     );
     await expect(
-      strangerPage.getByRole("heading", { name: "Owner Private Console" })
+      strangerPage.getByRole("heading", { name: "Owner Private Console" }),
     ).toHaveCount(0);
 
     // Copy only the test's passkey feature flag, never the owner's auth cookies.
     await stranger.addCookies(
       (await context.cookies()).filter(
-        ({ name }) => name === "vercel-flag-overrides"
-      )
+        ({ name }) => name === "vercel-flag-overrides",
+      ),
     );
     authenticator = await registerPasskey(stranger, strangerPage);
     await expect(strangerPage).toHaveURL(`${appOrigin}/`);
@@ -209,29 +209,29 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     expect(strangerId).not.toBe(ownerId);
     const unavailableResponse = await getWithTransientRetry(
       strangerPage,
-      handoff.statusPath
+      handoff.statusPath,
     );
     expect(unavailableResponse.status()).toBe(404);
     const unavailableBody = await unavailableResponse.json();
     expect(Object.keys(unavailableBody)).toEqual(["error"]);
     expect(unavailableBody.error).toBe("handoff_unavailable");
     expect(unavailableResponse.headers()["cache-control"]).toContain(
-      "no-store"
+      "no-store",
     );
     await strangerPage.goto(handoff.url);
     await expect(
-      strangerPage.getByRole("heading", { name: "Handoff unavailable" })
+      strangerPage.getByRole("heading", { name: "Handoff unavailable" }),
     ).toBeVisible();
     await expect(
-      strangerPage.getByText("Owner Private Console", { exact: true })
+      strangerPage.getByText("Owner Private Console", { exact: true }),
     ).toHaveCount(0);
     await expect(
       strangerPage.getByText("This prepared brief belongs only to its owner.", {
         exact: true,
-      })
+      }),
     ).toHaveCount(0);
     await expect(
-      strangerPage.getByRole("textbox", { name: "Handoff prompt" })
+      strangerPage.getByRole("textbox", { name: "Handoff prompt" }),
     ).toHaveCount(0);
     const ownerResponse = await getWithTransientRetry(page, handoff.statusPath);
     expect(ownerResponse.ok()).toBe(true);
@@ -254,7 +254,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   const handoff = await prepareNamedHandoff(
     page,
     "Observed Console",
-    "Observe server-confirmed continuation only."
+    "Observe server-confirmed continuation only.",
   );
   await page.bringToFront();
   await expect
@@ -331,7 +331,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
         page,
         "Cursor Setup Console",
         "Wait for the local Cursor connection setup.",
-        "Cursor"
+        "Cursor",
       );
       await page.bringToFront();
       await page
@@ -344,7 +344,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       await expect(
         page.getByText("Cursor connection setup is not available", {
           exact: false,
-        })
+        }),
       ).toBeVisible();
       const before = await getWithTransientRetry(page, handoff.statusPath);
       expect(before.ok()).toBe(true);
@@ -354,8 +354,8 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       const installUrl = new URL((await install.getAttribute("href"))!);
       const config = JSON.parse(
         Buffer.from(installUrl.searchParams.get("config")!, "base64").toString(
-          "utf8"
-        )
+          "utf8",
+        ),
       );
       expect(Object.keys(config).sort()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
@@ -427,14 +427,14 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   const handoffUrl = page.url();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Support Console" })
+    page.getByRole("heading", { name: "Support Console" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Continued in your app", { exact: false })
+    page.getByText("Continued in your app", { exact: false }),
   ).toHaveCount(0);
   const response = await getWithTransientRetry(
     page,
-    `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`
+    `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`,
   );
   expect(response.ok()).toBe(true);
   const saved = await response.json();
@@ -450,31 +450,31 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   expect(state.clipboard).toHaveLength(1);
   expect(state.opened).toHaveLength(1);
   expect(state.clipboard[0]).toMatch(
-    /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u,
   );
   expect(state.clipboard[0]).not.toContain("Support Console");
   expect(state.clipboard[0]).not.toContain("support-console");
   expect(state.clipboard[0]).not.toMatch(
-    /GitHub Resource|Vercel Resource|Installation[ _-]?ID|Repository ID|Head SHA|digest/iu
+    /GitHub Resource|Vercel Resource|Installation[ _-]?ID|Repository ID|Head SHA|digest/iu,
   );
   expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
   expect(new URL(state.opened.at(-1)!).searchParams.get("prompt")).toBe(
-    state.clipboard[0]
+    state.clipboard[0],
   );
 
   await expect(
-    page.getByText("Launch requested for Codex", { exact: false })
+    page.getByText("Launch requested for Codex", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByText("Continued in your app", { exact: false })
+    page.getByText("Continued in your app", { exact: false }),
   ).toHaveCount(0);
   await page.getByText("Set up Autograph in Codex", { exact: true }).click();
   await expect(page.locator("pre code")).toContainText(
-    "codex plugin add app-builder@autograph"
+    "codex plugin add app-builder@autograph",
   );
   await page.getByRole("link", { name: "Create another app" }).click();
   await expect(
-    page.getByRole("heading", { name: "Build an app" })
+    page.getByRole("heading", { name: "Build an app" }),
   ).toBeVisible();
 });
 
@@ -502,7 +502,7 @@ test("Cursor handoff carries the exact copied prompt", async ({
     opened: [expect.stringMatching(/^cursor:\/\//u)],
   });
   await expect(
-    page.getByRole("radio", { name: "Cursor", exact: true })
+    page.getByRole("radio", { name: "Cursor", exact: true }),
   ).toBeChecked();
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
   const install = page.getByRole("link", { name: "Add Autograph to Cursor" });
@@ -511,9 +511,9 @@ test("Cursor handoff carries the exact copied prompt", async ({
   expect(
     JSON.parse(
       Buffer.from(installUrl.searchParams.get("config")!, "base64").toString(
-        "utf8"
-      )
-    )
+        "utf8",
+      ),
+    ),
   ).toEqual({
     url: `${appOrigin}/mcp`,
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
@@ -526,13 +526,13 @@ test("Cursor handoff carries the exact copied prompt", async ({
   const state = await browserBoundaryState(page);
   expect(state.clipboard[0]).not.toContain("codex plugin");
   expect(state.opened.at(-1)).toMatch(
-    /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u
+    /^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u,
   );
   expect(new URL(state.opened.at(-1)!).searchParams.get("text")).toBe(
-    state.clipboard[0]
+    state.clipboard[0],
   );
   await expect(
-    page.getByRole("button", { name: "Open in Cursor" })
+    page.getByRole("button", { name: "Open in Cursor" }),
   ).toBeVisible();
 });
 
@@ -548,12 +548,12 @@ test("blocked handoffs remain actionable", async ({ context, page }) => {
     .click();
   await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
   await expect(
-    page.getByText("The browser blocked Codex.", { exact: false })
+    page.getByText("The browser blocked Codex.", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("Copy failed.", { exact: false })).toBeVisible();
   await page.getByText("View prompt for manual copy", { exact: true }).click();
   await expect(
-    page.getByRole("textbox", { name: "Handoff prompt" })
+    page.getByRole("textbox", { name: "Handoff prompt" }),
   ).toHaveValue(/autograph_start/u);
 });
 
@@ -612,7 +612,7 @@ test("expired handoff renews in place without changing intent or provisioning re
 
     await page.reload();
     await expect(
-      page.getByText("This handoff has expired.", { exact: false })
+      page.getByText("This handoff has expired.", { exact: false }),
     ).toBeVisible();
     const launch = page.getByRole("button", {
       name: "Open in Codex",
@@ -622,7 +622,7 @@ test("expired handoff renews in place without changing intent or provisioning re
     const renewalResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
-        new URL(response.url()).pathname === `${statusPath}/renew`
+        new URL(response.url()).pathname === `${statusPath}/renew`,
     );
     await page
       .getByRole("button", { name: "Renew handoff", exact: true })
@@ -633,7 +633,7 @@ test("expired handoff renews in place without changing intent or provisioning re
     await expect(launch).toBeEnabled();
     await expect(page).toHaveURL(handoffUrl);
     await expect(
-      page.getByText("This handoff has expired.", { exact: false })
+      page.getByText("This handoff has expired.", { exact: false }),
     ).toHaveCount(0);
 
     const statusResponse = await getWithTransientRetry(page, statusPath);
@@ -680,6 +680,6 @@ test("large briefs use fixed-size opaque handoff links", async ({
   const state = await browserBoundaryState(page);
   expect(state.opened.at(-1)?.length).toBeLessThan(8_000);
   expect(decodeURIComponent(state.opened.at(-1) ?? "")).not.toContain(
-    "x".repeat(100)
+    "x".repeat(100),
   );
 });

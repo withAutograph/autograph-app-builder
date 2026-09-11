@@ -23,13 +23,13 @@ const roots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))
+    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
 
 async function fixture() {
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "app-builder-development-application-"))
+    await mkdtemp(join(tmpdir(), "app-builder-development-application-")),
   );
   roots.push(root);
   const repositoryRoot = join(root, "repository");
@@ -51,10 +51,10 @@ describe("development Eve application roots", () => {
   it("creates a fresh writable application without prior Eve state", async () => {
     const input = await fixture();
     const firstRun = await realpath(
-      await mkdtemp(join(input.runsRoot, "run-"))
+      await mkdtemp(join(input.runsRoot, "run-")),
     );
     const secondRun = await realpath(
-      await mkdtemp(join(input.runsRoot, "run-"))
+      await mkdtemp(join(input.runsRoot, "run-")),
     );
     const first = await createDevelopmentApplication({
       repositoryRoot: input.repositoryRoot,
@@ -68,14 +68,14 @@ describe("development Eve application roots", () => {
     });
 
     expect(first.root).not.toBe(second.root);
-    expect(await readFile(join(second.root, "agent.ts"), "utf-8")).toContain(
-      "live"
+    expect(await readFile(join(second.root, "agent.ts"), "utf8")).toContain(
+      "live",
     );
     await expect(lstat(join(second.root, ".eve"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(
-      (await lstat(join(second.root, "node_modules"))).isSymbolicLink()
+      (await lstat(join(second.root, "node_modules"))).isSymbolicLink(),
     ).toBe(true);
     await writeFile(join(second.root, "agent.ts"), "export const live = 2;\n");
 
@@ -102,10 +102,10 @@ describe("development Eve application roots", () => {
     expect(second.application.root).not.toBe(first.application.root);
     expect(second.workflowData).not.toBe(first.workflowData);
     await expect(
-      lstat(join(second.workflowData, "stuck-run.json"))
+      lstat(join(second.workflowData, "stuck-run.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
-      lstat(join(second.application.root, ".eve"))
+      lstat(join(second.application.root, ".eve")),
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

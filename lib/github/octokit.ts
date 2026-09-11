@@ -16,9 +16,8 @@ const silentConsole = new Proxy(console, {
       property === "warn" ||
       property === "error" ||
       property === "log"
-    ) {
+    )
       return () => {};
-    }
     return Reflect.get(target, property, receiver) as unknown;
   },
 });
@@ -26,12 +25,8 @@ const silentConsole = new Proxy(console, {
 type Fetch = typeof fetch;
 
 function requestUrl(resource: RequestInfo | URL): URL {
-  if (typeof resource === "string") {
-    return new URL(resource);
-  }
-  if (resource instanceof URL) {
-    return resource;
-  }
+  if (typeof resource === "string") return new URL(resource);
+  if (resource instanceof URL) return resource;
   return new URL(resource.url);
 }
 
@@ -44,18 +39,14 @@ async function boundedResponse(response: Response): Promise<Response> {
     await response.body?.cancel();
     throw new Error("github-response-too-large");
   }
-  if (response.body === null) {
-    return response;
-  }
+  if (response.body === null) return response;
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
+    if (done) break;
     length += value.byteLength;
     if (length > MAX_RESPONSE_BYTES) {
       await reader.cancel();
@@ -70,9 +61,9 @@ async function boundedResponse(response: Response): Promise<Response> {
     offset += chunk.byteLength;
   }
   return new Response(body, {
-    headers: response.headers,
     status: response.status,
     statusText: response.statusText,
+    headers: response.headers,
   });
 }
 
@@ -106,13 +97,13 @@ export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
 function octokitClass(request: Fetch) {
   return Octokit.defaults({
     baseUrl: GITHUB_API_ORIGIN,
+    userAgent: USER_AGENT,
+    request: { fetch: createGuardedGitHubFetch(request) },
     headers: {
       accept: "application/vnd.github+json",
       "x-github-api-version": GITHUB_API_VERSION,
     },
     log: silentConsole,
-    request: { fetch: createGuardedGitHubFetch(request) },
-    userAgent: USER_AGENT,
   });
 }
 
@@ -131,9 +122,8 @@ export function createGitHubOAuthApp(input: {
       url.origin === GITHUB_ORIGIN &&
       url.pathname === "/login/oauth/access_token"
     ) {
-      if (typeof init?.body !== "string") {
+      if (typeof init?.body !== "string")
         throw new Error("github-oauth-request-invalid");
-      }
       let body: string;
       try {
         const parsed = JSON.parse(init.body) as unknown;
@@ -142,20 +132,18 @@ export function createGitHubOAuthApp(input: {
           parsed === null ||
           Array.isArray(parsed) ||
           "code_verifier" in parsed
-        ) {
+        )
           throw new Error("invalid-body");
-        }
         body = JSON.stringify({ ...parsed, code_verifier: input.codeVerifier });
       } catch (error) {
         if (error instanceof SyntaxError) {
           const parsed = new URLSearchParams(init.body);
-          if (parsed.has("code_verifier")) {
+          if (parsed.has("code_verifier"))
             throw new Error("github-oauth-request-invalid");
-          }
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {
-          throw new TypeError("github-oauth-request-invalid", { cause: error });
+          throw new Error("github-oauth-request-invalid");
         }
       }
       return request(resource, { ...init, body });
@@ -163,12 +151,12 @@ export function createGitHubOAuthApp(input: {
     return request(resource, init);
   };
   return new OAuthApp({
-    Octokit: octokitClass(oauthFetch),
+    clientType: "github-app",
     clientId: input.clientId,
     clientSecret: input.clientSecret,
-    clientType: "github-app",
-    log: silentConsole,
     redirectUrl: input.redirectUrl,
+    Octokit: octokitClass(oauthFetch),
+    log: silentConsole,
   });
 }
 
@@ -178,15 +166,15 @@ export function createGitHubApp(input: {
   fetch?: Fetch;
 }) {
   return new App({
-    Octokit: octokitClass(input.fetch ?? fetch),
     appId: input.appId,
+    privateKey: input.privateKey,
+    Octokit: octokitClass(input.fetch ?? fetch),
     log: {
       debug() {},
-      error() {},
       info() {},
       warn() {},
+      error() {},
     },
-    privateKey: input.privateKey,
   });
 }
 

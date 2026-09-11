@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import type * as databaseSchema from "../db/schema";
+import * as databaseSchema from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
@@ -14,16 +14,14 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
  * Missing rows, revoked rows, and database errors all fail closed.
  */
 export function createPostgresWorkspaceMembership(
-  database: Database
+  database: Database,
 ): HostedWorkspaceMembership {
   return {
     async isMember({ principal: principalInput, workspaceId }) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      if (workspaceId !== principal.workspaceId) {
-        return false;
-      }
+      if (workspaceId !== principal.workspaceId) return false;
       const rows = await database
-        .select({ banned: user.banned, role: member.role })
+        .select({ role: member.role, banned: user.banned })
         .from(member)
         .innerJoin(organization, eq(member.organizationId, organization.id))
         .innerJoin(user, eq(member.userId, user.id))
@@ -32,8 +30,8 @@ export function createPostgresWorkspaceMembership(
             eq(organization.issuer, principal.issuer),
             eq(organization.audience, principal.audience),
             eq(organization.workspaceId, principal.workspaceId),
-            eq(member.userId, principal.ownerUserId)
-          )
+            eq(member.userId, principal.ownerUserId),
+          ),
         )
         .limit(2);
       return (
@@ -56,9 +54,9 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
     }): Promise<string | undefined> {
       const rows = await database
         .select({
-          banned: user.banned,
-          role: member.role,
           workspaceId: organization.workspaceId,
+          role: member.role,
+          banned: user.banned,
         })
         .from(member)
         .innerJoin(organization, eq(member.organizationId, organization.id))
@@ -67,8 +65,8 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
           and(
             eq(organization.issuer, input.issuer),
             eq(organization.audience, input.audience),
-            eq(member.userId, input.ownerUserId)
-          )
+            eq(member.userId, input.ownerUserId),
+          ),
         )
         .limit(2);
       return rows.length === 1 &&
@@ -85,11 +83,11 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
     }): Promise<boolean> {
       return createPostgresWorkspaceMembership(database).isMember({
         principal: {
-          audience: input.audience,
           issuer: input.issuer,
+          audience: input.audience,
+          workspaceId: input.workspaceId,
           ownerUserId: input.ownerUserId,
           scopes: ["autograph:session"],
-          workspaceId: input.workspaceId,
         },
         workspaceId: input.workspaceId,
       });

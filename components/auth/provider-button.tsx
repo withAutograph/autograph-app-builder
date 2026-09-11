@@ -1,14 +1,12 @@
 "use client";
 
 import {
+  type AuthSocialProvider,
+  type AuthView,
   authMutationKeys,
   getProviderId,
   getProviderName,
-} from "@better-auth-ui/core";
-import type {
-  AuthSocialProvider,
-  AuthView,
-  OAuthPopupAuthClient,
+  type OAuthPopupAuthClient,
 } from "@better-auth-ui/core";
 import {
   renderProviderIcon,
@@ -26,7 +24,6 @@ import {
   resolveProviderCallbackURL,
 } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
-
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
 
 export type ProviderButtonProps = {
@@ -74,30 +71,30 @@ export function ProviderButton({
     const callback = resolveAuthCallbackURL(
       "/",
       window.location.search,
-      window.location.origin
+      window.location.origin,
     );
     const callbackURL = resolveProviderCallbackURL(
       redirectTo,
       callback,
-      window.location.origin
+      window.location.origin,
     );
 
     if (socialSignInMode === "popup") {
       signInPopup(
         {
-          callbackURL: callbackURL.toString(),
           provider: providerId,
+          callbackURL: callbackURL.toString(),
           requestSignUp: view === "signUp",
         },
         {
           onSuccess: () =>
             navigate({ to: callbackURL.pathname + callbackURL.search }),
-        }
+        },
       );
       return;
     }
 
-    signInSocial({ callbackURL: callbackURL.toString(), provider: providerId });
+    signInSocial({ provider: providerId, callbackURL: callbackURL.toString() });
   };
 
   return (
@@ -114,7 +111,7 @@ export function ProviderButton({
       {display === "full"
         ? localization.auth.continueWith.replace(
             "{{provider}}",
-            getProviderName(provider)
+            getProviderName(provider),
           )
         : display === "name"
           ? getProviderName(provider)

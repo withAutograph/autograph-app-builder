@@ -6,10 +6,9 @@ import type { User } from "better-auth";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-
 import { UserAvatar } from "./user-avatar";
 
-export interface UserViewProps {
+export type UserViewProps = {
   className?: string;
   isPending?: boolean;
   /**
@@ -22,7 +21,7 @@ export interface UserViewProps {
     username?: string | null;
     displayUsername?: string | null;
   };
-}
+};
 
 /**
  * Render a compact user item with an avatar, a primary label (display username, name, or email), and an optional subtitle (email).
@@ -48,7 +47,7 @@ export function UserView({
 
   if ((isPending || sessionPending) && !user) {
     return (
-      <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <div className={cn("flex items-center gap-2 min-w-0", className)}>
         <UserAvatar isPending />
 
         <div className="grid flex-1 gap-1 text-left text-sm">
@@ -61,11 +60,11 @@ export function UserView({
   }
 
   return (
-    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+    <div className={cn("flex items-center gap-2 min-w-0", className)}>
       <UserAvatar user={resolvedUser as User | undefined} />
 
       <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-        <span className="text-foreground truncate font-medium">
+        <span className="truncate font-medium text-foreground">
           {resolvedUser?.displayUsername ||
             resolvedUser?.name ||
             resolvedUser?.email}

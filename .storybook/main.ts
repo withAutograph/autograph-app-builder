@@ -14,9 +14,7 @@ async function resolveFlagForStorybook(flag: {
     request: Request;
   }) => Promise<boolean>;
 }) {
-  if (!process.env.FLAGS) {
-    return false;
-  }
+  if (!process.env.FLAGS) return false;
   try {
     return (
       (await flag.run({
@@ -37,10 +35,15 @@ export async function resolveBuilderFlagsForStorybook() {
       resolveFlagForStorybook(builderResourceProvisioningFlag),
     ]);
 
-  return { comingSoonEnabled, connectionsEnabled, provisioningEnabled };
+  return { connectionsEnabled, comingSoonEnabled, provisioningEnabled };
 }
 
 const config: StorybookConfig = {
+  stories: [
+    "../app/**/*.stories.@(ts|tsx)",
+    "../components/**/*.stories.@(ts|tsx)",
+    "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
+  ],
   addons: [
     "@storybook/addon-vitest",
     "@storybook/addon-a11y",
@@ -48,11 +51,6 @@ const config: StorybookConfig = {
   ],
   framework: "@storybook/nextjs-vite",
   staticDirs: ["../public"],
-  stories: [
-    "../app/**/*.stories.@(ts|tsx)",
-    "../components/**/*.stories.@(ts|tsx)",
-    "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
-  ],
   async viteFinal(viteConfig) {
     const existingAliases = viteConfig.resolve?.alias ?? [];
     const aliases = Array.isArray(existingAliases)
@@ -63,7 +61,7 @@ const config: StorybookConfig = {
         }));
     const storybookBuilderActions = path.join(
       import.meta.dirname,
-      "builder-actions.ts"
+      "builder-actions.ts",
     );
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
@@ -72,13 +70,13 @@ const config: StorybookConfig = {
       // This resolved Boolean is the only flag data included in the browser
       // bundle. The SDK key and discovery secret remain server-only.
       "process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED": JSON.stringify(
-        String(connectionsEnabled)
+        String(connectionsEnabled),
       ),
       "process.env.STORYBOOK_BUILDER_COMING_SOON_ENABLED": JSON.stringify(
-        String(comingSoonEnabled)
+        String(comingSoonEnabled),
       ),
       "process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED": JSON.stringify(
-        String(provisioningEnabled)
+        String(provisioningEnabled),
       ),
     };
     viteConfig.resolve = {
@@ -101,7 +99,7 @@ const config: StorybookConfig = {
           find: "@flags-sdk/vercel",
           replacement: path.join(
             import.meta.dirname,
-            "vercel-flags-adapter.ts"
+            "vercel-flags-adapter.ts",
           ),
         },
         ...aliases,

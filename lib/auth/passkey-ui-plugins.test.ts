@@ -5,8 +5,8 @@ import { passkeyUiPlugins } from "./passkey-ui-plugins";
 describe("passkey UI plugins", () => {
   it("omits the plugin and all of its UI surfaces when disabled", () => {
     const createPlugin = vi.fn(() => ({
-      authButtons: ["Continue with Passkey"],
       id: "passkey",
+      authButtons: ["Continue with Passkey"],
       securityCards: ["Passkeys"],
     }));
 
@@ -16,8 +16,8 @@ describe("passkey UI plugins", () => {
 
   it("restores the passkey auth and settings surfaces when enabled", () => {
     const plugin = {
-      authButtons: ["Continue with Passkey"],
       id: "passkey",
+      authButtons: ["Continue with Passkey"],
       securityCards: ["Passkeys"],
     };
 

@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import { describe, expect, it, vi } from "vitest";
@@ -19,16 +18,16 @@ describe("development process supervision", () => {
     const child = spawn(
       process.execPath,
       ["-e", "setInterval(() => {}, 1000)"],
-      { stdio: "ignore" }
+      { stdio: "ignore" },
     );
     const exited = developmentChildExit(child);
     const stopping = waitForDevelopmentShutdown(
       shutdown.signal,
-      shutdown.exitCode
+      shutdown.exitCode,
     );
 
     signals.emit("SIGTERM");
-    expect(await stopping).toEqual({ code: 143, kind: "stop" });
+    expect(await stopping).toEqual({ kind: "stop", code: 143 });
     await stopDevelopmentChild(child);
     expect(await exited).toBe(1);
     shutdown.dispose();
@@ -39,17 +38,15 @@ describe("development process supervision", () => {
     const shutdown = createDevelopmentShutdown(signals);
     const stopping = waitForDevelopmentShutdown(
       shutdown.signal,
-      shutdown.exitCode
+      shutdown.exitCode,
     );
     signals.emit("SIGINT");
-    expect(await stopping).toEqual({ code: 130, kind: "stop" });
+    expect(await stopping).toEqual({ kind: "stop", code: 130 });
     shutdown.dispose();
   });
 
   it("stops a detached Eve-style process group as one local cycle", async () => {
-    if (process.platform === "win32") {
-      return;
-    }
+    if (process.platform === "win32") return;
     const child = spawn(
       process.execPath,
       [
@@ -59,7 +56,7 @@ describe("development process supervision", () => {
           "setInterval(() => {}, 1000);",
         ].join(""),
       ],
-      { detached: true, stdio: "ignore" }
+      { detached: true, stdio: "ignore" },
     );
     const exited = developmentChildExit(child);
 
@@ -68,16 +65,14 @@ describe("development process supervision", () => {
   });
 
   it("signals the Eve wrapper once before forcing its task-owned group", async () => {
-    if (process.platform === "win32") {
-      return;
-    }
+    if (process.platform === "win32") return;
     const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
-    const groupSignals: Parameters<typeof process.kill>[1][] = [];
+    const groupSignals: Array<Parameters<typeof process.kill>[1]> = [];
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
-      pid: { value: 43_210 },
       signalCode: { value: null, writable: true },
+      pid: { value: 43_210 },
     });
     child.kill = ((signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
@@ -87,16 +82,14 @@ describe("development process supervision", () => {
       .spyOn(process, "kill")
       .mockImplementation((_pid, signal) => {
         groupSignals.push(signal);
-        if (signal === "SIGKILL") {
-          child.emit("exit", null, "SIGKILL");
-        }
+        if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
         return true;
       });
 
     try {
       await stopDevelopmentChild(child, {
-        gracefulTimeoutMs: 1,
         processGroup: true,
+        gracefulTimeoutMs: 1,
       });
       expect(directSignals).toEqual(["SIGTERM"]);
       expect(groupSignals).toEqual(["SIGKILL"]);
@@ -106,41 +99,37 @@ describe("development process supervision", () => {
   });
 
   it("cleans up a listener when the Eve wrapper exits before its descendant", async () => {
-    if (process.platform === "win32") {
-      return;
-    }
-    const port = 43_987;
+    if (process.platform === "win32") return;
+    const port = 43987;
     const child = spawn(
       process.execPath,
       [
         "-e",
         `const child = require("node:child_process").spawn(process.execPath, ["-e", "require('node:net').createServer().listen(${port}); setInterval(() => {}, 1000)"], { stdio: "ignore" }); child.unref();`,
       ],
-      { detached: true, stdio: "ignore" }
+      { detached: true, stdio: "ignore" },
     );
     await developmentChildExit(child);
 
     await stopDevelopmentChild(child, { processGroup: true });
-    await waitForDevelopmentPortRelease(port, { timeoutMs: 2000 });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
   });
 
   it("allows Eve's nested detached server time to settle after the wrapper exits", async () => {
-    if (process.platform === "win32") {
-      return;
-    }
-    const port = 43_988;
+    if (process.platform === "win32") return;
+    const port = 43988;
     const child = spawn(
       process.execPath,
       [
         "-e",
         `const child = require("node:child_process").spawn(process.execPath, ["-e", "const server = require('node:net').createServer().listen(${port}); process.on('message', (message) => { if (message === 'shutdown') setTimeout(() => server.close(() => process.exit(0)), 850); }); setInterval(() => {}, 1000)"], { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"] }); child.unref(); process.on("SIGTERM", () => { child.send("shutdown"); process.exit(0); });`,
       ],
-      { detached: true, stdio: "ignore" }
+      { detached: true, stdio: "ignore" },
     );
     await stopDevelopmentChild(child, {
-      gracefulTimeoutMs: 1_100,
       processGroup: true,
+      gracefulTimeoutMs: 1_100,
     });
-    await waitForDevelopmentPortRelease(port, { timeoutMs: 2000 });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
   });
 });

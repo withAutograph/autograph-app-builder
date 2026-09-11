@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page title, filter controls, exception list, selected-product header, evidence, and action footer form a clear review sequence. Selected-row treatment, severity pills, days-of-cover values, and the prominent shortfall heading make urgent information easy to scan. |
-| layout | 3/4 | The centered two-column workspace is consistently aligned from 1024px through 1920px, with balanced spacing and compact list density. At 1024×768, however, the fixed detail footer leaves the final projected-on-hand value partially obscured until the panel is scrolled. |
-| typography | 3/4 | Heading levels, field labels, values, and supporting text are visually consistent and readable, including the denser confirmation explanation. Automated evidence flags insufficient contrast for white text on the authoritative primary-button color in several captures, so button-label legibility remains an advisory concern despite otherwise strong typography. |
-| responsive | 3/4 | The design adapts effectively across desktop windows: wide and standard views retain list-detail context, while the 700px panel switches to a focused detail view with a clear Back to exceptions control. Internal scrolling prevents horizontal overflow, but the 1024px confirmation/result panels initially place the projected value against or behind the persistent footer. |
-| productClarity | 4/4 | The task is explicit: filter exceptions, select a product, review stock and supplier evidence, and model replenishment. Confirmation and result states clearly state Simulation only, explain the 96-unit calculation and supplier minimum, show projected on-hand, and emphasize that no order or inventory change occurred. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page title, filter controls, exception list, selected-product header, evidence, and action footer form a clear review sequence. Selected-row treatment, severity pills, days-of-cover values, and the prominent shortfall heading make urgent information easy to scan.                                                                                                        |
+| layout         | 3/4   | The centered two-column workspace is consistently aligned from 1024px through 1920px, with balanced spacing and compact list density. At 1024×768, however, the fixed detail footer leaves the final projected-on-hand value partially obscured until the panel is scrolled.                                                                                                       |
+| typography     | 3/4   | Heading levels, field labels, values, and supporting text are visually consistent and readable, including the denser confirmation explanation. Automated evidence flags insufficient contrast for white text on the authoritative primary-button color in several captures, so button-label legibility remains an advisory concern despite otherwise strong typography.            |
+| responsive     | 3/4   | The design adapts effectively across desktop windows: wide and standard views retain list-detail context, while the 700px panel switches to a focused detail view with a clear Back to exceptions control. Internal scrolling prevents horizontal overflow, but the 1024px confirmation/result panels initially place the projected value against or behind the persistent footer. |
+| productClarity | 4/4   | The task is explicit: filter exceptions, select a product, review stock and supplier evidence, and model replenishment. Confirmation and result states clearly state Simulation only, explain the 96-unit calculation and supplier minimum, show projected on-hand, and emphasize that no order or inventory change occurred.                                                      |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/526) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/526) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/526) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

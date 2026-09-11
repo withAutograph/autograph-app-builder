@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page establishes a clear sequence from “Stock exceptions” and review count, through location/severity filters, grouped exception records, selected-product detail, and the replenishment action. Selected rows, detail tabs, delivery guidance, and simulation confirmation are visually distinct across desktop-0, desktop-1, and desktop-2. |
-| layout | 3/4 | The master-detail composition is consistently aligned and comfortably spaced at 900, 1024, 1440, and 1920 pixels. Cards and controls use predictable dimensions, but the fixed two-column arrangement produces substantial unused space after filtering to one record in desktop-wide-3, and the 1024-pixel view requires a separately scrolling product list. |
-| typography | 3/4 | Headings, product names, cover values, metadata, and action labels form a consistent and readable type hierarchy. However, key-value labels such as “Estimated cover,” “On hand,” and supplier fields are visually faint; the supplied accessibility evidence repeatedly reports a 2.24:1 contrast ratio for these labels. |
-| responsive | 3/4 | Across the supplied desktop windows from 900 to 1920 pixels, controls remain usable, text does not visibly collide, and both panes preserve their task context. At 1024×768 the product list becomes an intentional local scroll region and includes explanatory text, though the weak visual indication of that scrolling slightly reduces discoverability. |
-| productClarity | 4/4 | The task is immediately understandable: filter low-stock products, select a record, compare stock and supplier information, and simulate a suggested order. Quantity-specific button labels, “Preview only · No supplier contacted,” delivery-gap guidance, and the post-action “Order simulated. Stock levels are unchanged.” message make the mock nature and consequences unusually clear; the supplied interaction checks passed for filtering, supplier inspection, delivery guidance, and simulation. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page establishes a clear sequence from “Stock exceptions” and review count, through location/severity filters, grouped exception records, selected-product detail, and the replenishment action. Selected rows, detail tabs, delivery guidance, and simulation confirmation are visually distinct across desktop-0, desktop-1, and desktop-2.                                                                                                                                                           |
+| layout         | 3/4   | The master-detail composition is consistently aligned and comfortably spaced at 900, 1024, 1440, and 1920 pixels. Cards and controls use predictable dimensions, but the fixed two-column arrangement produces substantial unused space after filtering to one record in desktop-wide-3, and the 1024-pixel view requires a separately scrolling product list.                                                                                                                                              |
+| typography     | 3/4   | Headings, product names, cover values, metadata, and action labels form a consistent and readable type hierarchy. However, key-value labels such as “Estimated cover,” “On hand,” and supplier fields are visually faint; the supplied accessibility evidence repeatedly reports a 2.24:1 contrast ratio for these labels.                                                                                                                                                                                  |
+| responsive     | 3/4   | Across the supplied desktop windows from 900 to 1920 pixels, controls remain usable, text does not visibly collide, and both panes preserve their task context. At 1024×768 the product list becomes an intentional local scroll region and includes explanatory text, though the weak visual indication of that scrolling slightly reduces discoverability.                                                                                                                                                |
+| productClarity | 4/4   | The task is immediately understandable: filter low-stock products, select a record, compare stock and supplier information, and simulate a suggested order. Quantity-specific button labels, “Preview only · No supplier contacted,” delivery-gap guidance, and the post-action “Order simulated. Stock levels are unchanged.” message make the mock nature and consequences unusually clear; the supplied interaction checks passed for filtering, supplier inspection, delivery guidance, and simulation. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/226) |
-| desktop-0 | typography | 0/0 | 0% (0/560) |
-| desktop-0 | spacing | 0/0 | 0% (0/313) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/137) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/226) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/560) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/313) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/137) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/226) |
-| desktop-window-0 | typography | 0/0 | 0% (0/560) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/313) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/137) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-900x900-0 | color | 0/0 | 0% (0/226) |
-| desktop-custom-900x900-0 | typography | 0/0 | 0% (0/560) |
-| desktop-custom-900x900-0 | spacing | 0/0 | 0% (0/313) |
-| desktop-custom-900x900-0 | radius | 0/0 | 0% (0/114) |
-| desktop-custom-900x900-0 | border | 0/0 | 0% (0/137) |
-| desktop-custom-900x900-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/226) |
+| desktop-0                | typography | 0/0                         | 0% (0/560) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/313) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/137) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/226) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/560) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/313) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/226) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/560) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/313) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-900x900-0 | color      | 0/0                         | 0% (0/226) |
+| desktop-custom-900x900-0 | typography | 0/0                         | 0% (0/560) |
+| desktop-custom-900x900-0 | spacing    | 0/0                         | 0% (0/313) |
+| desktop-custom-900x900-0 | radius     | 0/0                         | 0% (0/114) |
+| desktop-custom-900x900-0 | border     | 0/0                         | 0% (0/137) |
+| desktop-custom-900x900-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

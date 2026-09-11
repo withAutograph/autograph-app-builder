@@ -1,9 +1,20 @@
+import type { NextConfig } from "next";
 import { withEmulate } from "@emulators/adapter-next";
 import { withEve } from "eve/next";
-import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  partialPrefetching: true,
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/@emulators/core/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+core@*/node_modules/@emulators/core/dist/fonts/**/*",
+      "./node_modules/@emulators/github/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+github@*/node_modules/@emulators/github/dist/fonts/**/*",
+      "./node_modules/@emulators/vercel/dist/fonts/**/*",
+      "./node_modules/.pnpm/@emulators+vercel@*/node_modules/@emulators/vercel/dist/fonts/**/*",
+    ],
+  },
   async headers() {
     return [
       {
@@ -16,17 +27,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  outputFileTracingIncludes: {
-    "/*": [
-      "./node_modules/@emulators/core/dist/fonts/**/*",
-      "./node_modules/.pnpm/@emulators+core@*/node_modules/@emulators/core/dist/fonts/**/*",
-      "./node_modules/@emulators/github/dist/fonts/**/*",
-      "./node_modules/.pnpm/@emulators+github@*/node_modules/@emulators/github/dist/fonts/**/*",
-      "./node_modules/@emulators/vercel/dist/fonts/**/*",
-      "./node_modules/.pnpm/@emulators+vercel@*/node_modules/@emulators/vercel/dist/fonts/**/*",
-    ],
-  },
-  partialPrefetching: true,
 };
 
 // The local OAuth emulator only needs the application routes. Starting Eve's

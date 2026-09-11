@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected product details, and the replenishment action. Selected rows, severity pills, cover values, section headings, and the suggested-order heading make priorities immediately scannable. |
-| layout | 3/4 | The master-detail composition is consistently aligned and appropriately dense at 1440px and 1920px, while cards and detail rows use regular spacing. The main weakness is the simulated state at 1024px, where the confirmation and disabled action wrap into an inconsistent footer arrangement. |
-| typography | 4/4 | Product names, section headings, labels, values, and explanatory copy have a consistent and readable scale. Bold treatment is used selectively for cover, stock, supplier, delivery-risk, and order information without making the interface visually noisy. |
-| responsive | 3/4 | The design adapts effectively across the supplied desktop widths: it retains master-detail at 1920px, 1440px, and 1024px, then switches to a focused list/detail flow with a clear Back to exceptions control at 700px. The 1024px simulated footer shows a wrapping instability, and the 768px viewport can require a small amount of document scrolling. |
-| productClarity | 4/4 | The task is explicit in the header copy, filters clearly cover location and severity, records expose location, severity, and days of cover, and the detail panel separates stock from supplier information. The action is unambiguously a simulation through Preview only, No supplier contacted, and the post-action message that stock levels are unchanged. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page establishes a clear sequence from title and review count to filters, severity-grouped exceptions, selected product details, and the replenishment action. Selected rows, severity pills, cover values, section headings, and the suggested-order heading make priorities immediately scannable.                                                       |
+| layout         | 3/4   | The master-detail composition is consistently aligned and appropriately dense at 1440px and 1920px, while cards and detail rows use regular spacing. The main weakness is the simulated state at 1024px, where the confirmation and disabled action wrap into an inconsistent footer arrangement.                                                              |
+| typography     | 4/4   | Product names, section headings, labels, values, and explanatory copy have a consistent and readable scale. Bold treatment is used selectively for cover, stock, supplier, delivery-risk, and order information without making the interface visually noisy.                                                                                                   |
+| responsive     | 3/4   | The design adapts effectively across the supplied desktop widths: it retains master-detail at 1920px, 1440px, and 1024px, then switches to a focused list/detail flow with a clear Back to exceptions control at 700px. The 1024px simulated footer shows a wrapping instability, and the 768px viewport can require a small amount of document scrolling.     |
+| productClarity | 4/4   | The task is explicit in the header copy, filters clearly cover location and severity, records expose location, severity, and days of cover, and the detail panel separates stock from supplier information. The action is unambiguously a simulation through Preview only, No supplier contacted, and the post-action message that stock levels are unchanged. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/227) |
-| desktop-0 | typography | 0/0 | 0% (0/557) |
-| desktop-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/137) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/227) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/137) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/227) |
-| desktop-window-0 | typography | 0/0 | 0% (0/557) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/299) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/137) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/198) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/489) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/265) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/99) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/119) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/105) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/227) |
+| desktop-0                | typography | 0/0                         | 0% (0/557) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/299) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/137) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/227) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/299) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/137) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/227) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/299) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/137) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/198) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/489) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/265) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/99)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/119) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/105) |
 
 ## Latest-run screenshots
 

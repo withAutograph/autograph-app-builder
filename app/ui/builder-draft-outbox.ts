@@ -4,27 +4,27 @@
  * detail: callers only deal in snapshots and mutation IDs.
  */
 
-export interface BuilderDraftOutboxEntry<T> {
+export type BuilderDraftOutboxEntry<T> = {
   version: 1;
   mutationId: string;
   snapshot: T;
   createdAt: number;
-}
+};
 
-export interface BuilderDraftOutbox<T> {
+export type BuilderDraftOutbox<T> = {
   read(): Promise<BuilderDraftOutboxEntry<T> | undefined>;
   write(entry: BuilderDraftOutboxEntry<T>): Promise<void>;
   clearIfMutationId(mutationId: string): Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
   clear(): Promise<void>;
-}
+};
 
-export interface BuilderDraftOutboxOptions {
+export type BuilderDraftOutboxOptions = {
   /** Namespaces drafts in the browser origin. Include the draft ID in this key. */
   key: string;
   /** Injectable for tests and for WebViews that expose a non-global factory. */
   indexedDB?: IDBFactory | null;
-}
+};
 
 const databaseName = "autograph-builder-draft-outbox";
 const storeName = "pending";
@@ -60,11 +60,10 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       "upgradeneeded",
       () => {
         const database = request.result;
-        if (!database.objectStoreNames.contains(storeName)) {
+        if (!database.objectStoreNames.contains(storeName))
           database.createObjectStore(storeName);
-        }
       },
-      { once: true }
+      { once: true },
     );
     request.addEventListener("success", () => resolve(request.result), {
       once: true,
@@ -84,7 +83,7 @@ function defaultFactory() {
  * so a delayed older write can never overwrite a newer outbox entry.
  */
 export function createBuilderDraftOutbox<T>(
-  options: BuilderDraftOutboxOptions
+  options: BuilderDraftOutboxOptions,
 ): BuilderDraftOutbox<T> {
   const factory =
     options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
@@ -93,19 +92,17 @@ export function createBuilderDraftOutbox<T>(
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
     const result = operations.then(operation);
     operations = result.then(
-      () => {},
-      () => {}
+      () => undefined,
+      () => undefined,
     );
     return result;
   }
 
   async function withDatabase<Result>(
     operation: (database: IDBDatabase) => Promise<Result>,
-    fallback: () => Result
+    fallback: () => Result,
   ): Promise<Result> {
-    if (!factory) {
-      return fallback();
-    }
+    if (!factory) return fallback();
     try {
       const database = await openDatabase(factory);
       try {
@@ -119,59 +116,21 @@ export function createBuilderDraftOutbox<T>(
   }
 
   return {
-    clear: () =>
-      serial(() =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readwrite");
-            transaction.objectStore(storeName).delete(options.key);
-            await transactionResult(transaction);
-          },
-          () => {
-            memoryFallback.delete(options.key);
-          }
-        )
-      ),
-    clearIfMutationId: (mutationId) =>
-      serial(() =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readwrite");
-            const store = transaction.objectStore(storeName);
-            const entry = (await requestResult(store.get(options.key))) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
-            const cleared = entry?.mutationId === mutationId;
-            if (cleared) store.delete(options.key);
-            await transactionResult(transaction);
-            return cleared;
-          },
-          () => {
-            const entry = memoryFallback.get(options.key) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
-            if (entry?.mutationId !== mutationId) return false;
-            memoryFallback.delete(options.key);
-            return true;
-          }
-        )
-      ),
     read: () =>
       serial(() =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readonly");
             const result = await requestResult(
-              transaction.objectStore(storeName).get(options.key)
+              transaction.objectStore(storeName).get(options.key),
             );
             await transactionResult(transaction);
             return result as BuilderDraftOutboxEntry<T> | undefined;
           },
           () =>
             memoryFallback.get(options.key) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined
-        )
+              BuilderDraftOutboxEntry<T> | undefined,
+        ),
       ),
     write: (entry) =>
       serial(() =>
@@ -183,8 +142,43 @@ export function createBuilderDraftOutbox<T>(
           },
           () => {
             memoryFallback.set(options.key, entry);
-          }
-        )
+          },
+        ),
+      ),
+    clearIfMutationId: (mutationId) =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            const store = transaction.objectStore(storeName);
+            const entry = (await requestResult(store.get(options.key))) as
+              BuilderDraftOutboxEntry<T> | undefined;
+            const cleared = entry?.mutationId === mutationId;
+            if (cleared) store.delete(options.key);
+            await transactionResult(transaction);
+            return cleared;
+          },
+          () => {
+            const entry = memoryFallback.get(options.key) as
+              BuilderDraftOutboxEntry<T> | undefined;
+            if (entry?.mutationId !== mutationId) return false;
+            memoryFallback.delete(options.key);
+            return true;
+          },
+        ),
+      ),
+    clear: () =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            transaction.objectStore(storeName).delete(options.key);
+            await transactionResult(transaction);
+          },
+          () => {
+            memoryFallback.delete(options.key);
+          },
+        ),
       ),
   };
 }

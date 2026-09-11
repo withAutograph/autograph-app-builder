@@ -11,7 +11,7 @@ export function BuilderInstallInstructions({
   onDismiss: () => void;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle"
+    "idle",
   );
 
   return (

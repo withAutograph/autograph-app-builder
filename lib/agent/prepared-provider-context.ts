@@ -2,8 +2,10 @@ import { z } from "zod";
 
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
-import { parseRepositoryReference } from "../integrations/repository-access";
-import type { RepositoryAccessResult } from "../integrations/repository-access";
+import {
+  parseRepositoryReference,
+  type RepositoryAccessResult,
+} from "../integrations/repository-access";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import type { RepositoryAccessToolInput } from "./repository-access-tool";
@@ -45,15 +47,12 @@ export function preparedGitHubRepository(intent: PreparedIntent) {
 
 export function withPreparedGitHubSelection(
   input: RepositoryAccessToolInput,
-  intent: PreparedIntent | undefined
+  intent: PreparedIntent | undefined,
 ): RepositoryAccessToolInput {
-  if (!intent || input.selectedInstallationId !== undefined) {
-    return input;
-  }
+  if (!intent || input.selectedInstallationId !== undefined) return input;
   const preparedRepository = preparedGitHubRepository(intent);
-  if (preparedRepository?.toLowerCase() !== input.repository.toLowerCase()) {
+  if (preparedRepository?.toLowerCase() !== input.repository.toLowerCase())
     return input;
-  }
   const selectedInstallationId =
     intent.providers?.githubInstallationId ??
     (intent.provisioning?.github.status === "succeeded"
@@ -62,17 +61,14 @@ export function withPreparedGitHubSelection(
   return selectedInstallationId ? { ...input, selectedInstallationId } : input;
 }
 
-interface VercelCredential {
-  binding: VercelInstallationBinding;
-  token: string;
-}
+type VercelCredential = { binding: VercelInstallationBinding; token: string };
 type Authority = ReturnType<typeof exactForwardedSessionAuthority>["authority"];
-interface VercelScope {
+type VercelScope = {
   installationId: string;
   type: "team" | "user";
   id: string;
   slug: string;
-}
+};
 export type PreparedVercelAccess =
   | { status: "not-selected" }
   | { status: "resource-unavailable"; action: "review-selection" }
@@ -89,27 +85,23 @@ export type PreparedVercelAccess =
     };
 
 const unavailable = (): PreparedVercelAccess => ({
+  status: "provider-unavailable",
   action: "retry",
   retryable: true,
-  status: "provider-unavailable",
 });
 const reconnect = (): PreparedVercelAccess => ({
-  action: "reconnect",
   status: "authorization-required",
+  action: "reconnect",
 });
 
 async function boundedJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("invalid-response");
-  }
+  if (!reader) throw new Error("invalid-response");
   const chunks: Uint8Array[] = [];
   let length = 0;
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
+    if (done) break;
     length += value.byteLength;
     if (length > 2 * 1024 * 1024) {
       await reader.cancel();
@@ -123,7 +115,7 @@ async function boundedJson(response: Response): Promise<unknown> {
     bytes.set(chunk, offset);
     offset += chunk.length;
   }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  return JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
 }
 
 /** Server-only credential read followed by a fresh, read-only provider request. */
@@ -143,50 +135,43 @@ export async function readPreparedVercelAccess(input: {
       : undefined;
   const installationId =
     input.intent.providers?.vercelInstallationId ?? project?.installationId;
-  if (!installationId) {
-    return { status: "not-selected" };
-  }
+  if (!installationId) return { status: "not-selected" };
   try {
     const credential = await input.readCredential({
       authority: input.authority,
       installationId,
     });
-    if (!credential || !credential.binding.active) {
-      return reconnect();
-    }
-    if (credential.binding.installationId !== installationId) {
+    if (!credential || !credential.binding.active) return reconnect();
+    if (credential.binding.installationId !== installationId)
       return unavailable();
-    }
     const { binding, token } = credential;
     if (
       project &&
       (project.installationId !== installationId ||
         project.scope.id !== binding.scopeId ||
         project.scope.type !== binding.scopeType)
-    ) {
+    )
       return { status: "resource-unavailable", action: "review-selection" };
-    }
     const path = project
       ? `/v9/projects/${encodeURIComponent(project.projectId)}`
       : binding.scopeType === "team"
         ? `/v2/teams/${encodeURIComponent(binding.scopeId)}`
         : "/v2/user";
     const url = new URL(
-      `${input.apiOrigin ?? "https://api.vercel.com"}${path}`
+      `${input.apiOrigin ?? "https://api.vercel.com"}${path}`,
     );
-    if (project && binding.scopeType === "team") {
+    if (project && binding.scopeType === "team")
       url.searchParams.set("teamId", binding.scopeId);
-    }
     const response = await (input.fetch ?? fetch)(url, {
+      method: "GET",
+      redirect: "error",
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
         "User-Agent": "autograph-app-builder",
       },
-      method: "GET",
-      redirect: "error",
-      signal: AbortSignal.timeout(20_000),
     });
     // Classify status before reading provider bodies, which can contain secrets
     // or an HTML outage page. Match the existing provider credential semantics.
@@ -196,7 +181,7 @@ export async function readPreparedVercelAccess(input: {
     }
     if (response.status === 404) {
       await response.body?.cancel();
-      return { action: "review-selection", status: "resource-unavailable" };
+      return { status: "resource-unavailable", action: "review-selection" };
     }
     if ([401, 403].includes(response.status)) {
       await response.body?.cancel();
@@ -208,40 +193,37 @@ export async function readPreparedVercelAccess(input: {
     }
     const body = await boundedJson(response);
     const scope: VercelScope = {
-      id: binding.scopeId,
       installationId,
-      slug: binding.slug,
       type: binding.scopeType,
+      id: binding.scopeId,
+      slug: binding.slug,
     };
     if (project) {
       const observed = z
         .object({
-          accountId: z.string().min(1).optional(),
           id: z.string().min(1),
           name: z.string().min(1),
+          accountId: z.string().min(1).optional(),
         })
         .parse(body);
       if (
         observed.id !== project.projectId ||
         (observed.accountId !== undefined &&
           observed.accountId !== binding.scopeId)
-      ) {
+      )
         return unavailable();
-      }
       return {
-        project: { id: observed.id, name: observed.name },
-        scope,
         status: "ready",
+        scope,
+        project: { id: observed.id, name: observed.name },
       };
     }
     const observed =
       binding.scopeType === "team"
         ? z.object({ id: z.string() }).parse(body)
         : z.object({ user: z.object({ id: z.string() }) }).parse(body).user;
-    if (observed.id !== binding.scopeId) {
-      return unavailable();
-    }
-    return { scope, status: "ready" };
+    if (observed.id !== binding.scopeId) return unavailable();
+    return { status: "ready", scope };
   } catch {
     return unavailable();
   }
@@ -251,32 +233,30 @@ export function createPreparedAppContextReader(input: {
   readHandoff(sessionAuth: unknown): Promise<PreparedIntent | undefined>;
   github(
     sessionAuth: unknown,
-    input: RepositoryAccessToolInput
+    input: RepositoryAccessToolInput,
   ): Promise<RepositoryAccessResult>;
   vercel(
     sessionAuth: unknown,
-    intent: PreparedIntent
+    intent: PreparedIntent,
   ): Promise<PreparedVercelAccess>;
 }) {
   return async (sessionAuth: unknown) => {
     // The trusted reader establishes tenant ownership before any provider work.
     const intent = await input.readHandoff(sessionAuth);
-    if (!intent) {
-      return { status: "not-prepared" as const };
-    }
+    if (!intent) return { status: "not-prepared" as const };
     const repository = preparedGitHubRepository(intent);
     const [github, vercel] = await Promise.all([
       repository
         ? input
             .github(
               sessionAuth,
-              withPreparedGitHubSelection({ repository }, intent)
+              withPreparedGitHubSelection({ repository }, intent),
             )
             .catch((): RepositoryAccessResult => ({
-              repository: parseRepositoryReference(repository),
               status: "provider-unavailable",
+              repository: parseRepositoryReference(repository),
             }))
-        : Promise.resolve(),
+        : Promise.resolve(undefined),
       input.vercel(sessionAuth, intent).catch(unavailable),
     ]);
     const returnTo = preparedHandoffReturnPath(sessionAuth);
@@ -287,12 +267,54 @@ export function createPreparedAppContextReader(input: {
             // readHandoff has already verified this originating session.
             z
               .object({ initiator: z.object({ issuer: z.string().url() }) })
-              .parse(sessionAuth).initiator.issuer
+              .parse(sessionAuth).initiator.issuer,
           ).toString()
         : undefined;
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
     return {
+      status: "prepared" as const,
+      app: {
+        name: intent.appName,
+        id: intent.appId,
+        brief: intent.brief,
+        modelId: intent.modelId,
+        connections: [...intent.connections],
+      },
+      repository: {
+        requestedName: intent.repository.requestedName,
+        private: intent.repository.private,
+        ...(repository ? { fullName: repository } : {}),
+      },
+      resources: {
+        github:
+          intent.provisioning?.github.status === "succeeded"
+            ? {
+                repositoryId: intent.provisioning.github.repositoryId,
+                fullName: intent.provisioning.github.fullName,
+                installationId: intent.provisioning.github.installationId,
+              }
+            : undefined,
+        vercel:
+          intent.provisioning?.vercel.status === "succeeded"
+            ? {
+                projectId: intent.provisioning.vercel.projectId,
+                name: intent.provisioning.vercel.name,
+                installationId: intent.provisioning.vercel.installationId,
+                scope: {
+                  id: intent.provisioning.vercel.scope.id,
+                  type: intent.provisioning.vercel.scope.type,
+                  slug: intent.provisioning.vercel.scope.slug,
+                },
+              }
+            : undefined,
+      },
+      provisioning: intent.provisioning
+        ? {
+            github: intent.provisioning.github.status,
+            vercel: intent.provisioning.vercel.status,
+          }
+        : undefined,
       access: {
         github: github
           ? {
@@ -322,48 +344,6 @@ export function createPreparedAppContextReader(input: {
             ? { ...vercel, reconnectUrl: reconnectUrl("vercel") }
             : vercel,
       },
-      app: {
-        brief: intent.brief,
-        connections: [...intent.connections],
-        id: intent.appId,
-        modelId: intent.modelId,
-        name: intent.appName,
-      },
-      provisioning: intent.provisioning
-        ? {
-            github: intent.provisioning.github.status,
-            vercel: intent.provisioning.vercel.status,
-          }
-        : undefined,
-      repository: {
-        private: intent.repository.private,
-        requestedName: intent.repository.requestedName,
-        ...(repository ? { fullName: repository } : {}),
-      },
-      resources: {
-        github:
-          intent.provisioning?.github.status === "succeeded"
-            ? {
-                repositoryId: intent.provisioning.github.repositoryId,
-                fullName: intent.provisioning.github.fullName,
-                installationId: intent.provisioning.github.installationId,
-              }
-            : undefined,
-        vercel:
-          intent.provisioning?.vercel.status === "succeeded"
-            ? {
-                projectId: intent.provisioning.vercel.projectId,
-                name: intent.provisioning.vercel.name,
-                installationId: intent.provisioning.vercel.installationId,
-                scope: {
-                  id: intent.provisioning.vercel.scope.id,
-                  type: intent.provisioning.vercel.scope.type,
-                  slug: intent.provisioning.vercel.scope.slug,
-                },
-              }
-            : undefined,
-      },
-      status: "prepared" as const,
     };
   };
 }
@@ -371,12 +351,12 @@ export function createPreparedAppContextReader(input: {
 export async function readPreparedAppContext(sessionAuth: unknown) {
   const { readPreparedHandoffContext } = await import("./handoff-context");
   return createPreparedAppContextReader({
+    readHandoff: readPreparedHandoffContext,
     async github(auth, value) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");
       return (await repositoryAccessRuntimeForSession(auth)).classify(value);
     },
-    readHandoff: readPreparedHandoffContext,
     async vercel(auth, intent) {
       const { authority, principal } = exactForwardedSessionAuthority(auth);
       const [
@@ -405,10 +385,9 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
             config.resource !== authority.audience
           )
             throw new Error("Provider authority is unavailable.");
-          providerDatabase ??= openHostedPostgresDatabase(
-            environment.DATABASE_URL ?? ""
-          );
-          const database = providerDatabase;
+          const database = (providerDatabase ??= openHostedPostgresDatabase(
+            environment.DATABASE_URL ?? "",
+          ));
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({
               principal,
@@ -431,7 +410,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
                   providerEmulationFetch(
                     resource as URL,
                     init,
-                    emulation
+                    emulation,
                   )) as typeof fetch,
               }
             : {};

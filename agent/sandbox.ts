@@ -21,26 +21,25 @@ function createVercelDefinition() {
     return defineSandbox({ backend: justbash({ autoInstall: false }) });
   }
   return defineSandbox({
-    backend: createHostedVercelBackend(
-      process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
+    backend: createHostedVercelBackend({
+      ...(process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
         ? {
             sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
           }
-        : { sandboxEnvironment: HOSTED_BUN_RUNTIME_ENVIRONMENT }
-    ),
+        : { sandboxEnvironment: HOSTED_BUN_RUNTIME_ENVIRONMENT }),
+    }),
     async onSession({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
       const sandbox = await use({ networkPolicy: "allow-all" });
       if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
         const setup = await sandbox.run({
-          abortSignal: AbortSignal.timeout(300_000),
           command: developmentPinnedToolchainCommand(),
+          abortSignal: AbortSignal.timeout(300_000),
         });
-        if (setup.exitCode !== 0) {
+        if (setup.exitCode !== 0)
           throw new Error(
-            `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2_000)}`
+            `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2_000)}`,
           );
-        }
       } else {
         await installHostedBunRuntime(sandbox);
       }

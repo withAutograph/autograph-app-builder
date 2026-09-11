@@ -6,17 +6,19 @@ import {
 } from "jose";
 import { z } from "zod";
 
-import { verifiedHostedClaimsSchema } from "../eve/hosted-auth";
-import type { VerifiedHostedClaims } from "../eve/hosted-auth";
+import {
+  verifiedHostedClaimsSchema,
+  type VerifiedHostedClaims,
+} from "../eve/hosted-auth";
 
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
 export const hostedMcpAuthConfigSchema = z
   .object({
-    algorithm: strongAlgorithmSchema,
-    audience: z.string().url().startsWith("https://"),
     issuer: z.string().url().startsWith("https://"),
+    audience: z.string().url().startsWith("https://"),
     jwksUrl: z.string().url().startsWith("https://"),
+    algorithm: strongAlgorithmSchema,
     resourceUrl: z.string().url().startsWith("https://"),
   })
   .strict()
@@ -30,16 +32,16 @@ export const hostedMcpAuthConfigSchema = z
       if (url.username || url.password || url.hash || url.search) {
         context.addIssue({
           code: "custom",
-          message: `${field} cannot contain credentials, query, or fragment.`,
           path: [field],
+          message: `${field} cannot contain credentials, query, or fragment.`,
         });
       }
     }
     if (config.audience !== config.resourceUrl) {
       context.addIssue({
         code: "custom",
-        message: "audience must equal the protected resource URL.",
         path: ["audience"],
+        message: "audience must equal the protected resource URL.",
       });
     }
     const issuer = new URL(config.issuer);
@@ -48,29 +50,29 @@ export const hostedMcpAuthConfigSchema = z
     if (issuer.pathname !== "/api/auth") {
       context.addIssue({
         code: "custom",
-        message: "issuer must be the exact /api/auth URL.",
         path: ["issuer"],
+        message: "issuer must be the exact /api/auth URL.",
       });
     }
     if (resource.pathname !== "/mcp") {
       context.addIssue({
         code: "custom",
-        message: "resourceUrl must be the exact /mcp URL.",
         path: ["resourceUrl"],
+        message: "resourceUrl must be the exact /mcp URL.",
       });
     }
     if (issuer.origin !== resource.origin) {
       context.addIssue({
         code: "custom",
-        message: "issuer and resourceUrl must share one origin.",
         path: ["resourceUrl"],
+        message: "issuer and resourceUrl must share one origin.",
       });
     }
     if (jwks.origin !== issuer.origin || jwks.pathname !== "/api/auth/jwks") {
       context.addIssue({
         code: "custom",
-        message: "jwksUrl must be the exact issuer /api/auth/jwks URL.",
         path: ["jwksUrl"],
+        message: "jwksUrl must be the exact issuer /api/auth/jwks URL.",
       });
     }
   });
@@ -78,13 +80,13 @@ export const hostedMcpAuthConfigSchema = z
 export type HostedMcpAuthConfig = z.infer<typeof hostedMcpAuthConfigSchema>;
 
 export function readHostedMcpAuthConfig(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): HostedMcpAuthConfig {
   return hostedMcpAuthConfigSchema.parse({
-    algorithm: environment.MCP_OAUTH_ALGORITHM,
-    audience: environment.MCP_OAUTH_AUDIENCE,
     issuer: environment.MCP_OAUTH_ISSUER,
+    audience: environment.MCP_OAUTH_AUDIENCE,
     jwksUrl: environment.MCP_OAUTH_JWKS_URL,
+    algorithm: environment.MCP_OAUTH_ALGORITHM,
     resourceUrl: environment.MCP_RESOURCE_URL,
   });
 }
@@ -101,11 +103,9 @@ export class BearerAuthorizationError extends Error {
 const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/;
 
 export function parseStrictBearerAuthorization(
-  authorization: string | null
+  authorization: string | null,
 ): string {
-  if (authorization === null) {
-    throw new BearerAuthorizationError();
-  }
+  if (authorization === null) throw new BearerAuthorizationError();
   const match = /^Bearer ([^ ]+)$/i.exec(authorization);
   if (
     match === null ||
@@ -125,7 +125,7 @@ export interface HostedAccessTokenVerifier {
 }
 
 const oauthScopeTokenPattern =
-  /^[\u0021\x23-\u005B\x5D-\u007E]+(?: [\u0021\x23-\u005B\x5D-\u007E]+)*$/;
+  /^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$/;
 
 /**
  * Exact remote-JWKS verifier. Redirects are rejected and the configured URL,
@@ -140,7 +140,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
   const configuredJwksUrl = new URL(config.jwksUrl);
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const remoteJwks = createRemoteJWKSet(configuredJwksUrl, {
-    timeoutDuration: 5000,
+    timeoutDuration: 5_000,
     cooldownDuration: 30_000,
     cacheMaxAge: 600_000,
     [customFetch]: async (url, options) => {
@@ -170,12 +170,12 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         throw new Error("Invalid protected token header.");
       }
       const { payload } = await jwtVerify(token, remoteJwks, {
-        algorithms: [config.algorithm],
+        issuer: config.issuer,
         audience: config.audience,
+        algorithms: [config.algorithm],
+        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
         clockTolerance: 0,
         currentDate: new Date(nowEpochSeconds * 1_000),
-        issuer: config.issuer,
-        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
       });
       if (
         payload.iss !== config.issuer ||
@@ -196,11 +196,11 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         throw new Error("Invalid verified token claims.");
       }
       return verifiedHostedClaimsSchema.parse({
-        audience: payload.aud,
         issuer: payload.iss,
-        scopes: payload.scope.split(" "),
+        audience: payload.aud,
         subject: payload.sub,
         workspaceId: payload.workspace_id,
+        scopes: payload.scope.split(" "),
       });
     },
   };
@@ -209,9 +209,9 @@ export function createRemoteJwksAccessTokenVerifier(input: {
 export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
   const config = hostedMcpAuthConfigSchema.parse(configInput);
   return {
+    resource: config.resourceUrl,
     authorization_servers: [config.issuer],
     bearer_methods_supported: ["header"],
-    resource: config.resourceUrl,
     scopes_supported: [
       "autograph:session",
       "autograph:start",
@@ -226,20 +226,21 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   const metadataUrl = new URL(
     "/.well-known/oauth-protected-resource",
-    config.resourceUrl
+    config.resourceUrl,
   ).href;
   return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(
-    ", "
+    ", ",
   )}`;
 }
 
 export function unauthorizedResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"]
+  scopes = ["autograph:session"],
 ): Response {
   return Response.json(
     { error: "unauthorized" },
     {
+      status: 401,
       headers: {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
@@ -248,18 +249,18 @@ export function unauthorizedResponse(
           `scope="${scopes.join(" ")}"`,
         ]),
       },
-      status: 401,
-    }
+    },
   );
 }
 
 export function forbiddenResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"]
+  scopes = ["autograph:session"],
 ): Response {
   return Response.json(
     { error: "forbidden" },
     {
+      status: 403,
       headers: {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
@@ -268,21 +269,20 @@ export function forbiddenResponse(
           `scope="${scopes.join(" ")}"`,
         ]),
       },
-      status: 403,
-    }
+    },
   );
 }
 
 export function notFoundResponse(): Response {
   return Response.json(
     { error: "not_found" },
-    { headers: { "Cache-Control": "no-store" }, status: 404 }
+    { status: 404, headers: { "Cache-Control": "no-store" } },
   );
 }
 
 export function unavailableResponse(): Response {
   return Response.json(
     { error: "service_unavailable" },
-    { headers: { "Cache-Control": "no-store" }, status: 503 }
+    { status: 503, headers: { "Cache-Control": "no-store" } },
   );
 }

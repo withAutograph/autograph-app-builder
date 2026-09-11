@@ -9,17 +9,17 @@ describe("canonical portable-release remotes", () => {
     "accepts the exact HTTPS fetch remote: %s",
     (remote) => {
       expect(
-        hasCanonicalFetchRemote(`origin\t${remote} (fetch)`, repository)
+        hasCanonicalFetchRemote(`origin\t${remote} (fetch)`, repository),
       ).toBe(true);
-    }
+    },
   );
 
   it("accepts the exact canonical fetch remote in a blobless partial clone", () => {
     expect(
       hasCanonicalFetchRemote(
         `origin\t${repository}.git (fetch) [blob:none]`,
-        repository
-      )
+        repository,
+      ),
     ).toBe(true);
   });
 
@@ -41,14 +41,14 @@ describe("canonical portable-release remotes", () => {
     expect(
       hasCanonicalFetchRemote(
         "origin https://github.com/withAutograph/autograph-app-builder",
-        repository
-      )
+        repository,
+      ),
     ).toBe(false);
     expect(
       hasCanonicalFetchRemote(
         "origin\thttps://github.com/withAutograph/autograph-app-builder/ (fetch)",
-        repository
-      )
+        repository,
+      ),
     ).toBe(false);
   });
 });
@@ -61,7 +61,7 @@ describe("portable release endpoint", () => {
     "https://agent.localhost.",
   ])("rejects a terminal DNS root dot: %s", (endpoint) => {
     expect(() => releaseEndpoint(endpoint)).toThrow(
-      "credential-free, deployed, literal HTTPS origin"
+      "credential-free, deployed, literal HTTPS origin",
     );
   });
 
@@ -74,7 +74,7 @@ describe("portable release endpoint", () => {
     "https://[::ffff:127.0.0.1]",
   ])("rejects a loopback or unspecified canonical address: %s", (endpoint) => {
     expect(() => releaseEndpoint(endpoint)).toThrow(
-      "credential-free, deployed, literal HTTPS origin"
+      "credential-free, deployed, literal HTTPS origin",
     );
   });
 
@@ -84,7 +84,7 @@ describe("portable release endpoint", () => {
     "https://mcp.autograph.dev:443",
   ])("rejects a noncanonical origin spelling: %s", (endpoint) => {
     expect(() => releaseEndpoint(endpoint)).toThrow(
-      "credential-free, deployed, literal HTTPS origin"
+      "credential-free, deployed, literal HTTPS origin",
     );
   });
 });

@@ -20,9 +20,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 import { cn } from "@/lib/utils";
 
-export interface AppearanceProps {
+export type AppearanceProps = {
   className?: string;
-}
+};
 
 /**
  * Renders a theme selector card with visual theme previews.
@@ -38,14 +38,14 @@ export function Appearance({ className }: AppearanceProps) {
   const { theme, setTheme, themes = [] } = useTheme();
 
   const isMounted = useSyncExternalStore(
-    () => () => {},
+    () => () => undefined,
     () => true,
-    () => false
+    () => false,
   );
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold">{localization.appearance}</h2>
+      <h2 className="text-sm font-semibold mb-3">{localization.appearance}</h2>
 
       <Card className={cn(className)}>
         <CardContent>
@@ -55,16 +55,16 @@ export function Appearance({ className }: AppearanceProps) {
             <RadioGroup
               value={isMounted ? theme : ""}
               onValueChange={setTheme}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+              className="grid gap-3 grid-cols-2 sm:grid-cols-3"
               disabled={!isMounted || !theme}
             >
               {themes.includes("system") && (
                 <FieldLabel htmlFor="system">
                   <Field orientation="horizontal">
                     <FieldContent className="gap-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 justify-between">
                         <FieldTitle>
-                          <Monitor className="text-muted-foreground size-4" />
+                          <Monitor className="size-4 text-muted-foreground" />
 
                           {localization.system}
                         </FieldTitle>
@@ -82,9 +82,9 @@ export function Appearance({ className }: AppearanceProps) {
                 <FieldLabel htmlFor="light">
                   <Field orientation="horizontal">
                     <FieldContent className="gap-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 justify-between">
                         <FieldTitle>
-                          <Sun className="text-muted-foreground size-4" />
+                          <Sun className="size-4 text-muted-foreground" />
 
                           {localization.light}
                         </FieldTitle>
@@ -102,9 +102,9 @@ export function Appearance({ className }: AppearanceProps) {
                 <FieldLabel htmlFor="dark">
                   <Field orientation="horizontal">
                     <FieldContent className="gap-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 justify-between">
                         <FieldTitle>
-                          <Moon className="text-muted-foreground size-4" />
+                          <Moon className="size-4 text-muted-foreground" />
 
                           {localization.dark}
                         </FieldTitle>

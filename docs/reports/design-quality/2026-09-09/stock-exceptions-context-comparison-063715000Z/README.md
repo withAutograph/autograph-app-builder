@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page title and purpose lead cleanly into filters, an exception list, and the selected record. Selected-row treatment, severity pills, days-of-cover values, detail headings, and the replenishment result headline establish excellent scan priorities. |
-| layout | 3/4 | The two-column composition is consistently aligned, with compact list rows and well-spaced label/value groups. The centered maximum-width layout remains coherent at 1920px, though expanded or result content becomes cramped against the fixed action footer at 1024×768. |
-| typography | 4/4 | Heading levels, field labels, values, metadata, and status text are readable and visually consistent across all supplied sizes. Wrapping in the narrower result view remains understandable and does not create ambiguous associations. |
-| responsive | 3/4 | The interface transitions effectively from a wide list-detail view to a constrained detail view with an explicit Back control at 700px. Controls remain usable without horizontal overflow, but the 1024px expanded and result states depend on a subtly indicated internal scroll area, with lower content close to the footer. |
-| productClarity | 4/4 | Location and severity filters are explicit, exception rows expose product, location, severity, and urgency, and selection clearly updates the detail panel. The mock result prominently states that no order was placed and provides a clear Reset mock affordance. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page title and purpose lead cleanly into filters, an exception list, and the selected record. Selected-row treatment, severity pills, days-of-cover values, detail headings, and the replenishment result headline establish excellent scan priorities.                                                                      |
+| layout         | 3/4   | The two-column composition is consistently aligned, with compact list rows and well-spaced label/value groups. The centered maximum-width layout remains coherent at 1920px, though expanded or result content becomes cramped against the fixed action footer at 1024×768.                                                      |
+| typography     | 4/4   | Heading levels, field labels, values, metadata, and status text are readable and visually consistent across all supplied sizes. Wrapping in the narrower result view remains understandable and does not create ambiguous associations.                                                                                          |
+| responsive     | 3/4   | The interface transitions effectively from a wide list-detail view to a constrained detail view with an explicit Back control at 700px. Controls remain usable without horizontal overflow, but the 1024px expanded and result states depend on a subtly indicated internal scroll area, with lower content close to the footer. |
+| productClarity | 4/4   | Location and severity filters are explicit, exception rows expose product, location, severity, and urgency, and selection clearly updates the detail panel. The mock result prominently states that no order was placed and provides a clear Reset mock affordance.                                                              |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/526) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/526) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/526) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

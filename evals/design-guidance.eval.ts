@@ -17,9 +17,8 @@ ${renewalReviewDesignPrompt}`);
     t.succeeded();
     t.toolOrder(["inspect_source", "prepare_workspace", "record_ui_preview"]);
     t.calledTool("record_ui_preview", {
-      count: 1,
       input: {
-        catalogGaps: [],
+        routes: ["/"],
         files: (value) =>
           Array.isArray(value) &&
           value.some(
@@ -29,7 +28,7 @@ ${renewalReviewDesignPrompt}`);
               "content" in file &&
               typeof file.content === "string" &&
               file.content.includes("DataTableComposition") &&
-              !file.content.includes("fetch(")
+              !file.content.includes("fetch("),
           ),
         manifest: (value) => {
           if (typeof value !== "object" || value === null) return false;
@@ -43,15 +42,16 @@ ${renewalReviewDesignPrompt}`);
           return (
             (manifest.productionComponents?.length ?? 0) >= 4 &&
             manifest.productionCompositions?.some(
-              ({ name }) => name === "DataTableComposition"
+              ({ name }) => name === "DataTableComposition",
             ) === true &&
             (manifest.assumptions?.length ?? 0) === 1 &&
             (manifest.decisions?.length ?? 0) === 0 &&
             (manifest.openQuestions?.length ?? 0) === 1
           );
         },
-        routes: ["/"],
+        catalogGaps: [],
       },
+      count: 1,
     });
     t.notCalledTool("record_prototype_artifact");
     t.notCalledTool("record_prototype_bundle");
@@ -69,10 +69,10 @@ ${renewalReviewDesignPrompt}`);
         (reply) =>
           isProductFacing(reply) &&
           !/implementation plan|Context|Draft spec|manifest|receipt/iu.test(
-            String(reply)
+            String(reply),
           ),
-        "the review remains product-facing and exposes no internal workbench material"
-      )
+        "the review remains product-facing and exposes no internal workbench material",
+      ),
     );
   },
 });

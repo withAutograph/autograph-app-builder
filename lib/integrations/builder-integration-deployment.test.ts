@@ -6,7 +6,7 @@ describe("builder integration deployment", () => {
   it("requires complete authenticated identity and workspace input", async () => {
     const source = await readFile(
       "lib/integrations/builder-integration-deployment.ts",
-      "utf-8"
+      "utf8",
     );
     expect(source).toContain("authenticated: true");
     expect(source).toContain("organizationId: string");

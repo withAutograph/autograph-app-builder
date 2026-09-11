@@ -28,7 +28,7 @@ describe("Vercel Flags discovery route", () => {
 
   it("rejects unauthenticated discovery requests", async () => {
     const response = await GET(
-      new Request("https://agent.example.com/.well-known/vercel/flags")
+      new Request("https://agent.example.com/.well-known/vercel/flags"),
     );
 
     expect(response.status).toBe(401);
@@ -43,7 +43,7 @@ describe("Vercel Flags discovery route", () => {
     const response = await GET(
       new Request("https://agent.example.com/.well-known/vercel/flags", {
         headers: { Authorization: `Bearer ${proof}` },
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -58,7 +58,7 @@ describe("Vercel Flags discovery route", () => {
       expect.objectContaining({
         builderConnectionsFlag,
         selfServiceSignupFlag,
-      })
+      }),
     );
   });
 });

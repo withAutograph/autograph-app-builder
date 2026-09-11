@@ -3,11 +3,11 @@ import postgres from "postgres";
 
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
 
-export interface PreviewEmulateStateStore {
+export type PreviewEmulateStateStore = {
   read(namespace: string): Promise<string | undefined>;
   write(namespace: string, state: string, now: Date): Promise<void>;
   reset(namespace: string): Promise<number>;
-}
+};
 
 function validateState(state: string) {
   let parsed: unknown;
@@ -17,20 +17,17 @@ function validateState(state: string) {
     throw new Error("Preview emulator state is invalid.");
   }
   if (
-    Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES ||
+    Buffer.byteLength(state, "utf8") > MAX_STATE_BYTES ||
     typeof parsed !== "object" ||
     parsed === null ||
     Array.isArray(parsed)
-  ) {
+  )
     throw new Error("Preview emulator state is invalid.");
-  }
   return state;
 }
 
 function pendingVercelCodeCount(state: string | undefined) {
-  if (!state) {
-    return 0;
-  }
+  if (!state) return 0;
   try {
     const snapshot = JSON.parse(state) as {
       store?: { data?: Record<string, { entries?: unknown[] }> };
@@ -57,7 +54,7 @@ export function createPreviewEmulatePersistence(input: {
           level: "info",
           message: "preview_emulator_state_loaded",
           pendingVercelCodes: pendingVercelCodeCount(state),
-        })
+        }),
       );
       return state === undefined ? null : validateState(state);
     },
@@ -65,21 +62,21 @@ export function createPreviewEmulatePersistence(input: {
       await input.store.write(
         input.namespace,
         validateState(state),
-        input.now?.() ?? new Date()
+        input.now?.() ?? new Date(),
       );
       console.info(
         JSON.stringify({
           level: "info",
           message: "preview_emulator_state_saved",
           pendingVercelCodes: pendingVercelCodeCount(state),
-        })
+        }),
       );
     },
   };
 }
 
 export function createPostgresPreviewEmulateStateStore(
-  databaseUrl: string
+  databaseUrl: string,
 ): PreviewEmulateStateStore {
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   return {
@@ -92,14 +89,6 @@ export function createPostgresPreviewEmulateStateStore(
       `;
       return rows[0]?.state;
     },
-    async reset(namespace) {
-      const rows = await sql<Array<{ namespace: string }>>`
-        DELETE FROM "emulate_preview_state"
-        WHERE "namespace" = ${namespace}
-        RETURNING "namespace"
-      `;
-      return rows.length;
-    },
     async write(namespace, state, now) {
       await sql`
         INSERT INTO "emulate_preview_state" (
@@ -110,16 +99,24 @@ export function createPostgresPreviewEmulateStateStore(
           "updated_at" = EXCLUDED."updated_at"
       `;
     },
+    async reset(namespace) {
+      const rows = await sql<Array<{ namespace: string }>>`
+        DELETE FROM "emulate_preview_state"
+        WHERE "namespace" = ${namespace}
+        RETURNING "namespace"
+      `;
+      return rows.length;
+    },
   };
 }
 
 export async function resetPostgresPreviewEmulateState(
   databaseUrl: string,
-  namespace: string
+  namespace: string,
 ) {
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   try {
-    const rows = await sql<{ namespace: string }[]>`
+    const rows = await sql<Array<{ namespace: string }>>`
       DELETE FROM "emulate_preview_state"
       WHERE "namespace" = ${namespace}
       RETURNING "namespace"

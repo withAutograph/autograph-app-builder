@@ -9,7 +9,7 @@ export const builderAppIdSchema = z
 export function deriveBuilderAppId(appName: string): string {
   const value = appName
     .normalize("NFKD")
-    .replaceAll(/[\u0300-\u036F]/gu, "")
+    .replaceAll(/[\u0300-\u036f]/gu, "")
     .toLowerCase()
     .replaceAll("&", " and ")
     .replaceAll(/[^a-z0-9]+/gu, "-")

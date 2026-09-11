@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import {
   collectIntrinsicClassSignatures,
   classTokenAttribution,
@@ -13,9 +12,9 @@ import {
 describe("intrinsic class evidence", () => {
   const generated = collectIntrinsicClassSignatures([
     {
+      path: "src/Screen.tsx",
       content:
         'export function Screen(){ return <section className="generated-card tokenized">ok</section> }',
-      path: "src/Screen.tsx",
     },
   ]);
 
@@ -26,13 +25,13 @@ describe("intrinsic class evidence", () => {
     ]);
     expect(generatedSignatureSelector(candidate, ".generated-card")).toBe(true);
     expect(generatedSignatureSelector(candidate, ".generated-card:hover")).toBe(
-      false
+      false,
     );
     expect(
       uniqueIntrinsicSignature(generated, "div", [
         "generated-card",
         "tokenized",
-      ])
+      ]),
     ).toBeUndefined();
   });
 
@@ -40,11 +39,11 @@ describe("intrinsic class evidence", () => {
     expect(
       collectIntrinsicClassSignatures([
         {
+          path: "src/InvalidCandidates.tsx",
           content:
             'export function Invalid(){ return <><div className /><div svg:className="not-a-class" /></> }',
-          path: "src/InvalidCandidates.tsx",
         },
-      ])
+      ]),
     ).toEqual([]);
   });
 
@@ -53,13 +52,13 @@ describe("intrinsic class evidence", () => {
       signatureAttribution(generated, undefined, "section", [
         "generated-card",
         "tokenized",
-      ]).provenance
+      ]).provenance,
     ).toBe("unknown");
     const shared = collectIntrinsicClassSignatures([
       {
+        path: "packages/design-systems/Card.tsx",
         content:
           'export function Card(){ return <section className="generated-card tokenized">shared</section> }',
-        path: "packages/design-systems/Card.tsx",
       },
     ]);
     // The generated candidate is deliberately unrendered in this adversarial
@@ -68,44 +67,43 @@ describe("intrinsic class evidence", () => {
       signatureAttribution(generated, shared, "section", [
         "generated-card",
         "tokenized",
-      ]).provenance
+      ]).provenance,
     ).toBe("unknown");
   });
 
   it("offers a uniquely escaped utility token only as an origin candidate", () => {
     const shared = collectClassTokenEvidence([
       {
+        path: "packages/design-systems/RecordList.tsx",
         content:
           'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
-        path: "packages/design-systems/RecordList.tsx",
       },
     ]);
     const selector =
       '.data-\\[selected\\=true\\]\\:shadow-\\[inset_3px_0_0_var\\(--color-action-primary\\)\\][data-selected="true"]';
     expect(escapedTailwindClassToken(selector)).toBe(
-      "data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]"
+      "data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]",
     );
     expect(escapedTailwindClassToken('.token[data-label="a]b"][data-x]')).toBe(
-      "token"
+      "token",
     );
     for (const invalid of [
       ".token[data-x] .other",
       ".token[data-x]:hover",
       ".token[data-x],.other",
       ".token[data-x",
-    ]) {
+    ])
       expect(escapedTailwindClassToken(invalid)).toBeUndefined();
-    }
     expect(classTokenAttribution([], shared, selector)).toMatchObject({
       provenance: "shared",
       source: { path: "packages/design-systems/RecordList.tsx" },
     });
     expect(
       classTokenAttribution([], [...shared, { ...shared[0]! }], selector)
-        .provenance
+        .provenance,
     ).toBe("unknown");
     expect(classTokenAttribution([], shared, ".item:hover").provenance).toBe(
-      "unknown"
+      "unknown",
     );
   });
 });

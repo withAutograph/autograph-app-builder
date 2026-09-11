@@ -8,21 +8,21 @@ import {
 } from "./hosted-github-installation";
 
 const request = {
+  version: 1 as const,
   action: "github-installation.bind" as const,
   authority: {
-    audience: "https://builder.example.test/mcp",
     issuer: "https://builder.example.test/api/auth",
-    ownerUserId: "user_one",
+    audience: "https://builder.example.test/mcp",
     workspaceId: "workspace_one",
+    ownerUserId: "user_one",
   },
   installation: {
+    installationId: "123",
     accountId: "456",
     accountLogin: "withAutograph",
     accountType: "Organization" as const,
-    installationId: "123",
   },
   requestedAt: "2026-08-28T00:00:00.000Z",
-  version: 1 as const,
 };
 
 describe("hosted GitHub installation binding", () => {
@@ -34,12 +34,12 @@ describe("hosted GitHub installation binding", () => {
       updatedAt: now,
     }));
     const receipt = await bindHostedGitHubInstallation({
-      now: () => new Date("2026-08-28T00:01:00.000Z"),
       request: {
         ...request,
         confirmationDigest: plan.requiredConfirmationDigest,
       },
-      store: { bind, read: vi.fn() },
+      store: { read: vi.fn(), bind },
+      now: () => new Date("2026-08-28T00:01:00.000Z"),
     });
     expect(bind).toHaveBeenCalledWith({
       authority: request.authority,
@@ -47,23 +47,23 @@ describe("hosted GitHub installation binding", () => {
       now: new Date("2026-08-28T00:01:00.000Z"),
     });
     expect(receipt).toMatchObject({
-      authorityDigest: plan.authorityDigest,
-      effects: { bindingActive: true, installationId: "123" },
-      installationDigest: plan.installationDigest,
       status: "applied",
+      authorityDigest: plan.authorityDigest,
+      installationDigest: plan.installationDigest,
+      effects: { bindingActive: true, installationId: "123" },
     });
     await expect(
       bindHostedGitHubInstallation({
         request: { ...request, confirmationDigest: `sha256:${"0".repeat(64)}` },
-        store: { bind, read: vi.fn() },
-      })
+        store: { read: vi.fn(), bind },
+      }),
     ).rejects.toThrow(/confirmation/u);
   });
 
   it("keeps the mise apply path owner-only and task-scoped", async () => {
     const [task, cli] = await Promise.all([
-      readFile(".config/mise/tasks/hosted/github-installation-bind", "utf-8"),
-      readFile("lib/db/hosted-github-installation-cli.mts", "utf-8"),
+      readFile(".config/mise/tasks/hosted/github-installation-bind", "utf8"),
+      readFile("lib/db/hosted-github-installation-cli.mts", "utf8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");

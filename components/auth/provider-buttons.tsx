@@ -1,18 +1,16 @@
 "use client";
 
-import { getProviderId } from "@better-auth-ui/core";
-import type { AuthView } from "@better-auth-ui/core";
+import { type AuthView, getProviderId } from "@better-auth-ui/core";
 import { useAuth } from "@better-auth-ui/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/utils";
-
 import { ProviderButton } from "./provider-button";
 
-export interface ProviderButtonsProps {
+export type ProviderButtonsProps = {
   socialLayout?: SocialLayout;
   view?: AuthView;
-}
+};
 
 export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
 
@@ -27,13 +25,15 @@ export function ProviderButtons({
   view = "signIn",
 }: ProviderButtonsProps) {
   const { socialProviders } = useAuth();
-  const [isClientReady, setIsClientReady] = useState(false);
-
   // Better Auth starts social sign-in through a client mutation. Keep its
-  // controls disabled until React has attached those event handlers.
-  useEffect(() => {
-    setIsClientReady(true);
-  }, []);
+  // controls disabled until React has attached those event handlers. The
+  // server snapshot deliberately stays false, while the browser snapshot
+  // becomes true during hydration without an effect-driven render cascade.
+  const isClientReady = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const resolvedSocialLayout = useMemo(() => {
     if (socialLayout === "auto") {
@@ -54,7 +54,7 @@ export function ProviderButtons({
         "gap-3",
         resolvedSocialLayout === "grid" && "grid grid-cols-2",
         resolvedSocialLayout === "vertical" && "flex flex-col",
-        resolvedSocialLayout === "horizontal" && "flex flex-row flex-wrap"
+        resolvedSocialLayout === "horizontal" && "flex flex-row flex-wrap",
       )}
     >
       {socialProviders?.map((provider) => (

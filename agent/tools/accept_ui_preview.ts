@@ -10,6 +10,9 @@ import {
 export default defineTool({
   description:
     "Silently carry the current component-backed UI direction into implementation planning. This internal step requires no user prompt and does not authorize building or publication. Ask Build this app only after the Browser preview and implementation plan are ready.",
+  inputSchema: z.strictObject({
+    expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+  }),
   async execute({ expectedRevision }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase !== "ui_previewed")
@@ -32,7 +35,4 @@ export default defineTool({
       accepted: true,
     };
   },
-  inputSchema: z.strictObject({
-    expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-  }),
 });

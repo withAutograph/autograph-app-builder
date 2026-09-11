@@ -12,13 +12,13 @@ const appRoot = "/owned/app";
 function trustedSource(overrides: Record<string, string | undefined> = {}) {
   return {
     EVE_DEV: "1",
-    EVE_DEVELOPMENT_SANDBOX_RUN_ID: randomUUID(),
     EVE_DEV_WORKER_APP_ROOT: appRoot,
+    WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
+    PORT: "43123",
     EVE_DEV_WORKFLOW_TRANSPORT_SECRET: randomBytes(32).toString("base64url"),
+    EVE_DEVELOPMENT_SANDBOX_RUN_ID: randomUUID(),
     EVE_EVALUATION: "1",
     EVE_EVALUATION_RUN_ID: randomUUID(),
-    PORT: "43123",
-    WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
     WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
     WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     ...overrides,
@@ -35,9 +35,9 @@ describe("closed Eve worker environment", () => {
     expect(environment).toMatchObject({
       EVE_DEV: "1",
       EVE_DEV_WORKER_APP_ROOT: appRoot,
-      EVE_EVALUATION: "1",
-      PORT: "43123",
       WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
+      PORT: "43123",
+      EVE_EVALUATION: "1",
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
@@ -65,7 +65,7 @@ describe("closed Eve worker environment", () => {
     ["headers timeout", { WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "30000" }],
   ])("rejects %s drift", (_name, overrides) => {
     expect(() =>
-      captureEveWorkerEnvelope(trustedSource(overrides), appRoot)
+      captureEveWorkerEnvelope(trustedSource(overrides), appRoot),
     ).toThrow(/trusted Eve worker/u);
   });
 
@@ -75,13 +75,13 @@ describe("closed Eve worker environment", () => {
     try {
       captureEveWorkerEnvelope(
         trustedSource({ EVE_DEV_WORKFLOW_TRANSPORT_SECRET: hostileSecret }),
-        appRoot
+        appRoot,
       );
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
     expect(message).toBe(
-      "The trusted Eve worker transport secret was invalid."
+      "The trusted Eve worker transport secret was invalid.",
     );
     expect(message).not.toContain(hostileSecret);
   });
@@ -89,7 +89,7 @@ describe("closed Eve worker environment", () => {
   it("accepts an absent optional sandbox run id", () => {
     const envelope = captureEveWorkerEnvelope(
       trustedSource({ EVE_DEVELOPMENT_SANDBOX_RUN_ID: undefined }),
-      appRoot
+      appRoot,
     );
     const environment: Record<string, string | undefined> = {
       EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile",
@@ -104,7 +104,7 @@ describe("closed Eve worker environment", () => {
         WORKFLOW_LOCAL_BODY_TIMEOUT_MS: undefined,
         WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: undefined,
       }),
-      appRoot
+      appRoot,
     );
     const environment: Record<string, string | undefined> = {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile",

@@ -1,6 +1,5 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-
 import {
   exactPrototypeArtifact,
   prototypeArtifactPathPattern,
@@ -10,6 +9,10 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 export default defineTool({
   description:
     "Read one exact session-scoped prototype artifact by its content digest.",
+  inputSchema: z.object({
+    path: z.string().regex(prototypeArtifactPathPattern),
+    digest: z.string().regex(/^[0-9a-f]{64}$/u),
+  }),
   async execute({ path, digest }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty")
@@ -27,8 +30,4 @@ export default defineTool({
       content: artifact.content,
     };
   },
-  inputSchema: z.object({
-    path: z.string().regex(prototypeArtifactPathPattern),
-    digest: z.string().regex(/^[0-9a-f]{64}$/u),
-  }),
 });

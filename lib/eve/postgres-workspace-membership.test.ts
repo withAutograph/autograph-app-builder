@@ -1,7 +1,7 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
+import * as databaseSchema from "../db/schema";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   createPostgresOAuthMembershipAuthority,
@@ -11,11 +11,11 @@ import {
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const principal: HostedPrincipal = {
-  audience: "https://builder.example.test/mcp",
   issuer: "https://identity.example.test",
+  audience: "https://builder.example.test/mcp",
+  workspaceId: "workspace_1",
   ownerUserId: "user_1",
   scopes: ["autograph:session"],
-  workspaceId: "workspace_1",
 };
 
 function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
@@ -28,26 +28,26 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const select = vi.fn(() => ({ from }));
   return {
     database: { select } as unknown as Database,
+    select,
     from,
     innerJoin,
-    limit,
-    select,
     where,
+    limit,
   };
 }
 
 describe("PostgreSQL workspace membership", () => {
   it.each([
     [[], false],
-    [[{ banned: false, role: "revoked" }], false],
-    [[{ banned: true, role: "member" }], false],
-    [[{ banned: false, role: "member" }], true],
-    [[{ banned: false, role: "admin" }], true],
-    [[{ banned: false, role: "owner" }], true],
+    [[{ role: "revoked", banned: false }], false],
+    [[{ role: "member", banned: true }], false],
+    [[{ role: "member", banned: false }], true],
+    [[{ role: "admin", banned: false }], true],
+    [[{ role: "owner", banned: false }], true],
     [
       [
-        { banned: false, role: "member" },
-        { banned: false, role: "member" },
+        { role: "member", banned: false },
+        { role: "member", banned: false },
       ],
       false,
     ],
@@ -59,10 +59,10 @@ describe("PostgreSQL workspace membership", () => {
         createPostgresWorkspaceMembership(fixture.database).isMember({
           principal,
           workspaceId: principal.workspaceId,
-        })
+        }),
       ).resolves.toBe(expected);
       expect(fixture.limit).toHaveBeenCalledWith(2);
-    }
+    },
   );
 
   it("rejects a non-claim workspace before querying storage", async () => {
@@ -71,7 +71,7 @@ describe("PostgreSQL workspace membership", () => {
       createPostgresWorkspaceMembership(fixture.database).isMember({
         principal,
         workspaceId: "workspace_other",
-      })
+      }),
     ).resolves.toBe(false);
     expect(fixture.select).not.toHaveBeenCalled();
   });
@@ -79,18 +79,18 @@ describe("PostgreSQL workspace membership", () => {
   it.each([
     [[], undefined],
     [
-      [{ banned: false, role: "owner", workspaceId: "workspace_1" }],
+      [{ workspaceId: "workspace_1", role: "owner", banned: false }],
       "workspace_1",
     ],
-    [[{ banned: true, role: "member", workspaceId: "workspace_1" }], undefined],
+    [[{ workspaceId: "workspace_1", role: "member", banned: true }], undefined],
     [
-      [{ banned: false, role: "revoked", workspaceId: "workspace_1" }],
+      [{ workspaceId: "workspace_1", role: "revoked", banned: false }],
       undefined,
     ],
     [
       [
-        { banned: false, role: "member", workspaceId: "workspace_1" },
-        { banned: false, role: "member", workspaceId: "workspace_2" },
+        { workspaceId: "workspace_1", role: "member", banned: false },
+        { workspaceId: "workspace_2", role: "member", banned: false },
       ],
       undefined,
     ],
@@ -100,15 +100,15 @@ describe("PostgreSQL workspace membership", () => {
       const fixture = databaseReturning([...rows]);
       await expect(
         createPostgresOAuthMembershipAuthority(
-          fixture.database
+          fixture.database,
         ).activeWorkspaceForUser({
-          audience: principal.audience,
           issuer: principal.issuer,
+          audience: principal.audience,
           ownerUserId: principal.ownerUserId,
-        })
+        }),
       ).resolves.toBe(expected);
       expect(fixture.limit).toHaveBeenCalledWith(2);
-    }
+    },
   );
 
   it("propagates database failures for the request boundary to fail closed", async () => {
@@ -121,7 +121,7 @@ describe("PostgreSQL workspace membership", () => {
       createPostgresWorkspaceMembership(database).isMember({
         principal,
         workspaceId: principal.workspaceId,
-      })
+      }),
     ).rejects.toThrow("database unavailable");
   });
 });

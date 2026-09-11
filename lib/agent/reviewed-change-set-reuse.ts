@@ -15,9 +15,8 @@ export function assertAtomicReviewedChangeSetReuse(input: {
     input.latest.validationDigest !== input.expectedValidationDigest ||
     JSON.stringify(input.latest.reviewReceipt) !==
       JSON.stringify(input.expectedReviewReceipt)
-  ) {
+  )
     throw new Error(
-      "The workflow changed concurrently before reviewed change-set reuse."
+      "The workflow changed concurrently before reviewed change-set reuse.",
     );
-  }
 }

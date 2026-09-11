@@ -20,7 +20,6 @@ import {
   receiveMessageOnPort,
   workerData,
 } from "node:worker_threads";
-
 import {
   captureEveWorkerEnvelope,
   eveWorkerEnvelopeKey,
@@ -39,20 +38,19 @@ const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
-const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
   !isAbsolute(repositoryRoot) ||
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & 0o022n) !== 0n
-) {
+  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+)
   throw new Error("Structural test package root was not owner-bound.");
-}
 const require = createRequire(import.meta.url);
 const registry = require(
-  resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs")
+  resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"),
 );
 const workerThreads = require("node:worker_threads");
 const allowedWorkerEnvironment = new Set([
@@ -72,10 +70,9 @@ delete process.env.NODE_OPTIONS;
 
 function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
-  for (const name of allowedWorkerEnvironment) {
+  for (const name of allowedWorkerEnvironment)
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
       environment[name] = source[name];
-  }
   const hasEveEnvelope = eveEnvelope !== undefined;
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope
     ? undefined
@@ -85,25 +82,23 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
     : eveProfile
       ? "1"
       : undefined;
-  if (eveEnvelope?.bodyTimeout === "360000") {
+  if (eveEnvelope?.bodyTimeout === "360000")
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
-  }
-  if (eveEnvelope?.headersTimeout === "360000") {
+  if (eveEnvelope?.headersTimeout === "360000")
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = eveEnvelope.headersTimeout;
-  }
   return environment;
 }
 
 function canonical(proof) {
   return JSON.stringify({
-    authorization: proof.authorization,
-    capabilities: proof.capabilities,
-    context: proof.context,
-    expiresAt: proof.expiresAt,
-    gateAEvalProfile: proof.gateAEvalProfile,
-    nonce: proof.nonce,
-    publicKey: proof.publicKey,
     version: proof.version,
+    nonce: proof.nonce,
+    context: proof.context,
+    authorization: proof.authorization,
+    expiresAt: proof.expiresAt,
+    capabilities: proof.capabilities,
+    publicKey: proof.publicKey,
+    gateAEvalProfile: proof.gateAEvalProfile,
   });
 }
 function exactKeys(value, keys) {
@@ -118,37 +113,32 @@ function readFdFrame() {
   while (!source.includes("\n")) {
     const buffer = Buffer.alloc(512);
     const count = readSync(authorizationFd, buffer, 0, buffer.length, null);
-    if (count <= 0) {
+    if (count <= 0)
       throw new Error("Structural test authorization was absent.");
-    }
-    source += buffer.subarray(0, count).toString("utf-8");
+    source += buffer.subarray(0, count).toString("utf8");
     const newline = source.indexOf("\n");
     if (
-      (newline === -1 && Buffer.byteLength(source) > maxBytes) ||
-      (newline !== -1 &&
+      (newline < 0 && Buffer.byteLength(source) > maxBytes) ||
+      (newline >= 0 &&
         Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
-    ) {
+    )
       throw new Error("Structural test authorization was oversized.");
-    }
   }
-  if (source.indexOf("\n") !== source.length - 1) {
+  if (source.indexOf("\n") !== source.length - 1)
     throw new Error("Structural test authorization was not one frame.");
-  }
   return JSON.parse(source);
 }
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const value = receiveMessageOnPort(port)?.message;
-    if (value !== undefined) {
-      return value;
-    }
+    if (value !== undefined) return value;
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
   }
   throw new Error("Structural test authorization timed out.");
 }
 function contextForProcess() {
-  return isMainThread ? "main" : `worker:${import.meta.filename}`;
+  return isMainThread ? "main" : `worker:${fileURLToPath(import.meta.url)}`;
 }
 function requestAuthorization() {
   const context = contextForProcess();
@@ -156,28 +146,27 @@ function requestAuthorization() {
     !isMainThread && workerData && typeof workerData === "object"
       ? workerData[workerPortKey]
       : undefined;
-  if (!isMainThread && port === undefined) {
+  if (!isMainThread && port === undefined)
     throw new Error("Structural test Worker authorization was absent.");
-  }
   const delegatedPublicKey =
     !isMainThread && workerData && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
       : undefined;
   const request = registry.begin(process, context, delegatedPublicKey);
   let response;
-  if (port === undefined) {
-    if (!fstatSync(authorizationFd).isSocket())
-      throw new Error("Structural test authorization was not private IPC.");
-    writeSync(
-      authorizationFd,
-      `${JSON.stringify({ version: 2, ...request })}\n`
-    );
-    response = readFdFrame();
-  } else {
+  if (port !== undefined) {
     port.postMessage({ version: 2, ...request });
     response = readPortFrame(port);
     port.close();
     delete workerData[workerPortKey];
+  } else {
+    if (!fstatSync(authorizationFd).isSocket())
+      throw new Error("Structural test authorization was not private IPC.");
+    writeSync(
+      authorizationFd,
+      `${JSON.stringify({ version: 2, ...request })}\n`,
+    );
+    response = readFdFrame();
   }
   if (
     Buffer.byteLength(JSON.stringify(response)) > maxBytes ||
@@ -193,38 +182,36 @@ function requestAuthorization() {
       "signature",
       "delegationPrivateKey",
     ])
-  ) {
+  )
     throw new Error("Structural test authorization response was malformed.");
-  }
   const privateKey = createPrivateKey({
-    format: "der",
     key: Buffer.from(response.delegationPrivateKey, "base64"),
+    format: "der",
     type: "pkcs8",
   });
   const derivedPublic = createPublicKey(privateKey)
     .export({ format: "der", type: "spki" })
     .toString("base64");
-  if (derivedPublic !== response.publicKey) {
+  if (derivedPublic !== response.publicKey)
     throw new Error("Structural test delegation key did not match.");
-  }
   const proof = { ...response };
   delete proof.delegationPrivateKey;
   const capability = registry.complete(process, proof);
   return {
     capability,
-    gateAEvalProfile: response.gateAEvalProfile,
     privateKey,
     publicKey: response.publicKey,
+    gateAEvalProfile: response.gateAEvalProfile,
   };
 }
 
 function workerFilename(value) {
   try {
     return realpathSync(
-      value instanceof URL ? fileURLToPath(value) : String(value)
+      value instanceof URL ? fileURLToPath(value) : String(value),
     );
   } catch {
-    return;
+    return undefined;
   }
 }
 function allowedWorkerPaths() {
@@ -232,7 +219,7 @@ function allowedWorkerPaths() {
     resolve(repositoryRoot, "scripts/test-capability-worker-fixture.mjs"),
     resolve(
       repositoryRoot,
-      "scripts/test-capability-worker-timeout-fixture.mjs"
+      "scripts/test-capability-worker-timeout-fixture.mjs",
     ),
   ];
   for (const [pkg, relative] of [
@@ -241,7 +228,7 @@ function allowedWorkerPaths() {
   ]) {
     try {
       paths.push(
-        resolve(dirname(require.resolve(`${pkg}/package.json`)), relative)
+        resolve(dirname(require.resolve(`${pkg}/package.json`)), relative),
       );
     } catch {
       /* optional owner */
@@ -254,15 +241,15 @@ function allowedWorkerPaths() {
       } catch {
         return path;
       }
-    })
+    }),
   );
 }
 function eveRuntimeWorkerPath() {
   return realpathSync(
     resolve(
       dirname(require.resolve("eve/package.json")),
-      "dist/src/compiled/env-runner/node-worker.js"
-    )
+      "dist/src/compiled/env-runner/node-worker.js",
+    ),
   );
 }
 function installWorkerBroker(
@@ -270,7 +257,7 @@ function installWorkerBroker(
   privateKey,
   publicKey,
   eveProfile,
-  gateAEvalProfile
+  gateAEvalProfile,
 ) {
   const allowed = allowedWorkerPaths();
   const eveWorker = eveRuntimeWorkerPath();
@@ -296,22 +283,10 @@ function installWorkerBroker(
           ? validateGateAEvalProfile(gateAEvalProfile, repositoryRoot)
           : null;
       const isTimeoutFixture = exactFilename?.endsWith(
-        "/scripts/test-capability-worker-timeout-fixture.mjs"
+        "/scripts/test-capability-worker-timeout-fixture.mjs",
       );
       super(filename, {
         ...options,
-        env: {
-          ...workerEnvironment(
-            options.env ?? process.env,
-            eveProfile,
-            eveEnvelope
-          ),
-          APP_BUILDER_TEST_CAPABILITY_ID: undefined,
-          APP_BUILDER_TEST_MODEL: undefined,
-          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
-        },
-        execArgv: [],
-        transferList: [...(options.transferList ?? []), channel.port2],
         workerData: {
           ...existingData,
           [workerPortKey]: channel.port2,
@@ -320,12 +295,22 @@ function installWorkerBroker(
           [eveWorkerEnvelopeKey]: eveEnvelope,
           [gateAEvalProfileKey]: nestedGateAEvalProfile,
         },
+        transferList: [...(options.transferList ?? []), channel.port2],
+        execArgv: [],
+        env: {
+          ...workerEnvironment(
+            options.env ?? process.env,
+            eveProfile,
+            eveEnvelope,
+          ),
+          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
+          APP_BUILDER_TEST_MODEL: undefined,
+          APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+        },
       });
       let settled = false;
       const cleanup = () => {
-        if (settled) {
-          return;
-        }
+        if (settled) return;
         settled = true;
         clearTimeout(timeout);
         channel.port1.close();
@@ -335,7 +320,7 @@ function installWorkerBroker(
           cleanup();
           void this.terminate();
         },
-        isTimeoutFixture ? 250 : timeoutMs
+        isTimeoutFixture ? 250 : timeoutMs,
       );
       timeout.unref();
       channel.port1.unref();
@@ -355,26 +340,26 @@ function installWorkerBroker(
           return;
         }
         const proof = {
-          authorization: randomBytes(32).toString("hex"),
-          capabilities,
-          context: request.context,
-          expiresAt: Date.now() + 5_000,
-          gateAEvalProfile: nestedGateAEvalProfile,
-          nonce: request.nonce,
-          publicKey,
           version: 2,
+          nonce: request.nonce,
+          context: request.context,
+          authorization: randomBytes(32).toString("hex"),
+          expiresAt: Date.now() + 5_000,
+          capabilities,
+          publicKey,
+          gateAEvalProfile: nestedGateAEvalProfile,
         };
         const signature = sign(
           null,
           Buffer.from(canonical(proof)),
-          privateKey
+          privateKey,
         ).toString("base64");
         channel.port1.postMessage({
           ...proof,
+          signature,
           delegationPrivateKey: privateKey
             .export({ format: "der", type: "pkcs8" })
             .toString("base64"),
-          signature,
         });
         cleanup();
       });
@@ -395,30 +380,24 @@ try {
     !isMainThread &&
     JSON.stringify(workerGateAEvalProfile) !==
       JSON.stringify(authorization.gateAEvalProfile)
-  ) {
+  )
     throw new Error("The delegated Gate A eval profile did not match.");
-  }
   const gateAEvalProfileToInstall = isMainThread
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;
-  if (eveProfile) {
+  if (eveProfile)
     installGateAEvalProfile(
       process.env,
       gateAEvalProfileToInstall,
-      repositoryRoot
+      repositoryRoot,
     );
-  } else {
-    for (const name of gateAEnvironmentFields) delete process.env[name];
-  }
-  if (!isMainThread) {
-    delete workerData[gateAEvalProfileKey];
-  }
+  else for (const name of gateAEnvironmentFields) delete process.env[name];
+  if (!isMainThread) delete workerData[gateAEvalProfileKey];
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
     delete workerData[eveWorkerEnvelopeKey];
-  } else if (eveProfile) {
-    process.env.EVE_DEV = "1";
-  } else {
+  } else if (eveProfile) process.env.EVE_DEV = "1";
+  else {
     for (const name of [
       "EVE_DEV",
       "WORKFLOW_LOCAL_BASE_URL",
@@ -427,9 +406,8 @@ try {
       "EVE_DEVELOPMENT_SANDBOX_RUN_ID",
       "EVE_EVALUATION",
       "EVE_EVALUATION_RUN_ID",
-    ]) {
+    ])
       delete process.env[name];
-    }
   }
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;
@@ -439,12 +417,10 @@ try {
     authorization.privateKey,
     authorization.publicKey,
     eveProfile,
-    authorization.gateAEvalProfile
+    authorization.gateAEvalProfile,
   );
 } catch {
-  if (installed !== undefined) {
-    registry.revoke(process, installed);
-  }
+  if (installed !== undefined) registry.revoke(process, installed);
   delete process.env.APP_BUILDER_TEST_CAPABILITY_ID;
   delete process.env.APP_BUILDER_TEST_MODEL;
 }

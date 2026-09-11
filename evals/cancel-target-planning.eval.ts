@@ -11,7 +11,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
     await t.send(
-      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
     );
     t.succeeded();
     await t.send("Prepare offline target dependencies.");
@@ -27,10 +27,10 @@ export default defineEval({
         (reply) =>
           typeof reply === "string" &&
           !/canonical proposal|digest-bound|target identity|target mutation/iu.test(
-            reply
+            reply,
           ),
-        "automatic planning stays product-facing"
-      )
+        "automatic planning stays product-facing",
+      ),
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

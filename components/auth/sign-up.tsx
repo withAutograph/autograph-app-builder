@@ -14,10 +14,8 @@ import {
 } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
-import type { SyntheticEvent } from "react";
+import { type SyntheticEvent, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,13 +36,11 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
-
 import { AdditionalField } from "./additional-field";
 import { PasswordStrengthMeter } from "./password-strength-meter";
-import { ProviderButtons } from "./provider-buttons";
-import type { SocialLayout } from "./provider-buttons";
+import { ProviderButtons, type SocialLayout } from "./provider-buttons";
 
-export interface SignUpProps {
+export type SignUpProps = {
   className?: string;
   signInRedirectTo?: string;
   socialLayout?: SocialLayout;
@@ -55,7 +51,7 @@ export interface SignUpProps {
    * priority, and social sign-ups are unaffected.
    */
   onSignUpSuccess?: () => void;
-}
+};
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
@@ -98,9 +94,9 @@ export function SignUp({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const currentLocation = useSyncExternalStore(
-    () => () => {},
+    () => () => undefined,
     () => window.location.href,
-    () => ""
+    () => "",
   );
   const currentSearch = currentLocation ? new URL(currentLocation).search : "";
   const currentOrigin = currentLocation ? new URL(currentLocation).origin : "";
@@ -128,7 +124,7 @@ export function SignUp({
           navigate({
             to: getAuthLinkURL(
               `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
-              redirectTo
+              redirectTo,
             ),
           });
         } else if (onSignUpSuccess) {
@@ -137,7 +133,7 @@ export function SignUp({
           navigate({ to: redirectTo });
         }
       },
-    }
+    },
   );
 
   const signInMutating = useIsMutating({
@@ -177,12 +173,10 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
-      if (!field.signUp || field.readOnly) {
-        continue;
-      }
+      if (!field.signUp || field.readOnly) continue;
       const value = parseAdditionalFieldValue(
         field,
-        formData.get(field.name) as string | null
+        formData.get(field.name) as string | null,
       );
 
       if (field.validate) {
@@ -234,7 +228,7 @@ export function SignUp({
                   key={`${plugin.id}-${index.toString()}`}
                   view="signUp"
                 />
-              ))
+              )),
             )}
             {socialPosition === "top" && (
               <>
@@ -243,7 +237,7 @@ export function SignUp({
                 )}
 
                 {showSeparator && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card flex items-center text-xs">
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>
                 )}
@@ -335,7 +329,7 @@ export function SignUp({
                           isPending={isPending}
                           optionalLabel={localization.auth.optional}
                         />
-                      )
+                      ),
                   )}
 
                   <Field data-invalid={!!fieldErrors.password}>
@@ -372,11 +366,11 @@ export function SignUp({
                             : el.validity.tooShort
                               ? localization.auth.tooShort.replace(
                                   "{{min}}",
-                                  String(min)
+                                  String(min),
                                 )
                               : localization.auth.tooLong.replace(
                                   "{{max}}",
-                                  String(max)
+                                  String(max),
                                 );
 
                           setFieldErrors((prev) => ({
@@ -452,11 +446,11 @@ export function SignUp({
                               : el.validity.tooShort
                                 ? localization.auth.tooShort.replace(
                                     "{{min}}",
-                                    String(min)
+                                    String(min),
                                   )
                                 : localization.auth.tooLong.replace(
                                     "{{max}}",
-                                    String(max)
+                                    String(max),
                                   );
 
                             setFieldErrors((prev) => ({
@@ -504,7 +498,7 @@ export function SignUp({
                           isPending={isPending}
                           optionalLabel={localization.auth.optional}
                         />
-                      )
+                      ),
                   )}
 
                   <div className="flex flex-col gap-3">
@@ -521,7 +515,7 @@ export function SignUp({
             {socialPosition === "bottom" && (
               <>
                 {showSeparator && (
-                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card flex items-center text-xs">
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>
                 )}
@@ -540,7 +534,7 @@ export function SignUp({
         <Link
           href={getAuthLinkURL(
             `${basePaths.auth}/${viewPaths.auth.signIn}`,
-            alternateRedirectTo
+            alternateRedirectTo,
           )}
           className="underline underline-offset-4"
         >

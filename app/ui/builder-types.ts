@@ -2,13 +2,13 @@ export type BuildDestination = "web" | "codex" | "cursor";
 export type ClipboardState = "idle" | "copied" | "failed";
 export type HandoffAttempt = "idle" | "attempted" | "blocked" | "too-long";
 
-export interface BuilderHandoffReference {
+export type BuilderHandoffReference = {
   version: 1;
   handoffId: string;
   expiresAt: string;
-}
+};
 
-export interface BuilderForm {
+export type BuilderForm = {
   appName: string;
   repository: string;
   brief: string;
@@ -18,13 +18,13 @@ export interface BuilderForm {
   vercelInstallationId?: string;
   githubInstallationId?: string;
   modelId: string;
-}
+};
 
 export type ProviderField = "vercel" | "github";
 export type StorageProvider = "github" | "gitlab" | "bitbucket";
 export type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
 
-export interface BuilderDraft {
+export type BuilderDraft = {
   version: 1;
   form: BuilderForm;
   team: string;
@@ -39,4 +39,4 @@ export interface BuilderDraft {
   focusOrigin: ProviderField;
   appNameEditedByUser: boolean;
   repositoryEditedByUser: boolean;
-}
+};

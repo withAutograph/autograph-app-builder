@@ -7,14 +7,17 @@ import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
-  approval: always(),
   description:
     "After approval of the exact sealed proposal digest, create one private fresh-history repository through the selected GitHub App installation. The release gate must remain absent. This tool cannot publish a branch or PR.",
+  inputSchema: z.strictObject({
+    expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  }),
+  approval: always(),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed")
       throw new Error(
-        "An exact reviewed change set is required before repository creation."
+        "An exact reviewed change set is required before repository creation.",
       );
     const sandbox = await ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({
@@ -29,7 +32,4 @@ export default defineTool({
       approvedByCallId: ctx.callId,
     });
   },
-  inputSchema: z.strictObject({
-    expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  }),
 });

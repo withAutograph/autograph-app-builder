@@ -7,23 +7,23 @@ describe("release proof evidence", () => {
   it("requires exact ordered five-tool discovery", () => {
     expect(() => assertExactToolDiscovery(TOOL_NAMES)).not.toThrow();
     expect(() => assertExactToolDiscovery(TOOL_NAMES.slice(0, 4))).toThrow(
-      "five public tools"
+      "five public tools",
     );
     expect(() =>
-      assertExactToolDiscovery([...TOOL_NAMES].toReversed())
+      assertExactToolDiscovery([...TOOL_NAMES].toReversed()),
     ).toThrow("five public tools");
   });
 
   it("accepts only Browser-backed reviewed proof without publication", () => {
     const receipt = (overrides: Record<string, unknown> = {}) =>
       JSON.stringify({
+        terminalPhase: "reviewed",
         browserPreview: true,
         publicationAttempted: false,
-        terminalPhase: "reviewed",
         ...overrides,
       });
     expect(
-      parseReviewedProof(receipt(), "sandbox-existing-iteration")
+      parseReviewedProof(receipt(), "sandbox-existing-iteration"),
     ).toMatchObject({
       eval: "sandbox-existing-iteration",
       terminalPhase: "reviewed",
@@ -33,10 +33,9 @@ describe("release proof evidence", () => {
       receipt({ browserPreview: false }),
       receipt({ publicationAttempted: true }),
       "no structural receipt",
-    ]) {
+    ])
       expect(() =>
-        parseReviewedProof(invalid, "sandbox-reviewed-change-set")
+        parseReviewedProof(invalid, "sandbox-reviewed-change-set"),
       ).toThrow("reviewed proof receipt");
-    }
   });
 });

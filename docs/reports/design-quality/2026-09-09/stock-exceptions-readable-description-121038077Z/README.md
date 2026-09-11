@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected-record detail, and replenishment action form a clear scan path, while severity pills and prominent modeled quantities surface decision-critical information. However, the default detail shows Atlas at 1.4 days cover even though Cedar is ranked above it at 1.1 days cover under the stated “Critical first · lowest cover” ordering, weakening the initial priority signal. |
-| layout | 3/4 | The two-pane desktop composition has consistent edges, spacing, row heights, and well-grouped detail sections. It remains clean at 1024px and is centered at 1920px, though the constrained 700px detail header uses a tall, sparsely occupied action row and the wide view leaves substantial unused canvas around a relatively compact work area. |
-| typography | 4/4 | Heading levels, field labels, values, metadata, and large replenishment quantities are consistently differentiated and readable. Product names and days-of-cover values use weight effectively, while supporting copy remains visually subordinate without becoming difficult to read. |
-| responsive | 4/4 | The composition adapts effectively across the supplied 1920px, 1440px, 1024px, and 700px desktop captures. It preserves side-by-side review where viable, switches to a focused list-then-detail flow with a clear Back control at 700px, and shows no visible clipping, overlap, or horizontal overflow; expanded disclosures use ordinary document scrolling when content grows. |
-| productClarity | 4/4 | The purpose is explicit, location and severity filters are immediately available, exception rows expose location, shortage, severity, and cover, and selection reveals stock and supplier evidence. The mock flow clearly previews 18 + 96 = 114 units, explains supplier-minimum derivation, confirms that inventory is unchanged, and provides cancel/reset affordances. Minor “completed” terminology could still be mistaken for an operational action before the simulation note is read. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected-record detail, and replenishment action form a clear scan path, while severity pills and prominent modeled quantities surface decision-critical information. However, the default detail shows Atlas at 1.4 days cover even though Cedar is ranked above it at 1.1 days cover under the stated “Critical first · lowest cover” ordering, weakening the initial priority signal.                                                              |
+| layout         | 3/4   | The two-pane desktop composition has consistent edges, spacing, row heights, and well-grouped detail sections. It remains clean at 1024px and is centered at 1920px, though the constrained 700px detail header uses a tall, sparsely occupied action row and the wide view leaves substantial unused canvas around a relatively compact work area.                                                                                                                                            |
+| typography     | 4/4   | Heading levels, field labels, values, metadata, and large replenishment quantities are consistently differentiated and readable. Product names and days-of-cover values use weight effectively, while supporting copy remains visually subordinate without becoming difficult to read.                                                                                                                                                                                                         |
+| responsive     | 4/4   | The composition adapts effectively across the supplied 1920px, 1440px, 1024px, and 700px desktop captures. It preserves side-by-side review where viable, switches to a focused list-then-detail flow with a clear Back control at 700px, and shows no visible clipping, overlap, or horizontal overflow; expanded disclosures use ordinary document scrolling when content grows.                                                                                                             |
+| productClarity | 4/4   | The purpose is explicit, location and severity filters are immediately available, exception rows expose location, shortage, severity, and cover, and selection reveals stock and supplier evidence. The mock flow clearly previews 18 + 96 = 114 units, explains supplier-minimum derivation, confirms that inventory is unchanged, and provides cancel/reset affordances. Minor “completed” terminology could still be mistaken for an operational action before the simulation note is read. |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/267) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/126) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/267) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/126) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/267) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/126) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/144) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/302) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/169) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/72) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/80) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/76) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/267) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/126) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/267) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/126) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/267) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/126) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/144) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/302) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/169) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/72)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/80)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/76)  |
 
 ## Latest-run screenshots
 

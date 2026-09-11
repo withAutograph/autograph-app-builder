@@ -7,7 +7,6 @@ import {
 import { githubRepositoryAccessViewModel } from "../../integrations/store-in-view-model";
 import type { EveSessionResult, PublicInputRequest } from "../contracts";
 import { ApprovalRequest } from "./approval-request";
-
 import "./styles.css";
 
 export type SessionAnswer =
@@ -15,10 +14,10 @@ export type SessionAnswer =
   | { kind: "deny" }
   | { kind: "answer"; value: string; optionId?: string };
 
-export interface SessionResponse {
+export type SessionResponse = {
   requestId: string;
   response: SessionAnswer;
-}
+};
 
 export function InputControl({
   answer,
@@ -31,7 +30,7 @@ export function InputControl({
   onAnswer: (answer: SessionAnswer) => void;
   request: PublicInputRequest;
 }) {
-  if (request.kind === "approval") {
+  if (request.kind === "approval")
     return (
       <ApprovalRequest
         description={request.description}
@@ -40,9 +39,8 @@ export function InputControl({
         title={request.title}
       />
     );
-  }
 
-  if (request.options?.length) {
+  if (request.options?.length)
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
         {request.options.map((option) => {
@@ -76,9 +74,8 @@ export function InputControl({
         })}
       </div>
     );
-  }
 
-  if (request.allowFreeform) {
+  if (request.allowFreeform)
     return (
       <textarea
         aria-label={request.title}
@@ -89,7 +86,6 @@ export function InputControl({
         }
       />
     );
-  }
 
   return <p className="fallback">Answer this request in chat to continue.</p>;
 }
@@ -117,9 +113,7 @@ export function AuthorizationControl({
   const provider = storeIn?.title || challenge?.displayName || request.title;
 
   async function connect() {
-    if (!challenge?.url || !canOpen) {
-      return;
-    }
+    if (!challenge?.url || !canOpen) return;
     setError("");
     try {
       await onOpenLink(challenge.url);
@@ -130,9 +124,7 @@ export function AuthorizationControl({
   }
 
   async function refresh() {
-    if (!canRefresh || refreshing) {
-      return;
-    }
+    if (!canRefresh || refreshing) return;
     setRefreshing(true);
     setError("");
     try {
@@ -226,12 +218,12 @@ export function SessionAppView({
 }) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
   const [state, setState] = useState<"idle" | "submitting" | "submitted">(
-    "idle"
+    "idle",
   );
   const [error, setError] = useState("");
   const requests = result?.inputRequests ?? [];
   const respondable = requests.filter(
-    (request) => request.kind !== "authorization"
+    (request) => request.kind !== "authorization",
   );
   const complete = useMemo(
     () =>
@@ -243,7 +235,7 @@ export function SessionAppView({
           (answer.kind !== "answer" || answer.value.trim().length > 0)
         );
       }),
-    [answers, respondable]
+    [answers, respondable],
   );
   const unansweredCount = respondable.filter((request) => {
     const answer = answers[request.requestId];
@@ -252,19 +244,17 @@ export function SessionAppView({
       (answer.kind === "answer" && answer.value.trim().length === 0)
     );
   }).length;
-  const continueGuidance = canCallTools
-    ? unansweredCount > 0
+  const continueGuidance = !canCallTools
+    ? "Answer in chat to continue."
+    : unansweredCount > 0
       ? `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`
-      : undefined
-    : "Answer in chat to continue.";
+      : undefined;
 
   async function submitApproval(
     request: PublicInputRequest,
-    response: Extract<SessionAnswer, { kind: "approve" | "deny" }>
+    response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
   ) {
-    if (!result || !canCallTools || state === "submitting") {
-      return;
-    }
+    if (!result || !canCallTools || state === "submitting") return;
     setState("submitting");
     setError("");
     try {
@@ -277,9 +267,7 @@ export function SessionAppView({
   }
 
   async function submit() {
-    if (!result || !complete || !canCallTools || state === "submitting") {
-      return;
-    }
+    if (!result || !complete || !canCallTools || state === "submitting") return;
     setState("submitting");
     setError("");
     try {
@@ -287,7 +275,7 @@ export function SessionAppView({
         respondable.map((request) => ({
           requestId: request.requestId,
           response: answers[request.requestId]!,
-        }))
+        })),
       );
       setState("submitted");
     } catch {
@@ -296,14 +284,13 @@ export function SessionAppView({
     }
   }
 
-  if (!result) {
+  if (!result)
     return (
       <main className="mcpApp shell">
         <p>Loading requested controls…</p>
       </main>
     );
-  }
-  if (state === "submitted" || result.status !== "input_required") {
+  if (state === "submitted" || result.status !== "input_required")
     return (
       <main className="mcpApp shell success" role="status">
         <span>✓</span>
@@ -313,14 +300,13 @@ export function SessionAppView({
         </div>
       </main>
     );
-  }
 
   const onlyApproval =
     requests.length === 1 && requests[0]?.kind === "approval";
 
   return (
     <main className={`mcpApp shell${onlyApproval ? " approval-shell" : ""}`}>
-      {onlyApproval ? null : (
+      {!onlyApproval ? (
         <header>
           <div>
             <strong>Autograph App Builder</strong>
@@ -328,7 +314,7 @@ export function SessionAppView({
           </div>
           <span>{requests.length} requested</span>
         </header>
-      )}
+      ) : null}
       <div className="request-list">
         {requests.map((request) =>
           request.kind === "approval" ? (
@@ -384,7 +370,7 @@ export function SessionAppView({
                 />
               )}
             </SectionShell>
-          )
+          ),
         )}
       </div>
       {respondable.length && !onlyApproval ? (

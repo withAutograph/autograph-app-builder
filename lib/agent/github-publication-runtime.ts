@@ -3,22 +3,22 @@ import {
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
+  type DraftPullRequestProposal,
+  type DraftPullRequestSuccessReceipt,
+  type FreshRepositorySuccessReceipt,
+  type GitHubDraftPullRequestContentSource,
+  type GitHubFreshRepositoryContentSource,
+  type GitHubPublicationAdapter,
+  type GitHubPublicationReceiptStore,
+  type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
-import type {
-  DraftPullRequestProposal,
-  DraftPullRequestSuccessReceipt,
-  FreshRepositorySuccessReceipt,
-  GitHubDraftPullRequestContentSource,
-  GitHubFreshRepositoryContentSource,
-  GitHubPublicationAdapter,
-  GitHubPublicationReceiptStore,
-  ImmutableGitHubSourceReceipt,
-} from "../repository/github-publication";
-import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
-import { assertApprovalReceipt } from "./approval-receipt";
-import type { ApprovalReceipt } from "./approval-receipt";
+import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import {
+  assertApprovalReceipt,
+  type ApprovalReceipt,
+} from "./approval-receipt";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
@@ -28,7 +28,7 @@ const supportedOperations = [
   "recover-lost-response-by-idempotency-key",
 ] as const;
 
-export interface GitHubPublicationRuntimeStatus {
+export type GitHubPublicationRuntimeStatus = {
   version: 3;
   enabled: boolean;
   adapterConfigured: boolean;
@@ -49,7 +49,7 @@ export interface GitHubPublicationRuntimeStatus {
     };
   };
   reason: string;
-}
+};
 
 export interface GitHubPublicationRuntime {
   status(): Promise<GitHubPublicationRuntimeStatus>;
@@ -84,14 +84,13 @@ export interface GitHubPublicationRuntime {
 
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
   return {
+    version: 3,
+    enabled,
     adapterConfigured: enabled,
     durableStoreConfigured: enabled,
-    enabled,
     genericShellAuthority: false,
     liveGitHubCallsAvailable: enabled,
-    reason: enabled
-      ? "The explicit installation adapter and durable PostgreSQL stores are configured."
-      : "A least-privilege GitHub App adapter and durable receipt store are not configured on this host.",
+    supportedOperations,
     releaseGate: {
       name: "REPOSITORY_RELEASE_ENABLED",
       policies: {
@@ -99,29 +98,27 @@ function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
           requiredConfiguredState: false,
         },
         "publish-approved-branch-and-draft-pull-request": {
-          rejectsDrift: true,
           requiredConfiguredState: "sealed-proposal-value",
+          rejectsDrift: true,
         },
       },
     },
-    supportedOperations,
-    version: 3,
+    reason: enabled
+      ? "The explicit installation adapter and durable PostgreSQL stores are configured."
+      : "A least-privilege GitHub App adapter and durable receipt store are not configured on this host.",
   };
 }
 
 const unavailable = (): never => {
   throw new Error(
-    "GitHub acquisition and publication are disabled: no least-privilege GitHub App adapter or durable receipt store is configured."
+    "GitHub acquisition and publication are disabled: no least-privilege GitHub App adapter or durable receipt store is configured.",
   );
 };
 
 function disabledRuntime(): GitHubPublicationRuntime {
   return {
-    async createFreshRepository() {
-      return unavailable();
-    },
-    async publishDraftPullRequest() {
-      return unavailable();
+    async status() {
+      return runtimeStatus(false);
     },
     async resolveImmutableSource() {
       return unavailable();
@@ -129,8 +126,11 @@ function disabledRuntime(): GitHubPublicationRuntime {
     async sealDraftPullRequestProposal() {
       return unavailable();
     },
-    async status() {
-      return runtimeStatus(false);
+    async createFreshRepository() {
+      return unavailable();
+    },
+    async publishDraftPullRequest() {
+      return unavailable();
     },
   };
 }
@@ -147,22 +147,53 @@ export function composeGitHubPublicationRuntime(input: {
   proposals?: GitHubPublicationProposalStore;
   receipts?: GitHubPublicationReceiptStore;
 }): GitHubPublicationRuntime {
-  if (!input.enabled) {
-    return disabledRuntime();
-  }
+  if (!input.enabled) return disabledRuntime();
   if (
     input.adapter === undefined ||
     input.proposals === undefined ||
     input.receipts === undefined
   ) {
     throw new Error(
-      "GitHub publication cannot be enabled without its typed adapter and durable stores."
+      "GitHub publication cannot be enabled without its typed adapter and durable stores.",
     );
   }
-  const { adapter } = input;
-  const { proposals } = input;
-  const { receipts } = input;
+  const adapter = input.adapter;
+  const proposals = input.proposals;
+  const receipts = input.receipts;
   return {
+    async status() {
+      return runtimeStatus(true);
+    },
+    async resolveImmutableSource(request) {
+      return resolveImmutableExistingSource({
+        adapter,
+        expectedInstallationId: request.expectedInstallationId,
+        repositoryId: request.repositoryId,
+        ref: request.ref,
+        expectedSha: request.expectedSha,
+        expectedTree: request.expectedTree,
+        resolvedByCallId: request.approvedByCallId,
+      });
+    },
+    async sealDraftPullRequestProposal(request) {
+      const repository = await adapter.inspectRepository({
+        operation: "publish-draft-pull-request",
+        repositoryId: request.githubSource.repository.repositoryId,
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+      });
+      const installation = await adapter.inspectInstallation(
+        "publish-draft-pull-request",
+      );
+      const proposal = createDraftPullRequestProposal({
+        installation,
+        repository,
+        review: request.review,
+        changedPathsSinceBase: [],
+        title: request.title,
+      });
+      await proposals.save(proposal);
+      return proposal;
+    },
     async createFreshRepository(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
       if (
@@ -171,7 +202,7 @@ export function composeGitHubPublicationRuntime(input: {
         proposal.intendedOutcome !== "create-private-fresh-history-repository"
       ) {
         throw new Error(
-          "The exact fresh-repository proposal is unavailable or changed."
+          "The exact fresh-repository proposal is unavailable or changed.",
         );
       }
       return createApprovedFreshRepository({
@@ -192,7 +223,7 @@ export function composeGitHubPublicationRuntime(input: {
           "publish-reviewed-change-set-as-draft-pull-request"
       ) {
         throw new Error(
-          "The exact draft-pull-request proposal is unavailable or changed."
+          "The exact draft-pull-request proposal is unavailable or changed.",
         );
       }
       assertApprovalReceipt({
@@ -214,39 +245,6 @@ export function composeGitHubPublicationRuntime(input: {
         contentSource: request.contentSource,
         approvedByCallId: request.approvedByCallId,
       });
-    },
-    async resolveImmutableSource(request) {
-      return resolveImmutableExistingSource({
-        adapter,
-        expectedInstallationId: request.expectedInstallationId,
-        repositoryId: request.repositoryId,
-        ref: request.ref,
-        expectedSha: request.expectedSha,
-        expectedTree: request.expectedTree,
-        resolvedByCallId: request.approvedByCallId,
-      });
-    },
-    async sealDraftPullRequestProposal(request) {
-      const repository = await adapter.inspectRepository({
-        operation: "publish-draft-pull-request",
-        repositoryId: request.githubSource.repository.repositoryId,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-      });
-      const installation = await adapter.inspectInstallation(
-        "publish-draft-pull-request"
-      );
-      const proposal = createDraftPullRequestProposal({
-        installation,
-        repository,
-        review: request.review,
-        changedPathsSinceBase: [],
-        title: request.title,
-      });
-      await proposals.save(proposal);
-      return proposal;
-    },
-    async status() {
-      return runtimeStatus(true);
     },
   };
 }

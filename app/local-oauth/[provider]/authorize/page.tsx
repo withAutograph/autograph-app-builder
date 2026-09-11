@@ -11,20 +11,22 @@ import {
   parseLocalOAuthAuthorization,
   signFreshLocalOAuthApproval,
 } from "@/lib/auth/local-oauth-approval";
-import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
-import type { ProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import {
+  readProviderEmulation,
+  type ProviderEmulation,
+} from "@/lib/integrations/local-provider-emulation";
 
-interface Props {
+type Props = {
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
+};
 
 function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => [
       key,
       typeof value === "string" ? value : undefined,
-    ])
+    ]),
   );
 }
 
@@ -36,17 +38,15 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
     const configured = readProviderEmulation(process.env);
-    if (!configured) {
-      notFound();
-    }
+    if (!configured) notFound();
     emulation = configured;
     const appOrigin = emulation.canonicalOrigin;
     parsed = parseLocalOAuthAuthorization({
+      provider,
+      values: scalarValues(query),
       appOrigin,
       emulation,
       githubClientId: emulation.githubClientId,
-      provider,
-      values: scalarValues(query),
       vercelClientId: emulation.vercelClientId,
     });
   } catch {
@@ -60,11 +60,11 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   const approval = signFreshLocalOAuthApproval(
     {
-      authorization: parsed.authorization,
-      origin: emulation.canonicalOrigin,
       provider: parsed.provider,
+      origin: emulation.canonicalOrigin,
+      authorization: parsed.authorization,
     },
-    emulation.relaySecret
+    emulation.relaySecret,
   );
   const environment =
     emulation.mode === "preview"
@@ -99,7 +99,7 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
             {Object.entries(parsed.authorization).map(([name, value]) =>
               value ? (
                 <input key={name} type="hidden" name={name} value={value} />
-              ) : null
+              ) : null,
             )}
             <button className={emulationApprovalStyles.button} type="submit">
               {actionLabel}

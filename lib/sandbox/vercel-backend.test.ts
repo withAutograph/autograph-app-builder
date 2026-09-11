@@ -1,19 +1,17 @@
-import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
-import type {
-  SandboxBackendHandle,
-  SandboxBackendPrewarmInput,
-  SandboxSeedFile,
-  SandboxSession,
-} from "eve/sandbox";
 import { describe, expect, it, vi } from "vitest";
+import {
+  SandboxTemplateNotProvisionedError,
+  type SandboxBackendHandle,
+  type SandboxBackendPrewarmInput,
+  type SandboxSeedFile,
+  type SandboxSession,
+} from "eve/sandbox";
 
 import {
   createHostedVercelBackend,
   createProviderFetch,
-} from "./vercel-backend";
-import type {
-  HostedVercelBackendFactory,
-  HostedVercelBackendOptions,
+  type HostedVercelBackendFactory,
+  type HostedVercelBackendOptions,
 } from "./vercel-backend";
 import {
   clearVercelSessionGitSource,
@@ -28,7 +26,7 @@ function recoveryInput(input?: {
   readonly seedFiles?: readonly SandboxSeedFile[];
 }) {
   return () => ({
-    bootstrap: input?.bootstrap ?? (async () => {}),
+    bootstrap: input?.bootstrap ?? (async () => undefined),
     seedFiles:
       input?.seedFiles ??
       ([
@@ -45,8 +43,8 @@ function backendFactory(input: {
   readonly prewarm: ReturnType<typeof vi.fn>;
 }): HostedVercelBackendFactory {
   return vi.fn(() => ({
-    create: input.create,
     name: "vercel",
+    create: input.create,
     prewarm: input.prewarm,
   })) as HostedVercelBackendFactory;
 }
@@ -60,10 +58,10 @@ describe.skip("retired template-backed Vercel backend", () => {
     const request = new Request(
       "https://sandbox.example.test/v1/create?secret=hidden",
       {
-        body: "hidden",
-        headers: { authorization: "Bearer hidden", "x-private": "hidden" },
         method: "POST",
-      }
+        headers: { authorization: "Bearer hidden", "x-private": "hidden" },
+        body: "hidden",
+      },
     );
     await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
       status: 200,
@@ -81,20 +79,20 @@ describe.skip("retired template-backed Vercel backend", () => {
             init?.signal?.addEventListener(
               "abort",
               () => reject(init.signal?.reason),
-              { once: true }
+              { once: true },
             );
-          })
+          }),
       )
       .mockResolvedValueOnce(new Response("ok"));
     await expect(
       createProviderFetch(
         timedOutFetch,
-        1
+        1,
       )(
         new Request("https://sandbox.example.test/fs/write", {
           method: "POST",
-        })
-      )
+        }),
+      ),
     ).resolves.toMatchObject({ status: 200 });
     expect(timedOutFetch).toHaveBeenCalledTimes(2);
 
@@ -106,12 +104,12 @@ describe.skip("retired template-backed Vercel backend", () => {
     await expect(
       createProviderFetch(
         cancelledFetch,
-        1
+        1,
       )(
         new Request("https://sandbox.example.test/fs/read", {
           signal: controller.signal,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow();
     expect(cancelledFetch).toHaveBeenCalledOnce();
   });
@@ -144,16 +142,16 @@ describe.skip("retired template-backed Vercel backend", () => {
     }) satisfies HostedVercelBackendFactory);
     createHostedVercelBackend({
       factory,
-      runtimeRecoveryPrewarmInput: recoveryInput(),
       sandboxEnvironment: {
-        CARGO_NET_OFFLINE: "true",
         MISE_AUTO_INSTALL: "false",
+        CARGO_NET_OFFLINE: "true",
       },
+      runtimeRecoveryPrewarmInput: recoveryInput(),
     });
     expect(options?.networkPolicy).toBe("allow-all");
     expect(options?.env).toEqual({
-      CARGO_NET_OFFLINE: "true",
       MISE_AUTO_INSTALL: "false",
+      CARGO_NET_OFFLINE: "true",
     });
   });
 
@@ -161,15 +159,15 @@ describe.skip("retired template-backed Vercel backend", () => {
     const providerKey = "development-dependencies";
     const session = { id: "session-1" } as SandboxSession;
     const handle = {
+      session,
+      useSessionFn: async () => session,
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "session-1",
       }),
-      session,
-      shutdown: async () => undefined,
       stop: async () => undefined,
-      useSessionFn: async () => session,
+      shutdown: async () => undefined,
     } satisfies SandboxBackendHandle;
     const create = vi.fn(async () => handle);
     const prewarm = vi.fn(async () => ({ reused: true }));
@@ -180,7 +178,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     });
 
     await backend.prewarm({
-      bootstrap: async () => {},
+      bootstrap: async () => undefined,
       runtimeContext,
       seedFiles: [],
       templateKey: "authored-key-a",
@@ -192,26 +190,26 @@ describe.skip("retired template-backed Vercel backend", () => {
     });
 
     expect(prewarm).toHaveBeenCalledWith(
-      expect.objectContaining({ templateKey: providerKey })
+      expect.objectContaining({ templateKey: providerKey }),
     );
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ templateKey: providerKey })
+      expect.objectContaining({ templateKey: providerKey }),
     );
   });
 
   it("reuses one live Development session until its handle is closed", async () => {
     const session = { id: "session-1" } as SandboxSession;
-    const stop = vi.fn(async () => {});
+    const stop = vi.fn(async () => undefined);
     const handle = {
+      session,
+      useSessionFn: async () => session,
       captureState: async () => ({
         backendName: "vercel",
         metadata: { sandboxName: "provider-session" },
         sessionKey: "session-1",
       }),
-      session,
-      shutdown: vi.fn(async () => undefined),
       stop,
-      useSessionFn: async () => session,
+      shutdown: vi.fn(async () => undefined),
     } satisfies SandboxBackendHandle;
     const create = vi.fn(async () => handle);
     const options = {
@@ -249,18 +247,18 @@ describe.skip("retired template-backed Vercel backend", () => {
 
   it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
     const session = { id: "session-1" } as SandboxSession;
-    const stop = vi.fn(async () => {});
-    const shutdown = vi.fn(async () => {});
+    const stop = vi.fn(async () => undefined);
+    const shutdown = vi.fn(async () => undefined);
     const handle = {
+      session,
+      useSessionFn: async () => session,
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "session-1",
       }),
-      session,
-      shutdown,
       stop,
-      useSessionFn: async () => session,
+      shutdown,
     } satisfies SandboxBackendHandle;
     const create = vi
       .fn()
@@ -268,14 +266,14 @@ describe.skip("retired template-backed Vercel backend", () => {
         new SandboxTemplateNotProvisionedError({
           backendName: "vercel",
           templateKey,
-        })
+        }),
       )
       .mockResolvedValueOnce(handle);
     const prewarm = vi.fn(async (input: SandboxBackendPrewarmInput) => {
       void input;
       return { reused: false };
     });
-    const bootstrap = vi.fn(async () => {});
+    const bootstrap = vi.fn(async () => undefined);
     const seedFiles = [
       {
         content: Buffer.from("first skill"),
@@ -319,25 +317,25 @@ describe.skip("retired template-backed Vercel backend", () => {
 
   it.each([
     {
+      name: "a null template",
+      requestedTemplateKey: null,
       error: new SandboxTemplateNotProvisionedError({
         backendName: "vercel",
         templateKey,
       }),
-      name: "a null template",
-      requestedTemplateKey: null,
     },
     {
-      error: new Error("provider unavailable"),
       name: "an unrelated provider failure",
       requestedTemplateKey: templateKey,
+      error: new Error("provider unavailable"),
     },
     {
+      name: "a typed failure for a different template",
+      requestedTemplateKey: templateKey,
       error: new SandboxTemplateNotProvisionedError({
         backendName: "vercel",
         templateKey: "different-template",
       }),
-      name: "a typed failure for a different template",
-      requestedTemplateKey: templateKey,
     },
   ])("does not recover $name", async ({ error, requestedTemplateKey }) => {
     const create = vi.fn().mockRejectedValueOnce(error);
@@ -356,7 +354,7 @@ describe.skip("retired template-backed Vercel backend", () => {
         runtimeContext,
         sessionKey: "session-1",
         templateKey: requestedTemplateKey,
-      })
+      }),
     ).rejects.toBe(error);
     expect(create).toHaveBeenCalledOnce();
     expect(prewarm).not.toHaveBeenCalled();
@@ -381,7 +379,7 @@ describe.skip("retired template-backed Vercel backend", () => {
         runtimeContext,
         sessionKey: "session-1",
         templateKey,
-      })
+      }),
     ).rejects.toBe(failure);
     expect(create).toHaveBeenCalledOnce();
     expect(prewarm).toHaveBeenCalledOnce();
@@ -414,7 +412,7 @@ describe.skip("retired template-backed Vercel backend", () => {
         runtimeContext,
         sessionKey: "session-1",
         templateKey,
-      })
+      }),
     ).rejects.toBe(second);
     expect(create).toHaveBeenCalledTimes(2);
     expect(prewarm).toHaveBeenCalledOnce();
@@ -425,15 +423,15 @@ describe("provider-native Vercel source", () => {
   it("falls back to a fresh sandbox when an optional template is absent", async () => {
     const session = { id: "fresh-session" } as SandboxSession;
     const handle = {
+      session,
+      useSessionFn: async () => session,
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "fresh-session",
       }),
-      session,
-      shutdown: async () => undefined,
       stop: async () => undefined,
-      useSessionFn: async () => session,
+      shutdown: async () => undefined,
     } satisfies SandboxBackendHandle;
     const create = vi
       .fn()
@@ -441,7 +439,7 @@ describe("provider-native Vercel source", () => {
         new SandboxTemplateNotProvisionedError({
           backendName: "vercel",
           templateKey,
-        })
+        }),
       )
       .mockResolvedValueOnce(handle);
     const prewarm = vi.fn();
@@ -457,11 +455,11 @@ describe("provider-native Vercel source", () => {
     expect(result.session.id).toBe("fresh-session");
     expect(create).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ templateKey })
+      expect.objectContaining({ templateKey }),
     );
     expect(create).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ templateKey: null })
+      expect.objectContaining({ templateKey: null }),
     );
     expect(prewarm).not.toHaveBeenCalled();
   });
@@ -475,24 +473,24 @@ describe("provider-native Vercel source", () => {
     const token = "short_lived_installation_token";
     configureVercelSessionGitSource({
       sessionId: "session-source",
-      source: { token, url: "https://github.com/acme/private.git" },
+      source: { url: "https://github.com/acme/private.git", token },
     });
     try {
       createHostedVercelBackend({ factory });
       expect(
-        options?.sessionCreateOptions({ session: { id: "other" } })
+        options?.sessionCreateOptions({ session: { id: "other" } }),
       ).toEqual({
         networkPolicy: "allow-all",
       });
       expect(
-        options?.sessionCreateOptions({ session: { id: "session-source" } })
+        options?.sessionCreateOptions({ session: { id: "session-source" } }),
       ).toEqual({
         networkPolicy: "allow-all",
         source: {
-          password: token,
           type: "git",
           url: "https://github.com/acme/private.git",
           username: "x-access-token",
+          password: token,
         },
       });
       expect(JSON.stringify(factory.mock.calls)).not.toContain(token);
@@ -509,7 +507,7 @@ describe("provider-native Vercel source", () => {
     }) satisfies HostedVercelBackendFactory);
     configureVercelSessionGitSource({
       sessionId: "wrun_source",
-      source: { token: "token", url: "https://github.com/acme/private.git" },
+      source: { url: "https://github.com/acme/private.git", token: "token" },
     });
     try {
       createHostedVercelBackend({ factory });
@@ -518,7 +516,7 @@ describe("provider-native Vercel source", () => {
           session: {
             id: "eve-sbx-ses-vercel-scope-version-wrun_source-root",
           },
-        })
+        }),
       ).toMatchObject({
         source: { url: "https://github.com/acme/private.git" },
       });

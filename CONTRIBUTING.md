@@ -105,7 +105,10 @@ The list must contain the enabled `app-builder@autograph-dev` plugin. Rerunning 
 
 ### Arrusted changes are not visible
 
-Keep `mise run dev` running and retry the affected planning step. The local development binding incrementally synchronizes the changed working-tree bytes to the reusable sandbox. Restart only the Eve/MCP/agent cycle when its own code changed; keep Next.js running for UI HMR.
+Keep `mise run dev` running and retry the affected planning step. The local
+development binding incrementally synchronizes the changed working-tree bytes
+to the reusable sandbox. Restart only the Eve/MCP/agent cycle when its own
+code changed; keep Next.js running for UI HMR.
 
 ### A release command rejects the checkout
 

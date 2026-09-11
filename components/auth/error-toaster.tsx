@@ -25,23 +25,13 @@ export function ErrorToaster() {
     queryCache.config.onError = (error, query) => {
       previousQueryOnError?.(error, query);
 
-      if (!matchQuery({ queryKey: authQueryKeys.all }, query)) {
-        return;
-      }
-      if (getAuthErrorPresentation(query.meta) !== "toast") {
-        return;
-      }
-      if (isSessionNotFreshError(error)) {
-        return;
-      }
+      if (!matchQuery({ queryKey: authQueryKeys.all }, query)) return;
+      if (getAuthErrorPresentation(query.meta) !== "toast") return;
+      if (isSessionNotFreshError(error)) return;
 
       const err = error as BetterFetchError;
-      if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
-        return;
-      }
-      if (err?.error) {
-        toast.error(err.error.message);
-      }
+      if (err?.error?.code === "EMAIL_NOT_VERIFIED") return;
+      if (err?.error) toast.error(err.error.message);
     };
 
     const mutationCache = queryClient.getMutationCache();
@@ -52,30 +42,24 @@ export function ErrorToaster() {
       variables,
       onMutateResult,
       mutation,
-      context
+      context,
     ) => {
       previousMutationOnError?.(
         error,
         variables,
         onMutateResult,
         mutation,
-        context
+        context,
       );
 
       if (!matchMutation({ mutationKey: authMutationKeys.all }, mutation)) {
         return;
       }
-      if (getAuthErrorPresentation(mutation.meta) !== "toast") {
-        return;
-      }
-      if (isSessionNotFreshError(error)) {
-        return;
-      }
+      if (getAuthErrorPresentation(mutation.meta) !== "toast") return;
+      if (isSessionNotFreshError(error)) return;
       // Every form that sets a new password renders this one against the
       // password field, so a toast would just repeat it.
-      if (isPasswordCompromisedError(error)) {
-        return;
-      }
+      if (isPasswordCompromisedError(error)) return;
 
       const err = error as BetterFetchError;
       if (

@@ -28,7 +28,7 @@ export interface HostedVercelBackendOptions {
 }
 
 export type HostedVercelBackendFactory = (
-  options: HostedVercelBackendOptions
+  options: HostedVercelBackendOptions,
 ) => ReturnType<typeof vercel>;
 
 type RuntimeRecoveryPrewarmInput<BO = Record<string, never>> = Readonly<{
@@ -54,23 +54,18 @@ const PROVIDER_REQUEST_TIMEOUT_MS = 150_000;
 const PROVIDER_RETRY_DELAY_MS = 250;
 
 function retryableProviderFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const { status } = error as Error & { status?: unknown };
-  if (typeof status === "number" && (status === 429 || status >= 500)) {
+  if (!(error instanceof Error)) return false;
+  const status = (error as Error & { status?: unknown }).status;
+  if (typeof status === "number" && (status === 429 || status >= 500))
     return true;
-  }
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
-    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`
+    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
   );
 }
 
 function providerDiagnostic(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "unknown";
-  }
-  const { cause } = error as Error & { cause?: unknown };
+  if (!(error instanceof Error)) return "unknown";
+  const cause = (error as Error & { cause?: unknown }).cause;
   const code =
     cause &&
     typeof cause === "object" &&
@@ -83,12 +78,12 @@ function providerDiagnostic(error: unknown): string {
 
 type ProviderFetch = (
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit,
 ) => Promise<Response>;
 
 export function createProviderFetch(
   fetchImpl: typeof fetch = fetch,
-  requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS
+  requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS,
 ): ProviderFetch {
   return async (input, init) => {
     const original = new Request(input, init);
@@ -106,10 +101,10 @@ export function createProviderFetch(
         ) {
           await response.body?.cancel();
           console.warn(
-            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`
+            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
           );
           await new Promise((resolve) =>
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS)
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
           );
           continue;
         }
@@ -124,15 +119,15 @@ export function createProviderFetch(
           (providerRequestTimedOut || retryableProviderFailure(error))
         ) {
           console.warn(
-            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`
+            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
           await new Promise((resolve) =>
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS)
+            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS),
           );
           continue;
         }
         console.warn(
-          `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}`
+          `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}`,
         );
         throw error;
       } finally {
@@ -153,6 +148,12 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
       : (input.providerTemplateKey?.(authoredTemplateKey) ??
         authoredTemplateKey);
   return {
+    name: input.backend.name,
+    prewarm: (prewarmInput) =>
+      input.backend.prewarm({
+        ...prewarmInput,
+        templateKey: providerTemplateKey(prewarmInput.templateKey)!,
+      }),
     async create(createInput) {
       const providerCreateInput = {
         ...createInput,
@@ -177,17 +178,11 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
         });
       }
     },
-    name: input.backend.name,
-    prewarm: (prewarmInput) =>
-      input.backend.prewarm({
-        ...prewarmInput,
-        templateKey: providerTemplateKey(prewarmInput.templateKey)!,
-      }),
   };
 }
 
 function createProcessSessionReusingBackend<BO, SO>(
-  backend: SandboxBackend<BO, SO>
+  backend: SandboxBackend<BO, SO>,
 ): SandboxBackend<BO, SO> {
   const processState = globalThis as typeof globalThis & {
     __autographDevelopmentSandboxHandles?: Map<
@@ -198,6 +193,8 @@ function createProcessSessionReusingBackend<BO, SO>(
   const sessions = (processState.__autographDevelopmentSandboxHandles ??=
     new Map()) as Map<string, Promise<SandboxBackendHandle<SO>>>;
   return {
+    name: backend.name,
+    prewarm: (input) => backend.prewarm(input),
     create(input) {
       const key = JSON.stringify([
         backend.name,
@@ -212,7 +209,7 @@ function createProcessSessionReusingBackend<BO, SO>(
             event: "autograph.local.sandbox-handle",
             state: "hit",
             sessionKey: input.sessionKey,
-          })
+          }),
         );
         return existing;
       }
@@ -221,7 +218,7 @@ function createProcessSessionReusingBackend<BO, SO>(
           event: "autograph.local.sandbox-handle",
           state: "miss",
           sessionKey: input.sessionKey,
-        })
+        }),
       );
 
       const pending: Promise<SandboxBackendHandle<SO>> = backend
@@ -249,8 +246,6 @@ function createProcessSessionReusingBackend<BO, SO>(
       sessions.set(key, pending);
       return pending;
     },
-    name: backend.name,
-    prewarm: (input) => backend.prewarm(input),
   };
 }
 
@@ -259,7 +254,7 @@ function createProcessSessionReusingBackend<BO, SO>(
  * session. Only template construction may download the pinned toolchain.
  */
 export function createHostedVercelBackend(
-  input: HostedVercelBackendInput
+  input: HostedVercelBackendInput,
 ): ReturnType<typeof vercel> {
   // Eve merges session-only creation options into the provider request,
   // although its public return type currently names only mounts. Keep the
@@ -287,19 +282,19 @@ export function createHostedVercelBackend(
               // official Vercel `Sandbox.create` call when no template is
               // present. The installation token remains provider-only.
               source: {
-                password: source.token,
                 type: "git" as const,
                 url: source.url,
                 username: "x-access-token" as const,
+                password: source.token,
               },
             }),
       };
     },
   });
   const authorized = createAuthorizedSandboxBackend({
+    backend,
     authorizeSessionCommand: (sessionId) =>
       assertHostedSandboxCommandAuthority({ sessionId }),
-    backend,
   });
   const templateOptional = createRuntimeRecoveringBackend({
     backend: authorized,

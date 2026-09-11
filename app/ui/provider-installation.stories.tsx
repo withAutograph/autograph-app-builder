@@ -9,6 +9,8 @@ import {
 } from "./provider-connection";
 
 const meta = {
+  title: "Components/Connections/Provider Connection",
+  component: ProviderConnection,
   args: {
     action: "/github/installations/start",
     buttonLabel: "Install or update GitHub access",
@@ -16,13 +18,11 @@ const meta = {
     description:
       "Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here.",
     icon: <FaGithub size={23} />,
-    resumeKey: "resume-123",
     returnTo: "/",
+    resumeKey: "resume-123",
     title: "Connect a GitHub App installation",
   },
-  component: ProviderConnection,
   parameters: { layout: "fullscreen" },
-  title: "Components/Connections/Provider Connection",
 } satisfies Meta<typeof ProviderConnection>;
 
 export default meta;
@@ -74,7 +74,7 @@ export const VercelFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("alert")).toHaveTextContent(
-      "Vercel could not be connected."
+      "Vercel could not be connected.",
     );
   },
 };

@@ -8,22 +8,22 @@ import {
 describe("provider connection status", () => {
   it("accepts only allowlisted failure reasons", () => {
     expect(
-      parseProviderConnectionFailureReason("workspace-unavailable")
+      parseProviderConnectionFailureReason("workspace-unavailable"),
     ).toBeUndefined();
     expect(parseProviderConnectionFailureReason("secret=do-not-render")).toBe(
-      undefined
+      undefined,
     );
     expect(parseProviderConnectionFailureReason(["request-invalid"])).toBe(
-      undefined
+      undefined,
     );
   });
 
   it("renders actionable provider copy without reflecting arbitrary input", () => {
     expect(
-      providerConnectionFailureMessage("Vercel", "configuration-unavailable")
+      providerConnectionFailureMessage("Vercel", "configuration-unavailable"),
     ).toContain("administrator needs to finish provider setup");
     expect(providerConnectionFailureMessage("GitHub")).not.toContain(
-      "active App Builder workspace"
+      "active App Builder workspace",
     );
   });
 });

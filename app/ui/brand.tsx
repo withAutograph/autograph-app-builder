@@ -1,6 +1,6 @@
-interface IconProps {
+type IconProps = {
   className?: string;
-}
+};
 
 export function ArrowIcon({ className }: IconProps) {
   return (

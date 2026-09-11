@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-
 import { storyTeamOptions } from "@/.storybook/create-app/app-builder-fixtures";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-
 import { DeployToSection } from "./app-builder";
 
 const meta = {
+  title: "Components/Create App/Sections/Deploy To",
+  component: DeployToSection,
   args: {
     available: true,
     connected: true,
@@ -17,7 +17,6 @@ const meta = {
     team: "vercel-autograph",
     teamOptions: storyTeamOptions,
   },
-  component: DeployToSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -25,14 +24,13 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
-  title: "Components/Create App/Sections/Deploy To",
 } satisfies Meta<typeof DeployToSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const OptionalNone: Story = {};
 export const Connected: Story = { args: { selected: "vercel" } };
 export const ConnectRequired: Story = {
-  args: { connected: false, selected: "vercel" },
+  args: { selected: "vercel", connected: false },
 };
 export const Unavailable: Story = {
   args: { available: false, connected: false },

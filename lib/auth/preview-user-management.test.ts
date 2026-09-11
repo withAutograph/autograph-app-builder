@@ -7,10 +7,8 @@ import {
   createPreviewUserManagementLifecycle,
   OrganizationProvisioningError,
   previewUserManagementPlugins,
-} from "./preview-user-management";
-import type {
-  OrganizationProvisioningFailure,
-  PreviewOrganizationUserAuthority,
+  type OrganizationProvisioningFailure,
+  type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
 function createAuthority(input?: {
@@ -31,9 +29,9 @@ function createAuthority(input?: {
 }
 
 const verifiedUser = {
+  id: "user_one",
   email: "Person@Example.com",
   emailVerified: true,
-  id: "user_one",
 };
 
 describe("Preview Better Auth user management", () => {
@@ -47,7 +45,7 @@ describe("Preview Better Auth user management", () => {
     };
 
     expect(schema.organization?.fields?.workspaceId).toEqual(
-      expect.objectContaining({ input: false, required: true })
+      expect.objectContaining({ required: true, input: false }),
     );
     expect(schema.organization?.fields?.workspaceId?.fieldName).toBeUndefined();
   });
@@ -58,11 +56,11 @@ describe("Preview Better Auth user management", () => {
       const lifecycle = createPreviewUserManagementLifecycle(createAuthority());
 
       await expect(
-        lifecycle.beforeUserCreate(verifiedUser, { path })
+        lifecycle.beforeUserCreate(verifiedUser, { path }),
       ).resolves.toMatchObject({
         data: { email: "person@example.com", emailVerified: true },
       });
-    }
+    },
   );
 
   it("rejects an unverified provider identity before user creation", async () => {
@@ -72,11 +70,11 @@ describe("Preview Better Auth user management", () => {
     await expect(
       lifecycle.beforeUserCreate(
         { ...verifiedUser, emailVerified: false },
-        { path: "/callback/github" }
-      )
+        { path: "/callback/github" },
+      ),
     ).rejects.toMatchObject({
-      body: { code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED" },
       status: "FORBIDDEN",
+      body: { code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED" },
     });
     expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
   });
@@ -84,7 +82,7 @@ describe("Preview Better Auth user management", () => {
   it("leaves administrative user creation to the admin plugin", async () => {
     const lifecycle = createPreviewUserManagementLifecycle(createAuthority());
     await expect(
-      lifecycle.beforeUserCreate(verifiedUser, { path: "/admin/create-user" })
+      lifecycle.beforeUserCreate(verifiedUser, { path: "/admin/create-user" }),
     ).resolves.toBeUndefined();
   });
 
@@ -94,9 +92,9 @@ describe("Preview Better Auth user management", () => {
 
     await expect(
       lifecycle.beforeSessionCreate({
-        token: "session-token",
         userId: verifiedUser.id,
-      })
+        token: "session-token",
+      }),
     ).resolves.toEqual({
       data: {
         activeOrganizationId: "organization_one",
@@ -116,8 +114,8 @@ describe("Preview Better Auth user management", () => {
     await expect(
       lifecycle.beforeSessionCreate(
         { userId: verifiedUser.id },
-        { path: "/passkey/verify-registration" }
-      )
+        { path: "/passkey/verify-registration" },
+      ),
     ).resolves.toBeUndefined();
     expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
   });
@@ -127,10 +125,10 @@ describe("Preview Better Auth user management", () => {
     const database = new DatabaseSync(":memory:");
     const auth = betterAuth({
       baseURL: "http://localhost:3000",
+      secret: "better-auth-secret-that-is-long-enough-for-testing",
       database,
       emailAndPassword: { enabled: true },
       plugins: [...previewUserManagementPlugins(authority)],
-      secret: "better-auth-secret-that-is-long-enough-for-testing",
     });
     await (await auth.$context).runMigrations();
 
@@ -144,7 +142,7 @@ describe("Preview Better Auth user management", () => {
 
     expect(authority.ensureOrganizationForVerifiedUser).toHaveBeenCalledOnce();
     expect(
-      database.prepare('select "activeOrganizationId" from "session"').get()
+      database.prepare('select "activeOrganizationId" from "session"').get(),
     ).toEqual({ activeOrganizationId: "organization_one" });
   });
 
@@ -166,12 +164,12 @@ describe("Preview Better Auth user management", () => {
     "maps %s to the product-facing %s error",
     async (failure, code, status) => {
       const lifecycle = createPreviewUserManagementLifecycle(
-        createAuthority({ failure })
+        createAuthority({ failure }),
       );
       await expect(
-        lifecycle.beforeSessionCreate({ userId: verifiedUser.id })
-      ).rejects.toMatchObject({ body: { code }, status });
-    }
+        lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
+      ).rejects.toMatchObject({ status, body: { code } });
+    },
   );
 
   it("masks unexpected persistence failures and remains retry-safe", async () => {
@@ -187,12 +185,12 @@ describe("Preview Better Auth user management", () => {
     const lifecycle = createPreviewUserManagementLifecycle(authority);
 
     await expect(
-      lifecycle.beforeSessionCreate({ userId: verifiedUser.id })
+      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
     ).rejects.toMatchObject({
       body: { code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED" },
     });
     await expect(
-      lifecycle.beforeSessionCreate({ userId: verifiedUser.id })
+      lifecycle.beforeSessionCreate({ userId: verifiedUser.id }),
     ).resolves.toMatchObject({
       data: { activeOrganizationId: "organization_one" },
     });

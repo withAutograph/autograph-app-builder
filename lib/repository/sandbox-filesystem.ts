@@ -4,12 +4,12 @@ const DIRECTORY_BATCH_SIZE = 256;
 const DIRECTORY_TIMEOUT_MS = 30_000;
 
 function quoteSandboxArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
 export async function ensureSandboxDirectories(
   sandbox: SandboxSession,
-  paths: readonly string[]
+  paths: readonly string[],
 ): Promise<void> {
   const directories = [...new Set(paths)].toSorted();
   for (
@@ -19,14 +19,13 @@ export async function ensureSandboxDirectories(
   ) {
     const batch = directories.slice(index, index + DIRECTORY_BATCH_SIZE);
     const result = await sandbox.run({
-      abortSignal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
       command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
       workingDirectory: "/workspace",
+      abortSignal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0)
       throw new Error(
-        "The sandbox workspace directories could not be prepared."
+        "The sandbox workspace directories could not be prepared.",
       );
-    }
   }
 }

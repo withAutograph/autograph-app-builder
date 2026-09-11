@@ -1,15 +1,15 @@
 import type { BrowserContext, CDPSession, Page } from "playwright/test";
 
-interface Credential {
+type Credential = {
   credentialId: string;
   rpId: string;
   userHandle?: string;
-}
+};
 
 export class VirtualAuthenticator {
   private constructor(
     private readonly session: CDPSession,
-    readonly id: string
+    readonly id: string,
   ) {}
 
   static async create(context: BrowserContext, page: Page) {
@@ -19,15 +19,15 @@ export class VirtualAuthenticator {
       "WebAuthn.addVirtualAuthenticator",
       {
         options: {
-          automaticPresenceSimulation: true,
+          protocol: "ctap2",
           ctap2Version: "ctap2_1",
+          transport: "internal",
           hasResidentKey: true,
           hasUserVerification: true,
           isUserVerified: true,
-          protocol: "ctap2",
-          transport: "internal",
+          automaticPresenceSimulation: true,
         },
-      }
+      },
     );
     return new VirtualAuthenticator(session, authenticatorId);
   }

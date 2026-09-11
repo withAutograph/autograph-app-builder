@@ -1,20 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,
   buildCursorInstallUrl,
   codexInstallCommand,
+  type HandoffDestination,
 } from "../../lib/handoff/client";
-import type { HandoffDestination } from "../../lib/handoff/client";
-
 import styles from "./app-builder.module.css";
 import handoffStyles from "./handoff.module.css";
 
-export interface HandoffControlData {
+export type HandoffControlData = {
   version: 1;
   handoffId: string;
   expiresAt: string;
@@ -22,11 +21,11 @@ export interface HandoffControlData {
   destination: HandoffDestination;
   cursorInstallReady: boolean;
   mcpUrl: string;
-}
+};
 
 function readStatus(
   value: HandoffControlData,
-  handoffId: string
+  handoffId: string,
 ): HandoffControlData {
   if (
     value.version !== 1 ||
@@ -37,17 +36,16 @@ function readStatus(
     typeof value.mcpUrl !== "string" ||
     typeof value.expiresAt !== "string" ||
     Number.isNaN(Date.parse(value.expiresAt))
-  ) {
+  )
     throw new Error("handoff-response-invalid");
-  }
   return {
-    cursorInstallReady: value.cursorInstallReady,
-    destination: value.destination,
-    expiresAt: value.expiresAt,
-    handoffId,
-    mcpUrl: value.mcpUrl,
-    status: value.status,
     version: 1,
+    handoffId,
+    expiresAt: value.expiresAt,
+    status: value.status,
+    destination: value.destination,
+    cursorInstallReady: value.cursorInstallReady,
+    mcpUrl: value.mcpUrl,
   };
 }
 
@@ -60,7 +58,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
   const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">(
-    "ready"
+    "ready",
   );
   const [renewing, setRenewing] = useState(false);
   const renewalRequestId = useRef<string | undefined>(undefined);
@@ -76,9 +74,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       : undefined;
 
   useEffect(() => {
-    if (access !== "ready" || renewing || data.status === "continued") {
-      return;
-    }
+    if (access !== "ready" || renewing || data.status === "continued") return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     let disposed = false;
@@ -87,9 +83,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       controller?.abort();
     };
     const refresh = async () => {
-      if (disposed || document.visibilityState !== "visible") {
-        return;
-      }
+      if (disposed || document.visibilityState !== "visible") return;
       const request = new AbortController();
       controller = request;
       let complete = false;
@@ -99,11 +93,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           {
             cache: "no-store",
             signal: request.signal,
-          }
+          },
         );
-        if (request.signal.aborted || disposed) {
-          return;
-        }
+        if (request.signal.aborted || disposed) return;
         if (
           response.status === 401 ||
           response.status === 403 ||
@@ -113,38 +105,30 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           setAccess(response.status === 401 ? "sign-in" : "unavailable");
           return;
         }
-        if (!response.ok) {
-          throw new Error("handoff-status-unavailable");
-        }
+        if (!response.ok) throw new Error("handoff-status-unavailable");
         const next = readStatus(await response.json(), data.handoffId);
-        if (request.signal.aborted || disposed) {
-          return;
-        }
+        if (request.signal.aborted || disposed) return;
         complete = next.status === "continued";
         setData(next);
         setNotice("");
       } catch {
-        if (!request.signal.aborted && !disposed) {
+        if (!request.signal.aborted && !disposed)
           setNotice(
-            "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open."
+            "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open.",
           );
-        }
       } finally {
         if (
           !disposed &&
           !request.signal.aborted &&
           !complete &&
           document.visibilityState === "visible"
-        ) {
+        )
           timer = setTimeout(() => void refresh(), 5_000);
-        }
       }
     };
     const visibilityChanged = () => {
       stop();
-      if (document.visibilityState === "visible") {
-        void refresh();
-      }
+      if (document.visibilityState === "visible") void refresh();
     };
     document.addEventListener("visibilitychange", visibilityChanged);
     void refresh();
@@ -157,9 +141,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   }, [access, data.handoffId, data.status, renewing]);
 
   const renew = async () => {
-    if (renewalInFlight.current) {
-      return;
-    }
+    if (renewalInFlight.current) return;
     renewalInFlight.current = true;
     setRenewing(true);
     setRenewalNotice("");
@@ -181,10 +163,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       const response = await fetch(
         `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}/renew`,
         {
-          body: JSON.stringify({ creationRequestId: renewalRequestId.current }),
-          headers: { "Content-Type": "application/json" },
           method: "POST",
-        }
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ creationRequestId: renewalRequestId.current }),
+        },
       );
       if (
         response.status === 401 ||
@@ -194,9 +176,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         setAccess(response.status === 401 ? "sign-in" : "unavailable");
         return;
       }
-      if (!response.ok) {
-        throw new Error("handoff-renewal-unavailable");
-      }
+      if (!response.ok) throw new Error("handoff-renewal-unavailable");
       const renewed = (await response.json()) as {
         version: number;
         handoffId: string;
@@ -206,18 +186,15 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         renewed.version !== 1 ||
         typeof renewed.expiresAt !== "string" ||
         Number.isNaN(Date.parse(renewed.expiresAt))
-      ) {
+      )
         throw new Error("handoff-response-invalid");
-      }
       buildAppHandoffPrompt(renewed.handoffId, destination);
       if (renewed.handoffId === data.handoffId) {
         const status = await fetch(
           `/api/builder/handoffs/${encodeURIComponent(renewed.handoffId)}`,
-          { cache: "no-store" }
+          { cache: "no-store" },
         );
-        if (!status.ok) {
-          throw new Error("handoff-status-unavailable");
-        }
+        if (!status.ok) throw new Error("handoff-status-unavailable");
         setData(readStatus(await status.json(), renewed.handoffId));
       } else {
         router.replace(`/handoff/${encodeURIComponent(renewed.handoffId)}`);
@@ -225,7 +202,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       router.refresh();
     } catch {
       setRenewalNotice(
-        "We couldn’t renew this handoff. Try again; your brief and completed resources are saved."
+        "We couldn’t renew this handoff. Try again; your brief and completed resources are saved.",
       );
     } finally {
       renewalInFlight.current = false;
@@ -246,9 +223,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 ? "This handoff has expired. Renew it to continue with your saved brief and resources."
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
-      {access === "ready" ? null : (
+      {access !== "ready" ? (
         <a href={signInUrl}>Sign in with the same account</a>
-      )}
+      ) : null}
       <fieldset disabled={renewing}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (
@@ -287,14 +264,14 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             window.open(
               buildAppHandoffUrl(destination, data.handoffId),
               "_blank",
-              "noopener,noreferrer"
+              "noopener,noreferrer",
             );
             setLaunchNotice(
-              `Launch requested for ${label}. If it did not open, try again or paste the prompt manually. Review and send it in ${label}.`
+              `Launch requested for ${label}. If it did not open, try again or paste the prompt manually. Review and send it in ${label}.`,
             );
           } catch {
             setLaunchNotice(
-              `The browser blocked ${label}. Open it manually and paste the prompt below.`
+              `The browser blocked ${label}. Open it manually and paste the prompt below.`,
             );
           }
         }}
@@ -316,7 +293,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 setCopyNotice("Prompt copied.");
               } catch {
                 setCopyNotice(
-                  "Copy failed. Select and copy the prompt below manually."
+                  "Copy failed. Select and copy the prompt below manually.",
                 );
               }
             }}

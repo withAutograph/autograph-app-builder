@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-
 import { ConnectionsSection } from "./app-builder";
 
 const meta = {
+  title: "Components/Create App/Sections/Connections",
+  component: ConnectionsSection,
   args: {
     connected: [],
     onAdd: fn(),
@@ -17,7 +17,6 @@ const meta = {
     selected: [],
     showMore: false,
   },
-  component: ConnectionsSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -25,7 +24,6 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
-  title: "Components/Create App/Sections/Connections",
 } satisfies Meta<typeof ConnectionsSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -35,15 +33,15 @@ export const Filtered: Story = { args: { search: "quick" } };
 export const EmptySearch: Story = { args: { search: "missing" } };
 export const Added: Story = { args: { selected: ["QuickBooks"] } };
 export const Connected: Story = {
-  args: { connected: ["QuickBooks"], selected: ["QuickBooks"] },
+  args: { selected: ["QuickBooks"], connected: ["QuickBooks"] },
 };
 export const AddRemoveAndCustomize: Story = {
-  args: { connected: ["QuickBooks"], selected: ["QuickBooks"] },
+  args: { selected: ["QuickBooks"], connected: ["QuickBooks"] },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Customize" }));
     await userEvent.click(
-      canvas.getByRole("button", { name: "Remove QuickBooks" })
+      canvas.getByRole("button", { name: "Remove QuickBooks" }),
     );
     await expect(args.onCustomize).toHaveBeenCalledWith("QuickBooks");
     await expect(args.onRemove).toHaveBeenCalledWith("QuickBooks");
@@ -54,11 +52,11 @@ export const SearchClearAndShowMore: Story = {
     const canvas = within(canvasElement);
     await userEvent.type(
       canvas.getByPlaceholderText("Search connections…"),
-      "quick"
+      "quick",
     );
     await expect(args.onSearchChange).toHaveBeenCalled();
     await userEvent.click(
-      canvas.getByRole("button", { name: "Show more connections" })
+      canvas.getByRole("button", { name: "Show more connections" }),
     );
     await expect(args.onShowMore).toHaveBeenCalledOnce();
   },

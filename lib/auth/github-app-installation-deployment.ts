@@ -1,20 +1,5 @@
-import {
-  providerEmulationEnvironment,
-  readProviderEmulation,
-} from "../integrations/local-provider-emulation";
-import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
-import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
-import {
-  providerConnectionRedirect,
-  providerConnectionReturnFromFormData,
-} from "../integrations/provider-connection-return";
-import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
-import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
-import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
-import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
+import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
-import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
   createGitHubAppInstallationAuthorization,
@@ -22,21 +7,36 @@ import {
   GitHubInstallationAuthorizationError,
   readGitHubAppInstallationEnvironment,
 } from "./github-app-installation";
-import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
-import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "./preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
+import {
+  providerEmulationEnvironment,
+  readProviderEmulation,
+} from "../integrations/local-provider-emulation";
+import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
+import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
+import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
+import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
+import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
+import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
+import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
+import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
+import {
+  providerConnectionRedirect,
+  providerConnectionReturnFromFormData,
+  type ProviderConnectionReturn,
+} from "../integrations/provider-connection-return";
 import {
   signInForWorkspaceRedirect,
   workspaceOnboardingRedirect,
 } from "./workspace-onboarding";
 
-interface Authority {
+type Authority = {
   issuer: string;
   audience: string;
   workspaceId: string;
   ownerUserId: string;
-}
+};
 
 type InstallationAuthorization = ReturnType<
   typeof createGitHubAppInstallationAuthorization
@@ -56,13 +56,14 @@ export function createGitHubAppInstallationRouteHandlers(input: {
     returnState: ProviderConnectionReturn;
   }): Promise<string | undefined>;
 }) {
-  const { origin } = new URL(input.origin);
+  const origin = new URL(input.origin).origin;
   const redirect = (
     status: "connected" | "failed",
     reason?: ProviderConnectionFailureReason,
-    returnState?: ProviderConnectionReturn
+    returnState?: ProviderConnectionReturn,
   ) =>
     new Response(null, {
+      status: 303,
       headers: {
         ...noStoreHeaders,
         Location: providerConnectionRedirect({
@@ -73,92 +74,15 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           returnState,
         }),
       },
-      status: 303,
     });
 
   return {
-    async callback(request: Request): Promise<Response> {
-      const startedAt = Date.now();
-      const fail = (
-        reason: ProviderConnectionFailureReason,
-        diagnostic?: { stage: string; category?: string },
-        returnState?: ProviderConnectionReturn
-      ) => {
-        logProviderConnectionFailure({
-          request,
-          provider: "github",
-          phase: "callback",
-          reason,
-          startedAt,
-          diagnostic,
-        });
-        return redirect("failed", reason, returnState);
-      };
-      if (request.method !== "GET") return fail("request-invalid");
-
-      let authority: Authority | undefined;
-      try {
-        authority = await input.authorityForRequest(request);
-      } catch {
-        return new Response(null, {
-          status: 303,
-          headers: {
-            ...noStoreHeaders,
-            Location: workspaceOnboardingRedirect(
-              origin,
-              "workspace-setup-retry"
-            ),
-          },
-        });
-      }
-      if (authority === undefined)
-        return new Response(null, {
-          status: 303,
-          headers: {
-            ...noStoreHeaders,
-            Location: signInForWorkspaceRedirect(origin),
-          },
-        });
-
-      try {
-        const result = await input.authorization.complete(
-          request.url,
-          authority
-        );
-        if (result.status === "redirect") {
-          return new Response(null, {
-            status: 303,
-            headers: { ...noStoreHeaders, Location: result.redirectUrl },
-          });
-        }
-        const continuationRedirect = await input.onConnected?.({
-          authority,
-          returnState: result.returnState,
-        });
-        if (continuationRedirect) {
-          return new Response(null, {
-            status: 303,
-            headers: { ...noStoreHeaders, Location: continuationRedirect },
-          });
-        }
-        return redirect("connected", undefined, result.returnState);
-      } catch (error) {
-        return fail(
-          "callback-invalid",
-          githubInstallationAuthorizationDiagnostic(error),
-          error instanceof GitHubInstallationAuthorizationError
-            ? error.returnState
-            : undefined
-        );
-      }
-    },
-
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
       const fail = (
         reason: ProviderConnectionFailureReason,
         diagnostic?: { stage: string; category?: string },
-        returnState?: ProviderConnectionReturn
+        returnState?: ProviderConnectionReturn,
       ) => {
         logProviderConnectionFailure({
           request,
@@ -189,7 +113,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
             ...noStoreHeaders,
             Location: workspaceOnboardingRedirect(
               origin,
-              "workspace-setup-retry"
+              "workspace-setup-retry",
             ),
           },
         });
@@ -205,7 +129,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
 
       try {
         const returnState = providerConnectionReturnFromFormData(
-          await request.formData()
+          await request.formData(),
         );
         const result = await input.authorization.begin(authority, returnState);
         return new Response(null, {
@@ -219,57 +143,138 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         return fail("authorization-failed");
       }
     },
+
+    async callback(request: Request): Promise<Response> {
+      const startedAt = Date.now();
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
+        logProviderConnectionFailure({
+          request,
+          provider: "github",
+          phase: "callback",
+          reason,
+          startedAt,
+          diagnostic,
+        });
+        return redirect("failed", reason, returnState);
+      };
+      if (request.method !== "GET") return fail("request-invalid");
+
+      let authority: Authority | undefined;
+      try {
+        authority = await input.authorityForRequest(request);
+      } catch {
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: workspaceOnboardingRedirect(
+              origin,
+              "workspace-setup-retry",
+            ),
+          },
+        });
+      }
+      if (authority === undefined)
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...noStoreHeaders,
+            Location: signInForWorkspaceRedirect(origin),
+          },
+        });
+
+      try {
+        const result = await input.authorization.complete(
+          request.url,
+          authority,
+        );
+        if (result.status === "redirect") {
+          return new Response(null, {
+            status: 303,
+            headers: { ...noStoreHeaders, Location: result.redirectUrl },
+          });
+        }
+        const continuationRedirect = await input.onConnected?.({
+          authority,
+          returnState: result.returnState,
+        });
+        if (continuationRedirect) {
+          return new Response(null, {
+            status: 303,
+            headers: { ...noStoreHeaders, Location: continuationRedirect },
+          });
+        }
+        return redirect("connected", undefined, result.returnState);
+      } catch (error) {
+        return fail(
+          "callback-invalid",
+          githubInstallationAuthorizationDiagnostic(error),
+          error instanceof GitHubInstallationAuthorizationError
+            ? error.returnState
+            : undefined,
+        );
+      }
+    },
   };
 }
 
 let deploymentHandlers:
-  | ReturnType<typeof createGitHubAppInstallationRouteHandlers>
-  | undefined;
+  ReturnType<typeof createGitHubAppInstallationRouteHandlers> | undefined;
 
 export function getGitHubAppInstallationDeploymentHandlers(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (deploymentHandlers !== undefined) {
-    return deploymentHandlers;
-  }
+  if (deploymentHandlers !== undefined) return deploymentHandlers;
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const config = readGitHubAppInstallationEnvironment(resolvedEnvironment);
   const previewConfig = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
   const database = openHostedPostgresDatabase(previewConfig.databaseUrl);
   let credentialStore:
-    | ReturnType<typeof createPostgresGitHubUserCredentialStore>
-    | undefined;
+    ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
   try {
     credentialStore = createPostgresGitHubUserCredentialStore({
-      config: readGitHubUserCredentialEnvironment(environment),
       database,
+      config: readGitHubUserCredentialEnvironment(environment),
     });
   } catch {}
   const membership = createPostgresPreviewOrganizationAuthority(database, {
-    audience: previewConfig.resource,
     issuer: previewConfig.issuer,
+    audience: previewConfig.resource,
   });
   const emulation = readProviderEmulation(resolvedEnvironment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
+    stateStore:
+      createPostgresGitHubInstallationAuthorizationStateStore(database),
+    membership: {
+      isActiveMember: (authority) => membership.isActiveMember(authority),
+    },
+    installationStore: createPostgresHostedGitHubInstallationStore(database),
     credentialStore,
     emulation,
     fetch: emulation
       ? (resource, init) =>
           providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
-    installationStore: createPostgresHostedGitHubInstallationStore(database),
-    membership: {
-      isActiveMember: (authority) => membership.isActiveMember(authority),
-    },
-    stateStore:
-      createPostgresGitHubInstallationAuthorizationStateStore(database),
   });
   const repositoryAccessContinuations =
     createRepositoryAccessContinuationService({
       store: createPostgresRepositoryAccessContinuationStore(database),
     });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
+    origin: new URL(config.issuer).origin,
+    authorization,
+    async onConnected({ authority, returnState }) {
+      if (!returnState.resumeKey) return undefined;
+      return repositoryAccessContinuations.authorize({
+        authority,
+        continuationId: returnState.resumeKey,
+      });
+    },
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment: resolvedEnvironment,
@@ -283,22 +288,13 @@ export function getGitHubAppInstallationDeploymentHandlers(
         ownerUserId: session.user.id,
       };
     },
-    authorization,
-    async onConnected({ authority, returnState }) {
-      if (!returnState.resumeKey) return undefined;
-      return repositoryAccessContinuations.authorize({
-        authority,
-        continuationId: returnState.resumeKey,
-      });
-    },
-    origin: new URL(config.issuer).origin,
   });
   return deploymentHandlers;
 }
 
 export function createGitHubAppInstallationDeploymentHandler(
   kind: "start" | "callback",
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return async (request: Request): Promise<Response> => {
     const startedAt = Date.now();
@@ -308,19 +304,19 @@ export function createGitHubAppInstallationDeploymentHandler(
       ](request);
     } catch {
       logProviderConnectionFailure({
-        phase: kind,
-        provider: "github",
-        reason: "configuration-unavailable",
         request,
+        provider: "github",
+        phase: kind,
+        reason: "configuration-unavailable",
         startedAt,
       });
       return new Response(null, {
+        status: 303,
         headers: {
           ...noStoreHeaders,
           Location:
             "/github/installations?status=failed&reason=configuration-unavailable",
         },
-        status: 303,
       });
     }
   };

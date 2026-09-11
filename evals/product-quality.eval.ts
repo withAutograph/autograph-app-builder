@@ -12,11 +12,11 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 function assertQuality(
   report: { hardFailures: readonly string[] },
-  label: string
+  label: string,
 ) {
   return satisfies(
     () => report.hardFailures.length === 0,
-    `${label}: ${report.hardFailures.join(" ") || "passed"}`
+    `${label}: ${report.hardFailures.join(" ") || "passed"}`,
   );
 }
 
@@ -28,14 +28,14 @@ export default defineEval({
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
     await t.send(
-      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`
+      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
     );
     t.requireInputRequest({ toolName: "apply_app_creation" });
     await t.respondAll("approve");
     t.succeeded();
     t.calledTool("record_prototype_artifact", {
-      count: 1,
       input: {
+        path: "prototype/vendor-onboarding/index.html",
         content: (value) => {
           if (typeof value !== "string") return false;
           const report = evaluatePrototypeQuality({
@@ -107,28 +107,28 @@ Confirmed.
           });
           return report.hardFailures.length === 0;
         },
-        path: "prototype/vendor-onboarding/index.html",
       },
+      count: 1,
     });
     t.calledTool("record_prototype_artifact", {
-      count: 1,
       input: {
+        path: "prototype/vendor-onboarding/decisions.md",
         content: (value) =>
           typeof value === "string" &&
           value.includes("Operations starts from a review queue") &&
           value.includes("Finance tax verification appears only"),
-        path: "prototype/vendor-onboarding/decisions.md",
       },
+      count: 1,
     });
     t.calledTool("record_prototype_artifact", {
-      count: 1,
       input: {
+        path: "prototype/vendor-onboarding/app-spec.md",
         content: (value) =>
           typeof value === "string" &&
           validateBuildReadyAppSpec(value).valid &&
           value.includes("prototype/vendor-onboarding/index.html"),
-        path: "prototype/vendor-onboarding/app-spec.md",
       },
+      count: 1,
     });
     t.calledTool("apply_app_creation", { count: 1 });
     t.calledTool("validate_app_creation", { count: 1 });
@@ -136,11 +136,11 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(t.reply),
           scenario: vendor,
+          reply: String(t.reply),
         }),
-        vendor.id
-      )
+        vendor.id,
+      ),
     );
 
     const ambiguity = productQualityScenario("material-product-ambiguity");
@@ -149,11 +149,11 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(t.reply),
           scenario: ambiguity,
+          reply: String(t.reply),
         }),
-        ambiguity.id
-      )
+        ambiguity.id,
+      ),
     );
 
     const preference = productQualityScenario("explicit-preference");
@@ -162,26 +162,26 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(t.reply),
           scenario: preference,
+          reply: String(t.reply),
         }),
-        preference.id
-      )
+        preference.id,
+      ),
     );
 
     const unavailable = productQualityScenario(
-      "unavailable-product-alternative"
+      "unavailable-product-alternative",
     );
     await t.send(unavailable.brief);
     t.check(
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(t.reply),
           scenario: unavailable,
+          reply: String(t.reply),
         }),
-        unavailable.id
-      )
+        unavailable.id,
+      ),
     );
     t.eventsSatisfy(
       "all assistant messages stay product-facing across the quality suite",
@@ -197,7 +197,7 @@ Confirmed.
             : [];
         });
         return messages.length <= 4 && messages.every(isProductFacing);
-      }
+      },
     );
   },
 });

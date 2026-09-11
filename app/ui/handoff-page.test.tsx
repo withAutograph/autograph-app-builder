@@ -32,15 +32,15 @@ describe("authenticated handoff page", () => {
     server.load.mockResolvedValue(undefined);
     await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`
+      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,
     );
     expect(server.load.mock.calls[0]?.[0].headers.get("cookie")).toBe(
-      "web-session"
+      "web-session",
     );
   });
   it("does not expose server errors or owner information for an unavailable handoff", async () => {
     server.load.mockRejectedValue(
-      new Error("private-owner@example.com database error")
+      new Error("private-owner@example.com database error"),
     );
     const html = renderToStaticMarkup(await HandoffContent({ params }));
     expect(html).toContain("Handoff unavailable");
@@ -51,23 +51,23 @@ describe("authenticated handoff page", () => {
     "renders saved context and only offers reconnect for credential failures: %s",
     async (code) => {
       server.load.mockResolvedValue({
-        cursorInstallReady: false,
-        destination: "cursor",
-        expiresAt: "2030-01-01T00:00:00Z",
+        version: 1,
         handoffId: id,
+        expiresAt: "2030-01-01T00:00:00Z",
+        status: "prepared",
+        destination: "cursor",
+        cursorInstallReady: false,
+        mcpUrl: "https://builder.example/mcp",
         intent: {
           appName: "Support App",
           brief: "Help customers",
           connections: ["QuickBooks"],
+          repository: { requestedName: "support-app", private: true },
           provisioning: {
-            github: { code, status: "failed" },
-            vercel: { code, status: "failed" },
+            github: { status: "failed", code },
+            vercel: { status: "failed", code },
           },
-          repository: { private: true, requestedName: "support-app" },
         },
-        mcpUrl: "https://builder.example/mcp",
-        status: "prepared",
-        version: 1,
       });
       const html = renderToStaticMarkup(await HandoffContent({ params }));
       expect(html).toContain("Support App");
@@ -75,14 +75,12 @@ describe("authenticated handoff page", () => {
       expect(html).toContain("QuickBooks");
       if (code === "credential_unavailable") {
         expect(html).toContain(
-          `/github/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`
+          `/github/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`,
         );
         expect(html).toContain(
-          `/vercel/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`
+          `/vercel/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`,
         );
-      } else {
-        expect(html).not.toContain("Reconnect");
-      }
-    }
+      } else expect(html).not.toContain("Reconnect");
+    },
   );
 });

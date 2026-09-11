@@ -5,7 +5,7 @@ import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig } from "vitest/config";
 
-const dirname = import.meta.dirname;
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
@@ -36,16 +36,16 @@ export default defineConfig({
           storybookTest({ configDir: path.join(dirname, ".storybook") }),
         ],
         test: {
-          browser: {
-            enabled: true,
-            headless: true,
-            instances: [{ browser: "chromium" }],
-            provider: playwright({}),
-          },
+          name: "storybook",
           exclude: [...configDefaults.exclude, "**/.artifacts/**"],
           fileParallelism: false,
           maxWorkers: 1,
-          name: "storybook",
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright({}),
+            instances: [{ browser: "chromium" }],
+          },
         },
       },
     ],

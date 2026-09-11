@@ -7,7 +7,7 @@ export const TEST_CAPABILITIES = [
 export type TestCapability = (typeof TEST_CAPABILITIES)[number];
 
 const registryAccessor = Symbol.for(
-  "withAutograph.autograph-app-builder.test-capability-registry.v2"
+  "withAutograph.autograph-app-builder.test-capability-registry.v2",
 );
 
 export type InjectedTestCapability = Readonly<{
@@ -17,7 +17,7 @@ export type InjectedTestCapability = Readonly<{
 }>;
 
 const exactCapabilities = (
-  value: unknown
+  value: unknown,
 ): value is readonly TestCapability[] =>
   Array.isArray(value) &&
   value.length > 0 &&
@@ -27,23 +27,16 @@ const exactCapabilities = (
 export function testCapabilityEnabled(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>>,
-  injected: unknown
+  injected: unknown,
 ): boolean {
-  if (
-    capability === "mock-model" &&
-    environment.APP_BUILDER_TEST_MODEL !== "1"
-  ) {
+  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1")
     return false;
-  }
   if (
     environment.APP_BUILDER_REAL_SANDBOX === "1" &&
     capability !== "mock-model"
-  ) {
+  )
     return false;
-  }
-  if (typeof injected !== "object" || injected === null) {
-    return false;
-  }
+  if (typeof injected !== "object" || injected === null) return false;
   const candidate = injected as Partial<InjectedTestCapability>;
   return (
     Object.isFrozen(candidate) &&
@@ -60,7 +53,7 @@ export function testCapabilityEnabled(
 
 export function hasTestCapability(
   capability: TestCapability,
-  environment: Readonly<Record<string, string | undefined>> = process.env
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
   const accessor = (process as unknown as Record<symbol, unknown>)[
     registryAccessor
@@ -68,6 +61,6 @@ export function hasTestCapability(
   return testCapabilityEnabled(
     capability,
     environment,
-    typeof accessor === "function" ? accessor() : undefined
+    typeof accessor === "function" ? accessor() : undefined,
   );
 }

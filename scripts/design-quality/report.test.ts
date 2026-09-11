@@ -1,23 +1,22 @@
 import { describe, expect, it } from "vitest";
-
-import { scoreAdherence } from "./evidence";
 import { renderReport } from "./report";
+import { scoreAdherence } from "./evidence";
 
 describe("adherence report", () => {
   it("shows escaped case context without claiming intended outcomes passed", () => {
     const html = renderReport({
+      createdAt: "today",
+      source: {},
+      judge: {},
       captures: [],
       case: {
-        evidence: [{ repo: "ag2", path: "docs/example.md", status: "planned" }],
         id: "position-request",
-        notes: "Synthetic only",
-        outcomes: ["Save a draft"],
-        reviewQuestions: ["Can a user correct the form?"],
         title: "Position <request>",
+        notes: "Synthetic only",
+        evidence: [{ repo: "ag2", path: "docs/example.md", status: "planned" }],
+        reviewQuestions: ["Can a user correct the form?"],
+        outcomes: ["Save a draft"],
       },
-      createdAt: "today",
-      judge: {},
-      source: {},
     });
     expect(html).toContain("Position &lt;request&gt;");
     expect(html).toContain("docs/example.md");
@@ -26,6 +25,12 @@ describe("adherence report", () => {
   });
   it("links escaped source findings and annotated regions without changing screenshots", () => {
     const html = renderReport({
+      createdAt: "today",
+      source: {},
+      judge: { status: "not-run" },
+      sourceFiles: [
+        { path: "app.tsx", content: '<script>alert("x")</script>' },
+      ],
       adherence: scoreAdherence([
         {
           id: "a",
@@ -49,12 +54,6 @@ describe("adherence report", () => {
           interaction: {},
         },
       ],
-      createdAt: "today",
-      judge: { status: "not-run" },
-      source: {},
-      sourceFiles: [
-        { path: "app.tsx", content: '<script>alert("x")</script>' },
-      ],
     });
     expect(html).toContain('href="#source-0"');
     expect(html).toContain('href="#finding-0"');
@@ -65,17 +64,15 @@ describe("adherence report", () => {
     expect(html).toContain("0% (0/1)");
   });
   it("renders empty and historical evidence without inventing scores", () => {
-    const base = { captures: [], createdAt: "today", judge: {}, source: {} };
+    const base = { createdAt: "today", source: {}, judge: {}, captures: [] };
     expect(renderReport({ ...base, adherence: scoreAdherence([]) })).toContain(
-      "Arrusted adherence: Not assessed"
+      "Arrusted adherence: Not assessed",
     );
     expect(renderReport(base)).toContain("Historical report");
   });
   it("renders generated-source diagnostics with an escaped source location", () => {
     const html = renderReport({
-      captures: [],
       createdAt: "today",
-      judge: {},
       source: {
         implementationDiagnostics: [
           {
@@ -88,6 +85,8 @@ describe("adherence report", () => {
         ],
       },
       sourceFiles: [{ path: "src/Screen.tsx", content: "first\nsecond" }],
+      judge: {},
+      captures: [],
     });
     expect(html).toContain("Generated-code implementation diagnostics (1)");
     expect(html).toContain("src/Screen.tsx:2:8");
@@ -96,25 +95,25 @@ describe("adherence report", () => {
   it("shows candidate provenance without giving it adherence credit", () => {
     const adherence = scoreAdherence([
       {
-        dimension: "styling",
-        evidence: "browser",
         id: "candidate",
+        dimension: "styling",
+        verdict: "unassessed",
+        provenance: "unknown",
+        evidence: "browser",
+        summary: "Requires review",
         originCandidate: {
           provenance: "generated",
           reason: "May be shared <script>",
-          source: { line: 4, path: "app.tsx" },
+          source: { path: "app.tsx", line: 4 },
         },
-        provenance: "unknown",
-        summary: "Requires review",
-        verdict: "unassessed",
       },
     ]);
     const html = renderReport({
-      adherence,
-      captures: [],
       createdAt: "today",
-      judge: {},
       source: {},
+      judge: {},
+      captures: [],
+      adherence,
     });
     expect(adherence.score).toBeNull();
     expect(html).toContain("Possible generated source (unassessed): app.tsx:4");

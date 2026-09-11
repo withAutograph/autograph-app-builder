@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { watch } from "node:fs";
-import type { FSWatcher } from "node:fs";
+import { execFile } from "node:child_process";
+import { watch, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -49,10 +48,10 @@ async function runtimePaths(repositoryRoot: string) {
       "--exclude-standard",
       "-z",
     ],
-    { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 }
+    { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
   );
   return stdout
-    .toString("utf-8")
+    .toString("utf8")
     .split("\0")
     .filter(isDevelopmentRuntimePath)
     .toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right)));
@@ -67,9 +66,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live
       // edit is being saved. The next watcher pass observes the settled tree.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        continue;
-      }
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
       throw error;
     }
     hash.update(`${Buffer.byteLength(path)}\0${content.byteLength}\0${path}\0`);
@@ -93,13 +90,9 @@ export function waitForDevelopmentRuntimeChange(input: {
     let debounce: NodeJS.Timeout | undefined;
     let audit: NodeJS.Timeout | undefined;
     const finish = (changed: boolean) => {
-      if (settled) {
-        return;
-      }
+      if (settled) return;
       settled = true;
-      if (debounce !== undefined) {
-        clearTimeout(debounce);
-      }
+      if (debounce !== undefined) clearTimeout(debounce);
       if (audit !== undefined) {
         clearInterval(audit);
         audit = undefined;
@@ -135,17 +128,11 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
     };
     const schedule = () => {
-      if (settled) {
-        return;
-      }
-      if (debounce !== undefined) {
-        clearTimeout(debounce);
-      }
+      if (settled) return;
+      if (debounce !== undefined) clearTimeout(debounce);
       debounce = setTimeout(() => void check(), input.debounceMs ?? 150);
     };
-    if (input.signal?.aborted) {
-      return finish(false);
-    }
+    if (input.signal?.aborted) return finish(false);
     input.signal?.addEventListener("abort", aborted, { once: true });
     try {
       watcher = watch(input.repositoryRoot, { recursive: true }, schedule);

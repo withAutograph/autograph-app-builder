@@ -10,9 +10,9 @@ import {
   hostedAdminPlanRequestSchema,
   planHostedAdminRequest,
 } from "./hosted-admin";
-import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 import { createPostgresHostedAdminStore } from "./postgres-hosted-admin";
 import { readPrivateDatabaseUrl } from "./private-database-url";
+import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const actions = [
@@ -32,7 +32,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   ]);
   if (link.isSymbolicLink() || canonicalPath !== path) {
     throw new Error(
-      "Hosted admin request path must be canonical and unsymlinked."
+      "Hosted admin request path must be canonical and unsymlinked.",
     );
   }
   const metadata = await stat(path);
@@ -44,10 +44,10 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     metadata.size > MAX_REQUEST_BYTES
   ) {
     throw new Error(
-      "Hosted admin request must be an owner-only nonempty regular file."
+      "Hosted admin request must be an owner-only nonempty regular file.",
     );
   }
-  return JSON.parse(await readFile(path, "utf-8"));
+  return JSON.parse(await readFile(path, "utf8"));
 }
 
 const argv = process.argv.slice(2);
@@ -56,7 +56,7 @@ if (argv[0] === "plan") {
     throw new Error("hosted:admin-plan requires --request-file PATH.");
   }
   const request = hostedAdminPlanRequestSchema.parse(
-    await readPrivateRequest(argv[2])
+    await readPrivateRequest(argv[2]),
   );
   process.stdout.write(`${JSON.stringify(planHostedAdminRequest(request))}\n`);
 } else if (argv[0] === "apply") {
@@ -71,7 +71,7 @@ if (argv[0] === "plan") {
     throw new Error("Hosted admin apply arguments were invalid.");
   }
   const request = hostedAdminApplyRequestSchema.parse(
-    await readPrivateRequest(argv[6])
+    await readPrivateRequest(argv[6]),
   );
   if (request.action !== argv[2]) {
     throw new Error("Hosted admin request did not match the task action.");

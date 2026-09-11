@@ -1,13 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 describe("release publication workflow", () => {
   it("verifies already-promoted bytes without rebuilding them", async () => {
     const workflow = await readFile(
       resolve(".github/workflows/release.yml"),
-      "utf-8"
+      "utf8",
     );
 
     expect(workflow).toContain("types: [published]");
@@ -15,7 +14,7 @@ describe("release publication workflow", () => {
     expect(workflow).toContain("promotion-receipt.json");
     expect(workflow).toContain("autograph-release-promotion-v2");
     expect(workflow).toContain(
-      "--json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease'"
+      "--json isDraft,isPrerelease --jq '(.isDraft | not) and .isPrerelease'",
     );
     expect(workflow).toContain("gh release verify-asset");
     expect(workflow).not.toContain("mise run package:build-portable-release");
@@ -27,7 +26,7 @@ describe("release publication workflow", () => {
   it("binds deployment and tool readbacks before recoverable package publication", async () => {
     const publish = await readFile(
       resolve("scripts/release-publish.mts"),
-      "utf-8"
+      "utf8",
     );
     expect(publish).toContain("deployment.id !== endpointDeployment.id");
     expect(publish).toContain("hostedClient.listTools()");

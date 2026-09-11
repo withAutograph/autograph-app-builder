@@ -6,14 +6,12 @@ export type AuthPageSearchParams = Record<
 >;
 
 export function serializeAuthPageSearchParams(
-  searchParams: AuthPageSearchParams
+  searchParams: AuthPageSearchParams,
 ) {
   const serialized = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (Array.isArray(value)) {
-      for (const item of value) {
-        serialized.append(key, item);
-      }
+      for (const item of value) serialized.append(key, item);
     } else if (value !== undefined) {
       serialized.append(key, value);
     }
@@ -25,12 +23,10 @@ export function serializeAuthPageSearchParams(
 export function resolveAuthCallbackURL(
   defaultURL: string,
   search: string,
-  sameOrigin?: string
+  sameOrigin?: string,
 ) {
   const callbackURL = new URLSearchParams(search).get("callbackURL");
-  if (!callbackURL) {
-    return defaultURL;
-  }
+  if (!callbackURL) return defaultURL;
 
   try {
     const parsed = new URL(callbackURL, "https://autograph.invalid");
@@ -38,9 +34,7 @@ export function resolveAuthCallbackURL(
       callbackURL.startsWith("/") && !callbackURL.startsWith("//");
     const isSameOriginAbsolute =
       sameOrigin !== undefined && parsed.origin === sameOrigin;
-    if (!isRootRelative && !isSameOriginAbsolute) {
-      return defaultURL;
-    }
+    if (!isRootRelative && !isSameOriginAbsolute) return defaultURL;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return defaultURL;
@@ -50,7 +44,7 @@ export function resolveAuthCallbackURL(
 export function resolveProviderCallbackURL(
   redirectTo: string,
   callbackURL: string,
-  origin: string
+  origin: string,
 ) {
   const providerCallbackURL = new URL(redirectTo, origin);
   providerCallbackURL.searchParams.set("callbackURL", callbackURL);
@@ -60,7 +54,7 @@ export function resolveProviderCallbackURL(
 export function resolvePasskeyRedirectTo(
   redirectTo: string,
   search: string,
-  origin: string
+  origin: string,
 ) {
   const searchParams = new URLSearchParams(search);
   const inheritedRedirect = searchParams.get("redirectTo");
@@ -68,12 +62,10 @@ export function resolvePasskeyRedirectTo(
     return resolveAuthCallbackURL(
       redirectTo,
       `?callbackURL=${encodeURIComponent(inheritedRedirect)}`,
-      origin
+      origin,
     );
   }
-  if (!searchParams.has("callbackURL")) {
-    return redirectTo;
-  }
+  if (!searchParams.has("callbackURL")) return redirectTo;
 
   const callbackURL = resolveAuthCallbackURL("/", search, origin);
   const resolved = resolveProviderCallbackURL(redirectTo, callbackURL, origin);

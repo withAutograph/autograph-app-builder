@@ -5,13 +5,12 @@ import { createRoot } from "react-dom/client";
 import packageManifest from "../../../package.json";
 import type { EveSessionResult } from "../contracts";
 import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
-import { SessionAppView } from "./view";
-import type { SessionResponse } from "./view";
+import { SessionAppView, type SessionResponse } from "./view";
 
 const app = new App(
   { name: "Autograph App Builder", version: packageManifest.version },
   {},
-  { autoResize: true, strict: true }
+  { autoResize: true, strict: true },
 );
 let latestResult: EveSessionResult | undefined;
 const resultListeners = new Set<() => void>();
@@ -32,7 +31,7 @@ function SessionAppContainer() {
       return () => resultListeners.delete(listener);
     },
     () => latestResult,
-    () => latestResult
+    () => latestResult,
   );
   const capabilities = app.getHostCapabilities();
   const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
@@ -44,20 +43,17 @@ function SessionAppContainer() {
       .join(":") ?? "";
 
   const refresh = useCallback(async () => {
-    if (!result || !capabilities?.serverTools) {
-      return;
-    }
+    if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({
+      name: "autograph_get",
       arguments: {
+        sessionId: result.sessionId,
         cursor: result.cursor,
         limit: 100,
-        sessionId: result.sessionId,
       },
-      name: "autograph_get",
     });
-    if (response.structuredContent) {
+    if (response.structuredContent)
       publishResult(response.structuredContent as EveSessionResult);
-    }
   }, [capabilities?.serverTools, result]);
 
   useEffect(() => {
@@ -65,18 +61,12 @@ function SessionAppContainer() {
   }, [authorizationRequestKey]);
 
   useEffect(() => {
-    if (!authorizationRequestKey || !capabilities?.serverTools) {
-      return;
-    }
+    if (!authorizationRequestKey || !capabilities?.serverTools) return;
     const checkAfterReturn = () => {
-      if (document.visibilityState === "hidden") {
-        return;
-      }
+      if (document.visibilityState === "hidden") return;
       const now = Date.now();
-      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) {
-        return;
-      }
-      void refresh().catch(() => {});
+      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) return;
+      void refresh().catch(() => undefined);
     };
     window.addEventListener("focus", checkAfterReturn);
     document.addEventListener("visibilitychange", checkAfterReturn);
@@ -87,23 +77,18 @@ function SessionAppContainer() {
   }, [authorizationRequestKey, capabilities?.serverTools, refresh]);
 
   async function respond(responses: SessionResponse[]) {
-    if (!result || !capabilities?.serverTools) {
-      return;
-    }
+    if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({
-      arguments: {
-        clientRequestId: crypto.randomUUID(),
-        responses,
-        sessionId: result.sessionId,
-      },
       name: "autograph_respond",
+      arguments: {
+        sessionId: result.sessionId,
+        responses,
+        clientRequestId: crypto.randomUUID(),
+      },
     });
-    if (response.isError) {
-      throw new Error("response rejected");
-    }
-    if (response.structuredContent) {
+    if (response.isError) throw new Error("response rejected");
+    if (response.structuredContent)
       publishResult(response.structuredContent as EveSessionResult);
-    }
   }
 
   return (
@@ -120,9 +105,7 @@ function SessionAppContainer() {
   );
 }
 
-const root = document.querySelector("#root");
-if (!root) {
-  throw new Error("Missing MCP App root.");
-}
+const root = document.getElementById("root");
+if (!root) throw new Error("Missing MCP App root.");
 createRoot(root).render(<SessionAppContainer />);
 void app.connect();

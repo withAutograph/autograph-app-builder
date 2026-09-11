@@ -1,11 +1,10 @@
 import { defineConfig } from "playwright/test";
-
 export default defineConfig({
-  outputDir: ".artifacts/design-quality/tests",
-  reporter: "list",
-  retries: 0,
   testDir: "./scripts/design-quality",
   testMatch: "**/*.playwright.ts",
-  use: { browserName: "chromium", headless: true },
+  outputDir: ".artifacts/design-quality/tests",
+  reporter: "list",
   workers: 1,
+  retries: 0,
+  use: { headless: true, browserName: "chromium" },
 });

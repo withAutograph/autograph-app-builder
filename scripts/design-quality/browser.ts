@@ -1,49 +1,37 @@
-import { join } from "node:path";
-
+import { chromium, type Page } from "playwright";
 import * as axe from "axe-core";
-import { chromium } from "playwright";
-import type { Page } from "playwright";
+import { join } from "node:path";
 import { z } from "zod";
-
+import type { Observation } from "./evidence";
 import {
   classTokenAttribution,
   generatedSignatureSelector,
   signatureAttribution,
   uniqueIntrinsicSignature,
+  type ClassTokenEvidence,
+  type IntrinsicClassSignature,
 } from "./class-evidence";
-import type {
-  ClassTokenEvidence,
-  IntrinsicClassSignature,
-} from "./class-evidence";
-import { generatedCssRule } from "./css-evidence";
-import type { CssRuleEvidence } from "./css-evidence";
-import { originalCssSource } from "./css-source-map";
-import type { CssSourceMap } from "./css-source-map";
-import type { Observation } from "./evidence";
+import { generatedCssRule, type CssRuleEvidence } from "./css-evidence";
+import { originalCssSource, type CssSourceMap } from "./css-source-map";
 
 export const viewports = [
-  { height: 900, name: "desktop", width: 1440 },
-  { height: 1080, name: "desktop-wide", width: 1920 },
-  { height: 768, name: "desktop-window", width: 1024 },
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "desktop-wide", width: 1920, height: 1080 },
+  { name: "desktop-window", width: 1024, height: 768 },
 ];
 
-export interface DesktopSize {
-  width: number;
-  height: number;
-}
+export type DesktopSize = { width: number; height: number };
 
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^([1-9]\d*)x([1-9]\d*)$/.exec(value);
-  if (!match) {
+  if (!match)
     throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
-  }
   const width = Number(match[1]);
   const height = Number(match[2]);
-  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
     throw new Error("Desktop dimensions must be safe integers");
-  }
-  return { height, width };
+  return { width, height };
 }
 
 export function captureViewports(additionalDesktopSize?: DesktopSize) {
@@ -59,7 +47,6 @@ export function captureViewports(additionalDesktopSize?: DesktopSize) {
 }
 export const scenariosSchema = z.array(
   z.object({
-    expect: z.object({ text: z.string().optional() }).optional(),
     name: z.string().min(1),
     steps: z.array(
       z
@@ -72,61 +59,52 @@ export const scenariosSchema = z.array(
         })
         .refine(
           (s) => Boolean(s.selector || (s.role && s.name)),
-          "Select a role/name or selector"
-        )
+          "Select a role/name or selector",
+        ),
     ),
-  })
+    expect: z.object({ text: z.string().optional() }).optional(),
+  }),
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
 export type Category =
-  | "color"
-  | "typography"
-  | "spacing"
-  | "radius"
-  | "border"
-  | "shadow";
+  "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
 export const properties: Record<string, Category> = {
-  "background-color": "color",
-  "border-top-color": "border",
-  "border-top-left-radius": "radius",
-  "border-top-width": "border",
-  "box-shadow": "shadow",
   color: "color",
-  "column-gap": "spacing",
+  "background-color": "color",
   "font-family": "typography",
   "font-size": "typography",
   "font-weight": "typography",
-  "letter-spacing": "typography",
   "line-height": "typography",
-  "margin-bottom": "spacing",
-  "margin-top": "spacing",
+  "letter-spacing": "typography",
+  "padding-top": "spacing",
+  "padding-right": "spacing",
   "padding-bottom": "spacing",
   "padding-left": "spacing",
-  "padding-right": "spacing",
-  "padding-top": "spacing",
+  "margin-top": "spacing",
+  "margin-bottom": "spacing",
+  "column-gap": "spacing",
   "row-gap": "spacing",
+  "border-top-left-radius": "radius",
+  "border-top-width": "border",
+  "border-top-color": "border",
+  "box-shadow": "shadow",
 };
 export function classifyStyle(
   values: string[],
   computed: string,
-  tokenValues: string[]
+  tokenValues: string[],
 ) {
   const unique = [...new Set(values)];
-  if (unique.length !== 1) {
-    return "unassessed" as const;
-  }
+  if (unique.length !== 1) return "unassessed" as const;
   const value = unique[0]!;
-  if (/var\(--/.test(value)) {
-    return "token-reference" as const;
-  }
+  if (/var\(--/.test(value)) return "token-reference" as const;
   if (
     /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/.test(
-      value
+      value,
     ) ||
     /%|\d(?:\.\d+)?fr\b/.test(value)
-  ) {
+  )
     return "structural" as const;
-  }
   return tokenValues.includes(computed)
     ? ("matching-literal" as const)
     : ("unmatched-literal" as const);
@@ -149,28 +127,24 @@ type BrowserStyleObservation = Observation & {
 };
 
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
-  const index = node.attributes?.indexOf("class") ?? -1;
+  const index = node.attributes?.findIndex((value) => value === "class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
   return value && node.nodeName
     ? {
-        classes: [...new Set(value.split(/\s+/).filter(Boolean))].sort(),
         tag: node.nodeName.toLowerCase(),
+        classes: [...new Set(value.split(/\s+/).filter(Boolean))].sort(),
       }
     : undefined;
 }
 
 function matchedSelector(match: {
   matchingSelectors?: number[];
-  rule: { selectorList?: { selectors?: { text?: string }[] } };
+  rule: { selectorList?: { selectors?: Array<{ text?: string }> } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
-  if (!selectors?.length) {
-    return undefined;
-  }
+  if (!selectors?.length) return undefined;
   const indexes = match.matchingSelectors;
-  if (indexes?.length === 1) {
-    return selectors[indexes[0]]?.text;
-  }
+  if (indexes?.length === 1) return selectors[indexes[0]]?.text;
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
@@ -181,29 +155,20 @@ function matchedSelector(match: {
  */
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) {
-    return undefined;
-  }
+  if (!candidate) return undefined;
   let depth = 0;
   for (const character of candidate) {
-    if (character === "(") {
-      depth++;
-    } else if (character === ")") {
+    if (character === "(") depth++;
+    else if (character === ")") {
       depth--;
-      if (depth < 0) {
-        return undefined;
-      }
-    } else if (depth === 0 && /\s/.test(character)) {
-      return undefined;
-    }
+      if (depth < 0) return undefined;
+    } else if (depth === 0 && /\s/.test(character)) return undefined;
   }
   return depth === 0 ? candidate : undefined;
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) {
-    return undefined;
-  }
+  if (!value) return undefined;
   try {
     const url = new URL(value);
     return url.protocol === "file:"
@@ -216,17 +181,16 @@ export const sourcePath = (value: string | undefined) => {
 
 export const generatedSource = (
   path: string | undefined,
-  generated: string[]
+  generated: string[],
 ) => {
-  if (!path) {
-    return false;
-  }
-  const clean = path.replaceAll("\\", "/");
+  if (!path) return false;
+  const clean = path.replace(/\\/g, "/");
   return generated.some((candidate) => {
-    const expected = sourcePath(candidate)?.replaceAll("\\", "/");
+    const expected = sourcePath(candidate)?.replace(/\\/g, "/");
     return Boolean(
       expected &&
-      (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/, "")}`))
+      (clean === expected ||
+        clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
     );
   });
 };
@@ -235,15 +199,10 @@ export const generatedSource = (
 // recognise in browser evidence is the checked-in Arrusted design-system tree.
 export const arrustedSharedSource = (path: string | undefined) =>
   Boolean(
-    path
-      ?.replaceAll("\\", "/")
-      .match(/(?:^|\/)packages\/design-systems(?:\/|$)/)
+    path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/),
   );
 
-interface CssSourceFile {
-  path: string;
-  content: string;
-}
+type CssSourceFile = { path: string; content: string };
 
 /**
  * Verify that a rendered declaration maps to one exact checked-in shared CSS
@@ -260,29 +219,23 @@ export function mappedSharedCssRule(input: {
 }) {
   const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } =
     input;
-  if (!map || !mapped || value === undefined) {
-    return undefined;
-  }
+  if (!map || !mapped || value === undefined) return undefined;
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
-  if (typeof sourceContent !== "string") {
-    return undefined;
-  }
+  if (typeof sourceContent !== "string") return undefined;
   const files = sharedCssSourceFiles.filter(
     (file) =>
       arrustedSharedSource(file.path) &&
       generatedSource(mapped.path, [file.path]) &&
-      file.content === sourceContent
+      file.content === sourceContent,
   );
-  if (files.length !== 1) {
-    return undefined;
-  }
+  if (files.length !== 1) return undefined;
   const declarations = sharedCssRules.filter(
     (candidate) =>
       candidate.source.path === files[0]!.path &&
       candidate.source.line === mapped.line &&
       candidate.source.column === mapped.column &&
       candidate.property === property &&
-      candidate.value === value
+      candidate.value === value,
   );
   return declarations.length === 1 ? declarations[0] : undefined;
 }
@@ -293,17 +246,17 @@ export async function settleFiniteMotion(page: Page) {
     // Let hydration/class updates start their CSS transitions before taking the
     // animation snapshot. A second frame is enough without adding a timer gate.
     await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
     const finite = document.getAnimations().filter((motion) => {
-      if (motion.playState !== "running" && !motion.pending) {
-        return false;
-      }
+      if (motion.playState !== "running" && !motion.pending) return false;
       const timing = motion.effect?.getComputedTiming();
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(finite.map((motion) => motion.finished.catch(() => {})));
+    await Promise.all(
+      finite.map((motion) => motion.finished.catch(() => undefined)),
+    );
   });
 }
 
@@ -314,15 +267,15 @@ export async function measurePage(page: Page) {
     const rect = (el: Element) => {
       const r = el.getBoundingClientRect();
       return {
-        height: r.height,
-        width: r.width,
         x: r.x + scrollX,
         y: r.y + scrollY,
+        width: r.width,
+        height: r.height,
       };
     };
     const visible = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect(),
+        s = getComputedStyle(el);
       return (
         r.width > 0 &&
         r.height > 0 &&
@@ -334,40 +287,36 @@ export async function measurePage(page: Page) {
       (el.getAttribute("aria-label") || el.textContent || el.tagName)
         .trim()
         .slice(0, 160);
-    const findings: {
+    const findings: Array<{
       kind: string;
       description: string;
       region: ReturnType<typeof rect>;
       reviewRequired: boolean;
-    }[] = [];
+    }> = [];
     const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
-      if (!visible(el)) {
-        return [];
-      }
+      if (!visible(el)) return [];
       const style = getComputedStyle(el);
-      const axes: ("x" | "y")[] = [];
+      const axes: Array<"x" | "y"> = [];
       if (
         el.scrollWidth > el.clientWidth + 2 &&
         /auto|scroll/.test(style.overflowX)
-      ) {
+      )
         axes.push("x");
-      }
       if (
         el.scrollHeight > el.clientHeight + 2 &&
         /auto|scroll/.test(style.overflowY)
-      ) {
+      )
         axes.push("y");
-      }
       return axes.map((axis) => ({
-        axis,
-        clientHeight: el.clientHeight,
-        clientWidth: el.clientWidth,
         el,
-        scrollHeight: el.scrollHeight,
+        axis,
         scrollWidth: el.scrollWidth,
+        scrollHeight: el.scrollHeight,
+        clientWidth: el.clientWidth,
+        clientHeight: el.clientHeight,
       }));
     });
-    if (document.documentElement.scrollWidth > innerWidth + 2) {
+    if (document.documentElement.scrollWidth > innerWidth + 2)
       findings.push({
         kind: "document-overflow",
         description:
@@ -375,25 +324,24 @@ export async function measurePage(page: Page) {
         region: rect(document.documentElement),
         reviewRequired: true,
       });
-    }
     const controls = [
       ...document.querySelectorAll(
-        "button,input,select,textarea,a[href],[role=button]"
+        "button,input,select,textarea,a[href],[role=button]",
       ),
     ].filter(visible);
     for (const el of controls) {
       let parent = el.parentElement;
       while (parent) {
-        const s = getComputedStyle(parent);
-        const a = el.getBoundingClientRect();
-        const b = parent.getBoundingClientRect();
+        const s = getComputedStyle(parent),
+          a = el.getBoundingClientRect(),
+          b = parent.getBoundingClientRect();
         if (
           /hidden|clip/.test(s.overflowX) &&
           (a.left < b.left - 2 || a.right > b.right + 2)
         ) {
           findings.push({
-            description: `${label(el)} extends beyond a clipped ancestor.`,
             kind: "possible-clipping",
+            description: `${label(el)} extends beyond a clipped ancestor.`,
             region: rect(el),
             reviewRequired: true,
           });
@@ -403,25 +351,25 @@ export async function measurePage(page: Page) {
       }
     }
     for (const table of document.querySelectorAll(
-      "table,[role=table],[role=grid]"
+      "table,[role=table],[role=grid]",
     )) {
       const headers = [
         ...table.querySelectorAll("th,[role=columnheader]"),
       ].filter(visible);
       const row = [...table.querySelectorAll("tr,[role=row]")].find((r) =>
-        r.querySelector("td,[role=cell],[role=gridcell]")
+        r.querySelector("td,[role=cell],[role=gridcell]"),
       );
       const cells = row
         ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(
-            visible
+            visible,
           )
         : [];
-      if (headers.length === cells.length) {
+      if (headers.length === cells.length)
         headers.forEach((h, i) => {
           if (
             Math.abs(
               h.getBoundingClientRect().left -
-                cells[i]!.getBoundingClientRect().left
+                cells[i]!.getBoundingClientRect().left,
             ) > 4
           )
             findings.push({
@@ -431,10 +379,9 @@ export async function measurePage(page: Page) {
               reviewRequired: true,
             });
         });
-      }
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
-    for (let i = 0; i < Math.min(controls.length, 150); i++) {
+    for (let i = 0; i < Math.min(controls.length, 150); i++)
       for (let j = i + 1; j < Math.min(controls.length, 150); j++) {
         const a = controls[i]!,
           b = controls[j]!;
@@ -457,17 +404,16 @@ export async function measurePage(page: Page) {
             reviewRequired: true,
           });
       }
-    }
     const result = await (
       window as unknown as {
         axe: {
           run: () => Promise<{
-            violations: {
+            violations: Array<{
               id: string;
               impact: string;
               help: string;
               nodes: Array<{ target: string[]; failureSummary: string }>;
-            }[];
+            }>;
             incomplete: unknown[];
           }>;
         };
@@ -483,21 +429,20 @@ export async function measurePage(page: Page) {
       // Diagnostics only: an intentional scroll region is not an automatic
       // pass/fail conclusion about the surrounding layout.
       intentionalScrollContainers: scrolling.map((scrolling) => ({
-        axis: scrolling.axis,
-        clientHeight: scrolling.clientHeight,
-        clientWidth: scrolling.clientWidth,
         label: label(scrolling.el),
-        region: rect(scrolling.el),
-        scrollHeight: scrolling.scrollHeight,
+        axis: scrolling.axis,
         scrollWidth: scrolling.scrollWidth,
+        scrollHeight: scrolling.scrollHeight,
+        clientWidth: scrolling.clientWidth,
+        clientHeight: scrolling.clientHeight,
+        region: rect(scrolling.el),
       })),
       controls: controls.map((el) => ({
         label: label(el),
-        region: rect(el),
         role: el.getAttribute("role") || el.tagName.toLowerCase(),
+        region: rect(el),
       })),
       accessibility: {
-        manualReviewCount: result.incomplete.length,
         violations: result.violations.map((v) => ({
           id: v.id,
           impact: v.impact,
@@ -507,6 +452,7 @@ export async function measurePage(page: Page) {
             summary: n.failureSummary,
           })),
         })),
+        manualReviewCount: result.incomplete.length,
       },
     };
   });
@@ -520,10 +466,10 @@ export async function measureStyles(
   sharedClassSignatures?: IntrinsicClassSignature[],
   generatedCssRules: CssRuleEvidence[] = [],
   sharedCssRules: CssRuleEvidence[] = [],
-  generatedCssSourceFiles: { path: string; content: string }[] = [],
+  generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
   sharedCssSourceFiles: CssSourceFile[] = [],
   generatedClassTokens: ClassTokenEvidence[] = [],
-  sharedClassTokens?: ClassTokenEvidence[]
+  sharedClassTokens?: ClassTokenEvidence[],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
@@ -542,25 +488,21 @@ export async function measureStyles(
           sourceURL?: string;
           sourceMapURL?: string;
         };
-      }) => headers.set(header.styleSheetId, header)
+      }) => headers.set(header.styleSheetId, header),
     );
     await session.send("DOM.enable");
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
-      if (!styleSheetId) {
-        return undefined;
-      }
-      if (sourceMaps.has(styleSheetId)) {
-        return sourceMaps.get(styleSheetId);
-      }
+      if (!styleSheetId) return undefined;
+      if (sourceMaps.has(styleSheetId)) return sourceMaps.get(styleSheetId);
       const header = headers.get(styleSheetId);
       const css = await session
         .send("CSS.getStyleSheetText", { styleSheetId })
         .then((result: { text: string }) => result.text)
         .catch(() => "");
       const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(
-        css
+        css,
       )?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
@@ -569,10 +511,10 @@ export async function measureStyles(
       if (url?.startsWith("data:application/json")) {
         try {
           const comma = url.indexOf(",");
-          if (comma !== -1) {
+          if (comma >= 0) {
             const body = url.slice(comma + 1);
             text = /;base64/i.test(url.slice(0, comma))
-              ? Buffer.from(body, "base64").toString("utf-8")
+              ? Buffer.from(body, "base64").toString("utf8")
               : decodeURIComponent(body);
           }
         } catch {
@@ -583,12 +525,11 @@ export async function measureStyles(
           const target = new URL(url, header?.sourceURL || page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
-          if (target.origin === new URL(page.url()).origin) {
+          if (target.origin === new URL(page.url()).origin)
             text = await page.evaluate(async (href) => {
               const response = await fetch(href);
               return response.ok ? response.text() : undefined;
             }, target.href);
-          }
         } catch {
           /* Missing or malformed maps remain unassigned. */
         }
@@ -601,14 +542,13 @@ export async function measureStyles(
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
           parsed.sources.every(
-            (source: unknown) => typeof source === "string"
+            (source: unknown) => typeof source === "string",
           ) &&
           (parsed.sourceRoot === undefined ||
             typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
-        ) {
+        )
           map = parsed;
-        }
       } catch {
         /* Source maps are optional evidence. */
       }
@@ -626,7 +566,7 @@ export async function measureStyles(
         nodeId: root.nodeId,
         selector:
           "button,input,select,textarea,a[href],[role=button],[role=link]",
-      }
+      },
     );
     const interactiveNodes = new Set(interactiveNodeIds);
     // Resolve tokens in the active browser theme. A detached element only sees a
@@ -636,7 +576,7 @@ export async function measureStyles(
         const el = document.createElement("span");
         el.style.cssText =
           "position:absolute;visibility:hidden;pointer-events:none";
-        document.body.append(el);
+        document.body.appendChild(el);
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
           result[prop] = [];
@@ -652,42 +592,37 @@ export async function measureStyles(
                   : prop.includes("shadow")
                     ? name.includes("shadow")
                     : /spacing|space|radius|border/.test(name);
-            if (!relevant) {
-              continue;
-            }
+            if (!relevant) continue;
             el.style.removeProperty(prop);
             el.style.setProperty(prop, `var(${name})`);
-            if (el.style.getPropertyValue(prop)) {
+            if (el.style.getPropertyValue(prop))
               result[prop].push(getComputedStyle(el).getPropertyValue(prop));
-            }
           }
         }
         el.remove();
         return result;
       },
-      { properties, tokens }
+      { tokens, properties },
     );
     // CSS.enable normally emits existing headers, but source location is optional
     // in CDP. Missing headers deliberately remain unknown.
-    const candidates: {
+    const candidates: Array<{
       nodeId: number;
       model: { width: number; height: number; content: number[] };
       region: "top" | "middle" | "bottom";
       interactive: boolean;
-    }[] = [];
+    }> = [];
     for (const nodeId of nodeIds) {
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
         .catch(() => ({ model: null }));
-      if (!model || model.width <= 0 || model.height <= 0) {
-        continue;
-      }
+      if (!model || model.width <= 0 || model.height <= 0) continue;
       const y = model.content[1] ?? 0;
       candidates.push({
-        interactive: interactiveNodes.has(nodeId),
-        model,
         nodeId,
+        model,
         region: y < 300 ? "top" : y < 1000 ? "middle" : "bottom",
+        interactive: interactiveNodes.has(nodeId),
       });
     }
     const selected: typeof candidates = [];
@@ -695,33 +630,27 @@ export async function measureStyles(
     const buckets = regions.flatMap((region) =>
       [true, false].map((interactive) =>
         candidates.filter(
-          (item) => item.region === region && item.interactive === interactive
-        )
-      )
+          (item) => item.region === region && item.interactive === interactive,
+        ),
+      ),
     );
     // Reserve controls before using a round-robin budget across each rendered
     // region and control/non-control bucket.
     for (const bucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
       const candidate = bucket.shift();
-      if (candidate) {
-        selected.push(candidate);
-      }
+      if (candidate) selected.push(candidate);
     }
     while (selected.length < 120) {
       let added = false;
       for (const bucket of buckets) {
-        if (selected.length >= 120) {
-          break;
-        }
+        if (selected.length >= 120) break;
         const candidate = bucket.shift();
         if (candidate) {
           selected.push(candidate);
           added = true;
         }
       }
-      if (!added) {
-        break;
-      }
+      if (!added) break;
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
@@ -731,7 +660,7 @@ export async function measureStyles(
         ? uniqueIntrinsicSignature(
             generatedClassSignatures,
             signature.tag,
-            signature.classes
+            signature.classes,
           )
         : undefined;
       const signatureOrigin = signature
@@ -739,47 +668,45 @@ export async function measureStyles(
             generatedClassSignatures,
             sharedClassSignatures,
             signature.tag,
-            signature.classes
+            signature.classes,
           )
         : { provenance: "unknown" as const };
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
       const cv = Object.fromEntries(
-        computed.computedStyle.map((p) => [p.name, p.value])
+        computed.computedStyle.map((p) => [p.name, p.value]),
       );
-      if (cv.display === "none" || cv.visibility === "hidden") {
-        continue;
-      }
+      if (cv.display === "none" || cv.visibility === "hidden") continue;
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
       });
       for (const [property, category] of Object.entries(properties)) {
         const inline = (matched.inlineStyle?.cssProperties ?? []).filter(
-          (p) => p.name === property && !p.disabled && p.parsedOk !== false
+          (p) => p.name === property && !p.disabled && p.parsedOk !== false,
         );
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
             m.rule.origin !== "user-agent" &&
             !(m.rule.media ?? []).some((media) =>
-              media.mediaList?.every((q) => !q.active)
-            )
+              media.mediaList?.every((q) => !q.active),
+            ),
         );
         const inherited = /^(font-|line-height|letter-spacing|color$)/.test(
-          property
+          property,
         )
           ? (matched.inherited ?? []).flatMap((i) =>
               (i.matchedCSSRules ?? []).filter(
-                (m) => m.rule.origin !== "user-agent"
-              )
+                (m) => m.rule.origin !== "user-agent",
+              ),
             )
           : [];
         const own = rules.flatMap((m) =>
           m.rule.style.cssProperties
             .filter(
-              (p) => p.name === property && !p.disabled && p.parsedOk !== false
+              (p) => p.name === property && !p.disabled && p.parsedOk !== false,
             )
-            .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) }))
+            .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const needsGapFallback =
           (property === "row-gap" || property === "column-gap") &&
@@ -787,13 +714,13 @@ export async function measureStyles(
         const gapShorthands = needsGapFallback
           ? rules.flatMap((m) =>
               m.rule.style.cssProperties.filter(
-                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false
-              )
+                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false,
+              ),
             )
           : [];
         const unsupportedGap = gapShorthands.some(
           (declaration) =>
-            declaration.value.trim() && !singleGapValue(declaration.value)
+            declaration.value.trim() && !singleGapValue(declaration.value),
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -804,13 +731,13 @@ export async function measureStyles(
                       p.name === "gap" &&
                       !p.disabled &&
                       p.parsedOk !== false &&
-                      singleGapValue(p.value)
+                      singleGapValue(p.value),
                   )
                   .map((p) => ({
                     p,
                     rule: m.rule,
                     selector: matchedSelector(m),
-                  }))
+                  })),
               )
             : [];
         const ownEvidence = gapFallback.length ? gapFallback : own;
@@ -822,13 +749,15 @@ export async function measureStyles(
                 m.rule.style.cssProperties
                   .filter(
                     (p) =>
-                      p.name === property && !p.disabled && p.parsedOk !== false
+                      p.name === property &&
+                      !p.disabled &&
+                      p.parsedOk !== false,
                   )
                   .map((p) => ({
                     p,
                     rule: m.rule,
                     selector: matchedSelector(m),
-                  }))
+                  })),
               );
         // Chrome can report the same matched rule twice. Collapse only entries
         // with the same owning rule location, selector, property, and value;
@@ -838,7 +767,7 @@ export async function measureStyles(
             declarationEntries.map((entry) => [
               `${entry.rule?.styleSheetId ?? entry.rule?.style?.styleSheetId ?? "inline"}:${entry.rule?.style?.range?.startLine ?? -1}:${entry.rule?.style?.range?.startColumn ?? -1}:${entry.selector ?? ""}:${entry.p.name}:${entry.p.value}`,
               entry,
-            ])
+            ]),
           ).values(),
         ];
         const declarations = uniqueDeclarationEntries.map(({ p }) => p.value);
@@ -846,7 +775,7 @@ export async function measureStyles(
         const selector = uniqueDeclarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
         const path = sourcePath(
-          styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined
+          styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined,
         );
         const declaration = uniqueDeclarationEntries[0]?.p;
         const styleMap = await sourceMapFor(styleSheetId);
@@ -859,7 +788,7 @@ export async function measureStyles(
             (entry) =>
               !entry.disabled &&
               entry.parsedOk !== false &&
-              typeof entry.text === "string"
+              typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
             : undefined);
@@ -867,7 +796,7 @@ export async function measureStyles(
           ? originalCssSource(
               styleMap,
               mappingRange?.startLine ?? -1,
-              mappingRange?.startColumn ?? -1
+              mappingRange?.startColumn ?? -1,
             )
           : undefined;
         const mappedPath = mapped?.path;
@@ -877,7 +806,7 @@ export async function measureStyles(
         const tokenOrigin = classTokenAttribution(
           generatedClassTokens,
           sharedClassTokens,
-          selector
+          selector,
         );
         // A shared component can assemble the same classes at runtime (including
         // through spreads), so a signature is reviewer evidence, never scored
@@ -897,8 +826,8 @@ export async function measureStyles(
                   (entry) =>
                     !entry.disabled &&
                     entry.parsedOk !== false &&
-                    typeof entry.text === "string"
-                )
+                    typeof entry.text === "string",
+                ),
               )
             : undefined;
         const mappedSourceContent =
@@ -906,7 +835,7 @@ export async function measureStyles(
         const mappedFile = generatedCssSourceFiles.find(
           (file) =>
             generatedSource(mappedPath, [file.path]) &&
-            file.content === mappedSourceContent
+            file.content === mappedSourceContent,
         );
         const mappedGenerated = Boolean(
           mappedFile &&
@@ -916,8 +845,8 @@ export async function measureStyles(
               candidate.source.line === mapped?.line &&
               candidate.source.column === mapped?.column &&
               candidate.property === property &&
-              candidate.value === declaration?.value
-          ).length === 1
+              candidate.value === declaration?.value,
+          ).length === 1,
         );
         const mappedShared =
           uniqueDeclarationEntries.length === 1
@@ -925,9 +854,9 @@ export async function measureStyles(
                 map: styleMap,
                 mapped,
                 property,
+                value: declaration?.value,
                 sharedCssRules,
                 sharedCssSourceFiles,
-                value: declaration?.value,
               })
             : undefined;
         const generated =
@@ -937,45 +866,36 @@ export async function measureStyles(
         let classification: string = classifyStyle(
           declarations,
           cv[property] ?? "",
-          normalized[property] ?? []
+          normalized[property] ?? [],
         );
-        if (unsupportedGap) {
-          classification = "unknown";
-        }
+        if (unsupportedGap) classification = "unknown";
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
-            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1]! in tokens))
+            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1]! in tokens)),
           )
-        ) {
+        )
           classification = "unassessed";
-        }
-        if (classification === "token-reference") {
+        if (classification === "token-reference")
           classification = "semantic-token-reference";
-        }
-        if (generated && classification === "unmatched-literal") {
+        if (generated && classification === "unmatched-literal")
           classification = "generated-override";
-        }
         if (
           !generated &&
           (arrustedSharedSource(path) || Boolean(mappedShared)) &&
           classification !== "semantic-token-reference" &&
           classification !== "matching-literal" &&
           classification !== "structural"
-        ) {
+        )
           classification = "inherited-shared";
-        }
         if (
           classification === "unassessed" ||
           classification === "unmatched-literal"
-        ) {
+        )
           classification = "unknown";
-        }
         // Structural layout values are not adherence evidence, so exclude them
         // entirely rather than allowing downstream global scores to count them.
-        if (classification === "structural") {
-          continue;
-        }
+        if (classification === "structural") continue;
         const provenance: Observation["provenance"] = generated
           ? "generated"
           : arrustedSharedSource(path) || mappedShared
@@ -983,10 +903,10 @@ export async function measureStyles(
             : "unknown";
         const quad = model.content;
         const region = {
-          height: model.height,
-          width: model.width,
           x: quad[0] ?? 0,
           y: quad[1] ?? 0,
+          width: model.width,
+          height: model.height,
         };
         const cssSource = generatedRule
           ? generatedRule.source
@@ -994,9 +914,9 @@ export async function measureStyles(
             mapped ??
             (path
               ? {
-                  column: (rule?.style?.range?.startColumn ?? 0) + 1,
-                  line: (rule?.style?.range?.startLine ?? 0) + 1,
                   path,
+                  line: (rule?.style?.range?.startLine ?? 0) + 1,
+                  column: (rule?.style?.range?.startColumn ?? 0) + 1,
                 }
               : undefined));
         const originCandidate =
@@ -1017,15 +937,12 @@ export async function measureStyles(
               : undefined;
         const source = cssSource;
         observations.push({
-          category,
-          classification,
-          computed: cv[property] ?? "",
-          cssSource,
-          declarations: [...new Set(declarations)],
-          dimension: "styling",
-          evidence: "browser",
-          id: `style-${nodeId}-${property}`,
           node: `node-${nodeId}`,
+          property,
+          category,
+          computed: cv[property] ?? "",
+          classification,
+          declarations: [...new Set(declarations)],
           origin: generated
             ? "generated-rule"
             : provenance === "shared" && inheritedDeclaration
@@ -1035,15 +952,8 @@ export async function measureStyles(
                 : inline.length
                   ? "inline"
                   : "unknown",
-          originCandidate,
-          property,
-          provenance,
-          region,
-          selector,
-          source,
-          summary: originCandidate
-            ? `${property}: ${classification}; ${originCandidate.provenance} origin candidate requires review.`
-            : `${property}: ${classification}`,
+          id: `style-${nodeId}-${property}`,
+          dimension: "styling",
           verdict:
             provenance === "generated" &&
             classification === "semantic-token-reference"
@@ -1053,13 +963,23 @@ export async function measureStyles(
                     classification === "generated-override")
                 ? "nonconforming"
                 : "unassessed",
+          provenance,
+          evidence: "browser",
+          summary: originCandidate
+            ? `${property}: ${classification}; ${originCandidate.provenance} origin candidate requires review.`
+            : `${property}: ${classification}`,
+          source,
+          selector,
+          cssSource,
+          originCandidate,
+          region,
         });
       }
     }
     const categories = Object.fromEntries(
       [...new Set(Object.values(properties))].map((category) => {
         const items = observations.filter(
-          (o) => o.category === category && o.classification !== "structural"
+          (o) => o.category === category && o.classification !== "structural",
         );
         const counts = Object.fromEntries(
           [
@@ -1071,16 +991,17 @@ export async function measureStyles(
           ].map((key) => [
             key,
             items.filter((o) => o.classification === key).length,
-          ])
+          ]),
         );
         const assessed = items.filter(
-          (item) => item.verdict !== "unassessed"
+          (item) => item.verdict !== "unassessed",
         ).length;
         return [
           category,
           {
-            assessed,
             counts,
+            assessed,
+            total: items.length,
             coveragePercent: items.length
               ? Math.round((assessed / items.length) * 100)
               : null,
@@ -1089,19 +1010,38 @@ export async function measureStyles(
                   (items.filter(
                     (item) =>
                       item.provenance === "generated" &&
-                      item.classification === "semantic-token-reference"
+                      item.classification === "semantic-token-reference",
                   ).length /
                     assessed) *
-                    100
+                    100,
                 )
               : null,
-            total: items.length,
           },
         ];
-      })
+      }),
     );
     return {
+      sampledElements: selected.length,
+      totalDomElements: nodeIds.length,
+      sampling: {
+        eligible: candidates.length,
+        sampled: selected.length,
+        coveragePercent: candidates.length
+          ? Math.round((selected.length / candidates.length) * 100)
+          : null,
+        regions: Object.fromEntries(
+          (["top", "middle", "bottom"] as const).map((region) => [
+            region,
+            {
+              eligible: candidates.filter((item) => item.region === region)
+                .length,
+              sampled: selected.filter((item) => item.region === region).length,
+            },
+          ]),
+        ),
+      },
       categories,
+      observations,
       limitations: [
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
@@ -1113,26 +1053,6 @@ export async function measureStyles(
               "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",
             ]),
       ],
-      observations,
-      sampledElements: selected.length,
-      sampling: {
-        coveragePercent: candidates.length
-          ? Math.round((selected.length / candidates.length) * 100)
-          : null,
-        eligible: candidates.length,
-        regions: Object.fromEntries(
-          (["top", "middle", "bottom"] as const).map((region) => [
-            region,
-            {
-              eligible: candidates.filter((item) => item.region === region)
-                .length,
-              sampled: selected.filter((item) => item.region === region).length,
-            },
-          ])
-        ),
-        sampled: selected.length,
-      },
-      totalDomElements: nodeIds.length,
     };
   } finally {
     await session.detach();
@@ -1151,7 +1071,7 @@ export async function capturePreview(input: {
   sharedClassTokens?: ClassTokenEvidence[];
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
-  generatedCssSourceFiles?: { path: string; content: string }[];
+  generatedCssSourceFiles?: Array<{ path: string; content: string }>;
   sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
 }) {
@@ -1160,8 +1080,8 @@ export async function capturePreview(input: {
   try {
     for (const viewport of captureViewports(input.additionalDesktopSize)) {
       const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
         deviceScaleFactor: 1,
-        viewport: { height: viewport.height, width: viewport.width },
       });
       // tsx preserves local function names using this helper when serializing
       // page.evaluate callbacks. Install it only in this disposable QA context.
@@ -1169,9 +1089,8 @@ export async function capturePreview(input: {
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
       const response = await page.goto(input.url, { waitUntil: "load" });
-      if (response && !response.ok()) {
+      if (response && !response.ok())
         throw new Error(`Preview returned HTTP ${response.status()}`);
-      }
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index++) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -1180,39 +1099,34 @@ export async function capturePreview(input: {
         };
         if (scenario) {
           const refreshed = await page.reload({ waitUntil: "load" });
-          if (refreshed && !refreshed.ok()) {
+          if (refreshed && !refreshed.ok())
             throw new Error(`Preview returned HTTP ${refreshed.status()}`);
-          }
           try {
             for (const step of scenario.steps) {
               const locator = step.selector
                 ? page.locator(step.selector)
                 : page.getByRole(
                     step.role as Parameters<Page["getByRole"]>[0],
-                    { exact: true, name: step.name }
+                    { name: step.name, exact: true },
                   );
-              if (step.action === "click") {
-                await locator.click();
-              } else if (step.action === "fill") {
+              if (step.action === "click") await locator.click();
+              else if (step.action === "fill")
                 await locator.fill(step.value ?? "");
-              } else {
-                await locator.selectOption({ label: step.value ?? "" });
-              }
+              else await locator.selectOption({ label: step.value ?? "" });
             }
-            if (scenario.expect?.text) {
+            if (scenario.expect?.text)
               await page
                 .getByText(scenario.expect.text, { exact: false })
                 .first()
                 .waitFor({ state: "visible" });
-            }
             interaction = {
-              expectedText: scenario.expect?.text,
               status: "passed",
+              expectedText: scenario.expect?.text,
             };
           } catch {
             interaction = {
-              expectedText: scenario.expect?.text,
               status: "failed",
+              expectedText: scenario.expect?.text,
             };
           }
         }
@@ -1231,27 +1145,26 @@ export async function capturePreview(input: {
                 input.generatedCssSourceFiles,
                 input.sharedCssSourceFiles,
                 input.generatedClassTokens,
-                input.sharedClassTokens
+                input.sharedClassTokens,
               )
             : undefined;
-        if (styles) {
+        if (styles)
           styles.observations.forEach((observation) => {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
           });
-        }
         const path = join(input.output, `${name}.png`);
         await settleFiniteMotion(page);
-        await page.screenshot({ fullPage: true, path });
+        await page.screenshot({ path, fullPage: true });
         captures.push({
-          height: Math.max(viewport.height, measurements.documentHeight),
-          interaction,
-          measurements,
           name,
-          path,
           state: scenario?.name ?? "initial",
-          styles,
+          path,
           width: viewport.width,
+          height: Math.max(viewport.height, measurements.documentHeight),
+          measurements,
+          styles,
+          interaction,
         });
       }
       await context.close();

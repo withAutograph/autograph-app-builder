@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-
 import { describe, expect, it, vi } from "vitest";
-
-import { cursorClientId, cursorRedirectUri } from "../auth/cursor-client";
-import { previewOAuthScopes } from "../auth/preview-oauth-contract";
 import {
   createRealOAuthHarness,
   codexClientMetadata,
@@ -16,19 +12,23 @@ import {
   issuer,
   resource,
 } from "../auth/real-oauth-test-harness";
-import type { HostedEveTransport } from "../eve/hosted-service";
-import { InMemoryHostedEveStore } from "../eve/hosted-store";
-import type { BuilderHandoffRecord } from "../handoff/contracts";
+import { cursorClientId, cursorRedirectUri } from "../auth/cursor-client";
+import { previewOAuthScopes } from "../auth/preview-oauth-contract";
 import { createBuilderHandoffRouteHandler } from "../handoff/deployment";
-import { createBuilderHandoffService } from "../handoff/service";
-import type { BuilderHandoffStore } from "../handoff/service";
+import {
+  createBuilderHandoffService,
+  type BuilderHandoffStore,
+} from "../handoff/service";
+import type { BuilderHandoffRecord } from "../handoff/contracts";
+import { InMemoryHostedEveStore } from "../eve/hosted-store";
+import type { HostedEveTransport } from "../eve/hosted-service";
+import { createMcpRequestHandler } from "./request-handler";
+import { createRemoteJwksAccessTokenVerifier } from "./request-auth";
 import {
   preparedJournal,
   preparedProviderFixture,
   sessionEnvelope,
 } from "./handoff-provider-test-harness";
-import { createRemoteJwksAccessTokenVerifier } from "./request-auth";
-import { createMcpRequestHandler } from "./request-handler";
 
 function handoffStore(): BuilderHandoffStore {
   const records = new Map<string, BuilderHandoffRecord>();
@@ -40,12 +40,23 @@ function handoffStore(): BuilderHandoffStore {
     return record &&
       Object.entries(authority).every(
         ([key, value]) =>
-          record.authority[key as keyof typeof authority] === value
+          record.authority[key as keyof typeof authority] === value,
       )
       ? record
       : undefined;
   };
   return {
+    read,
+    async reserve(record) {
+      const existing = [...records.values()].find(
+        (candidate) =>
+          candidate.creationRequestId === record.creationRequestId &&
+          candidate.requestDigest === record.requestDigest,
+      );
+      if (existing) return { disposition: "existing", record: existing };
+      records.set(record.handoffId, record);
+      return { disposition: "created", record };
+    },
     async bindSession(input) {
       const record = await read(input);
       if (
@@ -63,27 +74,22 @@ function handoffStore(): BuilderHandoffStore {
       records.set(record.handoffId, bound);
       return bound;
     },
-    read,
-    async reserve(record) {
-      const existing = [...records.values()].find(
-        (candidate) =>
-          candidate.creationRequestId === record.creationRequestId &&
-          candidate.requestDigest === record.requestDigest
-      );
-      if (existing) return { disposition: "existing", record: existing };
-      records.set(record.handoffId, record);
-      return { disposition: "created", record };
-    },
   };
 }
 
 async function callStart(
   handler: ReturnType<typeof createMcpRequestHandler>,
   token: string,
-  handoffId: string
+  handoffId: string,
 ) {
   const response = await handler(
     new Request(resource, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -93,13 +99,7 @@ async function callStart(
           arguments: { handoffId, clientRequestId: randomUUID() },
         },
       }),
-      headers: {
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    })
+    }),
   );
   expect(response.status).toBe(200);
   const text = await response.text();
@@ -107,7 +107,7 @@ async function callStart(
     text
       .split("\n")
       .find((line) => line.startsWith("data: "))
-      ?.slice(6) ?? text
+      ?.slice(6) ?? text,
   );
   return result.result as {
     isError?: boolean;
@@ -121,7 +121,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
     async (firstClient) => {
       const auth = await createRealOAuthHarness(
         ["workspace_1"],
-        codexClientMetadata
+        codexClientMetadata,
       );
       await registerTestCursorClient(auth);
       const browser = await auth.signIn();
@@ -130,10 +130,10 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       });
       expect(browserSession).not.toBeNull();
       const authority = {
-        audience: resource,
         issuer,
-        ownerUserId: browserSession!.user.id,
+        audience: resource,
         workspaceId: "workspace_1",
+        ownerUserId: browserSession!.user.id,
       };
       const provisioningRequestId = randomUUID();
       const journalRow = preparedJournal(authority, provisioningRequestId);
@@ -153,15 +153,21 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             value.requestId !== provisioningRequestId ||
             Object.entries(authority).some(
               ([key, expected]) =>
-                value.authority[key as keyof typeof authority] !== expected
+                value.authority[key as keyof typeof authority] !== expected,
             )
-          ) {
+          )
             return undefined;
-          }
           return structuredClone(journalRow);
-        }
+        },
       );
       const route = createBuilderHandoffRouteHandler({
+        origin,
+        handoffs,
+        journal: {
+          read: journalRead,
+          reserve: vi.fn(),
+          compareAndSet: vi.fn(),
+        },
         async authorityForRequest(request) {
           const session = await auth.auth.api.getSession({
             headers: request.headers,
@@ -176,19 +182,14 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             ownerUserId: session.user.id,
           };
         },
-        handoffs,
-        journal: {
-          compareAndSet: vi.fn(),
-          read: journalRead,
-          reserve: vi.fn(),
-        },
-        origin,
       });
       const webHeaders = new Headers(browser);
       webHeaders.set("origin", origin);
       webHeaders.set("content-type", "application/json");
       const create = await route(
         new Request(`${origin}/api/builder/handoffs`, {
+          method: "POST",
+          headers: webHeaders,
           body: JSON.stringify({
             version: 1,
             creationRequestId: randomUUID(),
@@ -199,9 +200,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             modelId: "openai/gpt-5.6-terra",
             connections: ["Ramp"],
           }),
-          headers: webHeaders,
-          method: "POST",
-        })
+        }),
       );
       expect(create.status).toBe(200);
       const { handoffId } = (await create.json()) as { handoffId: string };
@@ -215,46 +214,47 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       });
       expect(preparedRecord?.intent).toMatchObject({
         appName: journalRow.record.request.appName,
-        providers: journalRow.record.request.providers,
-        provisioning: journalRow.record.response,
         repository: {
           requestedName: "prepared-vendor-review",
           resolvedFullName: "acme/prepared-vendor-review",
         },
+        providers: journalRow.record.request.providers,
+        provisioning: journalRow.record.response,
       });
       const clients = {
-        codex: { id: codexClientId, redirectUri: codexRedirectUris[0] },
         cursor: { id: cursorClientId, redirectUri: cursorRedirectUri },
+        codex: { id: codexClientId, redirectUri: codexRedirectUris[0] },
       };
       const first = await grantRealOAuth(
         auth,
         browser,
         clients[firstClient],
-        previewOAuthScopes.join(" ")
+        previewOAuthScopes.join(" "),
       );
       const snapshot = {
+        status: "waiting" as const,
         events: [
           { type: "assistant.message", index: 0, text: "Ready to continue." },
         ],
-        status: "waiting" as const,
       };
-      const observedContexts: Awaited<ReturnType<typeof readPrepared>>[] = [];
+      const observedContexts: Array<Awaited<ReturnType<typeof readPrepared>>> =
+        [];
       const start = vi.fn<HostedEveTransport["start"]>(async (value) => {
         expect(value.sourceHandoffId).toBe(handoffId);
         observedContexts.push(
           await readPrepared(
-            sessionEnvelope(value.principal, value.sourceHandoffId!)
-          )
+            sessionEnvelope(value.principal, value.sourceHandoffId!),
+          ),
         );
         return { adapterSessionId: "adapter-handoff", snapshot };
       });
       const store = new InMemoryHostedEveStore();
       const config = {
-        algorithm: "ES256" as const,
-        audience: resource,
         issuer,
-        jwksUrl: `${issuer}/jwks`,
+        audience: resource,
         resourceUrl: resource,
+        jwksUrl: `${issuer}/jwks`,
+        algorithm: "ES256" as const,
       };
       const jwksFetch = vi.fn<typeof fetch>(async (url, init) => {
         expect(String(url)).toBe(config.jwksUrl);
@@ -264,6 +264,22 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: {
           auth: config,
+          verifier: createRemoteJwksAccessTokenVerifier({
+            config,
+            fetchImplementation: jwksFetch,
+          }),
+          membership: {
+            isMember: async ({ workspaceId }) =>
+              auth.membershipState.activeWorkspaces.includes(workspaceId),
+          },
+          store,
+          transport: {
+            start,
+            get: async () => snapshot,
+            send: vi.fn(),
+            respond: vi.fn(),
+            cancel: vi.fn(),
+          },
           handoffs: {
             ...handoffs,
             recheckRepositoryAccess: async ({
@@ -274,7 +290,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
               expect(repository).toBe("acme/prepared-vendor-review");
               expect(sourceHandoffId).toBe(handoffId);
               const prepared = await readPrepared(
-                sessionEnvelope(principal, sourceHandoffId!)
+                sessionEnvelope(principal, sourceHandoffId!),
               );
               return prepared.status === "prepared" &&
                 prepared.access.github.status === "ready"
@@ -282,51 +298,29 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
                 : { status: "provider-unavailable" as const };
             },
           },
-          membership: {
-            isMember: async ({ workspaceId }) =>
-              auth.membershipState.activeWorkspaces.includes(workspaceId),
-          },
-          store,
-          transport: {
-            cancel: vi.fn(),
-            get: async () => snapshot,
-            respond: vi.fn(),
-            send: vi.fn(),
-            start,
-          },
-          verifier: createRemoteJwksAccessTokenVerifier({
-            config,
-            fetchImplementation: jwksFetch,
-          }),
         },
       });
       const result = await callStart(
         handler,
         first.tokens.access_token,
-        handoffId
+        handoffId,
       );
       expect(result.isError, JSON.stringify(result)).not.toBe(true);
       expect(result.structuredContent.sessionId).toEqual(expect.any(String));
       expect(jwksFetch).toHaveBeenCalledTimes(1);
       expect(start).toHaveBeenCalledTimes(1);
       expect(observedContexts[0]).toMatchObject({
-        access: {
-          github: { scope: { installationId: "10" }, status: "ready" },
-          vercel: {
-            project: { id: "prj_prepared", name: "observed-project-name" },
-            status: "ready",
-          },
-        },
+        status: "prepared",
         app: {
+          name: "Prepared Vendor Review",
           brief: "Review new vendors before activation.",
           connections: ["Ramp"],
-          name: "Prepared Vendor Review",
         },
         resources: {
           github: {
-            fullName: "acme/prepared-vendor-review",
             installationId: "10",
             repositoryId: "100",
+            fullName: "acme/prepared-vendor-review",
           },
           vercel: {
             installationId: "icfg_prepared",
@@ -334,7 +328,13 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             scope: { id: "team_prepared" },
           },
         },
-        status: "prepared",
+        access: {
+          github: { status: "ready", scope: { installationId: "10" } },
+          vercel: {
+            status: "ready",
+            project: { id: "prj_prepared", name: "observed-project-name" },
+          },
+        },
       });
       expect(providers.githubHttp).toHaveBeenCalled();
       expect(providers.vercelHttp).toHaveBeenCalled();
@@ -343,7 +343,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         installationId: "icfg_prepared",
       });
       expect(JSON.stringify(observedContexts)).not.toMatch(
-        /mock_server|ghs_|privateIgnoredField|PRIVATE KEY/u
+        /mock_server|ghs_|privateIgnoredField|PRIVATE KEY/u,
       );
       expect(start.mock.calls[0][0]).toMatchObject({
         principal: {
@@ -354,29 +354,29 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       const refreshed = await refreshRealOAuth(
         auth,
         clients[firstClient].id,
-        first.tokens.refresh_token
+        first.tokens.refresh_token,
       );
       const retry = await callStart(
         handler,
         refreshed.tokens.access_token,
-        handoffId
+        handoffId,
       );
       expect(retry.structuredContent.sessionId).toBe(
-        result.structuredContent.sessionId
+        result.structuredContent.sessionId,
       );
       const second = await grantRealOAuth(
         auth,
         browser,
         clients[firstClient === "cursor" ? "codex" : "cursor"],
-        previewOAuthScopes.join(" ")
+        previewOAuthScopes.join(" "),
       );
       const switched = await callStart(
         handler,
         second.tokens.access_token,
-        handoffId
+        handoffId,
       );
       expect(switched.structuredContent.sessionId).toBe(
-        result.structuredContent.sessionId
+        result.structuredContent.sessionId,
       );
       expect(start).toHaveBeenCalledTimes(1);
       const strangerCredentials = {
@@ -391,17 +391,17 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         auth,
         strangerBrowser,
         clients[firstClient],
-        previewOAuthScopes.join(" ")
+        previewOAuthScopes.join(" "),
       );
       expect(stranger.claims.sub).not.toBe(first.claims.sub);
       const denied = await callStart(
         handler,
         stranger.tokens.access_token,
-        handoffId
+        handoffId,
       );
       expect(denied.isError).toBe(true);
       expect(JSON.stringify(denied)).not.toContain(
-        result.structuredContent.sessionId
+        result.structuredContent.sessionId,
       );
       expect(start).toHaveBeenCalledTimes(1);
       // Requires the coordinator's sourceHandoffId implementation, intentionally
@@ -409,20 +409,19 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       expect(start.mock.calls[0][0]).toMatchObject({
         sourceHandoffId: handoffId,
       });
-      const { principal } = start.mock.calls[0][0];
+      const principal = start.mock.calls[0][0].principal;
       expect(
-        await store.getSession(principal, result.structuredContent.sessionId)
+        await store.getSession(principal, result.structuredContent.sessionId),
       ).toMatchObject({ sourceHandoffId: handoffId });
       const persisted = await store.getSession(
         principal,
-        result.structuredContent.sessionId
+        result.structuredContent.sessionId,
       );
-      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId) {
+      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId)
         throw new Error("Durable prepared session missing.");
-      }
       const restartedAuth = sessionEnvelope(
         persisted.principal,
-        persisted.sourceHandoffId
+        persisted.sourceHandoffId,
       );
       providers.rotateCredentials();
       const credentialReadsBeforeRestart =
@@ -431,11 +430,11 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       const restartedReader = providers.createReader();
       expect(await restartedReader(restartedAuth)).toEqual(observedContexts[0]);
       expect(providers.credentialRead.mock.calls.length).toBe(
-        credentialReadsBeforeRestart + 1
+        credentialReadsBeforeRestart + 1,
       );
       const foreignSession = sessionEnvelope(
         { ...principal, ownerUserId: String(stranger.claims.sub) },
-        persisted.sourceHandoffId
+        persisted.sourceHandoffId,
       );
       const providerCallsBeforeDenial =
         providers.githubHttp.mock.calls.length +
@@ -445,13 +444,13 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       await expect(restartedReader(restartedAuth)).rejects.toThrow();
       expect(
         providers.githubHttp.mock.calls.length +
-          providers.vercelHttp.mock.calls.length
+          providers.vercelHttp.mock.calls.length,
       ).toBe(providerCallsBeforeDenial);
       auth.membershipState.activeWorkspaces = ["workspace_1"];
       providers.setVercelStatus(503);
       const outage = await restartedReader(restartedAuth);
       expect(outage).toMatchObject({
-        access: { vercel: { retryable: true, status: "provider-unavailable" } },
+        access: { vercel: { status: "provider-unavailable", retryable: true } },
         resources:
           observedContexts[0].status === "prepared"
             ? observedContexts[0].resources
@@ -461,15 +460,15 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       expect(await restartedReader(restartedAuth)).toMatchObject({
         access: {
           vercel: {
-            reconnectUrl: `${origin}/vercel/installations?returnTo=%2Fhandoff%2F${handoffId}`,
             status: "authorization-required",
+            reconnectUrl: `${origin}/vercel/installations?returnTo=%2Fhandoff%2F${handoffId}`,
           },
         },
       });
       providers.setVercelStatus(200);
       expect(await providers.createReader()(restartedAuth)).toEqual(
-        observedContexts[0]
+        observedContexts[0],
       );
-    }
+    },
   );
 });

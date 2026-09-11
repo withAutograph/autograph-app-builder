@@ -3,16 +3,14 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubUserCredentials } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
+import * as databaseSchema from "../db/schema";
 import {
   decryptGitHubUserTokens,
   encryptGitHubUserTokens,
   githubCredentialAssociatedData,
   githubUserTokenSetSchema,
-} from "./github-user-credential";
-import type {
-  GitHubUserCredentialConfig,
-  GitHubUserCredentialStore,
+  type GitHubUserCredentialConfig,
+  type GitHubUserCredentialStore,
 } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
 
@@ -20,14 +18,14 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 function predicate(
   authority: BuilderProvisionAuthority,
-  providerUserId: string
+  providerUserId: string,
 ) {
   return and(
     eq(hostedGitHubUserCredentials.issuer, authority.issuer),
     eq(hostedGitHubUserCredentials.audience, authority.audience),
     eq(hostedGitHubUserCredentials.workspaceId, authority.workspaceId),
     eq(hostedGitHubUserCredentials.ownerUserId, authority.ownerUserId),
-    eq(hostedGitHubUserCredentials.providerUserId, providerUserId)
+    eq(hostedGitHubUserCredentials.providerUserId, providerUserId),
   );
 }
 
@@ -37,19 +35,16 @@ export function createPostgresGitHubUserCredentialStore(input: {
 }): GitHubUserCredentialStore {
   const parse = (row: typeof hostedGitHubUserCredentials.$inferSelect) => {
     const authority = hostedTenantAuthoritySchema.parse({
-      audience: row.audience,
       issuer: row.issuer,
-      ownerUserId: row.ownerUserId,
+      audience: row.audience,
       workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
     });
-    if (row.keyVersion !== input.config.keyVersion) {
+    if (row.keyVersion !== input.config.keyVersion)
       throw new Error("github-credential-key-version");
-    }
     return {
-      active: row.active,
-      providerLogin: row.providerLogin,
       providerUserId: row.providerUserId,
-      revision: row.revision,
+      providerLogin: row.providerLogin,
       tokens: decryptGitHubUserTokens({
         encryptedCredential: row.encryptedCredential,
         credentialIv: row.credentialIv,
@@ -60,6 +55,8 @@ export function createPostgresGitHubUserCredentialStore(input: {
           providerUserId: row.providerUserId,
         }),
       }),
+      revision: row.revision,
+      active: row.active,
       updatedAt: row.updatedAt,
     };
   };
@@ -108,17 +105,6 @@ export function createPostgresGitHubUserCredentialStore(input: {
       if (!rows[0]) throw new Error("github-credential-not-durable");
       return parse(rows[0]);
     },
-    async deactivate(value) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const rows = await input.database
-        .update(hostedGitHubUserCredentials)
-        .set({ active: false, updatedAt: value.now })
-        .where(predicate(authority, value.providerUserId))
-        .returning({
-          providerUserId: hostedGitHubUserCredentials.providerUserId,
-        });
-      return rows.length;
-    },
     async read(value) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const rows = await input.database
@@ -152,11 +138,22 @@ export function createPostgresGitHubUserCredentialStore(input: {
           and(
             predicate(authority, value.providerUserId),
             eq(hostedGitHubUserCredentials.revision, value.expectedRevision),
-            eq(hostedGitHubUserCredentials.active, true)
-          )
+            eq(hostedGitHubUserCredentials.active, true),
+          ),
         )
         .returning();
       return rows[0] ? parse(rows[0]) : undefined;
+    },
+    async deactivate(value) {
+      const authority = hostedTenantAuthoritySchema.parse(value.authority);
+      const rows = await input.database
+        .update(hostedGitHubUserCredentials)
+        .set({ active: false, updatedAt: value.now })
+        .where(predicate(authority, value.providerUserId))
+        .returning({
+          providerUserId: hostedGitHubUserCredentials.providerUserId,
+        });
+      return rows.length;
     },
   };
 }

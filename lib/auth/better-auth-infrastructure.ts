@@ -22,14 +22,14 @@ function readApiKey(value: string | undefined): string {
   const apiKey = value?.trim();
   if (!apiKey) {
     throw new Error(
-      "BETTER_AUTH_API_KEY is required when Better Auth Infrastructure is enabled"
+      "BETTER_AUTH_API_KEY is required when Better Auth Infrastructure is enabled",
     );
   }
   return apiKey;
 }
 
 export function resolveBetterAuthInfrastructure(
-  options: BetterAuthInfrastructureOptions
+  options: BetterAuthInfrastructureOptions,
 ) {
   const configuredValue =
     options.environment.BETTER_AUTH_INFRASTRUCTURE?.trim();
@@ -39,21 +39,21 @@ export function resolveBetterAuthInfrastructure(
       plugins: [],
       summary: {
         enabled: false,
-        organizationAuthorityReady: options.organizationAuthorityReady,
         plan: null,
+        organizationAuthorityReady: options.organizationAuthorityReady,
       } satisfies BetterAuthInfrastructureSummary,
     };
   }
 
   if (configuredValue !== ENABLED_VALUE) {
     throw new Error(
-      `BETTER_AUTH_INFRASTRUCTURE must be exactly ${ENABLED_VALUE}`
+      `BETTER_AUTH_INFRASTRUCTURE must be exactly ${ENABLED_VALUE}`,
     );
   }
 
   if (!options.organizationAuthorityReady) {
     throw new Error(
-      "Better Auth Infrastructure cannot start before organization authority migration is verified"
+      "Better Auth Infrastructure cannot start before organization authority migration is verified",
     );
   }
 
@@ -63,8 +63,8 @@ export function resolveBetterAuthInfrastructure(
     plugins: [dash({ apiKey })],
     summary: {
       enabled: true,
-      organizationAuthorityReady: true,
       plan: "starter",
+      organizationAuthorityReady: true,
     } satisfies BetterAuthInfrastructureSummary,
   };
 }

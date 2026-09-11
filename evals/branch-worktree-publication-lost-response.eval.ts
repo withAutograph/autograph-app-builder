@@ -12,7 +12,7 @@ export default defineEval({
     await prepareReviewedWorkflow(
       t,
       repository,
-      "branch-publication-lost-response"
+      "branch-publication-lost-response",
     );
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({

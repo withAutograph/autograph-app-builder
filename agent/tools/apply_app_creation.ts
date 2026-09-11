@@ -3,10 +3,6 @@ import { always } from "eve/tools/approval";
 import { z } from "zod";
 
 import {
-  implementationFilesSchema,
-  withImplementationFiles,
-} from "@/lib/agent/apply-implementation-files";
-import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   updateExactWorkflow,
@@ -18,11 +14,19 @@ import {
   sandboxApplyCommandExecutor,
 } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import {
+  implementationFilesSchema,
+  withImplementationFiles,
+} from "@/lib/agent/apply-implementation-files";
 
 export default defineTool({
-  approval: always(),
   description:
     "Build this app in the private preview checkout, then validate it for review. This does not publish, deploy, provision resources, or change the user's repository.",
+  approval: always(),
+  inputSchema: z.object({
+    productSummary: z.string().trim().min(1).max(600).optional(),
+    implementationFiles: implementationFilesSchema.default([]),
+  }),
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -31,7 +35,7 @@ export default defineTool({
       current.phase !== "applied"
     )
       throw new Error(
-        "Derive an exact canonical proposal before requesting target apply."
+        "Derive an exact canonical proposal before requesting target apply.",
       );
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
@@ -65,7 +69,7 @@ export default defineTool({
       sandbox,
       executor: withImplementationFiles(
         fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
-        input.implementationFiles
+        input.implementationFiles,
       ),
       ...(fixture
         ? {
@@ -73,7 +77,7 @@ export default defineTool({
               inspectFixtureApplyOverlay(
                 fixtureSandbox,
                 applyRoot,
-                current.appSpec.appId
+                current.appSpec.appId,
               ),
           }
         : {}),
@@ -105,7 +109,7 @@ export default defineTool({
         }),
       });
       throw new Error(
-        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`
+        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`,
       );
     }
     updateExactWorkflow({
@@ -135,8 +139,4 @@ export default defineTool({
       reused: false,
     };
   },
-  inputSchema: z.object({
-    productSummary: z.string().trim().min(1).max(600).optional(),
-    implementationFiles: implementationFilesSchema.default([]),
-  }),
 });

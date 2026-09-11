@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected-record header, evidence, and footer action create a clear review sequence. Selection is strongly indicated, and confirmation/result headlines elevate the workflow state. However, the supplier minimum that materially affects replenishment is hidden in a secondary disclosure and is not surfaced during confirmation. |
-| layout | 4/4 | The two-column list-detail composition is consistently aligned and comfortably dense at 1024, 1440, and 1920 pixels. Labels and values form stable grids, rows have predictable spacing, and footer actions remain separated from evidence. At 700 pixels the focused detail layout uses the available width effectively without visible clipping. |
-| typography | 3/4 | Headings, field labels, values, metadata, and status pills are visually consistent and generally easy to read. The confirmation explanation wraps cleanly at narrower desktop widths, though its long assumption text is comparatively dense. Automated evidence also reports marginal muted-text contrast and low primary-button label contrast; these should be addressed through supported Arrusted treatments rather than local palette overrides. |
-| responsive | 4/4 | The composition scales from a centered wide layout to a tighter 1024-pixel split view, then switches to a focused detail view with a clear Back control at 700 pixels. Actions remain visible, confirmation content reflows without horizontal overflow, and longer evidence uses bounded vertical scrolling where needed. |
-| productClarity | 3/4 | The task is immediately understandable: filter exceptions, select an item, review stock and supplier facts, then run an explicitly simulated replenishment. Confirmation and result states repeatedly state that no order is placed. Clarity is reduced by proposing 3 cases while the expanded supplier terms specify a 4-case minimum, and by basing the shortfall on gross on-hand while reserved units are only explained later as context. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected-record header, evidence, and footer action create a clear review sequence. Selection is strongly indicated, and confirmation/result headlines elevate the workflow state. However, the supplier minimum that materially affects replenishment is hidden in a secondary disclosure and is not surfaced during confirmation.                                                                           |
+| layout         | 4/4   | The two-column list-detail composition is consistently aligned and comfortably dense at 1024, 1440, and 1920 pixels. Labels and values form stable grids, rows have predictable spacing, and footer actions remain separated from evidence. At 700 pixels the focused detail layout uses the available width effectively without visible clipping.                                                                                                     |
+| typography     | 3/4   | Headings, field labels, values, metadata, and status pills are visually consistent and generally easy to read. The confirmation explanation wraps cleanly at narrower desktop widths, though its long assumption text is comparatively dense. Automated evidence also reports marginal muted-text contrast and low primary-button label contrast; these should be addressed through supported Arrusted treatments rather than local palette overrides. |
+| responsive     | 4/4   | The composition scales from a centered wide layout to a tighter 1024-pixel split view, then switches to a focused detail view with a clear Back control at 700 pixels. Actions remain visible, confirmation content reflows without horizontal overflow, and longer evidence uses bounded vertical scrolling where needed.                                                                                                                             |
+| productClarity | 3/4   | The task is immediately understandable: filter exceptions, select an item, review stock and supplier facts, then run an explicitly simulated replenishment. Confirmation and result states repeatedly state that no order is placed. Clarity is reduced by proposing 3 cases while the expanded supplier terms specify a 4-case minimum, and by basing the shortfall on gross on-hand while reserved units are only explained later as context.        |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/526) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/526) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/526) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

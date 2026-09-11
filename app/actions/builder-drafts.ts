@@ -5,45 +5,41 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 
 import {
-  builderDraftRecordSchema,
-  saveActiveBuilderDraftInputSchema,
-} from "@/lib/builder-drafts/contracts";
-import type {
-  BuilderDraftRecord,
-  SaveActiveBuilderDraftInput,
-} from "@/lib/builder-drafts/contracts";
-import {
   getAuthenticatedBuilderDraftContext,
   readAuthenticatedActiveBuilderDraft,
   readAuthenticatedBuilderDraft,
 } from "@/lib/builder-drafts/deployment";
+import {
+  builderDraftRecordSchema,
+  saveActiveBuilderDraftInputSchema,
+  type BuilderDraftRecord,
+  type SaveActiveBuilderDraftInput,
+} from "@/lib/builder-drafts/contracts";
 
 async function context() {
   const value = await getAuthenticatedBuilderDraftContext({
     environment: process.env,
     headers: await headers(),
   });
-  if (!value) {
-    throw new Error("builder-draft-unauthorized");
-  }
+  if (!value) throw new Error("builder-draft-unauthorized");
   return value;
 }
 
 /** The revisioned mutation used by the autosave island and provider redirects. */
 export async function saveActiveBuilderDraft(
-  input: SaveActiveBuilderDraftInput
+  input: SaveActiveBuilderDraftInput,
 ) {
   const value = await context();
   const saved = await value.drafts.saveActive(
     value.authority,
-    saveActiveBuilderDraftInputSchema.parse(input)
+    saveActiveBuilderDraftInputSchema.parse(input),
   );
   return {
-    concurrent: saved.concurrent,
     draftId: saved.row.draftId,
-    idempotent: saved.idempotent,
     revision: saved.row.revision,
     updatedAt: saved.row.updatedAt.toISOString(),
+    idempotent: saved.idempotent,
+    concurrent: saved.concurrent,
   };
 }
 
@@ -56,9 +52,9 @@ export async function loadActiveBuilderDraft() {
 
 export async function loadBuilderDraft(draftId: string) {
   return readAuthenticatedBuilderDraft({
-    draftId,
     environment: process.env,
     headers: await headers(),
+    draftId,
   });
 }
 
@@ -68,17 +64,17 @@ export async function loadBuilderDraft(draftId: string) {
  */
 export async function saveBuilderDraft(
   draftId: string,
-  recordInput: BuilderDraftRecord
+  recordInput: BuilderDraftRecord,
 ) {
   const value = await context();
   const record = builderDraftRecordSchema.parse(recordInput);
   const current = await value.drafts.read(value.authority, draftId);
   return saveActiveBuilderDraft({
-    clientMutationId: randomUUID(),
+    version: 1,
     draftId,
     expectedRevision: current?.revision ?? 0,
+    clientMutationId: randomUUID(),
     record,
-    version: 1,
   });
 }
 

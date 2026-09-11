@@ -6,34 +6,32 @@ import { parseGitHubAppHttpProviderCredentials } from "./github-app-http-provide
 export const ARRUSTED_TEMPLATE_OWNER = "withAutograph";
 export const ARRUSTED_TEMPLATE_NAME = "arrusted-development";
 export const ARRUSTED_TEMPLATE_FULL_NAME = `${ARRUSTED_TEMPLATE_OWNER}/${ARRUSTED_TEMPLATE_NAME}`;
-export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1_221_250_267;
+export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1221250267;
 
 const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);
 
 const requestedPermissions = {
-  checks: "read" as const,
   contents: "read" as const,
+  checks: "read" as const,
 };
 
-export interface ArrustedTemplateReaderConfig {
+export type ArrustedTemplateReaderConfig = {
   appId: string;
   privateKey: string;
   installationId: string;
-}
+};
 
-export interface ArrustedTemplateReader {
+export type ArrustedTemplateReader = {
   acquire(): Promise<{ token: string }>;
-}
+};
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function privateTemplateRepository(value: unknown) {
-  if (!record(value)) {
-    return false;
-  }
+  if (!record(value)) return false;
   return (
     typeof value.id === "number" &&
     Number.isSafeInteger(value.id) &&
@@ -44,16 +42,13 @@ function privateTemplateRepository(value: unknown) {
 }
 
 function readOnlyReaderPermissions(value: unknown) {
-  if (!record(value)) {
-    return false;
-  }
+  if (!record(value)) return false;
   if (
     value.contents !== "read" ||
     value.checks !== "read" ||
     (value.metadata !== undefined && value.metadata !== "read")
-  ) {
+  )
     return false;
-  }
   return Object.values(value).every((permission) => permission === "read");
 }
 
@@ -73,14 +68,13 @@ type TemplateReaderFailureStage =
   | "repository_shape";
 
 function unavailable(stage?: TemplateReaderFailureStage): never {
-  if (stage !== undefined) {
+  if (stage !== undefined)
     console.warn(
       JSON.stringify({
         event: "autograph.template-reader.failed",
         stage,
-      })
+      }),
     );
-  }
   throw new Error("The Arrusted template reader is unavailable.");
 }
 
@@ -89,7 +83,7 @@ function unavailable(stage?: TemplateReaderFailureStage): never {
  * installation. It accepts only the deployment-owned fixed installation ID.
  */
 export function readDeploymentArrustedTemplateReaderConfig(
-  environment: Readonly<Record<string, string | undefined>>
+  environment: Readonly<Record<string, string | undefined>>,
 ): ArrustedTemplateReaderConfig {
   let credentials: { appId: string; privateKey: string };
   try {
@@ -101,11 +95,9 @@ export function readDeploymentArrustedTemplateReaderConfig(
     unavailable("configuration");
   }
   const installation = installationIdSchema.safeParse(
-    environment.APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID
+    environment.APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID,
   );
-  if (!installation.success) {
-    unavailable("configuration");
-  }
+  if (!installation.success) unavailable("configuration");
   return { ...credentials, installationId: installation.data };
 }
 
@@ -114,11 +106,9 @@ export function createArrustedTemplateReader(input: {
   fetch?: typeof fetch;
 }): ArrustedTemplateReader {
   const installation = installationIdSchema.safeParse(
-    input.config.installationId
+    input.config.installationId,
   );
-  if (!installation.success) {
-    unavailable();
-  }
+  if (!installation.success) unavailable();
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: input.config.appId,
     privateKey: input.config.privateKey,
@@ -133,11 +123,11 @@ export function createArrustedTemplateReader(input: {
       let authentication: unknown;
       try {
         authentication = await app.octokit.auth({
+          type: "installation",
           installationId: installation.data,
           permissions: requestedPermissions,
-          refresh: true,
           repositoryIds: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
-          type: "installation",
+          refresh: true,
         });
       } catch {
         unavailable("token_mint");
@@ -154,19 +144,18 @@ export function createArrustedTemplateReader(input: {
           authentication.repositorySelection !== "selected") ||
         !exactTemplateRepositoryIds(authentication.repositoryIds) ||
         !readOnlyReaderPermissions(authentication.permissions)
-      ) {
+      )
         unavailable("token_shape");
-      }
       const token = parsedToken.data;
 
       let inventory;
       try {
         inventory = await createGitHubTokenOctokit({
-          fetch: input.fetch,
           token,
+          fetch: input.fetch,
         }).request("GET /installation/repositories", {
-          page: 1,
           per_page: 100,
+          page: 1,
         });
       } catch {
         unavailable("repository_inventory");
@@ -178,16 +167,15 @@ export function createArrustedTemplateReader(input: {
         !Array.isArray(data.repositories) ||
         data.repositories.length !== 1 ||
         !privateTemplateRepository(data.repositories[0])
-      ) {
+      )
         unavailable("repository_shape");
-      }
       return { token };
     },
   };
 }
 
 export function deploymentArrustedTemplateReader(
-  environment: Readonly<Record<string, string | undefined>> = process.env
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   return createArrustedTemplateReader({
     config: readDeploymentArrustedTemplateReaderConfig(environment),

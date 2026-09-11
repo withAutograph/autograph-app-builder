@@ -10,7 +10,7 @@ export async function GET(
   request: Request,
   context: {
     params: Promise<{ sessionId: string; digest: string }>;
-  }
+  },
 ) {
   return requestHandler(request, await context.params);
 }

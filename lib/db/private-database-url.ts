@@ -2,7 +2,7 @@ import { closeSync, readSync } from "node:fs";
 
 import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
 
-const MAX_SECRET_BYTES = 8192;
+const MAX_SECRET_BYTES = 8_192;
 
 export function readPrivateDatabaseUrl(fd: number): string {
   if (!Number.isInteger(fd) || fd < 0) {
@@ -13,9 +13,7 @@ export function readPrivateDatabaseUrl(fd: number): string {
   try {
     while (length < frame.length) {
       const count = readSync(fd, frame, length, frame.length - length, null);
-      if (count === 0) {
-        break;
-      }
+      if (count === 0) break;
       length += count;
     }
   } finally {
@@ -25,7 +23,7 @@ export function readPrivateDatabaseUrl(fd: number): string {
     frame.fill(0);
     throw new Error("The database URL secret frame was empty or oversized.");
   }
-  const databaseUrl = frame.subarray(0, length).toString("utf-8");
+  const databaseUrl = frame.subarray(0, length).toString("utf8");
   frame.fill(0);
   if (/[\0\r\n]/u.test(databaseUrl)) {
     throw new Error("The database URL secret frame was malformed.");

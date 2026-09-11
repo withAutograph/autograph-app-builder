@@ -17,5 +17,5 @@ export type SourceWorkflowState =
 
 export const sourceWorkflowState = defineState<SourceWorkflowState>(
   "autograph-app-builder.source.v3",
-  () => ({ phase: "empty", version: APP_BUILDER_SOURCE_VERSION })
+  () => ({ version: APP_BUILDER_SOURCE_VERSION, phase: "empty" }),
 );

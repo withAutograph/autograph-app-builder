@@ -1,18 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { builderHandoffRecordSchema } from "./contracts";
-import type { BuilderHandoffRecord } from "./contracts";
+import {
+  builderHandoffRecordSchema,
+  type BuilderHandoffRecord,
+} from "./contracts";
+import { BuilderHandoffUnavailableError } from "./service";
 import {
   getBuilderHandoffPageData,
   getBuilderHandoffStatusDeploymentHandler,
 } from "./deployment";
-import { BuilderHandoffUnavailableError } from "./service";
 
 const mocks = vi.hoisted(() => ({
+  session: vi.fn(),
+  read: vi.fn(),
   cursorReady: vi.fn(),
   database: {},
-  read: vi.fn(),
-  session: vi.fn(),
 }));
 
 vi.mock("../auth/preview-oauth-deployment", () => ({
@@ -20,9 +22,9 @@ vi.mock("../auth/preview-oauth-deployment", () => ({
 }));
 vi.mock("../auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: () => ({
-    databaseUrl: "postgres://test:private-password@localhost/handoff-page",
     issuer: "https://builder.example.test/api/auth",
     resource: "https://builder.example.test/mcp",
+    databaseUrl: "postgres://test:private-password@localhost/handoff-page",
   }),
 }));
 vi.mock("../mcp/hosted-route", () => ({
@@ -37,36 +39,36 @@ vi.mock("./postgres-store", () => ({
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const authority = {
-  audience: "https://builder.example.test/mcp",
   issuer: "https://builder.example.test/api/auth",
-  ownerUserId: "user-one",
+  audience: "https://builder.example.test/mcp",
   workspaceId: "workspace-one",
+  ownerUserId: "user-one",
 };
 const prepared = builderHandoffRecordSchema.parse({
-  authority,
-  createdAt: new Date("2026-09-01T12:00:00Z"),
-  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
-  expiresAt: new Date("2026-09-08T12:00:00Z"),
+  version: 1,
   handoffId,
+  authority,
+  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
+  requestDigest: "a".repeat(64),
   intent: {
-    appId: "vendor-review",
     appName: "Vendor Review",
+    appId: "vendor-review",
     brief: "Review new vendors.",
-    connections: [],
+    repository: { requestedName: "vendor-review", private: true },
     modelId: "openai/gpt-5.6-terra",
+    connections: [],
     providers: {
       githubInstallationId: "123",
       vercelInstallationId: "icfg_selected",
     },
-    repository: { private: true, requestedName: "vendor-review" },
   },
-  requestDigest: "a".repeat(64),
-  version: 1,
+  createdAt: new Date("2026-09-01T12:00:00Z"),
+  expiresAt: new Date("2026-09-08T12:00:00Z"),
 });
 const pageInput = {
   environment: {},
-  handoffId,
   headers: new Headers({ cookie: "private-session-cookie" }),
+  handoffId,
 };
 
 describe("owner-only handoff browser data", () => {
@@ -90,21 +92,21 @@ describe("owner-only handoff browser data", () => {
           JSON.stringify(input.authority) === JSON.stringify(authority) &&
           input.handoffId === handoffId
             ? prepared
-            : undefined
+            : undefined,
       );
   });
 
   it("returns only public fields and uses the exact web session authority", async () => {
     const data = await getBuilderHandoffPageData(pageInput);
     expect(data).toEqual({
-      cursorInstallReady: false,
-      destination: "codex",
-      expiresAt: prepared.expiresAt.toISOString(),
-      handoffId,
-      intent: prepared.intent,
-      mcpUrl: authority.audience,
-      status: "prepared",
       version: 1,
+      handoffId,
+      expiresAt: prepared.expiresAt.toISOString(),
+      status: "prepared",
+      intent: prepared.intent,
+      destination: "codex",
+      cursorInstallReady: false,
+      mcpUrl: authority.audience,
     });
     expect(mocks.session).toHaveBeenCalledWith({
       environment: pageInput.environment,
@@ -113,10 +115,10 @@ describe("owner-only handoff browser data", () => {
     expect(mocks.read).toHaveBeenCalledWith({ authority, handoffId });
     expect(mocks.cursorReady).toHaveBeenCalledWith(
       mocks.database,
-      authority.audience
+      authority.audience,
     );
     expect(JSON.stringify(data)).not.toMatch(
-      /private-password|private-session-cookie|ownerUserId|workspaceId|requestDigest|sessionId/u
+      /private-password|private-session-cookie|ownerUserId|workspaceId|requestDigest|sessionId/u,
     );
   });
 
@@ -127,7 +129,7 @@ describe("owner-only handoff browser data", () => {
     expect(mocks.cursorReady).not.toHaveBeenCalled();
     const response = await getBuilderHandoffStatusDeploymentHandler({})(
       new Request(`${authority.audience}/unused`),
-      handoffId
+      handoffId,
     );
     expect(response.status).toBe(401);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -136,18 +138,16 @@ describe("owner-only handoff browser data", () => {
   it.each(["other-owner", "other-workspace", "missing", "invalid-id"])(
     "hides %s rows with the same generic 404",
     async (scenario) => {
-      if (scenario === "other-owner") {
+      if (scenario === "other-owner")
         mocks.session.mockResolvedValue({
           organization: { workspaceId: authority.workspaceId },
           user: { id: "user-two" },
         });
-      }
-      if (scenario === "other-workspace") {
+      if (scenario === "other-workspace")
         mocks.session.mockResolvedValue({
           organization: { workspaceId: "workspace-two" },
           user: { id: authority.ownerUserId },
         });
-      }
       const id =
         scenario === "missing"
           ? "123e4567-e89b-42d3-a456-426614174099"
@@ -155,17 +155,17 @@ describe("owner-only handoff browser data", () => {
             ? "invalid"
             : handoffId;
       await expect(
-        getBuilderHandoffPageData({ ...pageInput, handoffId: id })
+        getBuilderHandoffPageData({ ...pageInput, handoffId: id }),
       ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
       const response = await getBuilderHandoffStatusDeploymentHandler({})(
         new Request(`${authority.audience}/unused`),
-        id
+        id,
       );
       expect(response.status).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(await response.json()).toEqual({ error: "handoff_unavailable" });
       expect(mocks.cursorReady).not.toHaveBeenCalled();
-    }
+    },
   );
 
   it("reads expired records and exposes a bound session as continued without its engine ID", async () => {
@@ -180,14 +180,14 @@ describe("owner-only handoff browser data", () => {
     });
     const response = await getBuilderHandoffStatusDeploymentHandler({})(
       new Request(`${authority.audience}/unused`),
-      handoffId
+      handoffId,
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const data = await response.json();
     expect(data.status).toBe("continued");
     expect(JSON.stringify(data)).not.toMatch(
-      /sessionId|private-engine-id|redeemedAt/u
+      /sessionId|private-engine-id|redeemedAt/u,
     );
   });
 
@@ -197,13 +197,13 @@ describe("owner-only handoff browser data", () => {
       intent: { ...prepared.intent, destination: "cursor" },
     });
     expect(await getBuilderHandoffPageData(pageInput)).toMatchObject({
-      cursorInstallReady: false,
       destination: "cursor",
+      cursorInstallReady: false,
     });
     mocks.cursorReady.mockResolvedValue(true);
     expect(await getBuilderHandoffPageData(pageInput)).toMatchObject({
-      cursorInstallReady: true,
       destination: "cursor",
+      cursorInstallReady: true,
     });
   });
 });

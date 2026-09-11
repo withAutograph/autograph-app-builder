@@ -1,23 +1,25 @@
 import { createHash } from "node:crypto";
 
-import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
+import type { SandboxSession } from "eve/sandbox";
+import { hasTestCapability } from "../testing/test-capability";
+
+import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import { safeSourcePath } from "./source-path";
+
+import {
+  dependencyCacheReceiptDigest,
+  planningOverlayRoot,
+  type ObservedDependencyCache,
+} from "./dependency-cache";
+import { configuredToolchainImage } from "../sandbox/toolchain";
 import {
   isHostedVercelSandboxBackend,
   sandboxBackendPlan,
 } from "../sandbox/backend";
 import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
-import { configuredToolchainImage } from "../sandbox/toolchain";
-import { hasTestCapability } from "../testing/test-capability";
-import {
-  dependencyCacheReceiptDigest,
-  planningOverlayRoot,
-} from "./dependency-cache";
-import type { ObservedDependencyCache } from "./dependency-cache";
-import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { safeSourcePath } from "./source-path";
 import type { SourceReceipt } from "./source-receipt";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -29,7 +31,7 @@ const repositoryPath = z
 export class ExistingApplicationChangesRequiredError extends Error {
   constructor() {
     super(
-      "The requested application already exists. Inspect its app-owned source files, then retry target planning with exact replacement contents."
+      "The requested application already exists. Inspect its app-owned source files, then retry target planning with exact replacement contents.",
     );
     this.name = "ExistingApplicationChangesRequiredError";
   }
@@ -37,13 +39,13 @@ export class ExistingApplicationChangesRequiredError extends Error {
 
 export const targetIdentitySchema = z.strictObject({
   appId,
-  appSpecPath: repositoryPath,
-  baseRoutes: z.tuple([z.string().startsWith("/"), z.string().startsWith("/")]),
-  contractPath: repositoryPath,
-  kernelSchemaPath: repositoryPath,
+  workspacePath: repositoryPath,
   packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
   projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
-  workspacePath: repositoryPath,
+  baseRoutes: z.tuple([z.string().startsWith("/"), z.string().startsWith("/")]),
+  appSpecPath: repositoryPath,
+  contractPath: repositoryPath,
+  kernelSchemaPath: repositoryPath,
 });
 
 const appSpecBindingSchema = z.strictObject({
@@ -53,14 +55,12 @@ const appSpecBindingSchema = z.strictObject({
 
 const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
   z.strictObject({
-    blockers: z.array(z.string()),
     contract: z.strictObject({
       version: z.literal(1),
       appId,
       appSpec: appSpecBindingSchema,
     }),
     futurePath: repositoryPath,
-    mutations: z.tuple([]),
     plan: z.strictObject({
       source: z.strictObject({
         workspacePath: repositoryPath,
@@ -89,43 +89,44 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
         proposedDigest: digest.optional(),
       }),
     }),
+    blockers: z.array(z.string()),
+    mutations: z.tuple([]),
   });
 
 export const targetCreationProposalSchema =
   targetCreationProposalSchemaForTopology("microfrontends.json");
 
 const iterationChangeSchema = z.strictObject({
+  path: repositoryPath,
+  before: z
+    .strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest })
+    .optional(),
   after: z.strictObject({
     mode: z.string().regex(/^[0-7]{3,4}$/u),
     digest,
     content: z.string(),
   }),
-  before: z
-    .strictObject({ mode: z.string().regex(/^[0-7]{3,4}$/u), digest })
-    .optional(),
-  path: repositoryPath,
 });
 
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
     .extend({
+      operation: z.literal("iterate-existing-app"),
       iteration: z.strictObject({
         changes: z.array(iterationChangeSchema).min(1),
         digest,
       }),
-      operation: z.literal("iterate-existing-app"),
     })
     .superRefine((proposal, context) => {
       if (
         sha256(JSON.stringify(proposal.iteration.changes)) !==
         proposal.iteration.digest
-      ) {
+      )
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["iteration", "digest"],
           message: "The iteration digest does not bind its changes.",
         });
-      }
     });
 
 export const targetIterationProposalSchema =
@@ -137,9 +138,7 @@ export const targetProposalSchema = z.union([
 ]);
 
 function targetProposalSchemaForTopology(topologyOwner: string) {
-  if (topologyOwner === "microfrontends.json") {
-    return targetProposalSchema;
-  }
+  if (topologyOwner === "microfrontends.json") return targetProposalSchema;
   return z.union([
     targetCreationProposalSchemaForTopology(topologyOwner),
     targetIterationProposalSchemaForTopology(topologyOwner),
@@ -161,12 +160,12 @@ export class ExistingAppChangePreimageError extends Error {
   }) {
     const repair = {
       code: "existing_app_change_preimage_missing",
+      rejectedPaths: [...input.rejectedPaths],
       exactAppOwnedPaths: [...input.exactAppOwnedPaths],
       next: "Inspect only the listed exact paths, draft replacements from their returned contents, and retry target planning without resolving or preparing the source again.",
-      rejectedPaths: [...input.rejectedPaths],
     } as const;
     super(
-      `Existing-app changes require exact source preimages. ${JSON.stringify(repair)}`
+      `Existing-app changes require exact source preimages. ${JSON.stringify(repair)}`,
     );
     this.name = "ExistingAppChangePreimageError";
     this.rejectedPaths = repair.rejectedPaths;
@@ -175,7 +174,7 @@ export class ExistingAppChangePreimageError extends Error {
 }
 
 export function targetContractDigest(
-  contract: TargetProposal["contract"]
+  contract: TargetProposal["contract"],
 ): string {
   return sha256(JSON.stringify(contract));
 }
@@ -191,11 +190,11 @@ disable = ["bun"]
 `;
 
 export type TargetCommand = "identity" | "planning";
-export interface TargetCommandResult {
+export type TargetCommandResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
-}
+};
 export type TargetCommandExecutor = (input: {
   command: TargetCommand;
   appId: string;
@@ -208,24 +207,23 @@ const sha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
 function planningMarker(marker: string, phase: "start" | "finish") {
-  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
     console.info(`[app-builder planning] ${marker} ${phase}`);
-  }
 }
 
 function parseOutput<T>(
   result: TargetCommandResult,
   schema: z.ZodType<T>,
-  label: string
+  label: string,
 ): T {
   const stdout = result.stdout
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
-    .replaceAll("\r", "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\r/gu, "")
     .trim();
   if (result.exitCode !== 0) {
     const diagnostic = result.stderr.trim() || result.stdout.trim();
     throw new Error(
-      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2000)}`}`
+      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2_000)}`}`,
     );
   }
   let parsed: unknown;
@@ -235,66 +233,58 @@ function parseOutput<T>(
     throw new Error(`${label} returned invalid JSON.`);
   }
   const validated = schema.safeParse(parsed);
-  if (!validated.success) {
+  if (!validated.success)
     throw new Error(`${label} returned an invalid shape.`);
-  }
   return validated.data;
 }
 
 export function targetExecutionBinding(
   cache: ObservedDependencyCache | undefined,
-  environment: Readonly<Record<string, string | undefined>> = process.env
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  if (hasTestCapability("simulated-target", environment)) {
+  if (hasTestCapability("simulated-target", environment))
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
       dependencyCacheDigest:
         cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
-  }
   const imageDigest = configuredToolchainImage(environment);
-  if (cache === undefined) {
+  if (cache === undefined)
     return {
       imageDigest: imageDigest ?? "vercel-sandbox",
       dependencyCacheDigest: "checkout",
       fixture: false,
     } as const;
-  }
   if (imageDigest === undefined) {
     const backend = sandboxBackendPlan({
       environment,
       fixture: false,
       localImageConfigured: false,
     });
-    if (
-      backend.kind === "vercel-development" &&
-      backend.blockers.length === 0
-    ) {
+    if (backend.kind === "vercel-development" && backend.blockers.length === 0)
       return {
         imageDigest: developmentExecutionArtifactDigest(environment),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
       } as const;
-    }
     if (
       isHostedVercelSandboxBackend(backend.kind) &&
       backend.blockers.length === 0
-    ) {
+    )
       return {
         imageDigest: hostedExecutionArtifactDigest(),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
       } as const;
-    }
     throw new Error(
-      "The immutable sandbox image and offline dependency cache are not ready for target commands."
+      "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
   }
   return {
+    imageDigest,
     dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
     fixture: false,
-    imageDigest,
   } as const;
 }
 
@@ -310,7 +300,7 @@ export async function materializePlanningOverlay(input: {
   // The overlay is builder-owned scratch state. Recreate it from the current
   // checkout, including files generated since cloning. An inspection manifest
   // is optional diagnostic data, not a prerequisite for repository commands.
-  await input.sandbox.removePath({ force: true, path: root, recursive: true });
+  await input.sandbox.removePath({ path: root, recursive: true, force: true });
   await ensureSandboxDirectories(input.sandbox, [
     root,
     `${root}/prototype/${input.appId}`,
@@ -320,48 +310,48 @@ export async function materializePlanningOverlay(input: {
   // report a real missing-checkout or copy failure instead of predicting one
   // from a stale or absent inventory.
   const copy = await input.sandbox.run({
-    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
     command: `cp -R /workspace/repository/. /workspace/${root}/`,
     workingDirectory: "/workspace",
+    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
   });
   if (copy.exitCode !== 0) {
     await input.sandbox.removePath({
-      force: true,
       path: root,
       recursive: true,
+      force: true,
     });
     throw new Error("Prepared source copy into the planning overlay failed.");
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   await input.sandbox.writeTextFile({
-    content: input.appSpecContent,
     path: `${root}/${appSpecPath}`,
+    content: input.appSpecContent,
   });
   const contract = {
+    version: 1,
     appId: input.appId,
     appSpec: { path: appSpecPath, sha256: input.appSpecDigest },
-    version: 1,
   } as const;
   const contractPath = `.app-builder/target-inputs/${input.artifactRevision}/app-contract.json`;
   await input.sandbox.writeTextFile({
-    content: `${JSON.stringify(contract, null, 2)}\n`,
     path: contractPath,
+    content: `${JSON.stringify(contract, null, 2)}\n`,
   });
   await input.sandbox.writeTextFile({
-    content: TARGET_PLANNING_MISE_PROFILE,
     path: `${root}/.config/mise/config.app-builder.toml`,
+    content: TARGET_PLANNING_MISE_PROFILE,
   });
   const result = {
-    contractDigest: targetContractDigest(contract),
-    contractPath: `/workspace/${contractPath}`,
     planningRoot: `/workspace/${root}`,
+    contractPath: `/workspace/${contractPath}`,
+    contractDigest: targetContractDigest(contract),
   };
   planningMarker("planning-overlay", "finish");
   return result;
 }
 
 export function sandboxTargetCommandExecutor(
-  sandbox: SandboxSession
+  sandbox: SandboxSession,
 ): TargetCommandExecutor {
   return async ({
     command,
@@ -384,22 +374,19 @@ export function sandboxTargetCommandExecutor(
     if (
       result.exitCode === 0 ||
       !/(?:cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing)/iu.test(
-        `${result.stdout}\n${result.stderr}`
+        `${result.stdout}\n${result.stderr}`,
       )
-    ) {
+    )
       return result;
-    }
 
     await sandbox.setNetworkPolicy("allow-all");
     const setup = await sandbox.run({
-      abortSignal: AbortSignal.timeout(300_000),
       command:
         "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,
+      abortSignal: AbortSignal.timeout(300_000),
     });
-    if (setup.exitCode !== 0) {
-      return setup;
-    }
+    if (setup.exitCode !== 0) return setup;
     return sandbox.run({ ...request, abortSignal });
   };
 }
@@ -408,47 +395,46 @@ export function fixtureTargetCommandExecutor(): TargetCommandExecutor {
   return async ({ command, appId: requestedAppId, appSpecDigest }) => {
     const identity = {
       appId: requestedAppId,
-      appSpecPath: `prototype/${requestedAppId}/app-spec.md`,
-      baseRoutes: [`/${requestedAppId}`, `/${requestedAppId}/:path*`],
-      contractPath: `apps/${requestedAppId}/app.contract.json`,
-      kernelSchemaPath: `apps/${requestedAppId}/schema/${requestedAppId}-schema.json`,
+      workspacePath: `apps/${requestedAppId}`,
       packageName: `@autograph/${requestedAppId}`,
       projectName: `apps-${requestedAppId}`,
-      workspacePath: `apps/${requestedAppId}`,
+      baseRoutes: [`/${requestedAppId}`, `/${requestedAppId}/:path*`],
+      appSpecPath: `prototype/${requestedAppId}/app-spec.md`,
+      contractPath: `apps/${requestedAppId}/app.contract.json`,
+      kernelSchemaPath: `apps/${requestedAppId}/schema/${requestedAppId}-schema.json`,
     };
-    if (command === "identity") {
+    if (command === "identity")
       return { exitCode: 0, stdout: JSON.stringify(identity), stderr: "" };
-    }
     const proposal = {
-      blockers: [],
       contract: {
+        version: 1,
         appId: requestedAppId,
         appSpec: { path: identity.appSpecPath, sha256: appSpecDigest },
-        version: 1,
       },
       futurePath: identity.contractPath,
-      mutations: [],
       plan: {
-        product: {
-          appSpec: { path: identity.appSpecPath, sha256: appSpecDigest },
-          optionalCapabilities: { hostedResources: [], integrations: [] },
-          owner: "fixture-owner",
-        },
         source: {
-          packageName: identity.packageName,
-          runtime: "nextjs",
-          schema: { kind: "none" },
           workspacePath: identity.workspacePath,
+          runtime: "nextjs",
+          packageName: identity.packageName,
+          schema: { kind: "none" },
+        },
+        product: {
+          owner: "fixture-owner",
+          appSpec: { path: identity.appSpecPath, sha256: appSpecDigest },
+          optionalCapabilities: { integrations: [], hostedResources: [] },
         },
         topology: {
           configPath: "microfrontends.json",
-          packageName: identity.packageName,
           projectName: identity.projectName,
+          packageName: identity.packageName,
           routes: identity.baseRoutes,
         },
       },
+      blockers: [],
+      mutations: [],
     };
-    return { exitCode: 0, stderr: "", stdout: JSON.stringify(proposal) };
+    return { exitCode: 0, stdout: JSON.stringify(proposal), stderr: "" };
   };
 }
 
@@ -468,27 +454,26 @@ export async function executeTargetIdentityAndPlanning(input: {
   const overlay = await materializePlanningOverlay(input);
   const identity = parseOutput(
     await input.executor({
+      command: "identity",
       appId: input.appId,
       appSpecDigest: input.appSpecDigest,
-      command: "identity",
       ...overlay,
     }),
     targetIdentitySchema,
-    "Target identity command"
+    "Target identity command",
   );
   const expectedIdentity = {
     appId: input.appId,
-    appSpecPath: `prototype/${input.appId}/app-spec.md`,
-    baseRoutes: [`/${input.appId}`, `/${input.appId}/:path*`],
-    contractPath: `apps/${input.appId}/app.contract.json`,
-    kernelSchemaPath: `apps/${input.appId}/schema/${input.appId}-schema.json`,
+    workspacePath: `apps/${input.appId}`,
     packageName: `@autograph/${input.appId}`,
     projectName: `apps-${input.appId}`,
-    workspacePath: `apps/${input.appId}`,
+    baseRoutes: [`/${input.appId}`, `/${input.appId}/:path*`],
+    appSpecPath: `prototype/${input.appId}/app-spec.md`,
+    contractPath: `apps/${input.appId}/app.contract.json`,
+    kernelSchemaPath: `apps/${input.appId}/schema/${input.appId}-schema.json`,
   };
-  if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity)) {
+  if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
     throw new Error("Target identity did not match the accepted AppSpec.");
-  }
   // Discover the actual prepared checkout. Authored changes may describe a
   // new app, and existing apps do not need a package manifest to be iterable.
   const existingApplication =
@@ -497,9 +482,8 @@ export async function executeTargetIdentityAndPlanning(input: {
         command: `test -d /workspace/repository/${identity.workspacePath}`,
       })
     ).exitCode === 0;
-  if (existingApplication && input.existingAppChanges === undefined) {
+  if (existingApplication && input.existingAppChanges === undefined)
     throw new ExistingApplicationChangesRequiredError();
-  }
   if (existingApplication && input.existingAppChanges !== undefined) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
@@ -509,9 +493,8 @@ export async function executeTargetIdentityAndPlanning(input: {
         !requested.path.startsWith(`${identity.workspacePath}/`) ||
         requested.path === identity.contractPath ||
         seen.has(requested.path)
-      ) {
+      )
         throw new Error("An existing-app change path is not allowed.");
-      }
       seen.add(requested.path);
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
@@ -531,55 +514,54 @@ export async function executeTargetIdentityAndPlanning(input: {
         path: requested.path,
         ...(before === null
           ? {}
-          : { before: { digest: sha256(before), mode } }),
+          : { before: { mode, digest: sha256(before) } }),
         after: {
-          content: requested.content,
-          digest: sha256(requested.content),
           mode,
+          digest: sha256(requested.content),
+          content: requested.content,
         },
       });
     }
-    if (changes.length === 0) {
+    if (changes.length === 0)
       throw new Error("At least one existing-app change is required.");
-    }
     const contract = {
+      version: 1 as const,
       appId: input.appId,
       appSpec: {
         path: identity.appSpecPath,
         sha256: input.appSpecDigest,
       },
-      version: 1 as const,
     };
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
     const proposal = targetIterationProposalSchemaForTopology(
-      "microfrontends.json"
+      "microfrontends.json",
     ).parse({
-      blockers: [],
+      operation: "iterate-existing-app",
       contract,
       futurePath: identity.contractPath,
-      iteration: { changes, digest: iterationDigest },
-      mutations: [],
-      operation: "iterate-existing-app",
       plan: {
-        product: {
-          appSpec: contract.appSpec,
-          optionalCapabilities: { hostedResources: [], integrations: [] },
-          owner: "existing-application-owner",
-        },
         source: {
-          packageName: identity.packageName,
-          runtime: "nextjs",
-          schema: { kind: "none" },
           workspacePath: identity.workspacePath,
+          runtime: "nextjs",
+          packageName: identity.packageName,
+          schema: { kind: "none" },
+        },
+        product: {
+          owner: "existing-application-owner",
+          appSpec: contract.appSpec,
+          optionalCapabilities: { integrations: [], hostedResources: [] },
         },
         topology: {
           configPath: "microfrontends.json",
-          packageName: identity.packageName,
           projectName: identity.projectName,
+          packageName: identity.packageName,
           routes: identity.baseRoutes,
         },
       },
+      blockers: [],
+      mutations: [],
+      iteration: { changes, digest: iterationDigest },
     }) as unknown as TargetProposal;
     const result = { identity, proposal, ...overlay };
     planningMarker("target-identity-and-planning", "finish");
@@ -588,15 +570,15 @@ export async function executeTargetIdentityAndPlanning(input: {
   await input.onIdentity?.(identity);
   const proposal = parseOutput<TargetProposal>(
     await input.executor({
+      command: "planning",
       appId: input.appId,
       appSpecDigest: input.appSpecDigest,
-      command: "planning",
       ...overlay,
     }),
     targetProposalSchemaForTopology(
-      "microfrontends.json"
+      "microfrontends.json",
     ) as unknown as z.ZodType<TargetProposal>,
-    "Target planning command"
+    "Target planning command",
   );
   if (
     proposal.contract.appId !== input.appId ||
@@ -607,9 +589,8 @@ export async function executeTargetIdentityAndPlanning(input: {
     proposal.plan.source.packageName !== identity.packageName ||
     proposal.plan.topology.projectName !== identity.projectName ||
     proposal.plan.topology.packageName !== identity.packageName
-  ) {
+  )
     throw new Error("Target proposal did not match the resolved identity.");
-  }
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

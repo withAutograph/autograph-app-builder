@@ -1,13 +1,5 @@
-import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-  chmodSync,
-  constants as fsConstants,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  realpathSync,
-} from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmod,
   lstat,
@@ -24,10 +16,17 @@ import {
   symlink,
   unlink,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import {
+  chmodSync,
+  constants as fsConstants,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  realpathSync,
+} from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 
-import { hasTestCapability } from "../testing/test-capability";
 import {
   assertCanonicalBranchWorktreeJournal,
   assertExactBranchWorktreeProposal,
@@ -35,27 +34,31 @@ import {
   createBranchWorktreePublicationProposal,
   exactBranchWorktreeProposalMatch,
   proposalFromBranchJournal,
+  type BranchWorktreePublicationFailureReceipt,
+  type BranchWorktreePublicationJournal,
+  type BranchWorktreePublicationPendingReceipt,
+  type BranchWorktreePublicationProposal,
+  type BranchWorktreePublicationSuccessReceipt,
 } from "./branch-worktree-publication";
-import type {
-  BranchWorktreePublicationFailureReceipt,
-  BranchWorktreePublicationJournal,
-  BranchWorktreePublicationPendingReceipt,
-  BranchWorktreePublicationProposal,
-  BranchWorktreePublicationSuccessReceipt,
-} from "./branch-worktree-publication";
-import { contentDigest, stableDigest } from "./local-publication";
-import type { DestinationSnapshot } from "./local-publication";
+import { hasTestCapability } from "../testing/test-capability";
+import {
+  contentDigest,
+  stableDigest,
+  type DestinationSnapshot,
+} from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
+import {
+  inspectSourceContractDigest,
+  type SourceReceipt,
+} from "./source-receipt";
 import { safeSourcePath } from "./source-path";
-import { inspectSourceContractDigest } from "./source-receipt";
-import type { SourceReceipt } from "./source-receipt";
+import { compareOverlayPaths } from "./target-apply";
 import {
   resolveAllowedRepository,
   SUPPORTED_REPOSITORY_CONTRACT,
 } from "./supported-template";
-import { compareOverlayPaths } from "./target-apply";
 
-export interface BranchWorktreePublicationFaultHooks {
+export type BranchWorktreePublicationFaultHooks = {
   afterLockReady?: (pid: number) => void | Promise<void>;
   beforePendingJournal?: () => void | Promise<void>;
   afterPendingJournal?: () => void | Promise<void>;
@@ -65,39 +68,39 @@ export interface BranchWorktreePublicationFaultHooks {
   beforeSourcePostcondition?: () => void | Promise<void>;
   beforeTerminalJournal?: () => void | Promise<void>;
   preserveNonterminalJournal?: boolean;
-}
+};
 
-interface FileState {
+type FileState = {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   digest?: string;
-}
+};
 
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
-    GIT_ATTR_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_SYSTEM: "/dev/null",
-    HOME: "/dev/null",
-    LANG: "C.UTF-8",
-    LC_ALL: "C.UTF-8",
     NODE_ENV: process.env.NODE_ENV ?? "production",
     PATH: "/usr/bin:/bin",
     TMPDIR: "/tmp",
+    HOME: "/dev/null",
     XDG_CONFIG_HOME: "/dev/null",
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_ATTR_NOSYSTEM: "1",
   };
 }
 
 function lockHelperEnvironment(): NodeJS.ProcessEnv {
   return {
-    HOME: "/dev/null",
-    LANG: "C.UTF-8",
-    LC_ALL: "C.UTF-8",
     NODE_ENV: "production",
     PATH: "/usr/bin:/bin",
     TMPDIR: "/tmp",
+    HOME: "/dev/null",
     XDG_CONFIG_HOME: "/dev/null",
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
   };
 }
 
@@ -175,12 +178,8 @@ process.stdin.resume();
 `;
 
 function gitExecutable(): string {
-  if (existsSync("/usr/bin/git")) {
-    return "/usr/bin/git";
-  }
-  if (existsSync("/bin/git")) {
-    return "/bin/git";
-  }
+  if (existsSync("/usr/bin/git")) return "/usr/bin/git";
+  if (existsSync("/bin/git")) return "/bin/git";
   throw new Error("The fixed system Git executable is unavailable.");
 }
 
@@ -200,7 +199,7 @@ function gitArguments(root: string, args: readonly string[]): string[] {
 
 function git(root: string, args: readonly string[]): string {
   return execFileSync(gitExecutable(), gitArguments(root, args), {
-    encoding: "utf-8",
+    encoding: "utf8",
     env: gitEnvironment(),
     maxBuffer: 8 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
@@ -217,16 +216,15 @@ function gitBuffer(root: string, args: readonly string[]): Buffer {
 }
 
 function parseCanonicalPathList(output: Buffer, message: string): string[] {
-  const paths = output.toString("utf-8").split("\0").filter(Boolean);
+  const paths = output.toString("utf8").split("\0").filter(Boolean);
   const canonical = Buffer.from(
-    `${paths.join("\0")}${paths.length === 0 ? "" : "\0"}`
+    `${paths.join("\0")}${paths.length === 0 ? "" : "\0"}`,
   );
   if (
     canonical.compare(output) !== 0 ||
     paths.some((path) => !safeSourcePath(path))
-  ) {
+  )
     throw new Error(message);
-  }
   return paths.toSorted(compareOverlayPaths);
 }
 
@@ -236,29 +234,25 @@ function publicationRoot(): string {
     configured === undefined && hasTestCapability("simulated-publication")
       ? resolve(
           realpathSync(tmpdir()),
-          "autograph-app-builder-branch-publication"
+          "autograph-app-builder-branch-publication",
         )
       : undefined;
   if (testRoot !== undefined) {
     try {
       mkdirSync(testRoot, { mode: 0o700 });
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     const testRootState = lstatSync(testRoot);
-    if (!testRootState.isDirectory() || testRootState.isSymbolicLink()) {
+    if (!testRootState.isDirectory() || testRootState.isSymbolicLink())
       throw new Error("The test publication root is unsafe.");
-    }
     chmodSync(testRoot, 0o700);
   }
   const candidate = configured ?? testRoot;
-  if (candidate === undefined || !isAbsolute(candidate)) {
+  if (candidate === undefined || !isAbsolute(candidate))
     throw new Error(
-      "APP_BUILDER_BRANCH_WORKTREE_ROOT must be an absolute builder-owned directory."
+      "APP_BUILDER_BRANCH_WORKTREE_ROOT must be an absolute builder-owned directory.",
     );
-  }
   try {
     const resolved = resolve(candidate);
     const state = lstatSync(resolved);
@@ -271,16 +265,15 @@ function publicationRoot(): string {
       canonical !== resolved ||
       state.uid !== currentUid ||
       (state.mode & 0o777) !== 0o700
-    ) {
+    )
       throw new Error(
-        "The publication root must be canonical, owner-only, and owned by the current user."
+        "The publication root must be canonical, owner-only, and owned by the current user.",
       );
-    }
     return canonical;
   } catch (error) {
     throw new Error(
       "APP_BUILDER_BRANCH_WORKTREE_ROOT must already exist as a canonical builder-owned directory.",
-      { cause: error }
+      { cause: error },
     );
   }
 }
@@ -305,21 +298,15 @@ async function assertContainedNoLinkPath(
   candidate: string,
   options: {
     leaf?:
-      | "directory"
-      | "regular"
-      | "absent-or-directory"
-      | "absent-or-regular";
-  } = {}
+      "directory" | "regular" | "absent-or-directory" | "absent-or-regular";
+  } = {},
 ): Promise<void> {
   const root = publicationRoot();
   const rootState = await lstat(root);
-  if (!within(root, candidate)) {
+  if (!within(root, candidate))
     throw new Error("The builder-owned publication path escapes its root.");
-  }
   const path = relative(root, candidate);
-  if (path === "") {
-    return;
-  }
+  if (path === "") return;
   const segments = path.split(sep);
   let cursor = root;
   for (let index = 0; index < segments.length; index += 1) {
@@ -333,84 +320,74 @@ async function assertContainedNoLinkPath(
           options.leaf === undefined ||
           options.leaf === "absent-or-directory" ||
           options.leaf === "absent-or-regular"
-        ) {
+        )
           return;
-        }
         throw new Error(
           "The builder-owned publication path has a missing ancestor.",
-          { cause: error }
+          { cause: error },
         );
       }
       throw error;
     }
-    if (state.isSymbolicLink()) {
+    if (state.isSymbolicLink())
       throw new Error(
-        "The builder-owned publication path traverses a symbolic link."
+        "The builder-owned publication path traverses a symbolic link.",
       );
-    }
     const isLeaf = index === segments.length - 1;
-    if (!isLeaf && !state.isDirectory()) {
+    if (!isLeaf && !state.isDirectory())
       throw new Error(
-        "The builder-owned publication path traverses a non-directory."
+        "The builder-owned publication path traverses a non-directory.",
       );
-    }
     if (
       isLeaf &&
       (options.leaf === "directory" ||
         options.leaf === "absent-or-directory") &&
       !state.isDirectory()
-    ) {
+    )
       throw new Error("The builder-owned publication directory is unsafe.");
-    }
     if (
       isLeaf &&
       (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
       !state.isFile()
-    ) {
+    )
       throw new Error("The builder-owned publication file is unsafe.");
-    }
-    if (state.uid !== rootState.uid || state.dev !== rootState.dev) {
+    if (state.uid !== rootState.uid || state.dev !== rootState.dev)
       throw new Error(
-        "The builder-owned publication path changed owner or filesystem."
+        "The builder-owned publication path changed owner or filesystem.",
       );
-    }
-    if (state.isDirectory() && (state.mode & 0o777) !== 0o700) {
+    if (state.isDirectory() && (state.mode & 0o777) !== 0o700)
       throw new Error(
-        "The builder-owned publication directory is not owner-only."
+        "The builder-owned publication directory is not owner-only.",
       );
-    }
     if (
       isLeaf &&
       (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
-    ) {
+    )
       throw new Error(
-        "The builder-owned publication file is not an exclusive owner-only inode."
+        "The builder-owned publication file is not an exclusive owner-only inode.",
       );
-    }
-    if ((await realpath(cursor)) !== cursor) {
+    if ((await realpath(cursor)) !== cursor)
       throw new Error("The builder-owned publication path is not canonical.");
-    }
   }
 }
 
 async function assertPublicationLayoutSafe(): Promise<void> {
-  for (const family of ["journals", "staging", "worktrees"] as const) {
+  for (const family of ["journals", "staging", "worktrees"] as const)
     await assertContainedNoLinkPath(resolve(publicationRoot(), family), {
       leaf: "absent-or-directory",
     });
-  }
 }
 
-interface PublicationLock {
+type PublicationLock = {
   pid: number;
   assertHeld: () => void;
   lost: Promise<never>;
   release: () => Promise<void>;
-}
+};
 
 async function assertOwnedPublicationFileHandle(
-  handle: Awaited<ReturnType<typeof open>>
+  handle: Awaited<ReturnType<typeof open>>,
 ): Promise<void> {
   const [state, rootState] = await Promise.all([
     handle.stat(),
@@ -422,13 +399,12 @@ async function assertOwnedPublicationFileHandle(
     state.dev !== rootState.dev ||
     (state.mode & 0o777) !== 0o600 ||
     state.nlink !== 1
-  ) {
+  )
     throw new Error("The builder-owned publication file descriptor is unsafe.");
-  }
 }
 
 async function acquirePublicationLock(
-  identity: string
+  identity: string,
 ): Promise<PublicationLock> {
   const path = resolve(publicationRoot(), "locks", `${identity}.lock`);
   const directory = dirname(path);
@@ -436,13 +412,10 @@ async function acquirePublicationLock(
   await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
   try {
     const state = await lstat(path);
-    if (!state.isFile() || state.isSymbolicLink()) {
+    if (!state.isFile() || state.isSymbolicLink())
       throw new Error("The OS publication lock path is not a regular file.");
-    }
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     try {
       const handle = await open(
         path,
@@ -450,7 +423,7 @@ async function acquirePublicationLock(
           fsConstants.O_EXCL |
           fsConstants.O_WRONLY |
           fsConstants.O_NOFOLLOW,
-        0o600
+        0o600,
       );
       try {
         await assertOwnedPublicationFileHandle(handle);
@@ -460,30 +433,27 @@ async function acquirePublicationLock(
       }
       await syncDirectory(directory, true);
     } catch (createError: unknown) {
-      if ((createError as NodeJS.ErrnoException).code !== "EEXIST") {
+      if ((createError as NodeJS.ErrnoException).code !== "EEXIST")
         throw createError;
-      }
       const state = await lstat(path);
-      if (!state.isFile() || state.isSymbolicLink()) {
+      if (!state.isFile() || state.isSymbolicLink())
         throw new Error("The OS publication lock path is not a regular file.");
-      }
     }
   }
   const helper = existsSync("/usr/bin/flock")
-    ? { args: ["-n", path], command: "/usr/bin/flock" }
+    ? { command: "/usr/bin/flock", args: ["-n", path] }
     : existsSync("/bin/flock")
-      ? { args: ["-n", path], command: "/bin/flock" }
+      ? { command: "/bin/flock", args: ["-n", path] }
       : existsSync("/usr/bin/lockf")
-        ? { args: ["-k", "-t", "0", path], command: "/usr/bin/lockf" }
+        ? { command: "/usr/bin/lockf", args: ["-k", "-t", "0", path] }
         : undefined;
-  if (helper === undefined) {
+  if (helper === undefined)
     throw new Error(
-      "Branch-worktree publication requires the OS flock or lockf utility."
+      "Branch-worktree publication requires the OS flock or lockf utility.",
     );
-  }
   const lockHandle = await open(
     path,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
   );
   let lockState: Awaited<ReturnType<typeof lockHandle.stat>>;
   try {
@@ -507,11 +477,10 @@ async function acquirePublicationLock(
     {
       env: lockHelperEnvironment(),
       stdio: ["pipe", "pipe", "pipe"],
-    }
+    },
   );
-  if (holder.pid === undefined) {
+  if (holder.pid === undefined)
     throw new Error("The OS publication lock helper did not start.");
-  }
   let stderr = "";
   let terminal:
     | { kind: "exit"; code: number | null; signal: NodeJS.Signals | null }
@@ -521,20 +490,18 @@ async function acquirePublicationLock(
   const terminalPromise = new Promise<NonNullable<typeof terminal>>(
     (resolve) => {
       resolveTerminal = resolve;
-    }
+    },
   );
   holder.once("error", (error) => {
-    terminal = { error, kind: "error" };
+    terminal = { kind: "error", error };
     resolveTerminal(terminal);
   });
   holder.once("exit", (code, signal) => {
-    if (terminal !== undefined) {
-      return;
-    }
-    terminal = { code, kind: "exit", signal };
+    if (terminal !== undefined) return;
+    terminal = { kind: "exit", code, signal };
     resolveTerminal(terminal);
   });
-  holder.stderr.setEncoding("utf-8");
+  holder.stderr.setEncoding("utf8");
   holder.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
@@ -542,18 +509,18 @@ async function acquirePublicationLock(
     const timeout = setTimeout(() => {
       holder.kill();
       rejectReady(new Error("The OS publication lock did not become ready."));
-    }, 5000);
+    }, 5_000);
     void terminalPromise.then((outcome) => {
       clearTimeout(timeout);
       rejectReady(
         outcome.kind === "error"
           ? outcome.error
           : new Error(
-              `A branch-worktree publication operation is already in progress${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`
-            )
+              `A branch-worktree publication operation is already in progress${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`,
+            ),
       );
     });
-    holder.stdout.setEncoding("utf-8");
+    holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
       if (chunk !== "READY\n") {
@@ -565,13 +532,12 @@ async function acquirePublicationLock(
     });
   });
   const lockLostError = () => {
-    if (terminal?.kind === "error") {
+    if (terminal?.kind === "error")
       return new Error("The OS publication lock helper failed.", {
         cause: terminal.error,
       });
-    }
     return new Error(
-      `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`
+      `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`,
     );
   };
   const lost = terminalPromise.then(() => {
@@ -579,11 +545,11 @@ async function acquirePublicationLock(
   });
   let released = false;
   return {
+    pid: holder.pid,
     assertHeld: () => {
       if (terminal !== undefined) throw lockLostError();
     },
     lost,
-    pid: holder.pid,
     release: async () => {
       if (released) return;
       released = true;
@@ -601,19 +567,17 @@ async function acquirePublicationLock(
 
 async function syncDirectory(
   path: string,
-  builderOwned = false
+  builderOwned = false,
 ): Promise<void> {
-  if (builderOwned) {
+  if (builderOwned)
     await assertContainedNoLinkPath(path, { leaf: "directory" });
-  }
   const handle = await open(
     path,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
   );
   try {
-    if (!(await handle.stat()).isDirectory()) {
+    if (!(await handle.stat()).isDirectory())
       throw new Error("The builder-owned publication directory is unsafe.");
-    }
     await handle.sync();
   } finally {
     await handle.close();
@@ -622,11 +586,10 @@ async function syncDirectory(
 
 async function durableDirectory(path: string): Promise<void> {
   const root = publicationRoot();
-  if (!within(root, path)) {
+  if (!within(root, path))
     throw new Error(
-      "The builder-owned publication directory escapes its root."
+      "The builder-owned publication directory escapes its root.",
     );
-  }
   let cursor = root;
   for (const segment of relative(root, path).split(sep).filter(Boolean)) {
     const parent = cursor;
@@ -636,13 +599,9 @@ async function durableDirectory(path: string): Promise<void> {
       await mkdir(cursor, { mode: 0o700 });
       created = true;
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
-    if (created) {
-      await chmod(cursor, 0o700);
-    }
+    if (created) await chmod(cursor, 0o700);
     await assertContainedNoLinkPath(cursor, { leaf: "directory" });
     await syncDirectory(cursor, true);
     await syncDirectory(parent, true);
@@ -660,7 +619,7 @@ async function atomicWrite(path: string, value: string): Promise<void> {
       fsConstants.O_EXCL |
       fsConstants.O_WRONLY |
       fsConstants.O_NOFOLLOW,
-    0o600
+    0o600,
   );
   try {
     await assertOwnedPublicationFileHandle(handle);
@@ -676,7 +635,7 @@ async function atomicWrite(path: string, value: string): Promise<void> {
 
 async function createInitialJournal(
   path: string,
-  journal: BranchWorktreePublicationPendingReceipt
+  journal: BranchWorktreePublicationPendingReceipt,
 ): Promise<void> {
   await durableDirectory(dirname(path));
   await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
@@ -688,7 +647,7 @@ async function createInitialJournal(
       fsConstants.O_EXCL |
       fsConstants.O_WRONLY |
       fsConstants.O_NOFOLLOW,
-    0o600
+    0o600,
   );
   try {
     await assertOwnedPublicationFileHandle(handle);
@@ -702,20 +661,20 @@ async function createInitialJournal(
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
-    await unlink(candidate).catch(() => {});
+    await unlink(candidate).catch(() => undefined);
     await syncDirectory(dirname(path), true);
   }
 }
 
 async function writeJournal(
   path: string,
-  journal: BranchWorktreePublicationJournal
+  journal: BranchWorktreePublicationJournal,
 ): Promise<void> {
   await atomicWrite(path, `${JSON.stringify(journal)}\n`);
 }
 
 export async function readBranchWorktreePublicationJournal(
-  proposalOrIdentity: BranchWorktreePublicationProposal | string
+  proposalOrIdentity: BranchWorktreePublicationProposal | string,
 ): Promise<BranchWorktreePublicationJournal | undefined> {
   const identity =
     typeof proposalOrIdentity === "string"
@@ -726,12 +685,12 @@ export async function readBranchWorktreePublicationJournal(
     await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
     const handle = await open(
       path,
-      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
     );
     let contents: string;
     try {
       await assertOwnedPublicationFileHandle(handle);
-      contents = await handle.readFile("utf-8");
+      contents = await handle.readFile("utf8");
     } finally {
       await handle.close();
     }
@@ -739,12 +698,10 @@ export async function readBranchWorktreePublicationJournal(
     assertCanonicalBranchWorktreeJournal(journal);
     return journal;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw new Error(
       "The durable branch-worktree publication journal is unreadable.",
-      { cause: error }
+      { cause: error },
     );
   }
 }
@@ -754,9 +711,7 @@ async function pathExists(path: string): Promise<boolean> {
     await lstat(path);
     return true;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
 }
@@ -770,23 +725,17 @@ function branchExists(source: string, branch: string): boolean {
       "--quiet",
       `refs/heads/${branch}`,
     ]),
-    { env: gitEnvironment() }
+    { env: gitEnvironment() },
   );
-  if (result.status === 0) {
-    return true;
-  }
-  if (result.status === 1) {
-    return false;
-  }
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
   throw new Error("Git could not inspect the proposed publication branch.");
 }
 
 function exactBranchSha(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): string | undefined {
-  if (!branchExists(proposal.sourcePath, proposal.branchName)) {
-    return undefined;
-  }
+  if (!branchExists(proposal.sourcePath, proposal.branchName)) return undefined;
   return git(proposal.sourcePath, [
     "rev-parse",
     `refs/heads/${proposal.branchName}`,
@@ -802,17 +751,16 @@ function createExactBranch(proposal: BranchWorktreePublicationProposal): void {
       proposal.baseSha,
       "0".repeat(proposal.baseSha.length),
     ]),
-    { encoding: "utf8", env: gitEnvironment() }
+    { env: gitEnvironment(), encoding: "utf8" },
   );
-  if (result.status !== 0) {
+  if (result.status !== 0)
     throw new Error(
-      `Git could not create the approved publication branch: ${result.stderr.trim() || "unknown error"}`
+      `Git could not create the approved publication branch: ${result.stderr.trim() || "unknown error"}`,
     );
-  }
 }
 
 function registeredWorktreeEntries(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): readonly { path: string; branch?: string; head?: string }[] {
   const records = git(proposal.sourcePath, ["worktree", "list", "--porcelain"])
     .split("\n\n")
@@ -824,31 +772,30 @@ function registeredWorktreeEntries(
         return separator === -1
           ? [line, ""]
           : [line.slice(0, separator), line.slice(separator + 1)];
-      })
+      }),
     );
     return {
+      path: fields.worktree,
       branch: fields.branch,
       head: fields.HEAD,
-      path: fields.worktree,
     };
   });
 }
 
 async function assertOwnedPartialWorktree(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): Promise<void> {
   const rootState = await lstat(proposal.worktreePath);
-  if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
+  if (!rootState.isDirectory() || rootState.isSymbolicLink())
     throw new Error("The partial approved worktree path is unsafe.");
-  }
   const base = new Map(
     exactTreeEntries(proposal.sourcePath, proposal.baseSha).map((entry) => [
       entry.path,
       entry.state,
-    ])
+    ]),
   );
   const changes = new Map(
-    proposal.changes.map((change) => [change.path, change])
+    proposal.changes.map((change) => [change.path, change]),
   );
   const allowedPaths = new Set([...base.keys(), ...changes.keys()]);
   const commonGitDirectory = await realpath(
@@ -856,33 +803,29 @@ async function assertOwnedPartialWorktree(
       "rev-parse",
       "--path-format=absolute",
       "--git-common-dir",
-    ]).trim()
+    ]).trim(),
   );
   const worktreeAdminRoot = resolve(commonGitDirectory, "worktrees");
   const exactAdminPaths: string[] = [];
   for (const entry of await readdir(worktreeAdminRoot, {
     withFileTypes: true,
   })) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
+    if (!entry.isDirectory()) continue;
     const adminPath = resolve(worktreeAdminRoot, entry.name);
     try {
       const linkedPath = (
-        await readFile(resolve(adminPath, "gitdir"), "utf-8")
+        await readFile(resolve(adminPath, "gitdir"), "utf8")
       ).trim();
-      if (resolve(linkedPath) === resolve(proposal.worktreePath, ".git")) {
+      if (resolve(linkedPath) === resolve(proposal.worktreePath, ".git"))
         exactAdminPaths.push(adminPath);
-      }
     } catch {
       // An unrelated or incomplete registration is not ownership evidence.
     }
   }
-  if (exactAdminPaths.length !== 1) {
+  if (exactAdminPaths.length !== 1)
     throw new Error(
-      "The partial worktree lacks one exact owned Git registration."
+      "The partial worktree lacks one exact owned Git registration.",
     );
-  }
   let exactGitLinkSeen = false;
   const visit = async (directory: string, prefix: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -890,35 +833,29 @@ async function assertOwnedPartialWorktree(
       const target = resolve(directory, entry.name);
       if (prefix === "" && path === ".git") {
         const state = await lstat(target);
-        if (!state.isFile() || state.isSymbolicLink()) {
+        if (!state.isFile() || state.isSymbolicLink())
           throw new Error("The partial worktree Git link is unsafe.");
-        }
-        const match = /^gitdir: (.+)\n?$/u.exec(
-          await readFile(target, "utf-8")
-        );
+        const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf8"));
         if (
           match === null ||
           !isAbsolute(match[1]) ||
           resolve(match[1]) !== exactAdminPaths[0]
-        ) {
+        )
           throw new Error(
-            "The partial worktree Git link conflicts with intent."
+            "The partial worktree Git link conflicts with intent.",
           );
-        }
         exactGitLinkSeen = true;
         continue;
       }
-      if (!safeSourcePath(path)) {
+      if (!safeSourcePath(path))
         throw new Error("The partial worktree contains an unsafe path.");
-      }
       if (entry.isDirectory()) {
         if (
           ![...allowedPaths].some((allowed) => allowed.startsWith(`${path}/`))
-        ) {
+        )
           throw new Error(
-            `The partial worktree contains unapproved directory ${path}.`
+            `The partial worktree contains unapproved directory ${path}.`,
           );
-        }
         await visit(target, path);
         continue;
       }
@@ -930,37 +867,34 @@ async function assertOwnedPartialWorktree(
       if (
         (baseState === undefined || !exactStateMatches(state, baseState)) &&
         (afterState === undefined || !exactStateMatches(state, afterState))
-      ) {
+      )
         throw new Error(
-          `The partial worktree contains conflicting content at ${path}.`
+          `The partial worktree contains conflicting content at ${path}.`,
         );
-      }
     }
   };
   await visit(proposal.worktreePath, "");
-  if (!exactGitLinkSeen) {
+  if (!exactGitLinkSeen)
     throw new Error("The partial worktree lacks its exact owned Git link.");
-  }
 }
 
 async function createOrRepairExactWorktree(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): Promise<void> {
   const expectedBranch = `refs/heads/${proposal.branchName}`;
   const registration = registeredWorktreeEntries(proposal).find(
     ({ path, branch }) =>
-      path === proposal.worktreePath || branch === expectedBranch
+      path === proposal.worktreePath || branch === expectedBranch,
   );
   if (
     registration !== undefined &&
     (registration.path !== proposal.worktreePath ||
       registration.branch !== expectedBranch ||
       registration.head !== proposal.baseSha)
-  ) {
+  )
     throw new Error(
-      "The partial worktree registration does not match durable intent."
+      "The partial worktree registration does not match durable intent.",
     );
-  }
   if (await pathExists(proposal.worktreePath)) {
     try {
       git(proposal.worktreePath, ["rev-parse", "--absolute-git-dir"]);
@@ -971,11 +905,10 @@ async function createOrRepairExactWorktree(
           "--symbolic-full-name",
           "HEAD",
         ]).trim() !== expectedBranch
-      ) {
+      )
         throw new Error(
-          "The existing worktree does not match durable publication intent."
+          "The existing worktree does not match durable publication intent.",
         );
-      }
       await chmod(proposal.worktreePath, 0o700);
       await assertContainedNoLinkPath(proposal.worktreePath, {
         leaf: "directory",
@@ -985,22 +918,20 @@ async function createOrRepairExactWorktree(
       if (
         error instanceof Error &&
         error.message.includes("does not match durable publication intent")
-      ) {
+      )
         throw error;
-      }
-      if (registration === undefined) {
+      if (registration === undefined)
         throw new Error(
-          "The unregistered publication path conflicts with durable intent."
+          "The unregistered publication path conflicts with durable intent.",
         );
-      }
       await assertOwnedPartialWorktree(proposal);
       await rm(proposal.worktreePath, { recursive: true });
       await syncDirectory(dirname(proposal.worktreePath), true);
     }
   }
   await mkdir(dirname(proposal.worktreePath), {
-    mode: 0o700,
     recursive: true,
+    mode: 0o700,
   });
   const result = spawnSync(
     gitExecutable(),
@@ -1012,26 +943,25 @@ async function createOrRepairExactWorktree(
       proposal.worktreePath,
       proposal.branchName,
     ]),
-    { encoding: "utf8", env: gitEnvironment() }
+    { env: gitEnvironment(), encoding: "utf8" },
   );
-  if (result.status !== 0) {
+  if (result.status !== 0)
     throw new Error(
-      `Git could not create the approved branch worktree: ${result.stderr.trim() || "unknown error"}`
+      `Git could not create the approved branch worktree: ${result.stderr.trim() || "unknown error"}`,
     );
-  }
   await chmod(proposal.worktreePath, 0o700);
   await assertContainedNoLinkPath(proposal.worktreePath, {
     leaf: "directory",
   });
 }
 
-interface TreeEntry {
+type TreeEntry = {
   path: string;
   mode: "644" | "755" | "120000";
   objectId: string;
   bytes: Buffer;
   state: FileState;
-}
+};
 
 function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
   const output = gitBuffer(sourcePath, [
@@ -1042,45 +972,41 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
     sourceSha,
   ]);
   const result: TreeEntry[] = [];
-  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
+  for (const record of output.toString("utf8").split("\0").filter(Boolean)) {
     const match =
       /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40,64})\t(.+)$/u.exec(
-        record
+        record,
       );
-    if (match === null) {
+    if (match === null)
       throw new Error("The source tree contains an unsupported entry.");
-    }
-    if (match[1] === "160000" || match[2] !== "blob") {
+    if (match[1] === "160000" || match[2] !== "blob")
       throw new Error(
-        "Branch-worktree publication does not materialize Git submodules."
+        "Branch-worktree publication does not materialize Git submodules.",
       );
-    }
     const path = match[4];
-    if (!safeSourcePath(path)) {
+    if (!safeSourcePath(path))
       throw new Error("The source tree contains an unsafe path.");
-    }
     const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
     if (match[1] === "120000") {
-      const target = bytes.toString("utf-8");
-      if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0")) {
+      const target = bytes.toString("utf8");
+      if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0"))
         throw new Error("The source tree contains an invalid symbolic link.");
-      }
       result.push({
-        bytes,
+        path,
         mode: "120000",
         objectId: match[3],
-        path,
-        state: { digest: contentDigest(bytes), kind: "symlink" },
+        bytes,
+        state: { kind: "symlink", digest: contentDigest(bytes) },
       });
       continue;
     }
     const mode = match[1] === "100755" ? "755" : "644";
     result.push({
-      bytes,
+      path,
       mode,
       objectId: match[3],
-      path,
-      state: { digest: contentDigest(bytes), kind: "regular", mode },
+      bytes,
+      state: { kind: "regular", mode, digest: contentDigest(bytes) },
     });
   }
   return result;
@@ -1089,7 +1015,7 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
 async function ensureExactBaseMaterialization(
   proposal: BranchWorktreePublicationProposal,
   preserveReviewedPostimages: boolean,
-  lock: PublicationLock
+  lock: PublicationLock,
 ): Promise<void> {
   const entries = exactTreeEntries(proposal.sourcePath, proposal.baseSha);
   git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
@@ -1099,37 +1025,32 @@ async function ensureExactBaseMaterialization(
     const change = proposal.changes.find(({ path }) => path === entry.path);
     const target = await safeTarget(proposal.worktreePath, entry.path, true);
     const current = await fileState(target);
-    if (exactStateMatches(current, entry.state)) {
-      continue;
-    }
+    if (exactStateMatches(current, entry.state)) continue;
     if (
       preserveReviewedPostimages &&
       change !== undefined &&
       matches(current, change.after)
-    ) {
+    )
       continue;
-    }
-    if (current.kind !== "absent") {
+    if (current.kind !== "absent")
       throw new Error(
-        `The publication worktree conflicts with the exact base at ${entry.path}.`
+        `The publication worktree conflicts with the exact base at ${entry.path}.`,
       );
-    }
     await materializeAtomically(proposal, target, entry.bytes, entry.mode);
     lock.assertHeld();
   }
 }
 
 async function assertNoCollision(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): Promise<void> {
   if (
     branchExists(proposal.sourcePath, proposal.branchName) ||
     (await pathExists(proposal.worktreePath))
-  ) {
+  )
     throw new Error(
-      "The deterministic publication branch or worktree path already exists."
+      "The deterministic publication branch or worktree path already exists.",
     );
-  }
 }
 
 async function inspectBranchPublicationSource(input: {
@@ -1137,17 +1058,20 @@ async function inspectBranchPublicationSource(input: {
   review: ReviewedChangeSetReceipt;
 }): Promise<DestinationSnapshot> {
   const canonicalPath = await resolveAllowedRepository(
-    input.sourceReceipt.sourcePath
+    input.sourceReceipt.sourcePath,
   );
-  if (canonicalPath !== input.sourceReceipt.sourcePath) {
+  if (canonicalPath !== input.sourceReceipt.sourcePath)
     throw new Error("The source checkout changed canonical identity.");
-  }
   const [headSha, headTree, headReference, gitDirectoryPath] =
     await Promise.all([
       Promise.resolve(git(canonicalPath, ["rev-parse", "HEAD"]).trim()),
       Promise.resolve(git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim()),
       Promise.resolve(
-        git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim()
+        git(canonicalPath, [
+          "rev-parse",
+          "--symbolic-full-name",
+          "HEAD",
+        ]).trim(),
       ),
       realpath(git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim()),
     ]);
@@ -1170,47 +1094,45 @@ async function inspectBranchPublicationSource(input: {
   ]);
   const paths = parseCanonicalPathList(
     listed,
-    "The source contains non-canonical, non-UTF-8, or unsafe paths."
+    "The source contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const statusEntries = await Promise.all(
-    paths.map(async (path) => ({
-      path,
-      state: await fileState(resolve(canonicalPath, path)),
-    }))
+    paths.map(async (path) => {
+      return { path, state: await fileState(resolve(canonicalPath, path)) };
+    }),
   );
   for (const change of input.review.changes) {
     const target = await safeTarget(canonicalPath, change.path, false);
-    if (!matches(await fileState(target), change.before)) {
+    if (!matches(await fileState(target), change.before))
       throw new Error(
-        `The source has dirty overlap with approved path ${change.path}.`
+        `The source has dirty overlap with approved path ${change.path}.`,
       );
-    }
   }
   const dirtyDigest = stableDigest(statusEntries);
   const stable = {
     canonicalPath,
-    contractDigest: inspectSourceContractDigest(
-      canonicalPath,
-      headSha,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths
-    ),
-    dirty: [] as const,
-    dirtyDigest,
-    gitDirectoryIdentity: {
-      device: gitDirectoryStat.dev.toString(),
-      inode: gitDirectoryStat.ino.toString(),
-    },
-    gitDirectoryPath,
-    headReference,
-    headSha,
-    headTree,
-    index: [] as const,
-    indexFileDigest: contentDigest(await readFile(indexPath)),
-    remoteDigest: stableDigest(git(canonicalPath, ["remote", "-v"])),
     rootIdentity: {
       device: rootStat.dev.toString(),
       inode: rootStat.ino.toString(),
     },
+    gitDirectoryPath,
+    gitDirectoryIdentity: {
+      device: gitDirectoryStat.dev.toString(),
+      inode: gitDirectoryStat.ino.toString(),
+    },
+    headSha,
+    headTree,
+    headReference,
+    indexFileDigest: contentDigest(await readFile(indexPath)),
+    remoteDigest: stableDigest(git(canonicalPath, ["remote", "-v"])),
+    contractDigest: inspectSourceContractDigest(
+      canonicalPath,
+      headSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
+    dirty: [] as const,
+    index: [] as const,
+    dirtyDigest,
   };
   return { ...stable, statusDigest: stableDigest(stable) };
 }
@@ -1219,11 +1141,10 @@ export async function deriveBranchWorktreePublicationProposal(input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
 }): Promise<BranchWorktreePublicationProposal> {
-  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
+  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
     throw new Error(
-      "Branch-worktree publication is disabled until APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 is explicitly configured."
+      "Branch-worktree publication is disabled until APP_BUILDER_BRANCH_WORKTREE_PUBLICATION=1 is explicitly configured.",
     );
-  }
   const source = await inspectBranchPublicationSource(input);
   const root = publicationRoot();
   const rootState = await lstat(root);
@@ -1232,7 +1153,7 @@ export async function deriveBranchWorktreePublicationProposal(input: {
       "rev-parse",
       "--path-format=absolute",
       "--git-common-dir",
-    ]).trim()
+    ]).trim(),
   );
   if (
     within(root, source.canonicalPath) ||
@@ -1241,29 +1162,27 @@ export async function deriveBranchWorktreePublicationProposal(input: {
     within(source.gitDirectoryPath, root) ||
     within(root, commonGitDirectory) ||
     within(commonGitDirectory, root)
-  ) {
+  )
     throw new Error(
-      "The builder-owned publication root overlaps the source checkout or Git directories."
+      "The builder-owned publication root overlaps the source checkout or Git directories.",
     );
-  }
   const identity = stableDigest({
-    reviewDigest: input.review.digest,
     sourceReceiptDigest: input.sourceReceipt.digest,
+    reviewDigest: input.review.digest,
   });
   const proposal = createBranchWorktreePublicationProposal({
+    sourceReceipt: input.sourceReceipt,
+    source,
+    review: input.review,
+    worktreePath: worktreePath(identity),
+    publicationRootPath: root,
     publicationRootIdentity: {
       device: rootState.dev.toString(),
       inode: rootState.ino.toString(),
     },
-    publicationRootPath: root,
-    review: input.review,
-    source,
-    sourceReceipt: input.sourceReceipt,
-    worktreePath: worktreePath(identity),
   });
-  if (!within(publicationRoot(), proposal.worktreePath)) {
+  if (!within(publicationRoot(), proposal.worktreePath))
     throw new Error("The proposed worktree escapes its builder-owned root.");
-  }
   await assertNoCollision(proposal);
   return proposal;
 }
@@ -1278,11 +1197,10 @@ async function assertExactSource(input: {
     input.proposal.sourceReceiptDigest !== input.sourceReceipt.digest ||
     input.proposal.reviewDigest !== input.review.digest ||
     input.proposal.changeSetDigest !== input.review.changeSetDigest
-  ) {
+  )
     throw new Error(
-      "The source or reviewed change set changed after approval."
+      "The source or reviewed change set changed after approval.",
     );
-  }
   const current = await inspectBranchPublicationSource(input);
   const root = publicationRoot();
   const rootState = await lstat(root);
@@ -1291,58 +1209,50 @@ async function assertExactSource(input: {
     rootState.dev.toString() !==
       input.proposal.publicationRootIdentity.device ||
     rootState.ino.toString() !== input.proposal.publicationRootIdentity.inode
-  ) {
+  )
     throw new Error(
-      "The builder-owned publication root changed after approval."
+      "The builder-owned publication root changed after approval.",
     );
-  }
   const proposed = createBranchWorktreePublicationProposal({
-    publicationRootIdentity: input.proposal.publicationRootIdentity,
-    publicationRootPath: root,
-    review: input.review,
-    source: current,
     sourceReceipt: input.sourceReceipt,
+    source: current,
+    review: input.review,
     worktreePath: input.proposal.worktreePath,
+    publicationRootPath: root,
+    publicationRootIdentity: input.proposal.publicationRootIdentity,
   });
-  if (!exactBranchWorktreeProposalMatch(input.proposal, proposed)) {
+  if (!exactBranchWorktreeProposalMatch(input.proposal, proposed))
     throw new Error(
-      "The source SHA, index, remote, status, review, paths, modes, or digests changed after approval."
+      "The source SHA, index, remote, status, review, paths, modes, or digests changed after approval.",
     );
-  }
 }
 
 async function fileState(path: string): Promise<FileState> {
   try {
     const info = await lstat(path);
-    if (info.isSymbolicLink()) {
+    if (info.isSymbolicLink())
       return {
         kind: "symlink",
         digest: contentDigest(Buffer.from(await readlink(path))),
       };
-    }
-    if (info.isDirectory()) {
-      return { kind: "directory" };
-    }
-    if (!info.isFile()) {
-      return { kind: "special" };
-    }
+    if (info.isDirectory()) return { kind: "directory" };
+    if (!info.isFile()) return { kind: "special" };
     const bytes = await readFile(path);
     return {
-      digest: contentDigest(bytes),
       kind: "regular",
       mode: (info.mode & 0o777).toString(8),
+      digest: contentDigest(bytes),
     };
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
       return { kind: "absent" };
-    }
     throw error;
   }
 }
 
 function matches(
   state: FileState,
-  expected: { mode: string; digest: string } | undefined
+  expected: { mode: string; digest: string } | undefined,
 ): boolean {
   return expected === undefined
     ? state.kind === "absent"
@@ -1362,15 +1272,12 @@ function exactStateMatches(state: FileState, expected: FileState): boolean {
 async function safeTarget(
   root: string,
   path: string,
-  createParents: boolean
+  createParents: boolean,
 ): Promise<string> {
-  if (!safeSourcePath(path)) {
-    throw new Error("The approved path is unsafe.");
-  }
+  if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
   const target = resolve(root, path);
-  if (!within(root, target)) {
+  if (!within(root, target))
     throw new Error("The approved path escapes the publication worktree.");
-  }
   let cursor = root;
   for (const segment of path.split("/").slice(0, -1)) {
     cursor = resolve(cursor, segment);
@@ -1379,14 +1286,12 @@ async function safeTarget(
       await mkdir(cursor, { mode: 0o755 });
       await syncDirectory(dirname(cursor));
       await syncDirectory(cursor);
-    } else if (state.kind !== "directory" && state.kind !== "absent") {
+    } else if (state.kind !== "directory" && state.kind !== "absent")
       throw new Error("The approved path traverses a non-directory entry.");
-    }
   }
   const state = await fileState(target);
-  if (["directory", "symlink", "special"].includes(state.kind)) {
+  if (["directory", "symlink", "special"].includes(state.kind))
     throw new Error("The approved path names a non-regular entry.");
-  }
   return target;
 }
 
@@ -1394,18 +1299,18 @@ async function materializeAtomically(
   proposal: BranchWorktreePublicationProposal,
   target: string,
   bytes: Uint8Array,
-  mode: string | "120000"
+  mode: string | "120000",
 ): Promise<void> {
   const staging = resolve(
     publicationRoot(),
     "staging",
-    proposal.publicationIdentityDigest
+    proposal.publicationIdentityDigest,
   );
   await durableDirectory(staging);
   const temporary = resolve(staging, randomUUID());
   try {
     if (mode === "120000") {
-      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
+      await symlink(Buffer.from(bytes).toString("utf8"), temporary);
       await syncDirectory(staging, true);
     } else {
       const handle = await open(temporary, "wx", Number.parseInt(mode, 8));
@@ -1420,7 +1325,7 @@ async function materializeAtomically(
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
-    await unlink(temporary).catch(() => {});
+    await unlink(temporary).catch(() => undefined);
   }
 }
 
@@ -1428,54 +1333,48 @@ async function writePostimage(
   proposal: BranchWorktreePublicationProposal,
   path: string,
   bytes: Uint8Array,
-  mode: string
+  mode: string,
 ): Promise<void> {
   const target = await safeTarget(proposal.worktreePath, path, true);
   await materializeAtomically(proposal, target, bytes, mode);
 }
 
 async function worktreeFileStates(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): Promise<readonly { path: string; state: FileState }[]> {
   const cached = parseCanonicalPathList(
     gitBuffer(proposal.worktreePath, ["ls-files", "-z", "--cached"]),
-    "The publication worktree contains non-canonical, non-UTF-8, or unsafe paths."
+    "The publication worktree contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const present: string[] = [];
   const visit = async (directory: string, prefix: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-      if (prefix === "" && path === ".git") {
-        continue;
-      }
-      if (!safeSourcePath(path)) {
+      if (prefix === "" && path === ".git") continue;
+      if (!safeSourcePath(path))
         throw new Error("The publication worktree contains an unsafe path.");
-      }
-      if (entry.isDirectory()) {
+      if (entry.isDirectory())
         await visit(resolve(directory, entry.name), path);
-      } else {
-        present.push(path);
-      }
+      else present.push(path);
     }
   };
   await visit(proposal.worktreePath, "");
   const paths = [...new Set([...cached, ...present])].toSorted(
-    compareOverlayPaths
+    compareOverlayPaths,
   );
   return Promise.all(
     paths.map(async (path) => ({
       path,
       state: await fileState(resolve(proposal.worktreePath, path)),
-    }))
+    })),
   );
 }
 
 async function worktreeSnapshot(proposal: BranchWorktreePublicationProposal) {
   const root = await realpath(proposal.worktreePath);
-  if (root !== proposal.worktreePath) {
+  if (root !== proposal.worktreePath)
     throw new Error("The publication worktree path changed identity.");
-  }
   const [rootStat, gitDirectoryPath] = await Promise.all([
     stat(root),
     realpath(git(root, ["rev-parse", "--absolute-git-dir"]).trim()),
@@ -1489,36 +1388,36 @@ async function worktreeSnapshot(proposal: BranchWorktreePublicationProposal) {
   ]).trim();
   const statusEntries = await worktreeFileStates(proposal);
   return {
-    contractDigest: inspectSourceContractDigest(
-      root,
-      proposal.baseSha,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths
-    ),
-    gitDirectoryIdentity: {
-      device: gitDirectoryStat.dev.toString(),
-      inode: gitDirectoryStat.ino.toString(),
-    },
-    gitDirectoryPath,
-    headReference: git(root, [
-      "rev-parse",
-      "--symbolic-full-name",
-      "HEAD",
-    ]).trim(),
-    headSha: git(root, ["rev-parse", "HEAD"]).trim(),
-    headTree: git(root, ["rev-parse", "HEAD^{tree}"]).trim(),
-    indexFileDigest: contentDigest(await readFile(indexPath)),
-    remoteDigest: stableDigest(git(root, ["remote", "-v"])),
     root,
     rootIdentity: {
       device: rootStat.dev.toString(),
       inode: rootStat.ino.toString(),
     },
+    gitDirectoryPath,
+    gitDirectoryIdentity: {
+      device: gitDirectoryStat.dev.toString(),
+      inode: gitDirectoryStat.ino.toString(),
+    },
+    headSha: git(root, ["rev-parse", "HEAD"]).trim(),
+    headTree: git(root, ["rev-parse", "HEAD^{tree}"]).trim(),
+    headReference: git(root, [
+      "rev-parse",
+      "--symbolic-full-name",
+      "HEAD",
+    ]).trim(),
+    indexFileDigest: contentDigest(await readFile(indexPath)),
+    remoteDigest: stableDigest(git(root, ["remote", "-v"])),
+    contractDigest: inspectSourceContractDigest(
+      root,
+      proposal.baseSha,
+      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    ),
     statusDigest: stableDigest(statusEntries),
   };
 }
 
 async function verifyWorktreeIdentity(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ) {
   const snapshot = await worktreeSnapshot(proposal);
   if (
@@ -1531,11 +1430,10 @@ async function verifyWorktreeIdentity(
       "rev-parse",
       `refs/heads/${proposal.branchName}`,
     ]).trim() !== proposal.baseSha
-  ) {
+  )
     throw new Error(
-      "The branch or worktree no longer has its exact approved identity."
+      "The branch or worktree no longer has its exact approved identity.",
     );
-  }
   return snapshot;
 }
 
@@ -1553,33 +1451,31 @@ async function applyRemainingPostimages(input: {
     const target = await safeTarget(
       input.proposal.worktreePath,
       change.path,
-      false
+      false,
     );
     const current = await fileState(target);
     if (matches(current, change.after)) {
       applied.push(change.path);
       continue;
     }
-    if (!matches(current, change.before)) {
+    if (!matches(current, change.before))
       throw new Error(
-        `The publication worktree has conflicting bytes or mode for ${change.path}.`
+        `The publication worktree has conflicting bytes or mode for ${change.path}.`,
       );
-    }
     if (change.after === undefined) {
       await unlink(target);
       await syncDirectory(dirname(target));
     } else {
       const bytes = await input.readOverlayFile(change.path);
-      if (bytes === null || contentDigest(bytes) !== change.after.digest) {
+      if (bytes === null || contentDigest(bytes) !== change.after.digest)
         throw new Error(
-          `The immutable apply overlay is stale for ${change.path}.`
+          `The immutable apply overlay is stale for ${change.path}.`,
         );
-      }
       await writePostimage(
         input.proposal,
         change.path,
         bytes,
-        change.after.mode
+        change.after.mode,
       );
     }
     applied.push(change.path);
@@ -1590,28 +1486,25 @@ async function applyRemainingPostimages(input: {
 }
 
 async function assertPostimages(
-  proposal: BranchWorktreePublicationProposal
+  proposal: BranchWorktreePublicationProposal,
 ): Promise<void> {
   const base = new Map(
     exactTreeEntries(proposal.sourcePath, proposal.baseSha).map((entry) => [
       entry.path,
       entry.state,
-    ])
+    ]),
   );
   const changes = new Map(
-    proposal.changes.map((change) => [change.path, change])
+    proposal.changes.map((change) => [change.path, change]),
   );
   const expectedPaths = new Set(base.keys());
-  for (const change of proposal.changes) {
-    expectedPaths.add(change.path);
-  }
+  for (const change of proposal.changes) expectedPaths.add(change.path);
   const observed = await worktreeFileStates(proposal);
   if (
     JSON.stringify(observed.map(({ path }) => path)) !==
     JSON.stringify([...expectedPaths].toSorted(compareOverlayPaths))
-  ) {
+  )
     throw new Error("The publication worktree contains an unapproved path.");
-  }
   for (const { path, state } of observed) {
     const change = changes.get(path);
     const expected: FileState | undefined =
@@ -1620,11 +1513,10 @@ async function assertPostimages(
         : change.after === undefined
           ? { kind: "absent" }
           : { kind: "regular", ...change.after };
-    if (expected === undefined || !exactStateMatches(state, expected)) {
+    if (expected === undefined || !exactStateMatches(state, expected))
       throw new Error(
-        `The publication worktree changed unexpectedly at ${path}.`
+        `The publication worktree changed unexpectedly at ${path}.`,
       );
-    }
   }
 }
 
@@ -1637,8 +1529,8 @@ function pendingReceipt(input: {
   const unsigned = {
     ...proposal,
     proposalDigest,
-    publishedByCallId: input.callId,
     status: "pending" as const,
+    publishedByCallId: input.callId,
     ...(input.recoveryOfDigest === undefined
       ? {}
       : { recoveryOfDigest: input.recoveryOfDigest }),
@@ -1702,7 +1594,7 @@ async function successReceipt(input: {
     worktreeRemoteDigest: snapshot.remoteDigest,
     worktreeStatusDigest: snapshot.statusDigest,
     postconditionDigest: stableDigest(
-      input.proposal.changes.map(({ path, after }) => ({ after, path }))
+      input.proposal.changes.map(({ path, after }) => ({ path, after })),
     ),
     recoveryRequired: false as const,
   };
@@ -1718,8 +1610,8 @@ export async function verifyBranchWorktreePublication(input: {
   const proposal = proposalFromBranchJournal(input.receipt);
   await assertExactSource({
     proposal,
-    review: input.review,
     sourceReceipt: input.sourceReceipt,
+    review: input.review,
   });
   await assertPostimages(proposal);
   const snapshot = await verifyWorktreeIdentity(proposal);
@@ -1734,9 +1626,8 @@ export async function verifyBranchWorktreePublication(input: {
       input.receipt.worktreeGitDirectoryIdentity.inode ||
     snapshot.indexFileDigest !== input.receipt.worktreeIndexFileDigest ||
     snapshot.statusDigest !== input.receipt.worktreeStatusDigest
-  ) {
+  )
     throw new Error("The published branch-worktree receipt is stale.");
-  }
 }
 
 async function executePublication(input: {
@@ -1754,7 +1645,7 @@ async function executePublication(input: {
 > {
   let branchCreated = branchExists(
     input.proposal.sourcePath,
-    input.proposal.branchName
+    input.proposal.branchName,
   );
   let worktreeCreated = await pathExists(input.proposal.worktreePath);
   let appliedPaths: readonly string[] = [];
@@ -1763,22 +1654,20 @@ async function executePublication(input: {
     await assertExactSource(input);
     input.lock.assertHeld();
     if (!branchCreated) {
-      if (worktreeCreated) {
+      if (worktreeCreated)
         throw new Error(
-          "A publication worktree exists without its exact approved branch."
+          "A publication worktree exists without its exact approved branch.",
         );
-      }
       createExactBranch(input.proposal);
       input.lock.assertHeld();
       branchCreated = true;
       await input.hooks?.afterBranchCreation?.();
       input.lock.assertHeld();
     }
-    if (exactBranchSha(input.proposal) !== input.proposal.baseSha) {
+    if (exactBranchSha(input.proposal) !== input.proposal.baseSha)
       throw new Error(
-        "The approved publication branch changed after durable intent."
+        "The approved publication branch changed after durable intent.",
       );
-    }
     const hadWorktree = worktreeCreated;
     await createOrRepairExactWorktree(input.proposal);
     input.lock.assertHeld();
@@ -1786,7 +1675,7 @@ async function executePublication(input: {
     await ensureExactBaseMaterialization(
       input.proposal,
       hadWorktree,
-      input.lock
+      input.lock,
     );
     await input.hooks?.afterWorktreeCreation?.();
     input.lock.assertHeld();
@@ -1797,14 +1686,13 @@ async function executePublication(input: {
     if (
       before.indexFileDigest !== after.indexFileDigest ||
       before.remoteDigest !== after.remoteDigest
-    ) {
+    )
       throw new Error(
-        "The worktree index or remote configuration changed during publication."
+        "The worktree index or remote configuration changed during publication.",
       );
-    }
     const success = await successReceipt({
-      callId: input.publishedByCallId,
       proposal: input.proposal,
+      callId: input.publishedByCallId,
       recoveryOfDigest: input.recoveryOfDigest,
     });
     await input.hooks?.beforeSourcePostcondition?.();
@@ -1815,14 +1703,12 @@ async function executePublication(input: {
     input.lock.assertHeld();
     await writeJournal(
       journalPath(input.proposal.publicationIdentityDigest),
-      success
+      success,
     );
     input.lock.assertHeld();
     return success;
   } catch (error: unknown) {
-    if (input.hooks?.preserveNonterminalJournal === true) {
-      throw error;
-    }
+    if (input.hooks?.preserveNonterminalJournal === true) throw error;
     input.lock.assertHeld();
     const message =
       error instanceof Error
@@ -1830,7 +1716,7 @@ async function executePublication(input: {
         : "Unknown branch-worktree publication failure.";
     branchCreated = branchExists(
       input.proposal.sourcePath,
-      input.proposal.branchName
+      input.proposal.branchName,
     );
     worktreeCreated = await pathExists(input.proposal.worktreePath);
     const reason =
@@ -1845,18 +1731,18 @@ async function executePublication(input: {
               : "apply-partial"
             : "precondition-failed";
     const failure = failureReceipt({
-      appliedPaths,
-      branchCreated,
-      callId: input.publishedByCallId,
-      failureMessage: message,
       proposal: input.proposal,
-      reason,
+      callId: input.publishedByCallId,
       recoveryOfDigest: input.recoveryOfDigest,
+      branchCreated,
       worktreeCreated,
+      appliedPaths,
+      reason,
+      failureMessage: message,
     });
     await writeJournal(
       journalPath(input.proposal.publicationIdentityDigest),
-      failure
+      failure,
     );
     input.lock.assertHeld();
     return failure;
@@ -1892,12 +1778,11 @@ export async function publishReviewedChangeSetToBranchWorktree(input: {
   | BranchWorktreePublicationSuccessReceipt
   | BranchWorktreePublicationFailureReceipt
 > {
-  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
+  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
     throw new Error("Branch-worktree publication is disabled.");
-  }
   return withPublicationLock({
-    hooks: input.hooks,
     identity: input.proposal.publicationIdentityDigest,
+    hooks: input.hooks,
     operation: async (lock) => {
       await assertExactSource(input);
       lock.assertHeld();
@@ -1906,11 +1791,11 @@ export async function publishReviewedChangeSetToBranchWorktree(input: {
       await assertNoCollision(input.proposal);
       lock.assertHeld();
       const existing = await readBranchWorktreePublicationJournal(
-        input.proposal
+        input.proposal,
       );
       if (existing !== undefined)
         throw new Error(
-          `A durable branch-worktree publication ${existing.status} receipt already exists; use status or explicit recovery.`
+          `A durable branch-worktree publication ${existing.status} receipt already exists; use status or explicit recovery.`,
         );
       const pending = pendingReceipt({
         proposal: input.proposal,
@@ -1920,7 +1805,7 @@ export async function publishReviewedChangeSetToBranchWorktree(input: {
       lock.assertHeld();
       await createInitialJournal(
         journalPath(input.proposal.publicationIdentityDigest),
-        pending
+        pending,
       );
       lock.assertHeld();
       await input.hooks?.afterPendingJournal?.();
@@ -1942,15 +1827,14 @@ export async function recoverBranchWorktreePublication(input: {
   | BranchWorktreePublicationSuccessReceipt
   | BranchWorktreePublicationFailureReceipt
 > {
-  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
+  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
     throw new Error("Branch-worktree publication recovery is disabled.");
-  }
   return withPublicationLock({
-    hooks: input.hooks,
     identity: input.proposal.publicationIdentityDigest,
+    hooks: input.hooks,
     operation: async (lock) => {
       const existing = await readBranchWorktreePublicationJournal(
-        input.proposal
+        input.proposal,
       );
       lock.assertHeld();
       if (
@@ -1961,11 +1845,11 @@ export async function recoverBranchWorktreePublication(input: {
       if (
         !exactBranchWorktreeProposalMatch(
           proposalFromBranchJournal(existing),
-          input.proposal
+          input.proposal,
         )
       )
         throw new Error(
-          "The recovery proposal does not match its durable intent."
+          "The recovery proposal does not match its durable intent.",
         );
       if (existing.status === "succeeded") {
         await verifyBranchWorktreePublication({
@@ -1983,7 +1867,7 @@ export async function recoverBranchWorktreePublication(input: {
       });
       await writeJournal(
         journalPath(input.proposal.publicationIdentityDigest),
-        pending
+        pending,
       );
       lock.assertHeld();
       return executePublication({

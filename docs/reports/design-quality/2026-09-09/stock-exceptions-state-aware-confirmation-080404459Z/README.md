@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page title, filters, exception list, selected-product header, evidence sections, and primary action form an immediately scannable sequence. Selected-row treatment, severity pills, days-of-cover values, and explicit confirmation/result headings keep priority clear across all shown states. |
-| layout | 4/4 | The wide list-detail composition has consistent edges, restrained spacing, aligned evidence labels and values, and stable footer actions. At 1024px it remains dense but orderly, while the 700px view appropriately switches to a focused detail panel with a Back affordance. |
-| typography | 3/4 | Heading levels, bold labels, body copy, identifiers, and numeric values are visually consistent and readable. However, the supplied accessibility measurements repeatedly flag low text contrast on the primary action treatment in initial and confirmation states; this is advisory because the existing Arrusted palette is authoritative. |
-| responsive | 4/4 | The composition is demonstrated at 1920×1080, 1440×900, 1024×768, and a 700px desktop panel. It transitions cleanly from side-by-side review to a single-detail view, keeps Back and footer actions available, and uses bounded internal scrolling for longer evidence without document overflow. |
-| productClarity | 4/4 | The task is explicit: filter exceptions, choose a product, inspect stock and supplier evidence, and run a simulation. Confirmation explains the 96-unit calculation before proceeding, and the result clearly states that no order was placed and underlying inventory is unchanged. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                        |
+| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page title, filters, exception list, selected-product header, evidence sections, and primary action form an immediately scannable sequence. Selected-row treatment, severity pills, days-of-cover values, and explicit confirmation/result headings keep priority clear across all shown states.                                          |
+| layout         | 4/4   | The wide list-detail composition has consistent edges, restrained spacing, aligned evidence labels and values, and stable footer actions. At 1024px it remains dense but orderly, while the 700px view appropriately switches to a focused detail panel with a Back affordance.                                                               |
+| typography     | 3/4   | Heading levels, bold labels, body copy, identifiers, and numeric values are visually consistent and readable. However, the supplied accessibility measurements repeatedly flag low text contrast on the primary action treatment in initial and confirmation states; this is advisory because the existing Arrusted palette is authoritative. |
+| responsive     | 4/4   | The composition is demonstrated at 1920×1080, 1440×900, 1024×768, and a 700px desktop panel. It transitions cleanly from side-by-side review to a single-detail view, keeps Back and footer actions available, and uses bounded internal scrolling for longer evidence without document overflow.                                             |
+| productClarity | 4/4   | The task is explicit: filter exceptions, choose a product, inspect stock and supplier evidence, and run a simulation. Confirmation explains the 96-unit calculation before proceeding, and the result clearly states that no order was placed and underlying inventory is unchanged.                                                          |
 
 ## Strengths
 
@@ -45,32 +45,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/161) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/405) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/184) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/81) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/84) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/81) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/161) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/405) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/184) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/81)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/84)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/81)  |
 
 ## Latest-run screenshots
 

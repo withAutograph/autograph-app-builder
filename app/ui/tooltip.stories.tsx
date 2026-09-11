@@ -1,13 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, within } from "storybook/test";
-
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-
 import { InfoTooltip } from "./app-builder";
 
 const meta = {
-  args: { children: "Only use approved providers." },
+  title: "Components/Create App/Primitives/Tooltip",
   component: InfoTooltip,
+  args: { children: "Only use approved providers." },
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -15,7 +14,6 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
-  title: "Components/Create App/Primitives/Tooltip",
 } satisfies Meta<typeof InfoTooltip>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -26,7 +24,7 @@ export const Focused: Story = {
     await userEvent.tab();
     await expect(canvas.getByRole("button")).toHaveFocus();
     await expect(canvas.getByRole("tooltip")).toHaveTextContent(
-      "Only use approved providers."
+      "Only use approved providers.",
     );
   },
 };

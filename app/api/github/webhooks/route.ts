@@ -8,7 +8,7 @@ export const POST = (request: Request) => {
   try {
     handler ??= createGitHubProvisioningWebhookHandler({
       database: openHostedPostgresDatabase(
-        readPreviewOAuthRuntimeConfig(process.env).databaseUrl
+        readPreviewOAuthRuntimeConfig(process.env).databaseUrl,
       ),
       secret: process.env.GITHUB_APP_WEBHOOK_SECRET ?? "",
     });
@@ -16,7 +16,7 @@ export const POST = (request: Request) => {
   } catch {
     return Response.json(
       { error: "github_webhook_unavailable" },
-      { headers: { "Cache-Control": "no-store" }, status: 503 }
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 };

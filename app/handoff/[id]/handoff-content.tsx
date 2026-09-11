@@ -1,12 +1,11 @@
 import { headers } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { getBuilderHandoffPageData } from "../../../lib/handoff/deployment";
+import { HandoffControls } from "../../ui/handoff-controls";
 import { Header } from "../../ui/builder-shell";
 import { CreateAnotherAppLink } from "../../ui/create-another-app-link";
-import { HandoffControls } from "../../ui/handoff-controls";
-
 import styles from "../../ui/app-builder.module.css";
 import handoffStyles from "../../ui/handoff.module.css";
 
@@ -21,8 +20,8 @@ export async function HandoffContent({
   try {
     data = await getBuilderHandoffPageData({
       environment: process.env,
-      handoffId: id,
       headers: requestHeaders,
+      handoffId: id,
     });
   } catch {
     return (
@@ -45,16 +44,15 @@ export async function HandoffContent({
       </div>
     );
   }
-  if (!data) {
+  if (!data)
     redirect(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`
+      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
     );
-  }
   const { intent, ...controls } = data;
   const github = intent.provisioning?.github;
   const vercel = intent.provisioning?.vercel;
   const returnTo = encodeURIComponent(
-    `/handoff/${encodeURIComponent(data.handoffId)}`
+    `/handoff/${encodeURIComponent(data.handoffId)}`,
   );
   return (
     <div className={styles.appShell}>
@@ -92,7 +90,7 @@ export async function HandoffContent({
                 ) : null}
                 {github?.status === "failed" &&
                 ["credential_unavailable", "installation_inactive"].includes(
-                  github.code
+                  github.code,
                 ) ? (
                   <Link href={`/github/installations?returnTo=${returnTo}`}>
                     Reconnect GitHub
@@ -124,7 +122,7 @@ export async function HandoffContent({
                   )}
                   {vercel.status === "failed" &&
                   ["credential_unavailable", "installation_inactive"].includes(
-                    vercel.code
+                    vercel.code,
                   ) ? (
                     <Link href={`/vercel/installations?returnTo=${returnTo}`}>
                       Reconnect Vercel

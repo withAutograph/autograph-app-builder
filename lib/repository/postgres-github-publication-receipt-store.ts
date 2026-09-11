@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
+import * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationJournals } from "../db/schema";
-import { assertCanonicalGitHubMutationReceipt } from "./github-publication";
-import type {
-  GitHubMutationReceipt,
-  GitHubPublicationReceiptStore,
+import {
+  assertCanonicalGitHubMutationReceipt,
+  type GitHubMutationReceipt,
+  type GitHubPublicationReceiptStore,
 } from "./github-publication";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
@@ -16,19 +16,19 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const journalRowSchema = z
   .object({
-    createdAt: z.date(),
-    idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
     proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    record: z.unknown(),
+    idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
+    kind: z.enum(["fresh-repository", "draft-pull-request"]),
     status: z.enum(["pending", "failed", "succeeded"]),
+    record: z.unknown(),
+    createdAt: z.date(),
     updatedAt: z.date(),
   })
   .strict();
 
 export function parseGitHubPublicationJournalRow(
-  input: unknown
+  input: unknown,
 ): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
   const receipt = row.record as GitHubMutationReceipt;
@@ -49,13 +49,13 @@ export function parseGitHubPublicationJournalRow(
 function journalValues(receipt: GitHubMutationReceipt, now: Date) {
   assertCanonicalGitHubMutationReceipt(receipt);
   return {
-    createdAt: now,
-    idempotencyKey: receipt.idempotencyKey,
-    kind: receipt.kind,
     proposalDigest: receipt.proposalDigest,
     receiptDigest: receipt.digest,
-    record: receipt,
+    idempotencyKey: receipt.idempotencyKey,
+    kind: receipt.kind,
     status: receipt.status,
+    record: receipt,
+    createdAt: now,
     updatedAt: now,
   };
 }
@@ -66,16 +66,35 @@ function journalValues(receipt: GitHubMutationReceipt, now: Date) {
 export function createPostgresGitHubPublicationReceiptStore(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,
-  now: () => Date = () => new Date()
+  now: () => Date = () => new Date(),
 ): GitHubPublicationReceiptStore {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   const tenantPredicate = and(
     eq(hostedGitHubPublicationJournals.issuer, authority.issuer),
     eq(hostedGitHubPublicationJournals.audience, authority.audience),
     eq(hostedGitHubPublicationJournals.workspaceId, authority.workspaceId),
-    eq(hostedGitHubPublicationJournals.ownerUserId, authority.ownerUserId)
+    eq(hostedGitHubPublicationJournals.ownerUserId, authority.ownerUserId),
   );
   return {
+    async read(proposalDigest) {
+      if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
+        throw new Error("GitHub proposal digest is invalid.");
+      }
+      const rows = await database
+        .select()
+        .from(hostedGitHubPublicationJournals)
+        .where(
+          and(
+            tenantPredicate,
+            eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest),
+          ),
+        )
+        .limit(1);
+      return rows[0] === undefined
+        ? undefined
+        : parseGitHubPublicationJournalRow(rows[0]);
+    },
+
     async compareAndSet(proposalDigest, expectedDigest, receipt) {
       if (
         !/^[0-9a-f]{64}$/u.test(proposalDigest) ||
@@ -118,33 +137,14 @@ export function createPostgresGitHubPublicationReceiptStore(
             eq(hostedGitHubPublicationJournals.kind, receipt.kind),
             eq(
               hostedGitHubPublicationJournals.idempotencyKey,
-              receipt.idempotencyKey
-            )
-          )
+              receipt.idempotencyKey,
+            ),
+          ),
         )
         .returning({
           proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
         });
       return updated.length === 1;
-    },
-
-    async read(proposalDigest) {
-      if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
-        throw new Error("GitHub proposal digest is invalid.");
-      }
-      const rows = await database
-        .select()
-        .from(hostedGitHubPublicationJournals)
-        .where(
-          and(
-            tenantPredicate,
-            eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)
-          )
-        )
-        .limit(1);
-      return rows[0] === undefined
-        ? undefined
-        : parseGitHubPublicationJournalRow(rows[0]);
     },
   };
 }

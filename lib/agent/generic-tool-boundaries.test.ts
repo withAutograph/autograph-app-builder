@@ -9,23 +9,23 @@ describe("generic sandbox tool boundaries", () => {
     async (tool) => {
       const source = await readFile(
         resolve(process.cwd(), `agent/tools/${tool}.ts`),
-        "utf-8"
+        "utf8",
       );
 
       expect(source).toContain('import { disableTool } from "eve/tools";');
       expect(source).toContain("export default disableTool();");
-    }
+    },
   );
 
   it("keeps repository inspection separate from existing-application reads", async () => {
     const [router, inspector] = await Promise.all([
       readFile(
         resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
-        "utf-8"
+        "utf8",
       ),
       readFile(
         resolve(process.cwd(), "agent/tools/inspect_existing_app.ts"),
-        "utf-8"
+        "utf8",
       ),
     ]);
 
@@ -40,11 +40,11 @@ describe("generic sandbox tool boundaries", () => {
   it("prepares the configured development source when a model inspects its sandbox path", async () => {
     const router = await readFile(
       resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
-      "utf-8"
+      "utf8",
     );
 
     expect(router).toContain(
-      'const developmentWorkspacePath = "/workspace/repository"'
+      'const developmentWorkspacePath = "/workspace/repository"',
     );
     expect(router).toContain("canAutoSelectDevelopmentSource()");
     expect(router).toContain("prepareDevelopmentSandboxWorkspace(");

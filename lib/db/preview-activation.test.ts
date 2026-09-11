@@ -7,13 +7,18 @@ import {
   executePreviewActivation,
   planPreviewActivation,
   previewActivationApplyRequestSchema,
+  type PreviewActivationStore,
 } from "./preview-activation";
-import type { PreviewActivationStore } from "./preview-activation";
 
 const now = Date.parse("2026-08-27T12:00:00.000Z");
 
 function store(): PreviewActivationStore {
   return {
+    provisionInvitedUser: vi.fn(async () => ({
+      userRowsAffected: 1,
+      accountRowsAffected: 1,
+      membershipRowsAffected: 1,
+    })),
     configureRuntimeRole: vi.fn(async () => ({
       runtimeRoleCreated: true,
       runtimeRoleLogin: true,
@@ -31,25 +36,20 @@ function store(): PreviewActivationStore {
       jwksRowsBefore: 0,
       jwksRowsAfter: 1,
     })),
-    provisionInvitedUser: vi.fn(async () => ({
-      userRowsAffected: 1,
-      accountRowsAffected: 1,
-      membershipRowsAffected: 1,
-    })),
   };
 }
 
 const invite = {
+  version: 1 as const,
   action: "invited-user.provision" as const,
+  requestedAt: new Date(now).toISOString(),
+  issuer: "https://builder.example.test/api/auth",
+  resource: "https://builder.example.test/mcp",
+  userId: "user_one",
+  workspaceId: "workspace_one",
   email: "User@One.Example",
   githubAccountId: "128727",
   githubLogin: "jasonmorganson",
-  issuer: "https://builder.example.test/api/auth",
-  requestedAt: new Date(now).toISOString(),
-  resource: "https://builder.example.test/mcp",
-  userId: "user_one",
-  version: 1 as const,
-  workspaceId: "workspace_one",
 };
 
 describe("Preview activation prerequisite contract", () => {
@@ -57,17 +57,17 @@ describe("Preview activation prerequisite contract", () => {
     const plan = planPreviewActivation(invite);
     expect(JSON.stringify(plan)).not.toContain(invite.email);
     const receipt = await executePreviewActivation({
-      now: () => now,
       request: {
         ...invite,
         confirmationDigest: plan.requiredConfirmationDigest,
       },
       store: store(),
+      now: () => now,
     });
     expect(receipt.effects).toMatchObject({
+      userRowsAffected: 1,
       accountRowsAffected: 1,
       membershipRowsAffected: 1,
-      userRowsAffected: 1,
     });
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain(invite.email);
@@ -76,86 +76,86 @@ describe("Preview activation prerequisite contract", () => {
 
   it.each([
     {
+      version: 1,
       action: "runtime-role.configure",
-      password: "runtime role password",
       requestedAt: new Date(now).toISOString(),
       roleName: "app_builder_runtime",
-      version: 1,
+      password: "runtime role password",
     },
     {
-      action: "oauth.initialize",
-      authSecret: "a".repeat(32),
-      issuer: "https://builder.example.test/api/auth",
-      requestedAt: new Date(now).toISOString(),
-      resource: "https://builder.example.test/mcp",
       version: 1,
+      action: "oauth.initialize",
+      requestedAt: new Date(now).toISOString(),
+      issuer: "https://builder.example.test/api/auth",
+      resource: "https://builder.example.test/mcp",
+      authSecret: "a".repeat(32),
     },
   ])(
     "supports a closed confirmation-bound $action receipt",
     async (request) => {
       const plan = planPreviewActivation(request);
       const receipt = await executePreviewActivation({
-        now: () => now,
         request: {
           ...request,
           confirmationDigest: plan.requiredConfirmationDigest,
         },
         store: store(),
+        now: () => now,
       });
       expect(receipt.action).toBe(request.action);
       expect(receipt.status).toBe("applied");
-    }
+    },
   );
 
   it("rejects stale, mismatched, unknown, and cross-origin inputs", async () => {
     const plan = planPreviewActivation(invite);
     await expect(
       executePreviewActivation({
-        now: () => now,
         request: { ...invite, confirmationDigest: `sha256:${"0".repeat(64)}` },
         store: store(),
-      })
+        now: () => now,
+      }),
     ).rejects.toThrow("confirmation");
     await expect(
       executePreviewActivation({
-        now: () => now + 16 * 60_000,
         request: {
           ...invite,
           confirmationDigest: plan.requiredConfirmationDigest,
         },
         store: store(),
-      })
+        now: () => now + 16 * 60_000,
+      }),
     ).rejects.toThrow("stale");
     expect(() =>
       planPreviewActivation({
         ...invite,
         resource: "https://other.example.test/mcp",
-      })
+      }),
     ).toThrow("same-origin");
     expect(() =>
       previewActivationApplyRequestSchema.parse({
         ...invite,
         confirmationDigest: plan.requiredConfirmationDigest,
         publicSignup: true,
-      })
+      }),
     ).toThrow();
   });
 
   it("rejects every extra runtime role authority and role membership", () => {
     const exact = {
-      bypassRls: false,
       canConnect: true,
-      canCreateSchemaObjects: false,
-      canLogin: true,
       canUseSchema: true,
+      canCreateSchemaObjects: false,
+      tablePrivilegesExact: true,
+      sequencePrivilegesExact: true,
+      canLogin: true,
+      inherits: false,
+      superuser: false,
       createDatabase: false,
       createRole: false,
-      inherits: false,
-      membershipCount: 0,
       replication: false,
-      sequencePrivilegesExact: true,
-      superuser: false,
-      tablePrivilegesExact: true,
+      bypassRls: false,
+      membershipCount: 0,
     } as const;
     expect(assertRuntimeRoleReadback(exact)).toEqual(exact);
     for (const drift of [
@@ -175,9 +175,9 @@ describe("Preview activation prerequisite contract", () => {
   });
 
   it("has PostgreSQL quote the validated role credential without exposing failed SQL", async () => {
-    const cli = await readFile("lib/db/preview-activation-cli.mts", "utf-8");
+    const cli = await readFile("lib/db/preview-activation-cli.mts", "utf8");
     expect(cli).toContain(
-      "select format(${template}::text, ${roleName}::text, ${password}::text)"
+      "select format(${template}::text, ${roleName}::text, ${password}::text)",
     );
     expect(cli).toContain("await sql.unsafe(statement)");
     expect(cli).toContain("Runtime database role configuration failed.");
@@ -186,8 +186,8 @@ describe("Preview activation prerequisite contract", () => {
 
   it("provisions the exact migrated membership shape in one transaction", async () => {
     const [cli, migration] = await Promise.all([
-      readFile("lib/db/preview-activation-cli.mts", "utf-8"),
-      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8"),
+      readFile("lib/db/preview-activation-cli.mts", "utf8"),
+      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf8"),
     ]);
     const provisionStart = cli.indexOf("async provisionInvitedUser(input)");
     const provisionEnd = cli.indexOf("async configureRuntimeRole(input)");
@@ -196,13 +196,13 @@ describe("Preview activation prerequisite contract", () => {
     const provision = cli.slice(provisionStart, provisionEnd);
     expect(provision).toContain("return sql.begin(async (transaction) => {");
     expect(provision).toContain(
-      "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)"
+      "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)",
     );
     expect(provision).toContain("'local:oauth:github'");
     expect(provision).toContain("'github'");
     expect(provision).not.toContain("hashPassword");
     expect(provision).not.toMatch(
-      /hosted_workspace_membership[^;]*created_at/u
+      /hosted_workspace_membership[^;]*created_at/u,
     );
     expect(migration).toContain('"updated_at" timestamptz NOT NULL');
     expect(migration).not.toContain('"created_at"');

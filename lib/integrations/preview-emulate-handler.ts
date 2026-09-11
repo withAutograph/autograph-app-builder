@@ -2,22 +2,22 @@ import { createEmulateHandler } from "@emulators/adapter-next";
 import * as github from "@emulators/github";
 import * as vercel from "@emulators/vercel";
 
-import { readPreviewProviderEmulation } from "./local-provider-emulation";
-import type { PreviewProviderEmulation } from "./local-provider-emulation";
+import { providerEmulationSeed } from "./provider-emulation-seed";
+import {
+  readPreviewProviderEmulation,
+  type PreviewProviderEmulation,
+} from "./local-provider-emulation";
 import {
   createPostgresPreviewEmulateStateStore,
   createPreviewEmulatePersistence,
 } from "./preview-emulate-persistence";
-import { providerEmulationSeed } from "./provider-emulation-seed";
 
 type Handler = ReturnType<typeof createEmulateHandler>;
 
 let active: { namespace: string; handler: Handler } | undefined;
 
 function required(value: string | undefined, name: string) {
-  if (!value) {
-    throw new Error(`${name} is required for Preview emulation.`);
-  }
+  if (!value) throw new Error(`${name} is required for Preview emulation.`);
   return value;
 }
 
@@ -44,14 +44,6 @@ export function createPreviewEmulateHandler(input: {
   let pendingPersistence = Promise.resolve();
   let persistenceRevision = 0;
   const handler = createEmulateHandler({
-    persistence: {
-      load: persistence.load,
-      save(state) {
-        persistenceRevision += 1;
-        pendingPersistence = persistence.save(state);
-        return pendingPersistence;
-      },
-    },
     services: {
       github: {
         emulator: github,
@@ -60,6 +52,14 @@ export function createPreviewEmulateHandler(input: {
       vercel: {
         emulator: vercel,
         seed: seed.vercel as unknown as Record<string, unknown>,
+      },
+    },
+    persistence: {
+      load: persistence.load,
+      save(state) {
+        persistenceRevision += 1;
+        pendingPersistence = persistence.save(state);
+        return pendingPersistence;
       },
     },
   });
@@ -85,26 +85,20 @@ export function createPreviewEmulateHandler(input: {
 
 function handler(environment: NodeJS.ProcessEnv) {
   const emulation = readPreviewProviderEmulation(environment);
-  if (!emulation) {
-    return undefined;
-  }
-  if (active?.namespace === emulation.namespace) {
-    return active.handler;
-  }
+  if (!emulation) return undefined;
+  if (active?.namespace === emulation.namespace) return active.handler;
   const created = createPreviewEmulateHandler({
-    databaseUrl: required(environment.DATABASE_URL, "DATABASE_URL"),
     emulation,
+    databaseUrl: required(environment.DATABASE_URL, "DATABASE_URL"),
     githubAppPrivateKey: environment.EMULATE_PREVIEW_GITHUB_APP_PRIVATE_KEY,
   });
-  active = { handler: created, namespace: emulation.namespace };
+  active = { namespace: emulation.namespace, handler: created };
   return created;
 }
 
 export async function invokePreviewEmulateRequest(request: Request) {
   const selected = handler(process.env);
-  if (!selected) {
-    return new Response("Not found", { status: 404 });
-  }
+  if (!selected) return new Response("Not found", { status: 404 });
   const emulation = readPreviewProviderEmulation(process.env);
   const url = new URL(request.url);
   const prefix = "/api/emulate/";
@@ -112,28 +106,24 @@ export async function invokePreviewEmulateRequest(request: Request) {
     !emulation ||
     url.origin !== emulation.canonicalOrigin ||
     !url.pathname.startsWith(prefix)
-  ) {
+  )
     return new Response("Not found", { status: 404 });
-  }
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
   const method = request.method as keyof Handler;
   const selectedMethod = selected[method];
-  if (typeof selectedMethod !== "function") {
+  if (typeof selectedMethod !== "function")
     return new Response("Method not allowed", { status: 405 });
-  }
   return selectedMethod(request, { params: Promise.resolve({ path }) });
 }
 
 export function previewEmulateRoute(method: keyof Handler) {
   return async (
     request: Request,
-    context: { params: Promise<{ path: string[] }> }
+    context: { params: Promise<{ path: string[] }> },
   ) => {
     try {
       const selected = handler(process.env);
-      if (!selected) {
-        return new Response("Not found", { status: 404 });
-      }
+      if (!selected) return new Response("Not found", { status: 404 });
       return await selected[method](request, context);
     } catch {
       return new Response("Preview emulator unavailable", { status: 503 });

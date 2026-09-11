@@ -11,11 +11,11 @@ export type ProviderConnectionFailureReason = z.infer<
   typeof providerConnectionFailureReasonSchema
 >;
 
-export interface ProviderConnectionNotice {
+export type ProviderConnectionNotice = {
   provider: "github" | "vercel";
   status: "connected" | "failed";
   reason?: ProviderConnectionFailureReason;
-}
+};
 
 export function parseProviderConnectionFailureReason(input: unknown) {
   const parsed = providerConnectionFailureReasonSchema.safeParse(input);
@@ -24,7 +24,7 @@ export function parseProviderConnectionFailureReason(input: unknown) {
 
 export function providerConnectionFailureMessage(
   provider: "GitHub" | "Vercel",
-  reason?: ProviderConnectionFailureReason
+  reason?: ProviderConnectionFailureReason,
 ) {
   if (reason === "configuration-unavailable") {
     return `${provider} connections have not been configured for this deployment yet. An administrator needs to finish provider setup before you can connect.`;

@@ -10,7 +10,7 @@ import {
 describe("passkeyClientError", () => {
   it("accepts successful Better Auth passkey responses", () => {
     expect(
-      passkeyClientError({ data: { session: {} }, error: null })
+      passkeyClientError({ data: { session: {} }, error: null }),
     ).toBeNull();
   });
 
@@ -24,8 +24,8 @@ describe("passkeyClientError", () => {
     });
 
     expect(error).toMatchObject({
-      message: "Passkey authentication was cancelled.",
       name: "AUTH_CANCELLED",
+      message: "Passkey authentication was cancelled.",
     });
   });
 
@@ -34,8 +34,8 @@ describe("passkeyClientError", () => {
       passkeyClientError({
         data: null,
         error: { code: "ERROR_CEREMONY_ABORTED", message: "Cancelled." },
-      })
-    ).toMatchObject({ message: "Cancelled.", name: "ERROR_CEREMONY_ABORTED" });
+      }),
+    ).toMatchObject({ name: "ERROR_CEREMONY_ABORTED", message: "Cancelled." });
   });
 });
 
@@ -47,7 +47,7 @@ describe("passkey onboarding conflict detection", () => {
     };
 
     expect(passkeyErrorCode(response)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED
+      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
     );
     expect(isPasskeyOnboardingAlreadyAuthenticated(response)).toBe(true);
   });
@@ -62,23 +62,23 @@ describe("passkey onboarding conflict detection", () => {
     };
 
     expect(passkeyErrorCode(result)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED
+      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
     );
     expect(isPasskeyOnboardingAlreadyAuthenticated(result)).toBe(true);
   });
 
   it("reads the conflict code from a thrown BetterFetchError shape", () => {
     const error = Object.assign(new Error("Conflict"), {
+      status: 409,
+      statusText: "Conflict",
       error: {
         code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
         message: "The current session is already authenticated.",
       },
-      status: 409,
-      statusText: "Conflict",
     });
 
     expect(passkeyErrorCode(error)).toBe(
-      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED
+      PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
     );
     expect(isPasskeyOnboardingAlreadyAuthenticated(error)).toBe(true);
   });
@@ -88,12 +88,12 @@ describe("passkey onboarding conflict detection", () => {
       isPasskeyOnboardingAlreadyAuthenticated({
         code: "OTHER_ERROR",
         message: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
-      })
+      }),
     ).toBe(false);
     expect(
       isPasskeyOnboardingAlreadyAuthenticated({
         error: { code: 409 },
-      })
+      }),
     ).toBe(false);
     expect(passkeyErrorCode(null)).toBeUndefined();
   });

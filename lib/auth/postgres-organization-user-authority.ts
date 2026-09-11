@@ -3,12 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import type * as databaseSchema from "../db/schema";
+import * as databaseSchema from "../db/schema";
 import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
-import { OrganizationProvisioningError } from "./preview-user-management";
-import type {
-  EnsuredOrganization,
-  PreviewOrganizationUserAuthority,
+import {
+  OrganizationProvisioningError,
+  type EnsuredOrganization,
+  type PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
@@ -21,9 +21,7 @@ interface OrganizationRow {
 }
 
 function resultRows<T>(input: unknown): readonly T[] {
-  if (Array.isArray(input)) {
-    return input as T[];
-  }
+  if (Array.isArray(input)) return input as T[];
   if (
     typeof input === "object" &&
     input !== null &&
@@ -38,7 +36,7 @@ function resultRows<T>(input: unknown): readonly T[] {
 async function activeOrganizations(
   database: Database | Transaction,
   authority: { issuer: string; audience: string },
-  userId: string
+  userId: string,
 ) {
   const result = await database.execute(sql`
     select "member"."organization_id", "organization"."workspace_id", "member"."role"
@@ -55,11 +53,9 @@ async function activeOrganizations(
 }
 
 function oneAuthorizedOrganization(
-  rows: readonly OrganizationRow[]
+  rows: readonly OrganizationRow[],
 ): EnsuredOrganization | undefined {
-  if (rows.length !== 1 || rows[0] === undefined) {
-    return undefined;
-  }
+  if (rows.length !== 1 || rows[0] === undefined) return undefined;
   if (!new Set(["owner", "admin", "member"]).has(rows[0].role)) {
     throw new OrganizationProvisioningError("access-revoked");
   }
@@ -72,10 +68,10 @@ function oneAuthorizedOrganization(
 async function exactActiveOrganization(
   database: Database | Transaction,
   authority: { issuer: string; audience: string },
-  userId: string
+  userId: string,
 ) {
   return oneAuthorizedOrganization(
-    await activeOrganizations(database, authority, userId)
+    await activeOrganizations(database, authority, userId),
   );
 }
 
@@ -107,18 +103,10 @@ export function createPostgresPreviewOrganizationAuthority(
   options: {
     generateId?: () => string;
     isSelfServiceSignupEnabled?: () => Promise<boolean>;
-  } = {}
+  } = {},
 ): PostgresPreviewOrganizationAuthority {
   const generateId = options.generateId ?? randomUUID;
   return {
-    async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
-      if (issuer !== authority.issuer || audience !== authority.audience) {
-        return undefined;
-      }
-      return (await exactActiveOrganization(database, authority, ownerUserId))
-        ?.workspaceId;
-    },
-
     async ensureOrganizationForVerifiedUser({ userId }) {
       return database.transaction(async (transaction) => {
         const userResult = await transaction.execute(sql`
@@ -170,7 +158,7 @@ export function createPostgresPreviewOrganizationAuthority(
         const memberships = await activeOrganizations(
           transaction,
           authority,
-          userId
+          userId,
         );
         if (memberships.length > 1) {
           throw new OrganizationProvisioningError("workspace-ambiguous");
@@ -232,7 +220,7 @@ export function createPostgresPreviewOrganizationAuthority(
           const invitedMemberships = await activeOrganizations(
             transaction,
             authority,
-            userId
+            userId,
           );
           const invited = oneAuthorizedOrganization(invitedMemberships);
           if (
@@ -291,7 +279,7 @@ export function createPostgresPreviewOrganizationAuthority(
         const createdMemberships = await activeOrganizations(
           transaction,
           authority,
-          userId
+          userId,
         );
         const created = oneAuthorizedOrganization(createdMemberships);
         if (
@@ -303,6 +291,14 @@ export function createPostgresPreviewOrganizationAuthority(
         }
         return created;
       });
+    },
+
+    async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
+      if (issuer !== authority.issuer || audience !== authority.audience) {
+        return undefined;
+      }
+      return (await exactActiveOrganization(database, authority, ownerUserId))
+        ?.workspaceId;
     },
 
     async isActiveMember({ issuer, audience, workspaceId, ownerUserId }) {

@@ -2,7 +2,7 @@ import { getBuilderHandoffRenewDeploymentHandler } from "@/lib/handoff/deploymen
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   return getBuilderHandoffRenewDeploymentHandler(process.env)(request, id);

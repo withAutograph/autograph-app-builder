@@ -8,23 +8,23 @@ import {
   initialCompensationState,
   reduceCompensationState,
   validateCompensation,
+  type CompensationFixture,
 } from "./compensation-state";
-import type { CompensationFixture } from "./compensation-state";
 import { loadDesignQualityExample } from "./input";
 import {
   deriveSpendPreview,
   initialSpendState,
   reduceSpendState,
   spendActionModel,
+  type SpendFixture,
 } from "./spend-import-state";
-import type { SpendFixture } from "./spend-import-state";
 
 async function fixture<T>(id: string): Promise<T> {
   return JSON.parse(
     await readFile(
       resolve(`docs/design-quality-cases/${id}/fixtures.json`),
-      "utf-8"
-    )
+      "utf8",
+    ),
   ) as T;
 }
 
@@ -33,28 +33,28 @@ describe("spend import example", () => {
     const data = await fixture<SpendFixture>("spend-import-review");
     let state = initialSpendState(data);
     expect(deriveSpendPreview(data, state.mapping)).toMatchObject({
-      needsReview: 4,
       ready: 38,
+      needsReview: 4,
     });
 
     state = reduceSpendState(state, {
+      type: "mapping-changed",
       source: "Supplier",
       target: "ignore",
-      type: "mapping-changed",
     });
     const changed = deriveSpendPreview(data, state.mapping);
-    expect(changed).toMatchObject({ needsReview: 42, ready: 0 });
+    expect(changed).toMatchObject({ ready: 0, needsReview: 42 });
     expect(changed.rows[0]).toMatchObject({
-      result: "Needs review",
       vendor: "Not mapped",
+      result: "Needs review",
     });
 
     state = reduceSpendState(state, { type: "preview-requested" });
-    state = reduceSpendState(state, { fixture: data, type: "save-requested" });
+    state = reduceSpendState(state, { type: "save-requested", fixture: data });
     expect(state.saved).toMatchObject({
       imported: 0,
-      mapping: { Supplier: "ignore" },
       reviewQueue: 42,
+      mapping: { Supplier: "ignore" },
     });
     expect(state.saved?.message).toContain("42 rows remain in human review");
   });
@@ -63,22 +63,22 @@ describe("spend import example", () => {
     const data = await fixture<SpendFixture>("spend-import-review");
     let state = initialSpendState(data);
     state = reduceSpendState(state, { type: "preview-requested" });
-    state = reduceSpendState(state, { fixture: data, type: "save-requested" });
+    state = reduceSpendState(state, { type: "save-requested", fixture: data });
     state = reduceSpendState(state, { type: "review-requested" });
     expect(spendActionModel(state).applyEnabled).toBe(false);
 
     state = reduceSpendState(state, {
-      id: "nsc-1008",
       type: "match-selected",
+      id: "nsc-1008",
     });
     expect(spendActionModel(state).applyEnabled).toBe(true);
     state = reduceSpendState(state, { type: "decision-applied" });
 
     expect(state.saved).toMatchObject({ imported: 39, reviewQueue: 3 });
     expect(spendActionModel(state)).toEqual({
+      saveEnabled: false,
       applyEnabled: false,
       result: "Simulated decision recorded.",
-      saveEnabled: false,
     });
   });
 });
@@ -88,25 +88,25 @@ describe("compensation planning example", () => {
     const data = await fixture<CompensationFixture>("compensation-planning");
     let state = initialCompensationState(data);
     expect(calculateCompensation(state.assumptions)).toMatchObject({
-      currentTotal: 204_428,
-      proposedBase: 165_680,
-      proposedTotal: 219_155,
+      currentTotal: 204428,
+      proposedBase: 165680,
+      proposedTotal: 219155,
     });
 
     state = reduceCompensationState(state, {
-      field: "plannedIncrease",
       type: "assumption-changed",
+      field: "plannedIncrease",
       value: 0.1,
     });
     state = reduceCompensationState(state, {
-      field: "employerTaxRate",
       type: "assumption-changed",
+      field: "employerTaxRate",
       value: 0.08,
     });
     expect(calculateCompensation(state.assumptions)).toMatchObject({
-      currentTotal: 204_960,
-      proposedBase: 167_200,
-      proposedTotal: 221_376,
+      currentTotal: 204960,
+      proposedBase: 167200,
+      proposedTotal: 221376,
     });
   });
 
@@ -117,8 +117,8 @@ describe("compensation planning example", () => {
     expect(state.decision).toBe("recommended");
 
     state = reduceCompensationState(state, {
-      field: "plannedIncrease",
       type: "assumption-changed",
+      field: "plannedIncrease",
       value: 2,
     });
     expect(state).toMatchObject({
@@ -126,7 +126,7 @@ describe("compensation planning example", () => {
       decision: "none",
     });
     expect(validateCompensation(state.assumptions).plannedIncrease).toBe(
-      "Enter a percentage from -100 to 100."
+      "Enter a percentage from -100 to 100.",
     );
     expect(calculateCompensation(state.assumptions)).toBeUndefined();
 
@@ -145,9 +145,9 @@ describe("renderer inputs", () => {
     async (id) => {
       const input = await loadDesignQualityExample(id);
       expect(input.files.map(({ path }) => path)).toContain(
-        input.manifest.screens[0]?.entry
+        input.manifest.screens[0]?.entry,
       );
       expect(input.catalogGaps).toEqual([]);
-    }
+    },
   );
 });

@@ -9,20 +9,22 @@ import {
 
 import { z } from "zod";
 
-import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type { HostedAdminPlanRequest } from "../db/hosted-admin";
-import type { ProviderEmulation } from "./local-provider-emulation";
+import {
+  hostedTenantAuthoritySchema,
+  type HostedAdminPlanRequest,
+} from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
+import type { ProviderEmulation } from "./local-provider-emulation";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
 const configSchema = z
   .object({
-    clientId: z.string().min(1).max(512),
-    clientSecret: z.string().min(1).max(512),
     issuer: z.string().url(),
     resource: z.string().url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
+    clientId: z.string().min(1).max(512),
+    clientSecret: z.string().min(1).max(512),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u),
   })
@@ -31,24 +33,24 @@ const configSchema = z
 export type VercelIntegrationConfig = z.infer<typeof configSchema>;
 
 export function readVercelIntegrationEnvironment(
-  environment: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): VercelIntegrationConfig {
   const tokenKey = Buffer.from(
     environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "",
-    "base64"
+    "base64",
   );
   return configSchema.parse({
-    clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
-    clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
     slug: environment.VERCEL_INTEGRATION_SLUG,
+    clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
+    clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     tokenKey,
     tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
   });
 }
 
-export interface VercelAuthorizationStateStore {
+export type VercelAuthorizationStateStore = {
   create(input: {
     stateDigest: string;
     authority: Authority;
@@ -68,18 +70,18 @@ export interface VercelAuthorizationStateStore {
     authority: Authority;
     authorityDigest: string;
   }): Promise<ProviderConnectionReturn | undefined>;
-}
+};
 
 export class VercelInstallationAuthorizationError extends Error {
   constructor(
     readonly reason: string,
-    readonly returnState?: ProviderConnectionReturn
+    readonly returnState?: ProviderConnectionReturn,
   ) {
     super(reason);
   }
 }
 
-export interface VercelInstallationBinding {
+export type VercelInstallationBinding = {
   installationId: string;
   scopeId: string;
   scopeType: "team" | "user";
@@ -88,9 +90,9 @@ export interface VercelInstallationBinding {
   plan: string;
   active: boolean;
   updatedAt: Date;
-}
+};
 
-export interface VercelInstallationStore {
+export type VercelInstallationStore = {
   list(authority: Authority): Promise<VercelInstallationBinding[]>;
   bind(input: {
     authority: Authority;
@@ -99,7 +101,7 @@ export interface VercelInstallationStore {
     now: Date;
   }): Promise<VercelInstallationBinding>;
   deactivate(installationId: string, now: Date): Promise<number>;
-}
+};
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -118,7 +120,7 @@ export function encryptVercelToken(input: {
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
   const encrypted = Buffer.concat([
-    cipher.update(input.token, "utf-8"),
+    cipher.update(input.token, "utf8"),
     cipher.final(),
   ]);
   return {
@@ -138,28 +140,28 @@ export function decryptVercelToken(input: {
   const decipher = createDecipheriv(
     "aes-256-gcm",
     input.key,
-    Buffer.from(input.tokenIv, "base64")
+    Buffer.from(input.tokenIv, "base64"),
   );
   decipher.setAAD(Buffer.from(input.associatedData));
   decipher.setAuthTag(Buffer.from(input.tokenTag, "base64"));
   return Buffer.concat([
     decipher.update(Buffer.from(input.encryptedToken, "base64")),
     decipher.final(),
-  ]).toString("utf-8");
+  ]).toString("utf8");
 }
 
 const tokenResponseSchema = z
-  .object({ access_token: z.string().min(1).max(8192) })
+  .object({ access_token: z.string().min(1).max(8_192) })
   .passthrough();
 const teamSchema = z
   .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    slug: z.string().min(1),
     billing: z
       .object({ plan: z.string().min(1) })
       .passthrough()
       .optional(),
-    id: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().min(1),
   })
   .passthrough();
 const teamResponseSchema = z.union([
@@ -196,29 +198,27 @@ export function createVercelInstallationAuthorization(input: {
   return {
     async begin(
       authorityInput: Authority,
-      returnState: ProviderConnectionReturn = { returnTo: "/" }
+      returnState: ProviderConnectionReturn = { returnTo: "/" },
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-      if (!(await input.membership.isActiveMember(authority))) {
+      if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
-      }
       const state = nonce();
       const issuedAt = now();
       await input.states.create({
+        stateDigest: digest(state),
         authority,
         authorityDigest: authorityDigest(authority),
         createdAt: new Date(issuedAt),
         expiresAt: new Date(issuedAt + 10 * 60_000),
         returnState,
-        stateDigest: digest(state),
       });
       const url = input.emulation
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
-      if (input.emulation && returnState.resumeKey) {
+      if (input.emulation && returnState.resumeKey)
         url.searchParams.set("resume", returnState.resumeKey);
-      }
       return url.toString();
     },
 
@@ -228,7 +228,7 @@ export function createVercelInstallationAuthorization(input: {
       const code = z
         .string()
         .min(1)
-        .max(2048)
+        .max(2_048)
         .parse(url.searchParams.get("code"));
       const state = z
         .string()
@@ -241,25 +241,23 @@ export function createVercelInstallationAuthorization(input: {
         .max(256)
         .parse(url.searchParams.get("configurationId"));
       const teamId = url.searchParams.get("teamId") || undefined;
-      if (!(await input.membership.isActiveMember(authority))) {
+      if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
-      }
       const returnState = await input.states.consume({
+        stateDigest: digest(state),
         authority,
         authorityDigest: authorityDigest(authority),
         now: new Date(now()),
-        stateDigest: digest(state),
       });
-      if (!returnState) {
+      if (!returnState)
         throw new VercelInstallationAuthorizationError(
           "state-invalid",
           await input.states.recover({
             stateDigest: digest(state),
             authority,
             authorityDigest: authorityDigest(authority),
-          })
+          }),
         );
-      }
 
       const token = await (async () => {
         const tokenResponse = await request(
@@ -267,6 +265,11 @@ export function createVercelInstallationAuthorization(input: {
             ? `${input.emulation.vercelOrigin}/login/oauth/token`
             : "https://api.vercel.com/v2/oauth/access_token",
           {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
             body: new URLSearchParams({
               client_id: config.clientId,
               client_secret: config.clientSecret,
@@ -275,16 +278,11 @@ export function createVercelInstallationAuthorization(input: {
                 input.emulation
                   ? "/local-connections/vercel/oauth-callback"
                   : "/vercel/installations/callback",
-                config.issuer
+                config.issuer,
               ).toString(),
             }),
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method: "POST",
             signal: AbortSignal.timeout(8_000),
-          }
+          },
         );
         if (!tokenResponse.ok) {
           const errorPayload = z
@@ -294,7 +292,7 @@ export function createVercelInstallationAuthorization(input: {
             ? errorPayload.data.error
             : undefined;
           throw new Error(
-            `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`
+            `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`,
           );
         }
         return tokenResponseSchema.parse(await tokenResponse.json())
@@ -310,50 +308,45 @@ export function createVercelInstallationAuthorization(input: {
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
             headers,
-            signal: AbortSignal.timeout(8000),
-          }
+            signal: AbortSignal.timeout(8_000),
+          },
         );
-        if (!response.ok) {
-          throw new Error("scope-read-failed");
-        }
+        if (!response.ok) throw new Error("scope-read-failed");
         const team = teamResponseSchema.parse(await response.json());
         binding = {
-          displayName: team.name,
           installationId,
-          plan: team.billing?.plan ?? "unknown",
           scopeId: team.id,
           scopeType: "team",
+          displayName: team.name,
           slug: team.slug,
+          plan: team.billing?.plan ?? "unknown",
         };
       } else {
         const response = await request(
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/user`,
           {
             headers,
-            signal: AbortSignal.timeout(8000),
-          }
+            signal: AbortSignal.timeout(8_000),
+          },
         );
-        if (!response.ok) {
-          throw new Error("scope-read-failed");
-        }
+        if (!response.ok) throw new Error("scope-read-failed");
         const { user } = userSchema.parse(await response.json());
         binding = {
-          displayName: user.name ?? user.username,
           installationId,
-          plan: "hobby",
           scopeId: user.id,
           scopeType: "user",
+          displayName: user.name ?? user.username,
           slug: user.username,
+          plan: "hobby",
         };
       }
-      if (!(await input.membership.isActiveMember(authority))) {
+      if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
-      }
       const persistedBinding = await input.installations.bind({
         authority,
         binding,
-        now: new Date(now()),
         token,
+        now: new Date(now()),
       });
       return { binding: persistedBinding, returnState };
     },
@@ -365,9 +358,8 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) {
+  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature))
     return false;
-  }
   const expected = createHmac("sha1", input.secret).update(input.body).digest();
   const provided = Buffer.from(input.signature, "hex");
   return (

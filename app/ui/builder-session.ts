@@ -1,5 +1,4 @@
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
-
 import type {
   BuilderDraft,
   BuilderForm,
@@ -16,7 +15,7 @@ export type {
   StorageProvider,
 } from "./builder-types";
 
-export interface ActiveProvisioning {
+export type ActiveProvisioning = {
   version: 1;
   requestId: string;
   handoffCreationRequestId: string;
@@ -24,7 +23,7 @@ export interface ActiveProvisioning {
   phase: "handoff" | "ready";
   provisioning?: BuilderProvisionResponse;
   handoff?: BuilderHandoffReference;
-}
+};
 
 export const activeProvisioningStorageKey =
   "autograph-builder-active-provisioning";
@@ -38,18 +37,16 @@ const builderDraftCache = new Map<
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
-export interface BuilderDraftResume {
+export type BuilderDraftResume = {
   draft: BuilderDraft;
   /** Revision acknowledged by the server before a provider navigation. */
   acknowledgedRevision?: number;
-}
+};
 
 function parseBuilderDraft(
-  value: string | null
+  value: string | null,
 ): BuilderDraftResume | undefined {
-  if (!value) {
-    return undefined;
-  }
+  if (!value) return undefined;
   try {
     const parsed = JSON.parse(value) as Partial<BuilderDraft> & {
       draft?: Partial<BuilderDraft>;
@@ -62,14 +59,11 @@ function parseBuilderDraft(
       (draft.focusOrigin !== "vercel" && draft.focusOrigin !== "github") ||
       !Array.isArray(draft.form.connections) ||
       !Array.isArray(draft.connectedConnections)
-    ) {
+    )
       return undefined;
-    }
     const resume: BuilderDraftResume = {
       draft: {
         ...draft,
-        deploymentProvider:
-          draft.deploymentProvider === "vercel" ? "vercel" : null,
         form: {
           ...draft.form,
           buildDestination:
@@ -80,16 +74,17 @@ function parseBuilderDraft(
               : "codex",
         },
         storageProvider: draft.storageProvider === null ? null : "github",
+        deploymentProvider:
+          draft.deploymentProvider === "vercel" ? "vercel" : null,
       } as BuilderDraft,
     };
-    const { acknowledgedRevision } = parsed;
+    const acknowledgedRevision = parsed.acknowledgedRevision;
     if (
       typeof acknowledgedRevision === "number" &&
       Number.isSafeInteger(acknowledgedRevision) &&
       acknowledgedRevision > 0
-    ) {
+    )
       resume.acknowledgedRevision = acknowledgedRevision;
-    }
     return resume;
   } catch {
     return undefined;
@@ -103,9 +98,7 @@ export function readBuilderDraft(resumeKey: string) {
 export function readBuilderDraftResume(resumeKey: string) {
   const raw = sessionStorage.getItem(builderDraftStorageKey(resumeKey));
   const cached = builderDraftCache.get(resumeKey);
-  if (cached?.raw === raw) {
-    return cached.resume;
-  }
+  if (cached?.raw === raw) return cached.resume;
   const resume = parseBuilderDraft(raw);
   builderDraftCache.set(resumeKey, { raw, resume });
   return resume;
@@ -114,14 +107,14 @@ export function readBuilderDraftResume(resumeKey: string) {
 export function persistBuilderDraft(
   resumeKey: string,
   draft: BuilderDraft,
-  acknowledgedRevision?: number
+  acknowledgedRevision?: number,
 ) {
   sessionStorage.setItem(
     builderDraftStorageKey(resumeKey),
     JSON.stringify({
       draft,
       ...(acknowledgedRevision === undefined ? {} : { acknowledgedRevision }),
-    })
+    }),
   );
 }
 
@@ -130,9 +123,7 @@ export function clearBuilderDraft(resumeKey: string) {
 }
 
 export function parseActiveProvisioning(value: string | null) {
-  if (!value) {
-    return undefined;
-  }
+  if (!value) return undefined;
   try {
     const parsed = JSON.parse(value) as Partial<ActiveProvisioning>;
     const phase =
@@ -152,11 +143,10 @@ export function parseActiveProvisioning(value: string | null) {
       !["web", "codex", "cursor"].includes(parsed.form.buildDestination) ||
       !Array.isArray(parsed.form.connections) ||
       typeof parsed.form.modelId !== "string"
-    ) {
+    )
       return undefined;
-    }
-    const { provisioning } = parsed;
-    const { handoff } = parsed;
+    const provisioning = parsed.provisioning;
+    const handoff = parsed.handoff;
     if (
       phase === "ready" &&
       (!provisioning ||
@@ -169,22 +159,21 @@ export function parseActiveProvisioning(value: string | null) {
         typeof provisioning.vercel !== "object" ||
         typeof provisioning.updatedAt !== "string" ||
         handoff?.version !== 1 ||
-        !uuidPattern.test(handoff.handoffId) ||
+        !handoff.handoffId.match(uuidPattern) ||
         Number.isNaN(Date.parse(handoff.expiresAt)))
-    ) {
+    )
       return undefined;
-    }
     return {
-      form: parsed.form,
-      handoffCreationRequestId: parsed.handoffCreationRequestId,
-      phase,
-      requestId: parsed.requestId,
       version: 1,
+      requestId: parsed.requestId,
+      handoffCreationRequestId: parsed.handoffCreationRequestId,
+      form: parsed.form,
+      phase,
       ...(provisioning ? { provisioning } : {}),
       ...(handoff ? { handoff } : {}),
     } satisfies ActiveProvisioning;
   } catch {
-    return;
+    return undefined;
   }
 }
 

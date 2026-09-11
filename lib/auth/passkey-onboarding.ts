@@ -25,13 +25,13 @@ const INTERNAL_EMAIL_DOMAIN = "passkey.autograph.invalid";
 
 const tokenPayloadSchema = z
   .object({
-    deploymentId: z.string().min(1).max(256),
-    expiresAt: z.number().int().positive(),
+    version: z.literal(TOKEN_VERSION),
     nonce: z.string().uuid(),
+    userHandle: z.string().uuid(),
+    deploymentId: z.string().min(1).max(256),
     origin: z.string().url(),
     rpId: z.string().min(1).max(253),
-    userHandle: z.string().uuid(),
-    version: z.literal(TOKEN_VERSION),
+    expiresAt: z.number().int().positive(),
   })
   .strict();
 
@@ -62,11 +62,9 @@ function isLoopback(hostname: string) {
 
 export function readPasskeyOnboardingConfig(
   environment: Readonly<Record<string, string | undefined>>,
-  options: PasskeyOnboardingReadOptions = {}
+  options: PasskeyOnboardingReadOptions = {},
 ): PasskeyOnboardingConfig | null {
-  if (environment.PASSKEY_ONBOARDING !== ENABLED_VALUE) {
-    return null;
-  }
+  if (environment.PASSKEY_ONBOARDING !== ENABLED_VALUE) return null;
 
   const secret = environment.BETTER_AUTH_SECRET?.trim();
   if (!secret || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
@@ -78,9 +76,9 @@ export function readPasskeyOnboardingConfig(
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined;
   const origin = exactOrigin(
-    environment.BETTER_AUTH_URL ?? derivedPreviewIssuer
+    environment.BETTER_AUTH_URL ?? derivedPreviewIssuer,
   );
-  const { hostname } = new URL(origin);
+  const hostname = new URL(origin).hostname;
   if (environment.VERCEL_ENV === "production") {
     throw new Error("Passkey onboarding is unavailable in Production.");
   }
@@ -88,7 +86,7 @@ export function readPasskeyOnboardingConfig(
   if (environment.VERCEL_ENV === "preview") {
     if (environment.PASSKEY_PREVIEW_PROTECTION !== PROTECTION_VALUE) {
       throw new Error(
-        "Preview passkey onboarding requires an explicit Vercel Authentication protection acknowledgement."
+        "Preview passkey onboarding requires an explicit Vercel Authentication protection acknowledgement.",
       );
     }
     const deploymentId = environment.VERCEL_DEPLOYMENT_ID?.trim();
@@ -100,13 +98,13 @@ export function readPasskeyOnboardingConfig(
       !origin.startsWith("https://")
     ) {
       throw new Error(
-        "Preview passkey onboarding requires exact Vercel deployment metadata."
+        "Preview passkey onboarding requires exact Vercel deployment metadata.",
       );
     }
     if (options.previewCanonicalOrigin === undefined) {
       if (deploymentHostname !== hostname) {
         throw new Error(
-          "Preview passkey onboarding requires exact Vercel deployment metadata."
+          "Preview passkey onboarding requires exact Vercel deployment metadata.",
         );
       }
     } else {
@@ -123,14 +121,14 @@ export function readPasskeyOnboardingConfig(
         environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname
       ) {
         throw new Error(
-          "Preview passkey onboarding requires the exact validated branch origin."
+          "Preview passkey onboarding requires the exact validated branch origin.",
         );
       }
     }
     return {
-      deploymentId,
       origin,
       rpId: hostname,
+      deploymentId,
       secret,
       secureCookies: true,
     };
@@ -142,7 +140,7 @@ export function readPasskeyOnboardingConfig(
     !isLoopback(hostname)
   ) {
     throw new Error(
-      "Local passkey onboarding requires a non-Production loopback origin."
+      "Local passkey onboarding requires a non-Production loopback origin.",
     );
   }
   const localProviderEmulation =
@@ -160,20 +158,20 @@ export function readPasskeyOnboardingConfig(
         !localAuthEmulation))
   ) {
     throw new Error(
-      "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates."
+      "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.",
     );
   }
   return {
-    deploymentId: "local",
     origin,
     rpId: hostname,
+    deploymentId: "local",
     secret,
     secureCookies: isHttps,
   };
 }
 
 function encode(value: string) {
-  return Buffer.from(value, "utf-8").toString("base64url");
+  return Buffer.from(value, "utf8").toString("base64url");
 }
 
 function sign(encodedPayload: string, secret: string) {
@@ -199,34 +197,30 @@ function personalWorkspaceSlug(userId: string, deploymentId: string) {
 
 export function createPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
-  now = new Date()
+  now = new Date(),
 ) {
   const payload = tokenPayloadSchema.parse({
-    deploymentId: config.deploymentId,
-    expiresAt: Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS,
+    version: TOKEN_VERSION,
     nonce: randomUUID(),
+    userHandle: randomUUID(),
+    deploymentId: config.deploymentId,
     origin: config.origin,
     rpId: config.rpId,
-    userHandle: randomUUID(),
-    version: TOKEN_VERSION,
+    expiresAt: Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS,
   });
   const encodedPayload = encode(JSON.stringify(payload));
   const token = `${encodedPayload}.${sign(encodedPayload, config.secret)}`;
-  return { digest: tokenDigest(token), payload, token };
+  return { payload, token, digest: tokenDigest(token) };
 }
 
 export function verifyPasskeyOnboardingToken(
   token: string | null | undefined,
   config: PasskeyOnboardingConfig,
-  now = new Date()
+  now = new Date(),
 ) {
-  if (!token || token.length > 4096) {
-    return null;
-  }
+  if (!token || token.length > 4_096) return null;
   const [encodedPayload, signature, extra] = token.split(".");
-  if (!encodedPayload || !signature || extra !== undefined) {
-    return null;
-  }
+  if (!encodedPayload || !signature || extra !== undefined) return null;
   const expected = Buffer.from(sign(encodedPayload, config.secret));
   const actual = Buffer.from(signature);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
@@ -234,7 +228,7 @@ export function verifyPasskeyOnboardingToken(
   }
   try {
     const payload = tokenPayloadSchema.parse(
-      JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf-8"))
+      JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")),
     );
     if (
       payload.expiresAt <= Math.floor(now.getTime() / 1000) ||
@@ -244,7 +238,7 @@ export function verifyPasskeyOnboardingToken(
     ) {
       return null;
     }
-    return { digest: tokenDigest(token), payload };
+    return { payload, digest: tokenDigest(token) };
   } catch {
     return null;
   }
@@ -280,7 +274,7 @@ type PasskeyOnboardingContextAdapter = Pick<
 export async function issuePasskeyOnboardingContext(
   adapter: PasskeyOnboardingContextAdapter,
   config: PasskeyOnboardingConfig,
-  issuedAt: Date
+  issuedAt: Date,
 ) {
   await adapter.deleteMany({
     model: "passkeyOnboarding",
@@ -294,18 +288,18 @@ export async function issuePasskeyOnboardingContext(
   });
   const issued = createPasskeyOnboardingToken(config, issuedAt);
   await adapter.create({
+    model: "passkeyOnboarding",
     data: {
-      createdAt: issuedAt,
-      deploymentId: issued.payload.deploymentId,
-      expiresAt: new Date(issued.payload.expiresAt * 1000),
       id: issued.payload.nonce,
+      tokenDigest: issued.digest,
+      deploymentId: issued.payload.deploymentId,
       origin: issued.payload.origin,
       rpId: issued.payload.rpId,
-      tokenDigest: issued.digest,
       userHandle: issued.payload.userHandle,
+      expiresAt: new Date(issued.payload.expiresAt * 1000),
+      createdAt: issuedAt,
     },
     forceAllowId: true,
-    model: "passkeyOnboarding",
   });
   return issued;
 }
@@ -313,15 +307,11 @@ export async function issuePasskeyOnboardingContext(
 /** @internal */
 export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
-  context: string | null | undefined
+  context: string | null | undefined,
 ) {
-  if (!userId) {
-    return null;
-  }
-  if (context) {
-    throw onboardingAlreadyAuthenticated();
-  }
-  return { name: "Additional passkey", userId };
+  if (!userId) return null;
+  if (context) throw onboardingAlreadyAuthenticated();
+  return { userId, name: "Additional passkey" };
 }
 
 export function createPasskeyOnboardingPlugin(input: {
@@ -331,6 +321,49 @@ export function createPasskeyOnboardingPlugin(input: {
 }): BetterAuthPlugin {
   const now = input.now ?? (() => new Date());
   return {
+    id: "autograph-passkey-onboarding",
+    init() {
+      return {
+        options: {
+          databaseHooks: {
+            session: {
+              create: {
+                async before(
+                  session: Record<string, unknown> & { userId: string },
+                  ctx: { path?: string; context: { adapter: unknown } } | null,
+                ) {
+                  if (ctx?.path !== "/passkey/verify-registration") return;
+                  const adapter = await getCurrentAdapter(
+                    ctx.context.adapter as Parameters<
+                      typeof getCurrentAdapter
+                    >[0],
+                  );
+                  const memberships = await adapter.findMany<{
+                    organizationId: string;
+                  }>({
+                    model: "member",
+                    where: [{ field: "userId", value: session.userId }],
+                    limit: 2,
+                  });
+                  if (memberships.length !== 1 || !memberships[0]) {
+                    throw APIError.from("INTERNAL_SERVER_ERROR", {
+                      code: "PASSKEY_WORKSPACE_SETUP_FAILED",
+                      message: "Passkey workspace setup failed.",
+                    });
+                  }
+                  return {
+                    data: {
+                      ...session,
+                      activeOrganizationId: memberships[0].organizationId,
+                    },
+                  };
+                },
+              },
+            },
+          },
+        },
+      };
+    },
     endpoints: {
       createPasskeyOnboardingContext: createAuthEndpoint(
         "/passkey/onboarding-context",
@@ -351,10 +384,10 @@ export function createPasskeyOnboardingPlugin(input: {
           const issued = await issuePasskeyOnboardingContext(
             ctx.context.adapter,
             config,
-            requestedAt
+            requestedAt,
           );
           return ctx.json({ context: issued.token });
-        }
+        },
       ),
     },
     hooks: {
@@ -389,48 +422,18 @@ export function createPasskeyOnboardingPlugin(input: {
         },
       ],
     },
-    id: "autograph-passkey-onboarding",
-    init() {
-      return {
-        options: {
-          databaseHooks: {
-            session: {
-              create: {
-                async before(
-                  session: Record<string, unknown> & { userId: string },
-                  ctx: { path?: string; context: { adapter: unknown } } | null
-                ) {
-                  if (ctx?.path !== "/passkey/verify-registration") return;
-                  const adapter = await getCurrentAdapter(
-                    ctx.context.adapter as Parameters<
-                      typeof getCurrentAdapter
-                    >[0]
-                  );
-                  const memberships = await adapter.findMany<{
-                    organizationId: string;
-                  }>({
-                    model: "member",
-                    where: [{ field: "userId", value: session.userId }],
-                    limit: 2,
-                  });
-                  if (memberships.length !== 1 || !memberships[0]) {
-                    throw APIError.from("INTERNAL_SERVER_ERROR", {
-                      code: "PASSKEY_WORKSPACE_SETUP_FAILED",
-                      message: "Passkey workspace setup failed.",
-                    });
-                  }
-                  return {
-                    data: {
-                      ...session,
-                      activeOrganizationId: memberships[0].organizationId,
-                    },
-                  };
-                },
-              },
-            },
-          },
+    schema: {
+      passkeyOnboarding: {
+        fields: {
+          tokenDigest: { type: "string", required: true, unique: true },
+          deploymentId: { type: "string", required: true },
+          origin: { type: "string", required: true },
+          rpId: { type: "string", required: true },
+          userHandle: { type: "string", required: true, unique: true },
+          expiresAt: { type: "date", required: true },
+          createdAt: { type: "date", required: true },
         },
-      };
+      },
     },
     rateLimit: [
       {
@@ -439,19 +442,6 @@ export function createPasskeyOnboardingPlugin(input: {
         max: input.onboardingContextRateLimitMax ?? 10,
       },
     ],
-    schema: {
-      passkeyOnboarding: {
-        fields: {
-          createdAt: { required: true, type: "date" },
-          deploymentId: { required: true, type: "string" },
-          expiresAt: { required: true, type: "date" },
-          origin: { required: true, type: "string" },
-          rpId: { required: true, type: "string" },
-          tokenDigest: { required: true, type: "string", unique: true },
-          userHandle: { required: true, type: "string", unique: true },
-        },
-      },
-    },
   };
 }
 
@@ -465,11 +455,23 @@ export function createPasskeyPlugin(input: {
       ? { origin: input.config.origin, rpID: input.config.rpId }
       : {}),
     registration: {
+      requireSession: false,
+      async resolveUser({ context }) {
+        const config = input.config;
+        if (!config) throw onboardingUnavailable();
+        const verified = verifyPasskeyOnboardingToken(context, config, now());
+        if (!verified) throw invalidOnboardingAuthority();
+        return {
+          id: verified.payload.userHandle,
+          name: "Autograph passkey user",
+          displayName: "Autograph user",
+        };
+      },
       async afterVerification({ ctx, context }) {
         const existingSession = await getSessionFromCtx(ctx);
         const authenticatedRegistration = authenticatedPasskeyRegistration(
           existingSession?.user.id,
-          context
+          context,
         );
         if (authenticatedRegistration) return authenticatedRegistration;
         const config = input.config;
@@ -497,7 +499,7 @@ export function createPasskeyPlugin(input: {
             email: `${verified.payload.userHandle}@${INTERNAL_EMAIL_DOMAIN}`,
             emailVerified: false,
           },
-          { method: "passkey" }
+          { method: "passkey" },
         );
         const organizationId = randomUUID();
         const workspaceId = randomUUID();
@@ -526,18 +528,6 @@ export function createPasskeyPlugin(input: {
           forceAllowId: true,
         });
         return { userId: user.id, name: "Primary passkey" };
-      },
-      requireSession: false,
-      async resolveUser({ context }) {
-        const config = input.config;
-        if (!config) throw onboardingUnavailable();
-        const verified = verifyPasskeyOnboardingToken(context, config, now());
-        if (!verified) throw invalidOnboardingAuthority();
-        return {
-          id: verified.payload.userHandle,
-          name: "Autograph passkey user",
-          displayName: "Autograph user",
-        };
       },
     },
   });

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import { buildAppHandoffPrompt } from "./client";
 
 const handoffId = "11111111-1111-4111-8111-111111111111";
@@ -14,11 +13,11 @@ describe("destination-specific handoff setup", () => {
     expect(prompt).toContain("connection or tool-loading problem");
     expect(prompt).toContain("Do not ask the user to run installation");
     expect(prompt).toContain(
-      "Never claim the handoff has started until autograph_start succeeds"
+      "Never claim the handoff has started until autograph_start succeeds",
     );
     expect(prompt).toContain(`"clientRequestId":"web-handoff:${handoffId}"`);
     expect(prompt).toContain(
-      "does not approve building, publishing, or deploying"
+      "does not approve building, publishing, or deploying",
     );
   });
 
@@ -29,7 +28,7 @@ describe("destination-specific handoff setup", () => {
     expect(prompt).toContain("Add Autograph to Cursor");
     expect(prompt).toContain(`"clientRequestId":"web-handoff:${handoffId}"`);
     expect(prompt).toContain(
-      "Do not request provider tokens or separate provider logins"
+      "Do not request provider tokens or separate provider logins",
     );
   });
 });

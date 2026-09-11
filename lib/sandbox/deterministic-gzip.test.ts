@@ -18,7 +18,7 @@ describe("deterministic gzip", () => {
       0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03,
     ]);
     expect(sha256(first)).toBe(
-      "e34b1124586db69a28bc332fc778f31940a31b0c03096757d4afffd538c63338"
+      "e34b1124586db69a28bc332fc778f31940a31b0c03096757d4afffd538c63338",
     );
   });
 });

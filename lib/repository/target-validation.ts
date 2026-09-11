@@ -2,13 +2,18 @@ import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
 
-import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
-import type { ExecutionDependencyLayout } from "./dependency-cache";
 import {
   supportedValidationCommands,
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
-import type { ApplyCommandResult, TargetApplyReceipt } from "./target-apply";
+import {
+  ARRUSTED_APP_VALIDATION_SHA256,
+  type ExecutionDependencyLayout,
+} from "./dependency-cache";
+import {
+  type ApplyCommandResult,
+  type TargetApplyReceipt,
+} from "./target-apply";
 
 export type TargetValidationCommand =
   | `mise run app:check-build ${string}`
@@ -22,7 +27,7 @@ export type ValidationCommandExecutor = (input: {
   validationRoot: string;
 }) => Promise<ApplyCommandResult>;
 
-interface TargetValidationBinding {
+type TargetValidationBinding = {
   appId: string;
   testShards: readonly string[];
   appValidationSha256: string;
@@ -43,13 +48,13 @@ interface TargetValidationBinding {
   applyDigest: string;
   appliedTreeDigest: string;
   changedContentDigest: string;
-}
+};
 
-export interface PlannedValidationCommand {
+export type PlannedValidationCommand = {
   name: TargetValidationCommandName;
   command: TargetValidationCommand;
   validationRoot: string;
-}
+};
 
 export type TargetValidationAttemptReceipt = TargetValidationBinding & {
   version: 3;
@@ -101,13 +106,13 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   digest: string;
 };
 
-export interface TargetValidationDiagnostic {
+export type TargetValidationDiagnostic = {
   code: `TS${number}` | "VITEST";
   path: string;
   line: number;
   column: number;
   message: string;
-}
+};
 
 export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
@@ -128,7 +133,7 @@ const vitestLocationPattern = /^\s*❯\s+(.+?):(\d+):(\d+)$/u;
 function safeDiagnosticPath(value: string): string | undefined {
   const normalized = value.replaceAll("\\", "/");
   const appsOffset = normalized.indexOf("apps/");
-  const path = appsOffset !== -1 ? normalized.slice(appsOffset) : normalized;
+  const path = appsOffset >= 0 ? normalized.slice(appsOffset) : normalized;
   if (
     path.length === 0 ||
     path.length > 500 ||
@@ -136,32 +141,27 @@ function safeDiagnosticPath(value: string): string | undefined {
     path
       .split("/")
       .some(
-        (segment) => segment === "" || segment === "." || segment === ".."
+        (segment) => segment === "" || segment === "." || segment === "..",
       ) ||
     !/^[A-Za-z0-9._@/-]+$/u.test(path)
-  ) {
+  )
     return undefined;
-  }
   return path;
 }
 
 function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
   // Command text may contain source literals or credentials. Keep the actual
   // compiler code and location, but generate the explanation ourselves.
-  if (code === "VITEST") {
-    return "Test assertion failed at this location.";
-  }
-  if (code === "TS2304" || code === "TS2593") {
+  if (code === "VITEST") return "Test assertion failed at this location.";
+  if (code === "TS2304" || code === "TS2593")
     return "A referenced name is missing; inspect its declaration or import.";
-  }
-  if (code === "TS2532" || code === "TS18048") {
+  if (code === "TS2532" || code === "TS18048")
     return "A value may be undefined; handle the empty case.";
-  }
   return "Compiler error at this location; inspect the reported code and file.";
 }
 
 export function compilerDiagnostics(
-  output: string
+  output: string,
 ): TargetValidationDiagnostic[] {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
@@ -171,7 +171,7 @@ export function compilerDiagnostics(
     code: TargetValidationDiagnostic["code"],
     pathValue: string,
     lineValue: string,
-    columnValue: string
+    columnValue: string,
   ) => {
     const path = safeDiagnosticPath(pathValue);
     const line = Number(lineValue);
@@ -180,25 +180,22 @@ export function compilerDiagnostics(
       path === undefined ||
       !Number.isSafeInteger(line) ||
       !Number.isSafeInteger(column)
-    ) {
+    )
       return false;
-    }
     const diagnostic = {
       code,
-      column,
-      line,
-      message: diagnosticMessage(code),
       path,
+      line,
+      column,
+      message: diagnosticMessage(code),
     };
     const key = JSON.stringify(diagnostic);
-    if (!seen.has(key) && diagnostics.length < 50) {
-      diagnostics.push(diagnostic);
-    }
+    if (!seen.has(key) && diagnostics.length < 50) diagnostics.push(diagnostic);
     seen.add(key);
     return true;
   };
   for (const sourceLine of output
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
     .split("\n")) {
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {
@@ -224,21 +221,16 @@ export function compilerDiagnostics(
         "VITEST",
         vitestLocation[1],
         vitestLocation[2],
-        vitestLocation[3]
+        vitestLocation[3],
       );
-      if (recorded) {
-        pendingVitestMessage = false;
-      }
+      if (recorded) pendingVitestMessage = false;
       continue;
     }
     for (const pattern of compilerDiagnosticPatterns) {
       const match = pattern.exec(sourceLine);
-      if (match === null) {
-        continue;
-      }
-      if (/^TS\d+$/u.test(match[4])) {
+      if (match === null) continue;
+      if (/^TS\d+$/u.test(match[4]))
         append(match[4] as `TS${number}`, match[1], match[2], match[3]);
-      }
       break;
     }
   }
@@ -246,35 +238,35 @@ export function compilerDiagnostics(
 }
 
 export function validationBinding(
-  apply: TargetApplyReceipt
+  apply: TargetApplyReceipt,
 ): TargetValidationBinding {
   return {
     appId: apply.targetReceipt.appId,
-    appSpecDigest: apply.appSpecDigest,
-    appSpecPath: apply.appSpecPath,
+    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
     appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
-    appliedTreeDigest: apply.postTreeDigest,
-    applyDigest: apply.digest,
-    artifactRevision: apply.artifactRevision,
-    changedContentDigest: apply.changedContentDigest,
-    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
-    dependencyCacheDigest: apply.dependencyCacheDigest,
-    dependencyReceiptDigest: apply.dependencyReceiptDigest,
-    eligibilityDigest: apply.eligibilityDigest,
-    identityDigest: apply.identityDigest,
-    imageDigest: apply.imageDigest,
-    proposalDigest: apply.proposalDigest,
-    sourceReceiptDigest: apply.sourceReceiptDigest,
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
-    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
+    eligibilityDigest: apply.eligibilityDigest,
     workspaceDigest: apply.workspaceDigest,
+    appSpecDigest: apply.appSpecDigest,
+    appSpecPath: apply.appSpecPath,
+    artifactRevision: apply.artifactRevision,
+    dependencyReceiptDigest: apply.dependencyReceiptDigest,
+    identityDigest: apply.identityDigest,
+    imageDigest: apply.imageDigest,
+    dependencyCacheDigest: apply.dependencyCacheDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
+    proposalDigest: apply.proposalDigest,
+    applyDigest: apply.digest,
+    appliedTreeDigest: apply.postTreeDigest,
+    changedContentDigest: apply.changedContentDigest,
   };
 }
 
 export function createTargetValidationAttempt(
   apply: TargetApplyReceipt,
-  startedByCallId: string
+  startedByCallId: string,
 ): TargetValidationAttemptReceipt {
   const unsigned = {
     version: 3 as const,
@@ -282,10 +274,10 @@ export function createTargetValidationAttempt(
     ...validationBinding(apply),
     commands: supportedValidationCommands(
       apply.targetReceipt.appId,
-      SUPPORTED_VALIDATION_TEST_SHARDS
+      SUPPORTED_VALIDATION_TEST_SHARDS,
     ).map(({ command, name }) => ({
-      command,
       name,
+      command,
       validationRoot: apply.applyRoot,
     })),
     startedByCallId,
@@ -294,29 +286,29 @@ export function createTargetValidationAttempt(
 }
 
 function attemptBinding(
-  attempt: TargetValidationAttemptReceipt
+  attempt: TargetValidationAttemptReceipt,
 ): TargetValidationBinding {
   return {
     appId: attempt.appId,
-    appSpecDigest: attempt.appSpecDigest,
-    appSpecPath: attempt.appSpecPath,
+    testShards: attempt.testShards,
     appValidationSha256: attempt.appValidationSha256,
-    appliedTreeDigest: attempt.appliedTreeDigest,
-    applyDigest: attempt.applyDigest,
-    artifactRevision: attempt.artifactRevision,
-    changedContentDigest: attempt.changedContentDigest,
-    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
-    dependencyCacheDigest: attempt.dependencyCacheDigest,
-    dependencyReceiptDigest: attempt.dependencyReceiptDigest,
-    eligibilityDigest: attempt.eligibilityDigest,
-    identityDigest: attempt.identityDigest,
-    imageDigest: attempt.imageDigest,
-    proposalDigest: attempt.proposalDigest,
-    sourceReceiptDigest: attempt.sourceReceiptDigest,
     sourceSha: attempt.sourceSha,
     sourceTree: attempt.sourceTree,
-    testShards: attempt.testShards,
+    sourceReceiptDigest: attempt.sourceReceiptDigest,
+    eligibilityDigest: attempt.eligibilityDigest,
     workspaceDigest: attempt.workspaceDigest,
+    appSpecDigest: attempt.appSpecDigest,
+    appSpecPath: attempt.appSpecPath,
+    artifactRevision: attempt.artifactRevision,
+    dependencyReceiptDigest: attempt.dependencyReceiptDigest,
+    identityDigest: attempt.identityDigest,
+    imageDigest: attempt.imageDigest,
+    dependencyCacheDigest: attempt.dependencyCacheDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
+    proposalDigest: attempt.proposalDigest,
+    applyDigest: attempt.applyDigest,
+    appliedTreeDigest: attempt.appliedTreeDigest,
+    changedContentDigest: attempt.changedContentDigest,
   };
 }
 
@@ -337,19 +329,15 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
         /Formatting issues found/u.test(`${checked.stderr}\n${checked.stdout}`)
       ) {
         const formatted = await run("check", " -- --fix");
-        if (formatted.exitCode !== 0) {
-          return formatted;
-        }
+        if (formatted.exitCode !== 0) return formatted;
         checked = await run("check");
       }
-      if (checked.exitCode !== 0) {
-        return checked;
-      }
+      if (checked.exitCode !== 0) return checked;
       const built = await run("build");
       return {
         exitCode: built.exitCode,
-        stderr: `${checked.stderr}\n${built.stderr}`,
         stdout: `${checked.stdout}\n${built.stdout}`,
+        stderr: `${checked.stderr}\n${built.stderr}`,
       };
     }
     return await run("test");
@@ -360,8 +348,8 @@ export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ appId, command }) =>
     appId === "validation-failure" &&
     command.startsWith("mise run app:check-build ")
-      ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
-      : { exitCode: 0, stderr: "", stdout: `${command} passed` };
+      ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }
+      : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
 }
 
 function failureReceipt(
@@ -369,7 +357,7 @@ function failureReceipt(
   commands: readonly TargetValidationCommandReceipt[],
   reason: TargetValidationFailureReason,
   commandFailure?: TargetValidationFailureReceipt["commandFailure"],
-  diagnostics?: readonly TargetValidationDiagnostic[]
+  diagnostics?: readonly TargetValidationDiagnostic[],
 ): TargetValidationFailureReceipt {
   const unsigned = {
     version: 3 as const,
@@ -402,9 +390,9 @@ export async function executeProposalBoundValidation(input: {
     let result: ApplyCommandResult;
     try {
       result = await input.executor({
+        sandbox: input.sandbox,
         appId: input.appId,
         command: planned.command,
-        sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
       });
     } catch (error) {
@@ -415,19 +403,19 @@ export async function executeProposalBoundValidation(input: {
           commands,
           error instanceof Error && error.name === "TimeoutError"
             ? "command-timeout"
-            : "execution-error"
+            : "execution-error",
         ),
       };
     }
     const commandReceipt = {
       ...planned,
-      exitCode: result.exitCode,
       inputTreeDigest: input.apply.postTreeDigest,
-      stderrDigest: sha256(result.stderr),
+      exitCode: result.exitCode,
       stdoutDigest: sha256(result.stdout),
+      stderrDigest: sha256(result.stderr),
     };
     commands.push(commandReceipt);
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0)
       return {
         ok: false,
         receipt: failureReceipt(
@@ -438,17 +426,16 @@ export async function executeProposalBoundValidation(input: {
             name: planned.name,
             exitCode: result.exitCode,
             ...(/(?:script not found|missing script)/iu.test(
-              `${result.stderr}\n${result.stdout}`
+              `${result.stderr}\n${result.stdout}`,
             )
               ? {
                   hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
                 }
               : {}),
           },
-          compilerDiagnostics(`${result.stderr}\n${result.stdout}`)
+          compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
         ),
       };
-    }
   }
   const unsigned = {
     version: 3 as const,

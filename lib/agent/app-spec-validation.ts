@@ -18,11 +18,11 @@ export const REQUIRED_APP_SPEC_HEADINGS = [
 ] as const;
 
 export const BUILD_READY_HANDOFF_EXAMPLE = {
-  additionalPublicRoutes: [],
-  optionalCapabilities: { hostedResources: [], integrations: [] },
+  status: "build-ready",
   owner: "product-operations",
   schema: { kind: "none" },
-  status: "build-ready",
+  additionalPublicRoutes: [],
+  optionalCapabilities: { integrations: [], hostedResources: [] },
 } as const;
 
 const capabilityIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
@@ -35,16 +35,18 @@ const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
-    ) {
+    )
       context.addIssue({
         code: "custom",
         message: "Values must be sorted and contain no duplicates.",
       });
-    }
   });
 
 export const buildReadyHandoffSchema = z
   .object({
+    status: z.literal("build-ready"),
+    owner: z.string().trim().min(1),
+    schema: z.object({ kind: z.enum(["none", "kernel"]) }).strict(),
     additionalPublicRoutes: sortedUnique(publicRoute),
     optionalCapabilities: z
       .object({
@@ -52,13 +54,10 @@ export const buildReadyHandoffSchema = z
         hostedResources: sortedUnique(capabilityId),
       })
       .strict(),
-    owner: z.string().trim().min(1),
-    schema: z.object({ kind: z.enum(["none", "kernel"]) }).strict(),
-    status: z.literal("build-ready"),
   })
   .strict();
 
-export interface AppSpecValidationIssue {
+export type AppSpecValidationIssue = {
   code:
     | "missing_heading"
     | "duplicate_heading"
@@ -67,11 +66,10 @@ export interface AppSpecValidationIssue {
     | "build_handoff_shape";
   message: string;
   path?: string;
-}
+};
 
 export type AppSpecValidationResult =
-  | { valid: true }
-  | { valid: false; issues: AppSpecValidationIssue[] };
+  { valid: true } | { valid: false; issues: AppSpecValidationIssue[] };
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -80,14 +78,13 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function normalizedStrings(value: unknown, pattern: RegExp): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+  if (!Array.isArray(value)) return [];
   return [
     ...new Set(
       value.filter(
-        (item): item is string => typeof item === "string" && pattern.test(item)
-      )
+        (item): item is string =>
+          typeof item === "string" && pattern.test(item),
+      ),
     ),
   ].sort();
 }
@@ -98,16 +95,12 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
  * mechanical enum that the builder can resolve deterministically.
  */
 export function normalizeBuildReadyAppSpec(content: string): string {
-  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
+  const normalizedContent = content.replace(/\r\n?/gu, "\n");
   const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
-  if (heading === null) {
-    return normalizedContent;
-  }
+  if (heading === null) return normalizedContent;
   const section = normalizedContent.slice(heading.index + heading[0].length);
   const block = /```json[ \t]*\n([\s\S]*?)\n[ \t]*```/iu.exec(section);
-  if (block?.[1] === undefined) {
-    return normalizedContent;
-  }
+  if (block?.[1] === undefined) return normalizedContent;
 
   let parsed: unknown;
   try {
@@ -123,56 +116,55 @@ export function normalizeBuildReadyAppSpec(content: string): string {
       ? input.owner.trim()
       : BUILD_READY_HANDOFF_EXAMPLE.owner;
   const canonical = {
-    additionalPublicRoutes: normalizedStrings(
-      input.additionalPublicRoutes,
-      publicRoutePattern
-    ),
-    optionalCapabilities: {
-      hostedResources: normalizedStrings(
-        capabilities.hostedResources,
-        capabilityIdPattern
-      ),
-      integrations: normalizedStrings(
-        capabilities.integrations,
-        capabilityIdPattern
-      ),
-    },
+    status: "build-ready" as const,
     owner,
     schema: {
       kind: schema.kind === "none" ? ("none" as const) : ("kernel" as const),
     },
-    status: "build-ready" as const,
+    additionalPublicRoutes: normalizedStrings(
+      input.additionalPublicRoutes,
+      publicRoutePattern,
+    ),
+    optionalCapabilities: {
+      integrations: normalizedStrings(
+        capabilities.integrations,
+        capabilityIdPattern,
+      ),
+      hostedResources: normalizedStrings(
+        capabilities.hostedResources,
+        capabilityIdPattern,
+      ),
+    },
   };
   const prefix = normalizedContent.slice(0, heading.index).trimEnd();
   return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
 }
 
 export function validateBuildReadyAppSpec(
-  content: string
+  content: string,
 ): AppSpecValidationResult {
-  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
+  const normalizedContent = content.replace(/\r\n?/gu, "\n");
   const issues: AppSpecValidationIssue[] = [];
   for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
     const count =
       normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ??
       0;
-    if (count === 0) {
+    if (count === 0)
       issues.push({
         code: "missing_heading",
         path: heading,
         message: `Add exactly one "## ${heading}" section.`,
       });
-    } else if (count > 1) {
+    else if (count > 1)
       issues.push({
         code: "duplicate_heading",
         path: heading,
         message: `Keep exactly one "## ${heading}" section.`,
       });
-    }
   }
 
   const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(
-    normalizedContent
+    normalizedContent,
   );
   const handoffSection =
     handoffHeading === null
@@ -184,16 +176,16 @@ export function validateBuildReadyAppSpec(
     handoffSection === undefined
       ? null
       : /^[ \t]*```json[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(
-          handoffSection
+          handoffSection,
         );
   if (block?.[1] === undefined) {
     issues.push({
       code: "build_handoff_format",
+      path: "Build handoff",
       message:
         "End the document with the exact Build handoff heading, one blank line, and one json fenced block.",
-      path: "Build handoff",
     });
-    return { issues, valid: false };
+    return { valid: false, issues };
   }
 
   let parsed: unknown;
@@ -202,35 +194,34 @@ export function validateBuildReadyAppSpec(
   } catch {
     issues.push({
       code: "build_handoff_json",
-      message: "Make the Build handoff fenced block valid JSON.",
       path: "Build handoff",
+      message: "Make the Build handoff fenced block valid JSON.",
     });
-    return { issues, valid: false };
+    return { valid: false, issues };
   }
   const handoff = buildReadyHandoffSchema.safeParse(parsed);
-  if (!handoff.success) {
+  if (!handoff.success)
     for (const issue of handoff.error.issues)
       issues.push({
         code: "build_handoff_shape",
         path: ["Build handoff", ...issue.path].join("."),
         message: issue.message,
       });
-  }
 
-  return issues.length === 0 ? { valid: true } : { issues, valid: false };
+  return issues.length === 0 ? { valid: true } : { valid: false, issues };
 }
 
 export function appSpecRepairDiagnostic(
-  result: Extract<AppSpecValidationResult, { valid: false }>
+  result: Extract<AppSpecValidationResult, { valid: false }>,
 ): string {
   return JSON.stringify({
-    buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
     code: "app_spec_invalid",
     instruction:
       "Repair and replace the complete Markdown artifact, then retry accept_app_spec without asking the user.",
     issues: result.issues,
     requiredHeadings: REQUIRED_APP_SPEC_HEADINGS.map(
-      (heading) => `## ${heading}`
+      (heading) => `## ${heading}`,
     ),
+    buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
   });
 }

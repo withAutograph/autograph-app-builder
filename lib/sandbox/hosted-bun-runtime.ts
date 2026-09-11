@@ -17,22 +17,17 @@ export function createHostedBunRuntimeInstaller() {
 
   return (sandbox: Pick<SandboxSession, "id" | "run">) => {
     const existing = installs.get(sandbox.id);
-    if (existing !== undefined) {
-      return existing;
-    }
+    if (existing !== undefined) return existing;
 
     const install: Promise<void> = Promise.resolve(
-      sandbox.run(hostedBunRuntimeInstallRequest)
+      sandbox.run(hostedBunRuntimeInstallRequest),
     )
       .then((result) => {
-        if (result.exitCode !== 0) {
+        if (result.exitCode !== 0)
           throw new Error("The hosted Bun runtime could not be installed.");
-        }
       })
       .catch((error: unknown) => {
-        if (installs.get(sandbox.id) === install) {
-          installs.delete(sandbox.id);
-        }
+        if (installs.get(sandbox.id) === install) installs.delete(sandbox.id);
         throw error;
       });
     installs.set(sandbox.id, install);

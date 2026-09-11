@@ -5,19 +5,19 @@ import { describe, expect, it } from "vitest";
 
 const commands = [
   {
-    boundary: "Development mode cannot publish, deploy, or mutate providers.",
     task: ".config/mise/tasks/dev",
     usage: "mise run dev -- --arrusted-root",
+    boundary: "Development mode cannot publish, deploy, or mutate providers.",
   },
   {
-    boundary: "does not deploy or publish",
     task: ".config/mise/tasks/release/prove",
     usage: "mise run release:prove --",
+    boundary: "does not deploy or publish",
   },
   {
-    boundary: "Run it only after explicit publication authorization.",
     task: ".config/mise/tasks/release/publish",
     usage: "mise run release:publish --",
+    boundary: "Run it only after explicit publication authorization.",
   },
 ] as const;
 
@@ -25,7 +25,7 @@ describe("public command help", () => {
   for (const command of commands) {
     it(`documents ${command.task}`, () => {
       const result = spawnSync(resolve(command.task), ["--help"], {
-        encoding: "utf-8",
+        encoding: "utf8",
         env: { LANG: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       });
 

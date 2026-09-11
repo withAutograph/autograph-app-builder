@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page establishes a strong sequence from title and review count to filters, severity-grouped products, selected-item details, and the replenishment action. Selection highlighting and right-aligned cover values make urgent records easy to scan. |
-| layout | 3/4 | The two-column master-detail composition is consistently aligned and balanced at 900, 1024, 1440, and 1920px widths. However, the relatively tall product cards make a six-item list extend beyond a 768px-high desktop viewport, adding scrolling for a small result set. |
-| typography | 4/4 | Heading levels, labels, product names, secondary metadata, and bold numeric values are readable and visually consistent. Supplier guidance and simulation feedback are clearly separated from ordinary field values. |
-| responsive | 3/4 | The side-by-side workflow remains usable without visible clipping at the supplied 900px and 1024px windows, and the filters and detail actions resize appropriately. At 1024×768 the document grows to 850px, and no captures below 900px or independently resized panels were supplied. |
-| productClarity | 3/4 | Location and severity filters, urgency grouping, item selection, stock and supplier tabs, suggested quantities, and the explicitly mock action are understandable. The successful state clearly says no order was sent, but the replenishment CTA does not state its delivery assumption when supplier lead time exceeds available cover. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page establishes a strong sequence from title and review count to filters, severity-grouped products, selected-item details, and the replenishment action. Selection highlighting and right-aligned cover values make urgent records easy to scan.                                                                                    |
+| layout         | 3/4   | The two-column master-detail composition is consistently aligned and balanced at 900, 1024, 1440, and 1920px widths. However, the relatively tall product cards make a six-item list extend beyond a 768px-high desktop viewport, adding scrolling for a small result set.                                                                |
+| typography     | 4/4   | Heading levels, labels, product names, secondary metadata, and bold numeric values are readable and visually consistent. Supplier guidance and simulation feedback are clearly separated from ordinary field values.                                                                                                                      |
+| responsive     | 3/4   | The side-by-side workflow remains usable without visible clipping at the supplied 900px and 1024px windows, and the filters and detail actions resize appropriately. At 1024×768 the document grows to 850px, and no captures below 900px or independently resized panels were supplied.                                                  |
+| productClarity | 3/4   | Location and severity filters, urgency grouping, item selection, stock and supplier tabs, suggested quantities, and the explicitly mock action are understandable. The successful state clearly says no order was sent, but the replenishment CTA does not state its delivery assumption when supplier lead time exceeds available cover. |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/221) |
-| desktop-0 | typography | 0/0 | 0% (0/557) |
-| desktop-0 | spacing | 0/0 | 0% (0/298) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/142) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/221) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/298) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/142) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/221) |
-| desktop-window-0 | typography | 0/0 | 0% (0/557) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/298) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/142) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-900x900-0 | color | 0/0 | 0% (0/221) |
-| desktop-custom-900x900-0 | typography | 0/0 | 0% (0/557) |
-| desktop-custom-900x900-0 | spacing | 0/0 | 0% (0/298) |
-| desktop-custom-900x900-0 | radius | 0/0 | 0% (0/114) |
-| desktop-custom-900x900-0 | border | 0/0 | 0% (0/142) |
-| desktop-custom-900x900-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/221) |
+| desktop-0                | typography | 0/0                         | 0% (0/557) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/298) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/142) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/221) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/298) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/142) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/221) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/298) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/142) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-900x900-0 | color      | 0/0                         | 0% (0/221) |
+| desktop-custom-900x900-0 | typography | 0/0                         | 0% (0/557) |
+| desktop-custom-900x900-0 | spacing    | 0/0                         | 0% (0/298) |
+| desktop-custom-900x900-0 | radius     | 0/0                         | 0% (0/114) |
+| desktop-custom-900x900-0 | border     | 0/0                         | 0% (0/142) |
+| desktop-custom-900x900-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

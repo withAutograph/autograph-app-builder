@@ -8,13 +8,13 @@ import { createGitHubAppPublicationAdapter } from "../repository/github-app-adap
 import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
+  type GitHubAppHttpProviderConfig,
 } from "../repository/github-app-http-provider";
-import type { GitHubAppHttpProviderConfig } from "../repository/github-app-http-provider";
 import type { GitHubPublicationAdapter } from "../repository/github-publication";
-import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
-import type {
-  HostedGitHubPublicationRuntimeResolver,
-  HostedGitHubPublicationRuntimeResolverDependencies,
+import {
+  createHostedGitHubPublicationRuntimeResolver,
+  type HostedGitHubPublicationRuntimeResolver,
+  type HostedGitHubPublicationRuntimeResolverDependencies,
 } from "./hosted-github-publication-runtime";
 
 const enabledSchema = z.enum(["0", "1"]);
@@ -32,7 +32,7 @@ export type DeploymentGitHubPublicationConfig =
     };
 
 function rejectAmbientGitHubAuthority(
-  environment: Readonly<Record<string, string | undefined>>
+  environment: Readonly<Record<string, string | undefined>>,
 ): void {
   if (
     environment.GITHUB_APP_INSTALLATION_ID !== undefined ||
@@ -40,33 +40,29 @@ function rejectAmbientGitHubAuthority(
     environment.GITHUB_API_URL !== undefined
   ) {
     throw new Error(
-      "Hosted GitHub publication contains forbidden ambient authority."
+      "Hosted GitHub publication contains forbidden ambient authority.",
     );
   }
 }
 
 export function readDeploymentGitHubPublicationConfig(
-  environment: Readonly<Record<string, string | undefined>>
+  environment: Readonly<Record<string, string | undefined>>,
 ): DeploymentGitHubPublicationConfig {
   rejectAmbientGitHubAuthority(environment);
   const rawEnabled = environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED;
-  if (rawEnabled === undefined) {
-    return { enabled: false };
-  }
+  if (rawEnabled === undefined) return { enabled: false };
   const enabled = enabledSchema.safeParse(rawEnabled);
   if (!enabled.success) {
     throw new Error(
-      "APP_BUILDER_GITHUB_PUBLICATION_ENABLED must be exactly 0 or 1."
+      "APP_BUILDER_GITHUB_PUBLICATION_ENABLED must be exactly 0 or 1.",
     );
   }
-  if (enabled.data === "0") {
-    return { enabled: false };
-  }
+  if (enabled.data === "0") return { enabled: false };
   readHostedDeploymentEnvironment(environment);
   const forwarderSubject = readHostedForwarderSubject(environment);
   if (forwarderSubject === undefined) {
     throw new Error(
-      "Hosted GitHub publication requires the exact hosted forwarder binding."
+      "Hosted GitHub publication requires the exact hosted forwarder binding.",
     );
   }
   const providerCredentials = parseGitHubAppHttpProviderCredentials({
@@ -74,8 +70,8 @@ export function readDeploymentGitHubPublicationConfig(
     privateKey: environment.GITHUB_APP_PRIVATE_KEY,
   });
   return {
-    databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
     enabled: true,
+    databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
     forwarderSubject,
     providerCredentials,
   };
@@ -87,7 +83,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   environment: Readonly<Record<string, string | undefined>>;
   openDatabase?: (databaseUrl: string) => Database | Promise<Database>;
   createAdapter?: (
-    config: GitHubAppHttpProviderConfig
+    config: GitHubAppHttpProviderConfig,
   ) => GitHubPublicationAdapter;
   fetchImplementation?: typeof fetch;
   now?: () => number;
@@ -106,10 +102,9 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
           config: providerConfig,
           fetch: input.fetchImplementation,
           now: input.now,
-        })
+        }),
       ));
   return createHostedGitHubPublicationRuntimeResolver({
-    dependencies: input.resolverDependencies,
     enabled: true,
     openDatabase: () => openDatabase(config.databaseUrl),
     providerFactory: ({ installation }) =>
@@ -117,6 +112,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
         ...config.providerCredentials,
         installationId: installation.installationId,
       }),
+    dependencies: input.resolverDependencies,
   });
 }
 

@@ -4,10 +4,8 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   sha256,
-} from "@/lib/agent/workflow-state";
-import type {
-  AppBuilderWorkflowState,
-  DependencyPreparationReceipt,
+  type AppBuilderWorkflowState,
+  type DependencyPreparationReceipt,
 } from "@/lib/agent/workflow-state";
 
 type DependencyPreparationState = Exclude<
@@ -20,12 +18,12 @@ export type DependencyReadyState = Exclude<
   { phase: "app_spec_accepted" }
 >;
 
-export interface TargetDependencyPreparationResult {
+export type TargetDependencyPreparationResult = {
   state: DependencyReadyState;
   sandbox: SandboxSession;
   receipt: DependencyPreparationReceipt;
   reused: boolean;
-}
+};
 
 /**
  * Records checkout-backed planning state. Repository commands own dependency
@@ -41,34 +39,34 @@ export async function prepareOrReuseDependencies(input: {
 
   if (current.phase !== "app_spec_accepted") {
     return {
+      state: current,
+      sandbox,
       receipt: current.dependencyReceipt,
       reused: true,
-      sandbox,
-      state: current,
     };
   }
   const unsigned = {
-    appSpecDigest: current.appSpec.digest,
-    artifactRevision: current.appSpec.artifactRevision,
-    cacheContentDigest: "checkout",
-    cacheManifestDigest: "checkout",
-    dependencyCacheDigest: "checkout",
-    dependencyLayout: {
-      kind: "checkout" as const,
-      roots: [] as [],
-      version: 1 as const,
-      workspaceLinks: [] as [],
-    },
-    eligibilityDigest: current.workspace.eligibilityDigest,
-    imageDigest: "vercel-sandbox",
-    preparedByCallId: input.callId,
-    sourceReceiptDigest: current.sourceReceipt.digest,
+    version: 2 as const,
     sourceSha: current.workspace.sourceSha,
     sourceTree: current.workspace.sourceTree,
+    sourceReceiptDigest: current.sourceReceipt.digest,
+    eligibilityDigest: current.workspace.eligibilityDigest,
+    workspaceDigest: current.workspace.workspaceDigest,
+    imageDigest: "vercel-sandbox",
+    dependencyCacheDigest: "checkout",
+    appSpecDigest: current.appSpec.digest,
+    artifactRevision: current.appSpec.artifactRevision,
     targetSha: current.workspace.sourceSha,
     targetTree: current.workspace.sourceTree,
-    version: 2 as const,
-    workspaceDigest: current.workspace.workspaceDigest,
+    cacheManifestDigest: "checkout",
+    cacheContentDigest: "checkout",
+    dependencyLayout: {
+      version: 1 as const,
+      kind: "checkout" as const,
+      roots: [] as [],
+      workspaceLinks: [] as [],
+    },
+    preparedByCallId: input.callId,
   };
   const dependencyReceipt = {
     ...unsigned,
@@ -89,9 +87,9 @@ export async function prepareOrReuseDependencies(input: {
   };
   appBuilderWorkflowState.update(() => preparedState);
   return {
+    state: preparedState,
+    sandbox,
     receipt: dependencyReceipt,
     reused: false,
-    sandbox,
-    state: preparedState,
   };
 }

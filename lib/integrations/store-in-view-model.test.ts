@@ -12,7 +12,7 @@ describe("GitHub Store In view model", () => {
       githubStoreInViewModel({
         action: "connect",
         desiredRepository: "withAutograph/app-builder-dogfood",
-      })
+      }),
     ).toMatchObject({
       actionLabel: "Connect GitHub",
       description:
@@ -26,12 +26,12 @@ describe("GitHub Store In view model", () => {
         desiredRepository: "withAutograph/app-builder-dogfood",
         scopes: [
           {
-            detail: "Organization",
             id: "123",
             label: "withAutograph",
+            detail: "Organization",
           },
         ],
-      })
+      }),
     ).toMatchObject({
       actionLabel: "Update GitHub access",
       description:
@@ -42,12 +42,12 @@ describe("GitHub Store In view model", () => {
 
   it("keeps repository and scope metadata closed and internally consistent", () => {
     const access = {
-      action: "update" as const,
       provider: "github" as const,
+      action: "update" as const,
       repository: {
-        fullName: "withAutograph/app-builder-dogfood",
-        name: "app-builder-dogfood",
         owner: "withAutograph",
+        name: "app-builder-dogfood",
+        fullName: "withAutograph/app-builder-dogfood",
       },
       scopes: [
         {
@@ -61,19 +61,19 @@ describe("GitHub Store In view model", () => {
     expect(githubRepositoryAccessViewModel(access)).toMatchObject({
       action: "update",
       desiredRepository: "withAutograph/app-builder-dogfood",
-      scopes: [{ detail: "Organization", id: "123", label: "withAutograph" }],
+      scopes: [{ id: "123", label: "withAutograph", detail: "Organization" }],
     });
     expect(
       githubRepositoryAccessSchema.safeParse({
         ...access,
         repository: { ...access.repository, fullName: "other/repository" },
-      }).success
+      }).success,
     ).toBe(false);
     expect(
       githubRepositoryAccessSchema.safeParse({
         ...access,
         providerToken: "must-not-be-public",
-      }).success
+      }).success,
     ).toBe(false);
   });
 });

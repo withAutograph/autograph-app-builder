@@ -47,7 +47,7 @@ export function EmulationApproval({
   description: string;
   account: string;
   handle: string;
-  details: readonly { label: string; value: string }[];
+  details: ReadonlyArray<{ label: string; value: string }>;
   scope: string;
   actionLabel: string;
   action: ReactNode;

@@ -1,6 +1,5 @@
 #!/bin/sh
-#MISE description="Check repository formatting with Ultracite"
+#MISE description="Reject whitespace errors without rewriting legacy source formatting"
 set -eu
 
-exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which pnpm)" exec oxfmt --check .
+exec git diff --check

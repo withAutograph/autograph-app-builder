@@ -14,8 +14,8 @@ import { join } from "node:path";
 import {
   createDevelopmentSnapshot,
   removeDevelopmentSnapshot,
+  type DevelopmentSnapshot,
 } from "./local-mode";
-import type { DevelopmentSnapshot } from "./local-mode";
 
 /**
  * A development snapshot records an immutable baseline commit/tree/fingerprint
@@ -26,21 +26,17 @@ import type { DevelopmentSnapshot } from "./local-mode";
  */
 async function makeDevelopmentWorkAreaWritable(
   path: string,
-  preserveRuntime = false
+  preserveRuntime = false,
 ): Promise<void> {
   const info = await lstat(path);
-  if (info.isSymbolicLink()) {
-    return;
-  }
-  if (info.uid !== process.getuid?.()) {
+  if (info.isSymbolicLink()) return;
+  if (info.uid !== process.getuid?.())
     throw new Error("A local Eve application entry was not owner-bound.");
-  }
   if (info.isDirectory()) {
     await chmod(path, 0o700);
     for (const entry of await readdir(path)) {
-      if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) {
+      if (preserveRuntime && (entry === ".eve" || entry === "node_modules"))
         continue;
-      }
       await makeDevelopmentWorkAreaWritable(join(path, entry), preserveRuntime);
     }
     return;
@@ -61,8 +57,8 @@ export async function createDevelopmentApplication(input: {
   await mkdir(materializationRoot, { mode: 0o700 });
   try {
     const application = await createDevelopmentSnapshot({
-      runRoot: await realpath(materializationRoot),
       sourceRoot: input.repositoryRoot,
+      runRoot: await realpath(materializationRoot),
     });
     await makeDevelopmentWorkAreaWritable(application.root);
     const modules = await realpath(join(input.repositoryRoot, "node_modules"));
@@ -72,17 +68,14 @@ export async function createDevelopmentApplication(input: {
       modulesInfo.isSymbolicLink() ||
       modulesInfo.uid !== process.getuid?.() ||
       (modulesInfo.mode & 0o022) !== 0
-    ) {
+    )
       throw new Error("App Builder node_modules was not owner-bound.");
-    }
     await symlink(modules, join(application.root, "node_modules"));
     try {
       await lstat(join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     return application;
   } catch (error) {
@@ -117,8 +110,8 @@ export async function createDevelopmentCycle(input: {
     await mkdir(runtimeHome, { mode: 0o700 });
     await mkdir(workflowData, { mode: 0o700 });
     return {
-      application,
       root,
+      application,
       runtimeHome: await realpath(runtimeHome),
       workflowData: await realpath(workflowData),
     };
@@ -146,16 +139,14 @@ export async function refreshDevelopmentApplication(input: {
   const stageRoot = await mkdtemp(join(runRoot, "eve-application-stage-"));
   try {
     const snapshot = await createDevelopmentSnapshot({
-      runRoot: await realpath(stageRoot),
       sourceRoot: input.repositoryRoot,
+      runRoot: await realpath(stageRoot),
     });
     try {
       await lstat(join(snapshot.root, ".eve"));
       throw new Error("A live development checkout cannot supply Eve state.");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     // The stage's baseline identity is immutable, but its filesystem is a
     // mutable local work area. Normalize the whole incoming tree before
@@ -164,14 +155,11 @@ export async function refreshDevelopmentApplication(input: {
     await makeDevelopmentWorkAreaWritable(snapshot.root);
     await makeDevelopmentWorkAreaWritable(applicationRoot, true);
     for (const entry of await readdir(applicationRoot)) {
-      if (entry === ".eve" || entry === "node_modules") {
-        continue;
-      }
-      await rm(join(applicationRoot, entry), { force: true, recursive: true });
+      if (entry === ".eve" || entry === "node_modules") continue;
+      await rm(join(applicationRoot, entry), { recursive: true, force: true });
     }
-    for (const entry of await readdir(snapshot.root)) {
+    for (const entry of await readdir(snapshot.root))
       await rename(join(snapshot.root, entry), join(applicationRoot, entry));
-    }
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live
     // generation and overlays, not merely the staging parent used by rename.

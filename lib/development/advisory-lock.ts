@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { platform as hostPlatform } from "node:os";
 
 import {
@@ -21,25 +20,22 @@ export function developmentLockInvocation(input: {
   command: string;
   args: readonly string[];
 }): DevelopmentLockInvocation {
-  if (input.platform === "darwin") {
+  if (input.platform === "darwin")
     return {
       command: "/usr/bin/lockf",
       args: ["-t", "0", input.lockPath, input.command, ...input.args],
       busyExitCode: 75,
     };
-  }
   return {
+    command: "/usr/bin/flock",
     args: ["-E", "73", "-n", input.lockPath, input.command, ...input.args],
     busyExitCode: 73,
-    command: "/usr/bin/flock",
   };
 }
 
 function supportedPlatform(): SupportedPlatform {
   const platform = hostPlatform();
-  if (platform === "darwin" || platform === "linux") {
-    return platform;
-  }
+  if (platform === "darwin" || platform === "linux") return platform;
   throw new Error("Development mode supports macOS and Linux hosts only.");
 }
 
@@ -51,10 +47,10 @@ export async function runWithDevelopmentLock(input: {
   spawnChild?: typeof spawn;
 }): Promise<number> {
   const invocation = developmentLockInvocation({
-    args: input.args,
-    command: input.command,
-    lockPath: input.lockPath,
     platform: supportedPlatform(),
+    lockPath: input.lockPath,
+    command: input.command,
+    args: input.args,
   });
   const child: ChildProcess = (input.spawnChild ?? spawn)(
     invocation.command,
@@ -62,25 +58,23 @@ export async function runWithDevelopmentLock(input: {
     {
       env: input.environment ?? process.env,
       stdio: "inherit",
-    }
+    },
   );
   const signals = ["SIGINT", "SIGTERM"] as const;
   const handlers = signals.map((signal) => {
     const handler = () => void stopDevelopmentChild(child);
     process.once(signal, handler);
-    return { handler, signal };
+    return { signal, handler };
   });
   try {
     const code = await developmentChildExit(child);
-    if (code === invocation.busyExitCode) {
+    if (code === invocation.busyExitCode)
       throw new Error(
-        "Another `mise run dev` proof already owns this App Builder state root."
+        "Another `mise run dev` proof already owns this App Builder state root.",
       );
-    }
     return code;
   } finally {
-    for (const { signal, handler } of handlers) {
+    for (const { signal, handler } of handlers)
       process.removeListener(signal, handler);
-    }
   }
 }

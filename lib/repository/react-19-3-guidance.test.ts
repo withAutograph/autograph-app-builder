@@ -1,18 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const guidancePath = resolve(
   repositoryRoot,
-  "agent/skills/create-app/references/react-19-3.md"
+  "agent/skills/create-app/references/react-19-3.md",
 );
 const homePagePath = resolve(repositoryRoot, "app/page.tsx");
 const handoffPagePath = resolve(repositoryRoot, "app/handoff/[id]/page.tsx");
 
 describe("React 19.3 generated-app guidance", () => {
-  const guidance = readFileSync(guidancePath, "utf-8");
+  const guidance = readFileSync(guidancePath, "utf8");
 
   it("keeps View Transitions opt-in and accessible", () => {
     expect(guidance).toContain("Do not apply them globally");
@@ -24,14 +23,14 @@ describe("React 19.3 generated-app guidance", () => {
 
   it("keeps Builder route transitions server-rendered and loading fallbacks immediate", () => {
     for (const pagePath of [homePagePath, handoffPagePath]) {
-      const page = readFileSync(pagePath, "utf-8");
+      const page = readFileSync(pagePath, "utf8");
 
       expect(page).not.toContain('"use client"');
       expect(page).toContain(
-        'import { Suspense, ViewTransition } from "react"'
+        'import { Suspense, ViewTransition } from "react"',
       );
       expect(page).toMatch(
-        /<Suspense[\s\S]*?<ViewTransition>[\s\S]*?<\/ViewTransition>[\s\S]*?<\/Suspense>/
+        /<Suspense[\s\S]*?<ViewTransition>[\s\S]*?<\/ViewTransition>[\s\S]*?<\/Suspense>/,
       );
     }
   });
@@ -41,7 +40,7 @@ describe("React 19.3 generated-app guidance", () => {
     expect(guidance).toContain("Fragment ref");
     expect(guidance).toContain("client-exported Context");
     expect(guidance).toContain(
-      "Do not enable `require-trusted-types-for 'script'` by default"
+      "Do not enable `require-trusted-types-for 'script'` by default",
     );
     expect(guidance).toContain("not introduce `dangerouslySetInnerHTML`");
   });

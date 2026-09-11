@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-
 import { storyGitScopeOptions } from "@/.storybook/create-app/app-builder-fixtures";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-
 import { StoreInSection } from "./app-builder";
 
 const meta = {
+  title: "Components/Create App/Sections/Store In",
+  component: StoreInSection,
   args: {
     available: true,
     connected: true,
@@ -21,7 +21,6 @@ const meta = {
     repository: "vendor-portal",
     selected: "github",
   },
-  component: StoreInSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -29,12 +28,11 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
-  title: "Components/Create App/Sections/Store In",
 } satisfies Meta<typeof StoreInSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
-export const OptionalNone: Story = { args: { gitScope: "", selected: null } };
+export const OptionalNone: Story = { args: { selected: null, gitScope: "" } };
 export const ConnectRequired: Story = {
   args: { connected: false, gitScope: "" },
 };
@@ -46,7 +44,7 @@ export const SelectScope: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Git Scope"));
     await userEvent.click(
-      canvas.getByRole("option", { name: /jasonmorganson/ })
+      canvas.getByRole("option", { name: /jasonmorganson/ }),
     );
     await expect(args.onGitScopeChange).toHaveBeenCalledWith("202");
   },

@@ -1,1 +1,1 @@
-setInterval(() => {}, 1000);
+setInterval(() => {}, 1_000);

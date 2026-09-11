@@ -36,6 +36,6 @@ export function logProviderConnectionFailure(input: {
         : { diagnostic: input.diagnostic }),
       requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
       durationMs: Math.max(0, Date.now() - input.startedAt),
-    })
+    }),
   );
 }

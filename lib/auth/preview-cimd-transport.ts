@@ -1,52 +1,47 @@
+import { isPublicRoutableHost } from "@better-auth/core/utils/host";
+import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import { lookup as resolveHostname } from "node:dns/promises";
 import type { ClientRequest, IncomingMessage } from "node:http";
-import { request as requestHttps } from "node:https";
-import type { RequestOptions } from "node:https";
-import { isIP } from "node:net";
-import type { LookupFunction } from "node:net";
+import { request as requestHttps, type RequestOptions } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
-import { isPublicRoutableHost } from "@better-auth/core/utils/host";
-import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
-
 const BODY_FORBIDDEN_RESPONSE_STATUSES = new Set([204, 205, 304]);
-const REQUEST_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 type ResolveHostname = (
   hostname: string,
-  options: { all: true; verbatim: true }
+  options: { all: true; verbatim: true },
 ) => Promise<LookupAddress[]>;
 
 type RequestHttps = (
   url: URL,
   options: RequestOptions,
-  responseListener: (response: IncomingMessage) => void
+  responseListener: (response: IncomingMessage) => void,
 ) => ClientRequest;
 
-export interface PreviewCimdTransportDependencies {
+export type PreviewCimdTransportDependencies = {
   resolveHostname: ResolveHostname;
   requestHttps: RequestHttps;
   timeoutSignal?: (milliseconds: number) => AbortSignal;
-}
+};
 
 function lookupError(hostname: string): NodeJS.ErrnoException {
   return Object.assign(
     new Error(
-      `No pinned address satisfies the requested family for ${hostname}.`
+      `No pinned address satisfies the requested family for ${hostname}.`,
     ),
-    { code: "ENOTFOUND" }
+    { code: "ENOTFOUND" },
   );
 }
 
 function addressesForOptions(
   addresses: readonly LookupAddress[],
-  options: LookupOptions
+  options: LookupOptions,
 ): readonly LookupAddress[] {
   const requestedFamily = options.family;
-  if (requestedFamily !== 4 && requestedFamily !== 6) {
-    return addresses;
-  }
+  if (requestedFamily !== 4 && requestedFamily !== 6) return addresses;
   return addresses.filter(({ family }) => family === requestedFamily);
 }
 
@@ -57,7 +52,7 @@ function addressesForOptions(
  * that case the callback must receive the pinned address array, not a scalar.
  */
 export function createPinnedPreviewLookup(
-  addresses: readonly LookupAddress[]
+  addresses: readonly LookupAddress[],
 ): LookupFunction {
   const pinnedAddresses = addresses.map(({ address, family }) => ({
     address,
@@ -82,9 +77,7 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
   const result = new Headers();
   for (const [name, value] of Object.entries(headers)) {
     if (Array.isArray(value)) {
-      for (const item of value) {
-        result.append(name, item);
-      }
+      for (const item of value) result.append(name, item);
     } else if (value !== undefined) {
       result.append(name, value);
     }
@@ -93,9 +86,7 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
 }
 
 function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
-  if (signal.aborted) {
-    return Promise.reject<T>(signal.reason);
-  }
+  if (signal.aborted) return Promise.reject<T>(signal.reason);
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
@@ -111,16 +102,16 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
       (error: unknown) => {
         signal.removeEventListener("abort", onAbort);
         reject(error);
-      }
+      },
     );
   });
 }
 
 export function createPreviewCimdTransport(
   dependencies: PreviewCimdTransportDependencies = {
-    requestHttps,
     resolveHostname,
-  }
+    requestHttps,
+  },
 ): ClientMetadataResourceFetch {
   return async (input, init) => {
     const webRequest = new Request(input, init);
@@ -135,7 +126,7 @@ export function createPreviewCimdTransport(
     const callerSignal =
       init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(
-      REQUEST_TIMEOUT_MS
+      REQUEST_TIMEOUT_MS,
     );
     const signal = callerSignal
       ? AbortSignal.any([callerSignal, timeoutSignal])
@@ -145,14 +136,14 @@ export function createPreviewCimdTransport(
         all: true,
         verbatim: true,
       }),
-      signal
+      signal,
     );
     if (addresses.length === 0) {
       throw new TypeError("Metadata hostname returned no DNS addresses.");
     }
     if (addresses.some(({ address }) => !isPublicRoutableHost(address))) {
       throw new TypeError(
-        "Metadata hostname must resolve only to public-routable addresses."
+        "Metadata hostname must resolve only to public-routable addresses.",
       );
     }
 
@@ -168,7 +159,7 @@ export function createPreviewCimdTransport(
           lookup: createPinnedPreviewLookup(addresses),
           method: webRequest.method,
           servername:
-            isIP(url.hostname.replaceAll(/^\[|\]$/gu, "")) === 0
+            isIP(url.hostname.replace(/^\[|\]$/gu, "")) === 0
               ? url.hostname
               : undefined,
           signal,
@@ -185,9 +176,9 @@ export function createPreviewCimdTransport(
               headers: responseHeaders(response.headers),
               status,
               statusText: response.statusMessage,
-            })
+            }),
           );
-        }
+        },
       );
       request.once("error", reject);
       request.end();

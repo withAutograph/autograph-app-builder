@@ -1,20 +1,19 @@
 import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { safeSourcePath } from "@/lib/repository/source-path";
-
-import prepareWorkspace from "./prepare_workspace";
 import sourceStatus from "./source_status";
+import prepareWorkspace from "./prepare_workspace";
 
 const maximumFileBytes = 262_144;
 const maximumTotalBytes = 1_048_576;
 
 export default defineDynamic({
   events: {
-    "step.started": () =>
-      defineTool({
+    "step.started": () => {
+      return defineTool({
         description:
           "Read regular text files from one existing application. A fresh canonical-source flow prepares itself automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         inputSchema: z.strictObject({
@@ -47,7 +46,7 @@ export default defineDynamic({
           const requestedPaths = paths.flatMap((path) =>
             safeSourcePath(path)
               ? [path.startsWith(prefix) ? path : `${prefix}${path}`]
-              : []
+              : [],
           );
           const sandbox = await ctx.getSandbox();
           // The signed-in session supplies this sandbox. Read its current
@@ -70,8 +69,8 @@ export default defineDynamic({
                 "path" in candidate &&
                 typeof candidate.path === "string"
                   ? [candidate.path]
-                  : []
-            )
+                  : [],
+            ),
           );
           const availablePaths = [...allowed]
             .filter((path) => path.startsWith(prefix))
@@ -105,6 +104,7 @@ export default defineDynamic({
             ...(omittedPaths.length === 0 ? {} : { omittedPaths }),
           };
         },
-      }),
+      });
+    },
   },
 });

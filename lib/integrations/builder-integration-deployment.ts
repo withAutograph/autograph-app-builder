@@ -1,17 +1,19 @@
-import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
-import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import {
   createPostgresHostedGitHubInstallationStore,
   mergeHostedGitHubInstallationBindings,
 } from "../repository/postgres-github-installation-store";
-import { activeBuilderModelId } from "./active-model";
+import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { loadGatewayModels } from "./ai-gateway-models";
-import { builderIntegrationStateSchema } from "./builder-state";
-import type { BuilderIntegrationState } from "./builder-state";
-import { providerEmulationEnvironment } from "./local-provider-emulation";
+import {
+  builderIntegrationStateSchema,
+  type BuilderIntegrationState,
+} from "./builder-state";
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
+import { providerEmulationEnvironment } from "./local-provider-emulation";
+import { activeBuilderModelId } from "./active-model";
 
 type BuilderIntegrationRequest = {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -33,16 +35,14 @@ const databases = new Map<
 
 function databaseFor(databaseUrl: string) {
   const existing = databases.get(databaseUrl);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
   const database = openHostedPostgresDatabase(databaseUrl);
   databases.set(databaseUrl, database);
   return database;
 }
 
 export async function loadBuilderIntegrationState(
-  input: BuilderIntegrationRequest
+  input: BuilderIntegrationRequest,
 ): Promise<BuilderIntegrationState> {
   const environment = providerEmulationEnvironment(input.environment);
   const modelsPromise = loadGatewayModels({
@@ -51,15 +51,15 @@ export async function loadBuilderIntegrationState(
   });
   if (!input.authenticated) {
     return builderIntegrationStateSchema.parse({
-      github: { scopes: [], status: "disconnected" },
+      vercel: { status: "disconnected", scopes: [] },
+      github: { status: "disconnected", scopes: [] },
       models: await modelsPromise,
-      vercel: { scopes: [], status: "disconnected" },
     });
   }
 
   const unavailable = (reason: "configuration-unavailable") => ({
-    scopes: [],
     status: "unavailable" as const,
+    scopes: [],
     unavailableReason: reason,
   });
 
@@ -70,21 +70,21 @@ export async function loadBuilderIntegrationState(
     database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
+      vercel: unavailable("configuration-unavailable"),
       github: unavailable("configuration-unavailable"),
       models: await modelsPromise,
-      vercel: unavailable("configuration-unavailable"),
     });
   }
 
   const authority = {
-    audience: preview.resource,
     issuer: preview.issuer,
-    ownerUserId: input.userId,
+    audience: preview.resource,
     workspaceId: input.workspaceId,
+    ownerUserId: input.userId,
   };
 
   let github: BuilderIntegrationState["github"] = unavailable(
-    "configuration-unavailable"
+    "configuration-unavailable",
   );
   try {
     readGitHubAppInstallationEnvironment(environment);
@@ -94,38 +94,38 @@ export async function loadBuilderIntegrationState(
     const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
       .filter((binding) => binding.active)
       .map((binding) => ({
-        accountLogin: binding.accountLogin,
-        accountType: binding.accountType,
         installationId: binding.installationId,
         status: "connected" as const,
+        accountLogin: binding.accountLogin,
+        accountType: binding.accountType,
       }));
-    github = { scopes, status: scopes.length ? "connected" : "disconnected" };
+    github = { status: scopes.length ? "connected" : "disconnected", scopes };
   } catch {}
 
   let vercel: BuilderIntegrationState["vercel"] = unavailable(
-    "configuration-unavailable"
+    "configuration-unavailable",
   );
   try {
     const config = readVercelIntegrationEnvironment(environment);
     const bindings = await createPostgresVercelInstallationStore({
-      config,
       database,
+      config,
     }).list(authority);
     const scopes = bindings
       .filter((binding) => binding.active)
       .map((binding) => ({
-        displayName: binding.displayName,
         installationId: binding.installationId,
-        plan: binding.plan,
-        slug: binding.slug,
         status: "connected" as const,
+        displayName: binding.displayName,
+        slug: binding.slug,
+        plan: binding.plan,
       }));
-    vercel = { scopes, status: scopes.length ? "connected" : "disconnected" };
+    vercel = { status: scopes.length ? "connected" : "disconnected", scopes };
   } catch {}
 
   return builderIntegrationStateSchema.parse({
+    vercel,
     github,
     models: await modelsPromise,
-    vercel,
   });
 }

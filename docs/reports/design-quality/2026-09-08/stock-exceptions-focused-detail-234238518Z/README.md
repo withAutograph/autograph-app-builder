@@ -20,13 +20,13 @@ This is the saved component-backed preview, not a new generation or a built back
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 4/4 | The page establishes a clear sequence from title and filters to severity-grouped exceptions, selected record details, suggested order, and the primary simulation action. Selected rows, section counts, cover ranges, and the prominent order heading make urgent information highly scannable. |
-| layout | 3/4 | The master-detail composition is consistently aligned, with balanced card padding and compact data rows across 1440px and 1920px views. At the shorter 1024px window, the list extends below the viewport and introduces a small amount of page scrolling, while filtered results can leave substantial unused space. |
-| typography | 4/4 | Product names, section headings, values, explanatory copy, and control labels use a restrained and consistent hierarchy. Bold numeric values and delivery-risk statements are especially easy to scan, and no clipping or problematic wrapping is visible in the supplied states. |
-| responsive | 3/4 | The composition adapts effectively from a two-pane desktop view to separate list and detail views at 700px, with a clear Back to exceptions control and usable full-width filters. The 1024x768 captures have a 810px document height, so the final list item requires minor page scrolling rather than keeping both panes independently contained. |
-| productClarity | 4/4 | The workflow directly supports location and severity filtering, item selection, stock and supplier review, and replenishment simulation. Suggested quantities, pack assumptions, delivery gaps, preview-only language, and the post-action message explicitly communicate that no real order is sent. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 4/4   | The page establishes a clear sequence from title and filters to severity-grouped exceptions, selected record details, suggested order, and the primary simulation action. Selected rows, section counts, cover ranges, and the prominent order heading make urgent information highly scannable.                                                    |
+| layout         | 3/4   | The master-detail composition is consistently aligned, with balanced card padding and compact data rows across 1440px and 1920px views. At the shorter 1024px window, the list extends below the viewport and introduces a small amount of page scrolling, while filtered results can leave substantial unused space.                               |
+| typography     | 4/4   | Product names, section headings, values, explanatory copy, and control labels use a restrained and consistent hierarchy. Bold numeric values and delivery-risk statements are especially easy to scan, and no clipping or problematic wrapping is visible in the supplied states.                                                                   |
+| responsive     | 3/4   | The composition adapts effectively from a two-pane desktop view to separate list and detail views at 700px, with a clear Back to exceptions control and usable full-width filters. The 1024x768 captures have a 810px document height, so the final list item requires minor page scrolling rather than keeping both panes independently contained. |
+| productClarity | 4/4   | The workflow directly supports location and severity filtering, item selection, stock and supplier review, and replenishment simulation. Suggested quantities, pack assumptions, delivery gaps, preview-only language, and the post-action message explicitly communicate that no real order is sent.                                               |
 
 ## Strengths
 
@@ -46,32 +46,32 @@ This is the saved component-backed preview, not a new generation or a built back
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/222) |
-| desktop-0 | typography | 0/0 | 0% (0/557) |
-| desktop-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-0 | radius | 0/0 | 0% (0/114) |
-| desktop-0 | border | 0/0 | 0% (0/139) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/222) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/557) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/114) |
-| desktop-wide-0 | border | 0/0 | 0% (0/139) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/222) |
-| desktop-window-0 | typography | 0/0 | 0% (0/557) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/293) |
-| desktop-window-0 | radius | 0/0 | 0% (0/114) |
-| desktop-window-0 | border | 0/0 | 0% (0/139) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/222) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/564) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/295) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/114) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/140) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/120) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/222) |
+| desktop-0                | typography | 0/0                         | 0% (0/557) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/293) |
+| desktop-0                | radius     | 0/0                         | 0% (0/114) |
+| desktop-0                | border     | 0/0                         | 0% (0/139) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/222) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/557) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/293) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/114) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/139) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/222) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/557) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/293) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/114) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/139) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/222) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/564) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/295) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/114) |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/140) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/120) |
 
 ## Latest-run screenshots
 

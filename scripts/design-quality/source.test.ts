@@ -1,11 +1,10 @@
+import { describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
-
-import type { Reference } from "./reference";
 import { analyzeSource, parseTokens } from "./source";
+import type { Reference } from "./reference";
 
 const tokenCss = `
   @theme {
@@ -26,7 +25,7 @@ describe("parseTokens", () => {
 
   it("reads adjacent declarations and real core-theme aliases", () => {
     expect(
-      parseTokens(`/* first */ @theme { --one: #fff; --two: var(--one); }`)
+      parseTokens(`/* first */ @theme { --one: #fff; --two: var(--one); }`),
     ).toEqual({
       "--one": "#fff",
       "--two": "#fff",
@@ -48,8 +47,8 @@ describe("analyzeSource", () => {
         exports: {
           Button: {
             props: {
-              label: { primitiveKinds: ["string"], required: false },
               variant: { required: false, values: ["primary", "secondary"] },
+              label: { required: false, primitiveKinds: ["string"] },
             },
           },
         },
@@ -59,6 +58,8 @@ describe("analyzeSource", () => {
 
   it("uses selected public types, skips false branches, and labels unknown paths", () => {
     const report = analyzeSource({
+      tokenCss,
+      reference,
       files: [
         {
           path: "app/page.tsx",
@@ -68,35 +69,35 @@ describe("analyzeSource", () => {
       `,
         },
       ],
-      reference,
-      tokenCss,
     });
     expect(
-      report.observations.some((o) => o.classification === "local-control")
+      report.observations.some((o) => o.classification === "local-control"),
     ).toBe(false);
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          classification: "prop",
           dimension: "api",
           verdict: "nonconforming",
+          classification: "prop",
         }),
         expect.objectContaining({
-          classification: "spread-props",
           dimension: "api",
           verdict: "unassessed",
+          classification: "spread-props",
         }),
         expect.objectContaining({
-          classification: "dynamic-reachability",
           dimension: "component",
           verdict: "unassessed",
+          classification: "dynamic-reachability",
         }),
-      ])
+      ]),
     );
   });
 
   it("does not score dead branches or unresolved imports as local replacements", () => {
     const report = analyzeSource({
+      tokenCss,
+      reference,
       files: [
         {
           path: "app/page.tsx",
@@ -108,13 +109,11 @@ describe("analyzeSource", () => {
       `,
         },
       ],
-      reference,
-      tokenCss,
     });
     expect(
       report.observations.some((o) =>
-        o.summary.includes("outside the public variants")
-      )
+        o.summary.includes("outside the public variants"),
+      ),
     ).toBe(false);
     expect(report.observations).toEqual(
       expect.arrayContaining([
@@ -122,17 +121,19 @@ describe("analyzeSource", () => {
           classification: "unresolved-component",
           verdict: "unassessed",
         }),
-      ])
+      ]),
     );
     expect(
       report.observations.some((o) =>
-        o.summary.includes("Local custom visual control")
-      )
+        o.summary.includes("Local custom visual control"),
+      ),
     ).toBe(false);
   });
 
   it("reports public component color overrides and excludes responsive dimensions", () => {
     const report = analyzeSource({
+      tokenCss,
+      reference,
       files: [
         {
           path: "app/page.tsx",
@@ -142,25 +143,25 @@ describe("analyzeSource", () => {
       `,
         },
       ],
-      reference,
-      tokenCss,
     });
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           classification: "token-reference",
-          summary: expect.stringContaining("color treatment override"),
           verdict: "nonconforming",
+          summary: expect.stringContaining("color treatment override"),
         }),
-      ])
+      ]),
     );
     expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(
-      false
+      false,
     );
   });
 
   it("credits only TypeScript-proven static primitive prop values", () => {
     const report = analyzeSource({
+      tokenCss,
+      reference,
       files: [
         {
           path: "app/page.tsx",
@@ -170,14 +171,12 @@ describe("analyzeSource", () => {
       `,
         },
       ],
-      reference,
-      tokenCss,
     });
     const labels = report.observations.filter(
       (o) =>
         o.dimension === "api" &&
         o.classification === "prop" &&
-        o.summary.includes("label")
+        o.summary.includes("label"),
     );
     expect(labels.map((o) => o.verdict).sort()).toEqual([
       "conforming",
@@ -195,19 +194,14 @@ describe("analyzeSource", () => {
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
         },
-      })
+      }),
     );
     await writeFile(
       join(root, "core", "compositions.tsx"),
-      `export function DataTable(_props: { spec: { narrowLayout: "compact" | "full" } }) { return null; }`
+      `export function DataTable(_props: { spec: { narrowLayout: "compact" | "full" } }) { return null; }`,
     );
     const report = analyzeSource({
-      files: [
-        {
-          path: "app/page.tsx",
-          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <DataTable spec={{ narrowLayout: "wide" }} />; }`,
-        },
-      ],
+      tokenCss,
       reference: {
         arrustedRoot: root,
         limitations: [],
@@ -217,21 +211,27 @@ describe("analyzeSource", () => {
           },
         },
       },
-      tokenCss,
+      files: [
+        {
+          path: "app/page.tsx",
+          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <DataTable spec={{ narrowLayout: "wide" }} />; }`,
+        },
+      ],
     });
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          classification: "prop",
           dimension: "api",
           verdict: "nonconforming",
+          classification: "prop",
         }),
-      ])
+      ]),
     );
   });
 
   it("reports JSX imports, token evidence, and literal classifications", () => {
     const report = analyzeSource({
+      tokenCss,
       files: [
         {
           path: "app/page.tsx",
@@ -245,21 +245,20 @@ describe("analyzeSource", () => {
         `,
         },
       ],
-      tokenCss,
     });
 
     expect(report.imports).toEqual([
       {
-        localName: "Surface",
-        name: "Card",
         path: "app/page.tsx",
         source: "@autograph/components",
+        name: "Card",
+        localName: "Surface",
       },
       {
-        localName: "Icons",
-        name: "*",
         path: "app/page.tsx",
         source: "@autograph/icons",
+        name: "*",
+        localName: "Icons",
       },
     ]);
     expect(report.semanticVarRefs).toEqual(["--color-bg-page"]);
@@ -271,13 +270,13 @@ describe("analyzeSource", () => {
 
   it("keeps missing token references as evidence", () => {
     const report = analyzeSource({
+      tokenCss,
       files: [
         {
           path: "app/page.tsx",
           content: `<main style={{ color: "var(--missing)" }} />`,
         },
       ],
-      tokenCss,
     });
     expect(report.tokenRefs).toEqual(["--missing"]);
     expect(report.undefinedTokens).toEqual(["--missing"]);
@@ -285,13 +284,13 @@ describe("analyzeSource", () => {
 
   it("analyzes CSS declaration values and exempts structural values", () => {
     const report = analyzeSource({
+      tokenCss,
       files: [
         {
           path: "app/styles.css",
           content: `.panel { color: var(--color-bg-page); padding: 16px; margin: 0px; width: 100%; display: grid; border-color: #123456; }`,
         },
       ],
-      tokenCss,
     });
     expect(report.semanticVarRefs).toEqual(["--color-bg-page"]);
     expect(report.matchingLiterals).toEqual(["16px"]);

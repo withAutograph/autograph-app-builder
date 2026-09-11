@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 
-import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it } from "vitest";
-
+import type { MessageStreamEvent } from "eve/client";
 import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,
@@ -16,7 +15,7 @@ import {
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 function digest(value: string): string {
-  return createHash("sha256").update(value, "utf-8").digest("hex");
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 function recordedPrototypeEvents(input?: {
@@ -35,10 +34,11 @@ function recordedPrototypeEvents(input?: {
   const mediaType = "text/html";
   const artifactDigest = digest(content);
   const revision = digest(
-    JSON.stringify({ digest: artifactDigest, mediaType, path })
+    JSON.stringify({ path, mediaType, digest: artifactDigest }),
   );
   return [
     installedEvent({
+      type: "actions.requested",
       data: {
         actions: [
           {
@@ -49,32 +49,31 @@ function recordedPrototypeEvents(input?: {
           },
         ],
       },
-      type: "actions.requested",
     }),
     installedEvent({
+      type: "action.result",
       data: {
+        status: input?.resultStatus ?? "completed",
         result: {
-          callId,
           kind: "tool-result",
+          callId,
+          toolName: input?.resultToolName ?? "record_prototype_artifact",
           output: {
             appId: "vendor-onboarding",
-            digest: input?.outputDigest ?? artifactDigest,
-            mediaType,
             path,
-            recordedByCallId: callId,
-            reused: false,
+            mediaType,
+            digest: input?.outputDigest ?? artifactDigest,
             revision,
             sessionId: "wrun_1",
+            recordedByCallId: callId,
             size: Buffer.byteLength(content),
+            reused: false,
             ...(input?.invalidated === undefined
               ? {}
               : { invalidated: input.invalidated }),
           },
-          toolName: input?.resultToolName ?? "record_prototype_artifact",
         },
-        status: input?.resultStatus ?? "completed",
       },
-      type: "action.result",
     }),
   ];
 }
@@ -98,76 +97,77 @@ function recordedPlanEvents(input?: {
   const outputAppSpecDigest =
     input?.outputAppSpecDigest ?? expectedAppSpecDigest;
   const targetBase = {
-    blockers: input?.blockers ?? [],
     contract: {
+      version: 1 as const,
       appId: "vendor-onboarding",
       appSpec: {
         path: "prototype/vendor-onboarding/app-spec.md",
         sha256: outputAppSpecDigest,
       },
-      version: 1 as const,
     },
     futurePath: "apps/vendor-onboarding/app.contract.json",
-    mutations: [] as [],
     plan: {
+      source: {
+        workspacePath: "apps/vendor-onboarding",
+        runtime: "nextjs" as const,
+        packageName: "@autograph/vendor-onboarding",
+        schema: { kind: "none" as const },
+      },
       product: {
+        owner: "operations",
         appSpec: {
           path: "prototype/vendor-onboarding/app-spec.md",
           sha256: outputAppSpecDigest,
         },
-        optionalCapabilities: { hostedResources: [], integrations: [] },
-        owner: "operations",
-      },
-      source: {
-        packageName: "@autograph/vendor-onboarding",
-        runtime: "nextjs" as const,
-        schema: { kind: "none" as const },
-        workspacePath: "apps/vendor-onboarding",
+        optionalCapabilities: { integrations: [], hostedResources: [] },
       },
       topology: {
         configPath: "microfrontends.json" as const,
-        packageName: "@autograph/vendor-onboarding",
         projectName: "apps-vendor-onboarding",
+        packageName: "@autograph/vendor-onboarding",
         routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
       },
     },
+    blockers: input?.blockers ?? [],
+    mutations: [] as [],
   };
   const iterationChanges = input?.existingAppChanges?.map(
     ({ path, content }) => ({
-      after: { content, digest: digest(content), mode: "644" },
-      before: { digest: digest(`before:${path}`), mode: "644" },
       path,
-    })
+      before: { mode: "644", digest: digest(`before:${path}`) },
+      after: { mode: "644", digest: digest(content), content },
+    }),
   );
   const target = iterationChanges
     ? {
         ...targetBase,
+        operation: "iterate-existing-app" as const,
         iteration: {
           changes: iterationChanges,
           digest: digest(JSON.stringify(iterationChanges)),
         },
-        operation: "iterate-existing-app" as const,
       }
     : targetBase;
   const unsigned = {
-    appSpecDigest: outputAppSpecDigest,
-    artifactRevision: "7".repeat(64),
-    contractDigest: digest(JSON.stringify(target.contract)),
-    dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
-    eligibilityDigest: "3".repeat(64),
-    identityDigest: "8".repeat(64),
-    imageDigest:
-      input?.imageDigest ?? `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
-    plannedByCallId,
-    sourceReceiptDigest: "0".repeat(64),
+    version: 1 as const,
     sourceSha: "1".repeat(40),
     sourceTree: "2".repeat(40),
-    target,
-    version: 1 as const,
+    sourceReceiptDigest: "0".repeat(64),
+    eligibilityDigest: "3".repeat(64),
     workspaceDigest: "4".repeat(64),
+    imageDigest:
+      input?.imageDigest ?? `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
+    dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
+    appSpecDigest: outputAppSpecDigest,
+    artifactRevision: "7".repeat(64),
+    identityDigest: "8".repeat(64),
+    contractDigest: digest(JSON.stringify(target.contract)),
+    target,
+    plannedByCallId,
   };
   return [
     installedEvent({
+      type: "actions.requested",
       data: {
         actions: [
           {
@@ -183,23 +183,22 @@ function recordedPlanEvents(input?: {
           },
         ],
       },
-      type: "actions.requested",
     }),
     installedEvent({
+      type: "action.result",
       data: {
+        status: input?.resultStatus ?? "completed",
         result: {
-          callId,
           kind: "tool-result",
+          callId,
+          toolName: input?.resultToolName ?? "plan_app_creation",
           output: {
             ...unsigned,
             digest: input?.outputDigest ?? digest(JSON.stringify(unsigned)),
             reused: input?.reused ?? false,
           },
-          toolName: input?.resultToolName ?? "plan_app_creation",
         },
-        status: input?.resultStatus ?? "completed",
       },
-      type: "action.result",
     }),
   ];
 }
@@ -208,16 +207,16 @@ describe("toPublicEvent", () => {
   it("publishes an allowlisted assistant message", () => {
     expect(
       toPublicEvent({
-        index: 4,
-        text: "Done.",
-        turnId: "turn_1",
         type: "assistant.message",
-      })
+        index: 4,
+        turnId: "turn_1",
+        text: "Done.",
+      }),
     ).toEqual({
-      index: 4,
-      text: "Done.",
-      turnId: "turn_1",
       type: "assistant_message",
+      index: 4,
+      turnId: "turn_1",
+      text: "Done.",
     });
   });
 
@@ -225,9 +224,9 @@ describe("toPublicEvent", () => {
     "drops %s",
     (type) => {
       expect(
-        toPublicEvent({ index: 1, message: "secret", text: "secret", type })
+        toPublicEvent({ type, index: 1, text: "secret", message: "secret" }),
       ).toBeNull();
-    }
+    },
   );
 });
 
@@ -245,11 +244,11 @@ describe("installed Eve 0.43 projection", () => {
   it("projects only a receipt-bound read-only target implementation plan", () => {
     expect(latestInstalledImplementationPlan(recordedPlanEvents())).toEqual({
       appId: "vendor-onboarding",
+      runtime: "nextjs",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
-      readOnly: true,
       routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      runtime: "nextjs",
+      readOnly: true,
     });
   });
 
@@ -260,8 +259,8 @@ describe("installed Eve 0.43 projection", () => {
           callId: "call_plan_retry",
           plannedByCallId: "call_plan_original",
           reused: true,
-        })
-      )
+        }),
+      ),
     ).toMatchObject({
       appId: "vendor-onboarding",
       readOnly: true,
@@ -274,12 +273,12 @@ describe("installed Eve 0.43 projection", () => {
         recordedPlanEvents({
           existingAppChanges: [
             {
-              content: "export default function Page() { return 'Ready'; }\n",
               path: "apps/vendor-onboarding/app/page.tsx",
+              content: "export default function Page() { return 'Ready'; }\n",
             },
           ],
-        })
-      )
+        }),
+      ),
     ).toMatchObject({
       appId: "vendor-onboarding",
       readOnly: true,
@@ -290,8 +289,8 @@ describe("installed Eve 0.43 projection", () => {
     const events = recordedPlanEvents({
       existingAppChanges: [
         {
-          content: "export default function Page() { return 'Ready'; }\n",
           path: "apps/vendor-onboarding/app/page.tsx",
+          content: "export default function Page() { return 'Ready'; }\n",
         },
       ],
     });
@@ -301,9 +300,8 @@ describe("installed Eve 0.43 projection", () => {
       request.data.actions[0]?.kind !== "tool-call" ||
       typeof request.data.actions[0].input !== "object" ||
       request.data.actions[0].input === null
-    ) {
+    )
       throw new Error("expected a plan request fixture");
-    }
     const input = request.data.actions[0].input as {
       existingAppChanges: { content: string }[];
     };
@@ -315,8 +313,8 @@ describe("installed Eve 0.43 projection", () => {
   it("rejects a fresh plan bound to another call", () => {
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ plannedByCallId: "call_plan_other" })
-      )
+        recordedPlanEvents({ plannedByCallId: "call_plan_other" }),
+      ),
     ).toBeUndefined();
   });
 
@@ -325,35 +323,35 @@ describe("installed Eve 0.43 projection", () => {
     expect(latestInstalledImplementationPlan([valid[1]!])).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ resultStatus: "failed" })
-      )
+        recordedPlanEvents({ resultStatus: "failed" }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ resultToolName: "another_tool" })
-      )
+        recordedPlanEvents({ resultToolName: "another_tool" }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ outputAppSpecDigest: "b".repeat(64) })
-      )
+        recordedPlanEvents({ outputAppSpecDigest: "b".repeat(64) }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ outputDigest: "c".repeat(64) })
-      )
+        recordedPlanEvents({ outputDigest: "c".repeat(64) }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
-        recordedPlanEvents({ blockers: ["missing product owner"] })
-      )
+        recordedPlanEvents({ blockers: ["missing product owner"] }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(
         recordedPlanEvents({
           imageDigest: `fixture@sha256:${"d".repeat(64)}`,
-        })
-      )
+        }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledImplementationPlan([
@@ -363,7 +361,7 @@ describe("installed Eve 0.43 projection", () => {
           content: "<!doctype html><html><body>Revised</body></html>",
           invalidated: true,
         }),
-      ])
+      ]),
     ).toBeUndefined();
   });
 
@@ -378,9 +376,9 @@ describe("installed Eve 0.43 projection", () => {
     };
 
     expect(latestInstalledPrototype([...first, ...second])).toMatchObject({
-      content: expected.data.actions[0].input.content,
-      mediaType: "text/html",
       path: "prototype/vendor-onboarding/index.html",
+      mediaType: "text/html",
+      content: expected.data.actions[0].input.content,
     });
     expect(
       latestInstalledPrototype([
@@ -390,7 +388,7 @@ describe("installed Eve 0.43 projection", () => {
           content: "<html>failed replacement</html>",
           resultStatus: "failed",
         }),
-      ])
+      ]),
     ).toEqual(latestInstalledPrototype(first));
   });
 
@@ -399,18 +397,18 @@ describe("installed Eve 0.43 projection", () => {
     expect(latestInstalledPrototype([valid[1]!])).toBeUndefined();
     expect(
       latestInstalledPrototype(
-        recordedPrototypeEvents({ resultStatus: "rejected" })
-      )
+        recordedPrototypeEvents({ resultStatus: "rejected" }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledPrototype(
-        recordedPrototypeEvents({ resultToolName: "another_tool" })
-      )
+        recordedPrototypeEvents({ resultToolName: "another_tool" }),
+      ),
     ).toBeUndefined();
     expect(
       latestInstalledPrototype(
-        recordedPrototypeEvents({ outputDigest: "f".repeat(64) })
-      )
+        recordedPrototypeEvents({ outputDigest: "f".repeat(64) }),
+      ),
     ).toBeUndefined();
 
     const malformedRequest = structuredClone(valid);
@@ -428,24 +426,24 @@ describe("installed Eve 0.43 projection", () => {
     const revision = "a".repeat(64);
     const events = [
       installedEvent({
+        type: "action.result",
         data: {
+          status: "completed",
           result: {
-            callId: "ui-preview",
             kind: "tool-result",
+            callId: "ui-preview",
+            toolName: "record_ui_preview",
             output: {
               appId: "vendor-onboarding",
-              content,
-              digest: digest(content),
-              fidelity: "arrusted-component-catalog",
-              functionality: "fixtures-only",
               revision,
               routes: ["/", "/vendors"],
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              content,
+              digest: digest(content),
             },
-            toolName: "record_ui_preview",
           },
-          status: "completed",
         },
-        type: "action.result",
       }),
     ];
     expect(latestInstalledUiPreview(events)).toMatchObject({
@@ -460,18 +458,19 @@ describe("installed Eve 0.43 projection", () => {
 
   it("fails closed if internal specification recording requests approval", () => {
     const receipt = {
+      format: "autograph-eve-approval-receipt-v2",
+      phase: "appspec",
+      outcome: "accept-appspec",
+      repositoryId: "1234",
+      repository: "withAutograph/arrusted-development",
       baseRef: "refs/heads/main",
       baseSha: "a".repeat(40),
-      format: "autograph-eve-approval-receipt-v2",
-      outcome: "accept-appspec",
-      phase: "appspec",
-      repository: "withAutograph/arrusted-development",
-      repositoryId: "1234",
       subjectDigest: "b".repeat(64),
     };
     expect(
       projectInstalledEveEvent(
         installedEvent({
+          type: "input.requested",
           data: {
             requests: [
               {
@@ -490,24 +489,24 @@ describe("installed Eve 0.43 projection", () => {
               },
             ],
           },
-          type: "input.requested",
         }),
-        3
-      )
+        3,
+      ),
     ).toEqual([
       {
-        code: "confirmation_unavailable",
-        index: 3,
-        message: "I couldn't verify this action, so it was not run.",
         type: "error.public",
+        index: 3,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
-      { index: 3, status: "failed", type: "status" },
+      { type: "status", index: 3, status: "failed" },
     ]);
   });
 
   it("does not expose an internal local specification approval", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
+        type: "input.requested",
         data: {
           requests: [
             {
@@ -531,23 +530,23 @@ describe("installed Eve 0.43 projection", () => {
             },
           ],
         },
-        type: "input.requested",
       }),
-      3
+      3,
     );
     expect(projected).toEqual([
       {
-        code: "confirmation_unavailable",
-        index: 3,
-        message: "I couldn't verify this action, so it was not run.",
         type: "error.public",
+        index: 3,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
-      { index: 3, status: "failed", type: "status" },
+      { type: "status", index: 3, status: "failed" },
     ]);
     expect(JSON.stringify(projected)).not.toContain("not projected");
     expect(
       deriveInstalledEveStatus([
         installedEvent({
+          type: "input.requested",
           data: {
             requests: [
               {
@@ -570,9 +569,8 @@ describe("installed Eve 0.43 projection", () => {
               },
             ],
           },
-          type: "input.requested",
         }),
-      ])
+      ]),
     ).toBe("failed");
   });
 
@@ -581,6 +579,7 @@ describe("installed Eve 0.43 projection", () => {
     (toolName) => {
       const projected = projectInstalledEveEvent(
         installedEvent({
+          type: "input.requested",
           data: {
             requests: [
               {
@@ -595,27 +594,27 @@ describe("installed Eve 0.43 projection", () => {
               },
             ],
           },
-          type: "input.requested",
         }),
-        4
+        4,
       );
       expect(projected).toEqual([
         {
-          code: "confirmation_unavailable",
-          index: 4,
-          message: "I couldn't verify this action, so it was not run.",
           type: "error.public",
+          index: 4,
+          code: "confirmation_unavailable",
+          message: "I couldn't verify this action, so it was not run.",
         },
-        { index: 4, status: "failed", type: "status" },
+        { type: "status", index: 4, status: "failed" },
       ]);
       expect(JSON.stringify(projected)).not.toContain("private mechanics");
       expect(JSON.stringify(projected)).not.toContain("not projected");
-    }
+    },
   );
 
   it("presents sandbox build approval in product language", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
+        type: "input.requested",
         data: {
           requests: [
             {
@@ -633,23 +632,22 @@ describe("installed Eve 0.43 projection", () => {
             },
           ],
         },
-        type: "input.requested",
       }),
-      4
+      4,
     );
 
     expect(projected).toEqual([
       {
+        type: "input.requested",
         index: 4,
         request: {
-          allowFreeform: false,
+          requestId: "req_build",
+          kind: "approval",
+          title: "Build this app?",
           description:
             "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
-          kind: "approval",
-          requestId: "req_build",
-          title: "Build this app?",
+          allowFreeform: false,
         },
-        type: "input.requested",
       },
     ]);
     expect(JSON.stringify(projected)).not.toContain("apply_app_creation");
@@ -657,6 +655,7 @@ describe("installed Eve 0.43 projection", () => {
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
     const requested = installedEvent({
+      type: "input.requested",
       data: {
         requests: [
           {
@@ -675,26 +674,25 @@ describe("installed Eve 0.43 projection", () => {
           },
         ],
       },
-      type: "input.requested",
     });
     const projected = projectInstalledEveEvent(requested, 4);
     expect(projected).toEqual([
       {
-        code: "confirmation_unavailable",
-        index: 4,
-        message: "I couldn't verify this action, so it was not run.",
         type: "error.public",
+        index: 4,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
-      { index: 4, status: "failed", type: "status" },
+      { type: "status", index: 4, status: "failed" },
     ]);
     expect(projectInstalledEveEvents([requested])).toEqual([
       {
-        code: "confirmation_unavailable",
-        index: 0,
-        message: "I couldn't verify this action, so it was not run.",
         type: "error",
+        index: 0,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
-      { index: 1, status: "failed", type: "status" },
+      { type: "status", index: 1, status: "failed" },
     ]);
     expect(deriveInstalledEveStatus([requested])).toBe("failed");
     expect(JSON.stringify(projected)).not.toContain("secret");
@@ -703,17 +701,18 @@ describe("installed Eve 0.43 projection", () => {
 
   it("fails closed for the whole batch when one receipt-bound sibling is malformed", () => {
     const receipt = {
+      format: "autograph-eve-approval-receipt-v2",
+      phase: "appspec",
+      outcome: "accept-appspec",
+      repositoryId: "1234",
+      repository: "withAutograph/arrusted-development",
       baseRef: "refs/heads/main",
       baseSha: "a".repeat(40),
-      format: "autograph-eve-approval-receipt-v2",
-      outcome: "accept-appspec",
-      phase: "appspec",
-      repository: "withAutograph/arrusted-development",
-      repositoryId: "1234",
       subjectDigest: "b".repeat(64),
     };
     const projected = projectInstalledEveEvent(
       installedEvent({
+        type: "input.requested",
         data: {
           requests: [
             {
@@ -742,18 +741,17 @@ describe("installed Eve 0.43 projection", () => {
             },
           ],
         },
-        type: "input.requested",
       }),
-      4
+      4,
     );
     expect(projected).toEqual([
       {
-        code: "confirmation_unavailable",
-        index: 4,
-        message: "I couldn't verify this action, so it was not run.",
         type: "error.public",
+        index: 4,
+        code: "confirmation_unavailable",
+        message: "I couldn't verify this action, so it was not run.",
       },
-      { index: 4, status: "failed", type: "status" },
+      { type: "status", index: 4, status: "failed" },
     ]);
     expect(JSON.stringify(projected)).not.toContain("secret");
     expect(JSON.stringify(projected)).not.toContain("/private/workspace");
@@ -761,16 +759,17 @@ describe("installed Eve 0.43 projection", () => {
 
   it("rejects a valid receipt for the wrong approval tool phase", () => {
     const wrongPhaseReceipt = {
+      format: "autograph-eve-approval-receipt-v2",
+      phase: "change_set",
+      outcome: "accept-change-set",
+      repositoryId: "1234",
+      repository: "withAutograph/arrusted-development",
       baseRef: "refs/heads/main",
       baseSha: "a".repeat(40),
-      format: "autograph-eve-approval-receipt-v2",
-      outcome: "accept-change-set",
-      phase: "change_set",
-      repository: "withAutograph/arrusted-development",
-      repositoryId: "1234",
       subjectDigest: "b".repeat(64),
     };
     const event = installedEvent({
+      type: "input.requested",
       data: {
         requests: [
           {
@@ -785,11 +784,10 @@ describe("installed Eve 0.43 projection", () => {
           },
         ],
       },
-      type: "input.requested",
     });
     expect(projectInstalledEveEvent(event, 8)).toMatchObject([
-      { code: "confirmation_unavailable", type: "error.public" },
-      { status: "failed", type: "status" },
+      { type: "error.public", code: "confirmation_unavailable" },
+      { type: "status", status: "failed" },
     ]);
     expect(deriveInstalledEveStatus([event])).toBe("failed");
   });
@@ -798,22 +796,23 @@ describe("installed Eve 0.43 projection", () => {
     expect(
       projectInstalledEveEvent(
         installedEvent({
-          data: { message: "Done.", turnId: "turn_1" },
           type: "message.completed",
+          data: { message: "Done.", turnId: "turn_1" },
         }),
-        2
-      )
+        2,
+      ),
     ).toEqual([
       {
-        index: 2,
-        text: "Done.",
-        turnId: "turn_1",
         type: "assistant.message",
+        index: 2,
+        turnId: "turn_1",
+        text: "Done.",
       },
     ]);
     expect(
       projectInstalledEveEvent(
         installedEvent({
+          type: "input.requested",
           data: {
             requests: [
               {
@@ -823,30 +822,29 @@ describe("installed Eve 0.43 projection", () => {
               },
             ],
           },
-          type: "input.requested",
         }),
-        3
-      )
+        3,
+      ),
     ).toEqual([
       {
+        type: "input.requested",
         index: 3,
         request: {
-          allowFreeform: false,
-          kind: "approval",
           requestId: "req_1",
+          kind: "approval",
           title: "Apply change?",
+          allowFreeform: false,
         },
-        type: "input.requested",
       },
     ]);
     expect(
       projectInstalledEveEvent(
         installedEvent({
-          data: { output: "private" },
           type: "action.result",
+          data: { output: "private" },
         }),
-        4
-      )
+        4,
+      ),
     ).toEqual([]);
   });
 
@@ -854,17 +852,22 @@ describe("installed Eve 0.43 projection", () => {
     expect(
       projectInstalledEveEvent(
         installedEvent({
+          type: "authorization.required",
           data: {
+            turnId: "turn_1",
             attemptId: "attempt_1",
+            name: "github-repository-access",
+            description: "Internal connection description.",
             authorization: {
+              url: "https://builder.example.test/github/installations?continuation=opaque",
               displayName: "GitHub",
               repositoryAccess: {
-                action: "update",
                 provider: "github",
+                action: "update",
                 repository: {
-                  fullName: "withAutograph/app-builder-dogfood",
-                  name: "app-builder-dogfood",
                   owner: "withAutograph",
+                  name: "app-builder-dogfood",
+                  fullName: "withAutograph/app-builder-dogfood",
                 },
                 scopes: [
                   {
@@ -874,30 +877,32 @@ describe("installed Eve 0.43 projection", () => {
                   },
                 ],
               },
-              url: "https://builder.example.test/github/installations?continuation=opaque",
             },
-            description: "Internal connection description.",
-            name: "github-repository-access",
-            turnId: "turn_1",
           },
-          type: "authorization.required",
         }),
-        5
-      )
+        5,
+      ),
     ).toEqual([
       {
+        type: "input.requested",
         index: 5,
         request: {
-          allowFreeform: false,
+          requestId: "attempt_1",
+          kind: "authorization",
+          title: "Update GitHub access",
+          description:
+            "Update GitHub access to include withAutograph/app-builder-dogfood.",
+          presentation: { section: "store-in", control: "provider" },
           authorization: {
+            url: "https://builder.example.test/github/installations?continuation=opaque",
             displayName: "GitHub",
             repositoryAccess: {
-              action: "update",
               provider: "github",
+              action: "update",
               repository: {
-                fullName: "withAutograph/app-builder-dogfood",
-                name: "app-builder-dogfood",
                 owner: "withAutograph",
+                name: "app-builder-dogfood",
+                fullName: "withAutograph/app-builder-dogfood",
               },
               scopes: [
                 {
@@ -907,22 +912,16 @@ describe("installed Eve 0.43 projection", () => {
                 },
               ],
             },
-            url: "https://builder.example.test/github/installations?continuation=opaque",
           },
-          description:
-            "Update GitHub access to include withAutograph/app-builder-dogfood.",
-          kind: "authorization",
-          presentation: { control: "provider", section: "store-in" },
-          requestId: "attempt_1",
-          title: "Update GitHub access",
+          allowFreeform: false,
         },
-        type: "input.requested",
       },
     ]);
   });
 
   it("keeps a multi-request batch input-required until every id resolves", () => {
     const requested = installedEvent({
+      type: "input.requested",
       data: {
         requests: ["one", "two", "three"].map((requestId) => ({
           requestId,
@@ -930,7 +929,6 @@ describe("installed Eve 0.43 projection", () => {
           prompt: requestId,
         })),
       },
-      type: "input.requested",
     });
     expect(deriveInstalledEveStatus([requested])).toBe("input_required");
     for (const count of [1, 2]) {
@@ -938,36 +936,37 @@ describe("installed Eve 0.43 projection", () => {
         deriveInstalledEveStatus([
           requested,
           installedEvent({
+            type: "input.resolved",
             data: {
               resolutions: ["one", "two", "three"]
                 .slice(0, count)
                 .map((requestId) => ({ requestId })),
             },
-            type: "input.resolved",
           }),
-          installedEvent({ data: {}, type: "session.waiting" }),
-        ])
+          installedEvent({ type: "session.waiting", data: {} }),
+        ]),
       ).toBe("input_required");
     }
     expect(
       deriveInstalledEveStatus([
         requested,
         installedEvent({
+          type: "input.resolved",
           data: {
             resolutions: ["one", "two", "three"].map((requestId) => ({
               requestId,
             })),
           },
-          type: "input.resolved",
         }),
-        installedEvent({ data: {}, type: "session.waiting" }),
-      ])
+        installedEvent({ type: "session.waiting", data: {} }),
+      ]),
     ).toBe("waiting");
   });
 
   it("assigns dense unique public indices to sibling requests and errors", () => {
     const projected = projectInstalledEveEvents([
       installedEvent({
+        type: "input.requested",
         data: {
           requests: ["one", "two", "three"].map((requestId) => ({
             requestId,
@@ -975,11 +974,10 @@ describe("installed Eve 0.43 projection", () => {
             prompt: requestId,
           })),
         },
-        type: "input.requested",
       }),
       installedEvent({
-        data: { code: "failed", message: "Stopped" },
         type: "session.failed",
+        data: { code: "failed", message: "Stopped" },
       }),
     ]);
     expect(projected.map(({ index }) => index)).toEqual([0, 1, 2, 3, 4]);
@@ -996,26 +994,26 @@ describe("installed Eve 0.43 projection", () => {
   it("keeps source and planning diagnostics out of public failures", () => {
     const projected = projectInstalledEveEvents([
       installedEvent({
+        type: "session.failed",
         data: {
           code: "source_workspace_invalid",
           message:
             "The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
         },
-        type: "session.failed",
       }),
     ]);
     expect(projected).toEqual([
       {
-        code: "unable_to_continue",
+        type: "error",
         index: 0,
+        code: "unable_to_continue",
         message:
           "I couldn't finish preparing your app. Your progress is saved, so you can try again.",
-        type: "error",
       },
-      { index: 1, status: "failed", type: "status" },
+      { type: "status", index: 1, status: "failed" },
     ]);
     expect(JSON.stringify(projected)).not.toMatch(
-      /AppSpec|cache|dependency|digest|receipt|source workspace|validation/iu
+      /AppSpec|cache|dependency|digest|receipt|source workspace|validation/iu,
     );
   });
 });

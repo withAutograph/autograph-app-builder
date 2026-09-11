@@ -1,9 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
-
 import {
   appendReviewQuestions,
   listDesignCases,
@@ -11,13 +9,13 @@ import {
 } from "./cases";
 
 const metadata = {
-  evidence: [{ repo: "example", path: "fixtures/vendor", status: "available" }],
   id: "vendor-review",
-  notes: "Approved fixture only.",
-  outcomes: ["Review action is clear."],
-  reviewQuestions: ["Can reviewers find the next action?"],
-  status: "ready",
   title: "Vendor review",
+  status: "ready",
+  notes: "Approved fixture only.",
+  evidence: [{ repo: "example", path: "fixtures/vendor", status: "available" }],
+  reviewQuestions: ["Can reviewers find the next action?"],
+  outcomes: ["Review action is clear."],
 };
 
 describe("design-quality cases", () => {
@@ -26,10 +24,10 @@ describe("design-quality cases", () => {
     await mkdir(join(root, metadata.id));
     await writeFile(
       join(root, metadata.id, "case.json"),
-      JSON.stringify(metadata)
+      JSON.stringify(metadata),
     );
     expect(await listDesignCases(root)).toEqual([
-      { id: "vendor-review", status: "ready", title: "Vendor review" },
+      { id: "vendor-review", title: "Vendor review", status: "ready" },
     ]);
   });
 
@@ -38,14 +36,14 @@ describe("design-quality cases", () => {
     await mkdir(join(root, metadata.id));
     await writeFile(
       join(root, metadata.id, "case.json"),
-      JSON.stringify(metadata)
+      JSON.stringify(metadata),
     );
     await writeFile(join(root, metadata.id, "brief.md"), "Base brief\n");
     const designCase = await readDesignCase(metadata.id, root);
     expect(
-      appendReviewQuestions(designCase.brief, designCase.reviewQuestions)
+      appendReviewQuestions(designCase.brief, designCase.reviewQuestions),
     ).toBe(
-      "Base brief\n\n---\n\nReview questions for this case:\n- Can reviewers find the next action?"
+      "Base brief\n\n---\n\nReview questions for this case:\n- Can reviewers find the next action?",
     );
   });
 

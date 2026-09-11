@@ -11,16 +11,16 @@ import {
 
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
 
-export interface LocalOidcStartupInvocation {
+export type LocalOidcStartupInvocation = {
   executable: string;
   args: readonly string[];
   cwd: string;
   environment: NodeJS.ProcessEnv;
   operation: "development-env-pull" | "owner-bind";
-}
+};
 
 export type LocalOidcStartupCommandRunner = (
-  invocation: LocalOidcStartupInvocation
+  invocation: LocalOidcStartupInvocation,
 ) => void;
 
 export class LocalOidcRefreshFailedError extends Error {
@@ -31,7 +31,7 @@ export class LocalOidcRefreshFailedError extends Error {
 
 function requiredEnvironmentValue(
   environment: NodeJS.ProcessEnv,
-  name: "HOME" | "PATH"
+  name: "HOME" | "PATH",
 ): string {
   const value = environment[name];
   if (typeof value !== "string" || value.length === 0) {
@@ -42,14 +42,14 @@ function requiredEnvironmentValue(
 
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    CI: environment.CI ?? "",
-    HOME: requiredEnvironmentValue(environment, "HOME"),
-    LANG: environment.LANG ?? "C",
-    LC_ALL: environment.LC_ALL ?? "C",
     NODE_ENV: environment.NODE_ENV ?? "development",
+    HOME: requiredEnvironmentValue(environment, "HOME"),
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
+    LANG: environment.LANG ?? "C",
+    LC_ALL: environment.LC_ALL ?? "C",
     TZ: environment.TZ ?? "",
+    CI: environment.CI ?? "",
   };
 }
 
@@ -59,14 +59,14 @@ function assertNoStaticCredential(environment: NodeJS.ProcessEnv): void {
     Object.hasOwn(environment, "AI_GATEWAY_API_KEY")
   ) {
     throw new Error(
-      "Development OIDC startup refuses static provider credentials."
+      "Development OIDC startup refuses static provider credentials.",
     );
   }
 }
 
 function sameProject(
   left: ReturnType<typeof parseLinkedVercelProject>,
-  right: ReturnType<typeof parseLinkedVercelProject>
+  right: ReturnType<typeof parseLinkedVercelProject>,
 ): boolean {
   return (
     left.projectId === right.projectId &&
@@ -79,7 +79,7 @@ function readLinkedProject(repositoryRoot: string) {
   return parseLinkedVercelProject(
     readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
       confidential: false,
-    })
+    }),
   );
 }
 
@@ -96,12 +96,10 @@ function installedOidcNeedsRefresh(input: {
   try {
     environment = readOwnerBoundLocalFile(
       resolve(input.repositoryRoot, ".env.local"),
-      { confidential: true }
+      { confidential: true },
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return true;
-    }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
     const credentialPath = resolve(input.repositoryRoot, ".env.local");
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
@@ -122,10 +120,10 @@ function installedOidcNeedsRefresh(input: {
   }
   const token = parseLocalVercelOidcToken(environment);
   const claims = validateLocalVercelOidcClaims({
-    allowExpired: true,
-    nowEpochSeconds: input.nowEpochSeconds,
-    project,
     token,
+    project,
+    nowEpochSeconds: input.nowEpochSeconds,
+    allowExpired: true,
   });
   return (
     claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS
@@ -143,14 +141,14 @@ function validateInstalledOidc(input: {
 }
 
 export function runLocalOidcStartupCommand(
-  invocation: LocalOidcStartupInvocation
+  invocation: LocalOidcStartupInvocation,
 ): void {
   const result = spawnSync(invocation.executable, [...invocation.args], {
     cwd: invocation.cwd,
-    encoding: "utf8",
     env: invocation.environment,
-    maxBuffer: 1024 * 1024,
+    encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 1024 * 1024,
   });
   if (result.error !== undefined || result.status !== 0) {
     throw new Error(`Local OIDC ${invocation.operation} failed.`);
@@ -178,9 +176,9 @@ export function ensureLocalDevelopmentOidc(input: {
 
   if (
     !installedOidcNeedsRefresh({
-      expectedProject,
-      nowEpochSeconds,
       repositoryRoot,
+      nowEpochSeconds,
+      expectedProject,
     })
   ) {
     return { refreshed: false };
@@ -190,17 +188,17 @@ export function ensureLocalDevelopmentOidc(input: {
   const childEnvironment = commandEnvironment(environment);
   try {
     runCommand({
+      executable: input.vercelExecutable,
       args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
-      executable: input.vercelExecutable,
       operation: "development-env-pull",
     });
     runCommand({
+      executable: input.miseExecutable,
       args: ["run", "local:install-oidc"],
       cwd: repositoryRoot,
       environment: childEnvironment,
-      executable: input.miseExecutable,
       operation: "owner-bind",
     });
   } catch {
@@ -208,9 +206,9 @@ export function ensureLocalDevelopmentOidc(input: {
   }
 
   validateInstalledOidc({
-    expectedProject,
-    nowEpochSeconds,
     repositoryRoot,
+    nowEpochSeconds,
+    expectedProject,
   });
   return { refreshed: true };
 }

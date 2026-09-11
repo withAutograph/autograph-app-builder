@@ -1,28 +1,26 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-
 import {
   storyForm,
   storyHandoff,
   storyProvisioning,
 } from "@/.storybook/create-app/app-builder-fixtures";
-
 import { Ready } from "./app-builder";
 
 const meta = {
+  title: "Create App/Recovery/Ready",
+  component: Ready,
   args: {
     form: storyForm,
-    initialAttempt: "attempted",
-    initialClipboardState: "copied",
+    requestId: storyProvisioning.requestId,
     initialHandoff: storyHandoff,
     initialProvisioning: storyProvisioning,
-    onReset: fn(),
     provisioningEnabled: true,
-    requestId: storyProvisioning.requestId,
+    initialAttempt: "attempted",
+    initialClipboardState: "copied",
+    onReset: fn(),
   },
-  component: Ready,
   parameters: { layout: "fullscreen" },
-  title: "Create App/Recovery/Ready",
 } satisfies Meta<typeof Ready>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -32,7 +30,7 @@ export const ClipboardFailed: Story = {
 };
 export const LargeBriefUsesOpaqueHandoff: Story = {
   args: {
-    form: { ...storyForm, brief: "x".repeat(8100) },
+    form: { ...storyForm, brief: "x".repeat(8_100) },
     initialAttempt: "attempted",
     initialClipboardState: "copied",
   },
@@ -43,9 +41,9 @@ export const GitHubOnly: Story = {
     initialProvisioning: {
       ...storyProvisioning,
       vercel: {
+        status: "skipped",
         code: "not_selected",
         retryable: false,
-        status: "skipped",
       },
     },
   },
@@ -56,9 +54,9 @@ export const VercelOnly: Story = {
     initialProvisioning: {
       ...storyProvisioning,
       github: {
+        status: "skipped",
         code: "not_selected",
         retryable: false,
-        status: "skipped",
       },
       vercel: {
         ...storyProvisioning.vercel,
@@ -77,14 +75,14 @@ export const WithoutProviders: Story = {
     initialProvisioning: {
       ...storyProvisioning,
       github: {
+        status: "skipped",
         code: "not_selected",
         retryable: false,
-        status: "skipped",
       },
       vercel: {
+        status: "skipped",
         code: "not_selected",
         retryable: false,
-        status: "skipped",
       },
     },
   },
@@ -94,20 +92,20 @@ export const PartialFailure: Story = {
     initialProvisioning: {
       ...storyProvisioning,
       vercel: {
+        status: "failed",
         code: "provider_rejected",
         retryable: true,
-        status: "failed",
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      canvas.getByRole("heading", { name: "App created with an issue" })
+      canvas.getByRole("heading", { name: "App created with an issue" }),
     ).toBeInTheDocument();
     await expect(canvas.getByText("Setup needs attention")).toBeInTheDocument();
     await expect(
-      canvas.getByText(/Retry to finish setting up Vercel/u)
+      canvas.getByText(/Retry to finish setting up Vercel/u),
     ).toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Retry" })).toBeVisible();
   },
@@ -116,17 +114,17 @@ export const DismissInstallInstructions: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      canvas.getByRole("button", { name: "Dismiss install instructions" })
+      canvas.getByRole("button", { name: "Dismiss install instructions" }),
     );
     await expect(
-      canvas.queryByRole("heading", { name: "Install App Builder Plugin" })
+      canvas.queryByRole("heading", { name: "Install App Builder Plugin" }),
     ).not.toBeInTheDocument();
   },
 };
 export const ResetAction: Story = {
   play: async ({ canvasElement, args }) => {
     await userEvent.click(
-      within(canvasElement).getByRole("button", { name: "Create Another App" })
+      within(canvasElement).getByRole("button", { name: "Create Another App" }),
     );
     await expect(args.onReset).toHaveBeenCalledOnce();
   },

@@ -7,9 +7,7 @@ const mise = [
   `${process.env.HOME}/.local/share/mise/bin/mise`,
   `${process.env.HOME}/.local/bin/mise`,
 ].find(existsSync);
-if (!mise) {
-  throw new Error("The mise executable is unavailable.");
-}
+if (!mise) throw new Error("The mise executable is unavailable.");
 const webServerPath = `${dirname(process.execPath)}:${dirname(mise)}:/usr/bin:/bin`;
 const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
 const appProtocol = "https";
@@ -34,8 +32,8 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     baseURL: appOrigin,
     ignoreHTTPSErrors: true,
-    screenshot: "only-on-failure",
     storageState: flagsStorageState,
+    screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
   },

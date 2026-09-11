@@ -1,45 +1,45 @@
-import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
-import type { builderHandoffs } from "../db/schema";
+import { builderHandoffs } from "../db/schema";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 
 const authority = {
-  audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
-  ownerUserId: "user-one",
+  audience: "https://builder.example/mcp",
   workspaceId: "workspace-one",
+  ownerUserId: "user-one",
 };
 const row = {
   ...authority,
-  createdAt: new Date("2026-09-01T12:00:00Z"),
-  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
-  expiresAt: new Date("2026-09-01T12:01:00Z"),
   handoffId: "123e4567-e89b-42d3-a456-426614174001",
-  intent: {
-    appId: "vendor-review",
-    appName: "Vendor Review",
-    brief: "Review new vendors.",
-    connections: [],
-    modelId: "openai/gpt-5.6-terra",
-    repository: { private: true, requestedName: "vendor-review" },
-  },
-  redeemedAt: null,
+  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
   requestDigest: "a".repeat(64),
+  intent: {
+    appName: "Vendor Review",
+    appId: "vendor-review",
+    brief: "Review new vendors.",
+    repository: { requestedName: "vendor-review", private: true },
+    modelId: "openai/gpt-5.6-terra",
+    connections: [],
+  },
+  createdAt: new Date("2026-09-01T12:00:00Z"),
+  expiresAt: new Date("2026-09-01T12:01:00Z"),
+  redeemedAt: null,
   sessionId: null,
 } satisfies typeof builderHandoffs.$inferSelect;
 const renewal = {
   authority,
-  expiresAt: new Date("2026-09-01T12:02:00Z"),
   handoffId: row.handoffId,
-  now: row.expiresAt,
   requestDigest: row.requestDigest,
+  now: row.expiresAt,
+  expiresAt: new Date("2026-09-01T12:02:00Z"),
 };
 
 function store(input: {
-  updated?: (typeof builderHandoffs.$inferSelect)[];
-  current?: (typeof builderHandoffs.$inferSelect)[];
+  updated?: Array<typeof builderHandoffs.$inferSelect>;
+  current?: Array<typeof builderHandoffs.$inferSelect>;
 }) {
   const set = vi.fn();
   const updateWhere = vi.fn();
@@ -53,7 +53,6 @@ function store(input: {
     }),
   }));
   const database = {
-    select,
     update: () => ({
       set: (values: unknown) => {
         set(values);
@@ -65,13 +64,14 @@ function store(input: {
         };
       },
     }),
+    select,
   } as unknown as Parameters<typeof createPostgresBuilderHandoffStore>[0];
   return {
     handoffs: createPostgresBuilderHandoffStore(database),
-    readWhere,
-    select,
     set,
     updateWhere,
+    readWhere,
+    select,
   };
 }
 
@@ -82,10 +82,10 @@ describe("PostgreSQL handoff renewal", () => {
     expect(result).toMatchObject({
       disposition: "renewed",
       record: {
-        creationRequestId: row.creationRequestId,
-        expiresAt: renewal.expiresAt,
         handoffId: row.handoffId,
+        creationRequestId: row.creationRequestId,
         requestDigest: row.requestDigest,
+        expiresAt: renewal.expiresAt,
       },
     });
     expect(test.set).toHaveBeenCalledExactlyOnceWith({
@@ -99,9 +99,8 @@ describe("PostgreSQL handoff renewal", () => {
       "owner_user_id",
       "handoff_id",
       "request_digest",
-    ]) {
+    ])
       expect(query.sql).toContain(`"builder_handoff"."${column}" =`);
-    }
     expect(query.sql).not.toContain('"builder_handoff"."expires_at" =');
     expect(query.sql).toContain('"builder_handoff"."expires_at" <=');
     expect(query.sql).toContain('"builder_handoff"."redeemed_at" is null');
@@ -125,7 +124,7 @@ describe("PostgreSQL handoff renewal", () => {
     const test = store({ updated: [{ ...row, expiresAt: renewal.expiresAt }] });
     const timestamp = new Date("2026-09-01T12:01:00.001Z");
     expect(
-      await test.handoffs.renewExpired!({ ...renewal, now: timestamp })
+      await test.handoffs.renewExpired!({ ...renewal, now: timestamp }),
     ).toMatchObject({ disposition: "renewed" });
     const query = test.updateWhere.mock.calls[0][0];
     // The SQL must compare expiry only against current time, not the lossy
@@ -138,7 +137,7 @@ describe("PostgreSQL handoff renewal", () => {
 
   it("fails closed when a missed update reads back an expired unbound row", async () => {
     expect(
-      await store({ current: [row] }).handoffs.renewExpired!(renewal)
+      await store({ current: [row] }).handoffs.renewExpired!(renewal),
     ).toBeUndefined();
     // A previously bound session remains recoverable even after expiry.
     expect(
@@ -146,7 +145,7 @@ describe("PostgreSQL handoff renewal", () => {
         current: [
           { ...row, redeemedAt: row.createdAt, sessionId: "session-one" },
         ],
-      }).handoffs.renewExpired!(renewal)
+      }).handoffs.renewExpired!(renewal),
     ).toMatchObject({
       disposition: "existing",
       record: { sessionId: "session-one" },
@@ -167,8 +166,8 @@ describe("PostgreSQL handoff renewal", () => {
       expect(await test.handoffs.renewExpired!(renewal)).toMatchObject({
         disposition: "existing",
         record: {
-          expiresAt: current.expiresAt,
           handoffId: row.handoffId,
+          expiresAt: current.expiresAt,
           ...(bound ? { sessionId: "existing-session" } : {}),
         },
       });
@@ -179,14 +178,14 @@ describe("PostgreSQL handoff renewal", () => {
         authority.ownerUserId,
         row.handoffId,
       ]);
-    }
+    },
   );
 
   it("does not treat a missing row or mismatched digest as renewal success", async () => {
     expect(await store({}).handoffs.renewExpired!(renewal)).toBeUndefined();
     expect(
       await store({ current: [{ ...row, requestDigest: "b".repeat(64) }] })
-        .handoffs.renewExpired!(renewal)
+        .handoffs.renewExpired!(renewal),
     ).toBeUndefined();
   });
 
@@ -196,16 +195,16 @@ describe("PostgreSQL handoff renewal", () => {
       await test.handoffs.bindSession({
         authority,
         handoffId: row.handoffId,
-        now: row.expiresAt,
         requestDigest: row.requestDigest,
         sessionId: "session-one",
-      })
+        now: row.expiresAt,
+      }),
     ).toBeUndefined();
     expect(test.updateWhere.mock.calls[0][0].sql).toContain(
-      '"builder_handoff"."expires_at" >'
+      '"builder_handoff"."expires_at" >',
     );
     expect(test.updateWhere.mock.calls[0][0].params).toContain(
-      row.expiresAt.toISOString()
+      row.expiresAt.toISOString(),
     );
   });
 });

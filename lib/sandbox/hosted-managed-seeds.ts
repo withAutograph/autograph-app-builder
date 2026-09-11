@@ -13,7 +13,7 @@ export const HOSTED_MANAGED_SKILLS_TARGET = "$HOME/.agents/skills";
  */
 export function readHostedManagedSeedFiles(): readonly SandboxSeedFile[] {
   return HOSTED_MANAGED_SKILL_CONTENTS.map(({ content, path }) => ({
-    content: Buffer.from(content, "utf-8"),
+    content: Buffer.from(content, "utf8"),
     path: posix.join(HOSTED_MANAGED_SKILLS_TARGET, path),
   }));
 }

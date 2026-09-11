@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filter controls, exception list, selected-record header, evidence, and replenishment action form a clear review sequence. Selected-row treatment, severity pills, and large modeled quantities are easy to scan, though the constrained 700px list initially highlights Atlas before its detail is opened, creating a mildly ambiguous current state. |
-| layout | 3/4 | The two-pane desktop composition is consistently aligned, with compact list rows, well-grouped record facts, and stable action placement. It uses wide windows conservatively but readably. At the 1024px confirmation and expanded-supplier states, however, the detail footer overlaps or clips the final content instead of preserving a fully usable content area. |
-| typography | 4/4 | Typography is highly consistent: strong page and record headings, clear label/value differentiation, readable list metadata, and prominent quantity figures. Line lengths remain comfortable across the supplied widths, and no typographic collision is visible outside the separate footer-clipping issue. |
-| responsive | 2/4 | The composition successfully changes from side-by-side panes at 1024–1920px to deferred list/detail views with a clear Back action at 700px. Controls and KPI cards resize cleanly, but the intermediate 1024px detail panel clips replenishment text and expanded supplier facts behind its footer, which is a notable usability defect in resized desktop windows. |
-| productClarity | 4/4 | The task is explicit from the subtitle, filters directly match location and severity, list rows expose shortage and days-of-cover evidence, and the selected detail includes stock and supplier facts. The mock flow clearly distinguishes current, added, and projected quantities and repeatedly states that no order or inventory change occurs; confirm, cancel, reset, disclosure, and back affordances are understandable. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, filter controls, exception list, selected-record header, evidence, and replenishment action form a clear review sequence. Selected-row treatment, severity pills, and large modeled quantities are easy to scan, though the constrained 700px list initially highlights Atlas before its detail is opened, creating a mildly ambiguous current state.                                                            |
+| layout         | 3/4   | The two-pane desktop composition is consistently aligned, with compact list rows, well-grouped record facts, and stable action placement. It uses wide windows conservatively but readably. At the 1024px confirmation and expanded-supplier states, however, the detail footer overlaps or clips the final content instead of preserving a fully usable content area.                                                           |
+| typography     | 4/4   | Typography is highly consistent: strong page and record headings, clear label/value differentiation, readable list metadata, and prominent quantity figures. Line lengths remain comfortable across the supplied widths, and no typographic collision is visible outside the separate footer-clipping issue.                                                                                                                     |
+| responsive     | 2/4   | The composition successfully changes from side-by-side panes at 1024–1920px to deferred list/detail views with a clear Back action at 700px. Controls and KPI cards resize cleanly, but the intermediate 1024px detail panel clips replenishment text and expanded supplier facts behind its footer, which is a notable usability defect in resized desktop windows.                                                             |
+| productClarity | 4/4   | The task is explicit from the subtitle, filters directly match location and severity, list rows expose shortage and days-of-cover evidence, and the selected detail includes stock and supplier facts. The mock flow clearly distinguishes current, added, and projected quantities and repeatedly states that no order or inventory change occurs; confirm, cancel, reset, disclosure, and back affordances are understandable. |
 
 ## Strengths
 
@@ -48,32 +48,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/139) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/287) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/162) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/69) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/77) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/73) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/139) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/287) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/162) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/69)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/77)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/73)  |
 
 ## Latest-run screenshots
 

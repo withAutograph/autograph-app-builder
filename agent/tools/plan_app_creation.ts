@@ -1,16 +1,18 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import {
+  prepareOrReuseDependencies,
+  type DependencyReadyState,
+} from "@/lib/agent/target-dependency-preparation";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
-import { prepareOrReuseDependencies } from "@/lib/agent/target-dependency-preparation";
-import type { DependencyReadyState } from "@/lib/agent/target-dependency-preparation";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   sha256,
+  type TargetIdentityReceipt,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import type { TargetIdentityReceipt } from "@/lib/agent/workflow-state";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -21,6 +23,9 @@ import {
 export default defineTool({
   description:
     "Create the implementation plan for the current product design. It prepares dependencies when needed, then runs the repository's normal planning commands. Repository inspection is best-effort context: ordinary source changes, new files, and differing project layouts do not block planning. This does not publish or otherwise change an external repository.",
+  inputSchema: z.object({
+    existingAppChanges: existingAppChangesSchema.optional(),
+  }),
   async execute({ existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -30,7 +35,7 @@ export default defineTool({
       state.phase === "ui_accepted"
     )
       throw new Error(
-        "Finalize the UI and accept a build-ready AppSpec before running target planning."
+        "Finalize the UI and accept a build-ready AppSpec before running target planning.",
       );
     const prepared = await prepareOrReuseDependencies({
       current: state,
@@ -146,7 +151,4 @@ export default defineTool({
     });
     return { ...proposal, reused: false };
   },
-  inputSchema: z.object({
-    existingAppChanges: existingAppChangesSchema.optional(),
-  }),
 });

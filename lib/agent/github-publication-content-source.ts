@@ -1,16 +1,15 @@
+import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
 
-import type { SandboxSession } from "eve/sandbox";
-
-import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
+import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationContentSource } from "../repository/github-publication";
-import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
+import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import {
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
 } from "../repository/target-apply";
+import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
-import type { AppBuilderWorkflowState } from "./workflow-state";
 
 type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 
@@ -28,7 +27,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
 }): GitHubPublicationContentSource {
   const relativeRoot = input.state.applyReceipt.applyRoot.replace(
     /^\/workspace\//u,
-    ""
+    "",
   );
   let applyFiles:
     | Promise<Map<string, { path: string; mode: string; digest: string }>>
@@ -39,30 +38,19 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         ? await inspectFixtureApplyOverlay(
             input.sandbox,
             input.state.applyReceipt.applyRoot,
-            input.state.appSpec.appId
+            input.state.appSpec.appId,
           )
         : await inspectApplyOverlay(
             input.sandbox,
-            input.state.applyReceipt.applyRoot
+            input.state.applyReceipt.applyRoot,
           );
-      if (observed.treeDigest !== input.state.reviewReceipt.postTreeDigest) {
+      if (observed.treeDigest !== input.state.reviewReceipt.postTreeDigest)
         throw new Error(
-          "The reviewed apply overlay changed before GitHub publication."
+          "The reviewed apply overlay changed before GitHub publication.",
         );
-      }
       return new Map(observed.files.map((file) => [file.path, file]));
     })());
   return {
-    async readFile(path) {
-      const files = await observeApplyFiles();
-      const file = files.get(path);
-      if (file === undefined) return null;
-      const bytes = await input.sandbox.readBinaryFile({
-        path: `${relativeRoot}/${path}`,
-      });
-      if (bytes === null) return null;
-      return { mode: file.mode, digest: file.digest, bytes };
-    },
     async readFreshTree() {
       const prepared = await inspectSourceBoundSandboxWorkspace({
         sandbox: input.sandbox,
@@ -72,7 +60,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
       });
       const sourceFiles = await readPreparedSandboxSourceManifest(
         input.sandbox,
-        prepared
+        prepared,
       );
       const files = await Promise.all(
         sourceFiles.map(async (file) => {
@@ -81,7 +69,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           });
           if (bytes === null || sha256(bytes) !== file.sha256)
             throw new Error(
-              "A prepared source file changed before publication."
+              "A prepared source file changed before publication.",
             );
           return {
             path: file.path,
@@ -90,7 +78,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
             digest: file.sha256,
             bytes,
           };
-        })
+        }),
       );
       await inspectSourceBoundSandboxWorkspace({
         sandbox: input.sandbox,
@@ -105,6 +93,16 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         sourceTree: prepared.sourceTree,
         files,
       };
+    },
+    async readFile(path) {
+      const files = await observeApplyFiles();
+      const file = files.get(path);
+      if (file === undefined) return null;
+      const bytes = await input.sandbox.readBinaryFile({
+        path: `${relativeRoot}/${path}`,
+      });
+      if (bytes === null) return null;
+      return { mode: file.mode, digest: file.digest, bytes };
     },
   };
 }

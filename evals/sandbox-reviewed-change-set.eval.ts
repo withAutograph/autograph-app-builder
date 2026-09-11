@@ -8,15 +8,16 @@ const staysProductFacing = satisfies(
   (reply) =>
     isProductFacing(reply) &&
     !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run|nothing (?:has been|was) published)/iu.test(
-      String(reply)
+      String(reply),
     ),
-  "assistant reply stays product-facing and omits internal review mechanics"
+  "assistant reply stays product-facing and omits internal review mechanics",
 );
 
 export default defineEval({
   description:
     "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
   tags: ["sandbox-image-proof", "reviewed-change-set"],
+  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
@@ -26,7 +27,7 @@ export default defineEval({
     t.succeeded();
 
     await t.send(
-      `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`
+      `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`,
     );
     t.succeeded();
 
@@ -94,8 +95,7 @@ export default defineEval({
           "accept_change_set",
           "artifact_workflow_status",
         ],
-      })}\n`
+      })}\n`,
     );
   },
-  timeoutMs: 360_000,
 });

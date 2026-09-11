@@ -14,10 +14,10 @@ export default defineEval({
     await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
     const head = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repository,
-      encoding: "utf-8",
+      encoding: "utf8",
     });
     await t.send(
-      "Publish reviewed change set with stale branch preconditions."
+      "Publish reviewed change set with stale branch preconditions.",
     );
     t.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
@@ -26,24 +26,22 @@ export default defineEval({
     t.succeeded();
     t.check(
       t.reply,
-      includes("rejected without creating a branch or worktree")
+      includes("rejected without creating a branch or worktree"),
     );
     if (
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,
-        encoding: "utf-8",
+        encoding: "utf8",
       }) !== head
-    ) {
+    )
       throw new Error("A stale approval changed the source HEAD.");
-    }
     if (
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
-        encoding: "utf-8",
+        encoding: "utf8",
       }) !== ""
-    ) {
+    )
       throw new Error("A stale approval created a branch.");
-    }
     t.notCalledTool("recover_branch_worktree_publication");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

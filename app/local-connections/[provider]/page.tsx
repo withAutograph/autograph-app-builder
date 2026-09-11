@@ -4,8 +4,8 @@ import { Suspense } from "react";
 import {
   EmulationApproval,
   emulationApprovalStyles,
+  type EmulatedProvider,
 } from "@/app/ui/emulation-approval";
-import type { EmulatedProvider } from "@/app/ui/emulation-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 import {
@@ -13,10 +13,10 @@ import {
   EMULATED_VERCEL_TEAM_ID,
 } from "@/lib/integrations/provider-emulation-seed";
 
-interface Props {
+type Props = {
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
+};
 
 /** Development-only consent surface; real provider installation pages remain external. */
 async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
@@ -31,9 +31,8 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
     !emulation ||
     !["vercel", "github"].includes(provider) ||
     typeof query.state !== "string"
-  ) {
+  )
     notFound();
-  }
   const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";
@@ -96,7 +95,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
           {forwarded.map((name) =>
             typeof query[name] === "string" ? (
               <input key={name} type="hidden" name={name} value={query[name]} />
-            ) : null
+            ) : null,
           )}
           <button className={emulationApprovalStyles.button} type="submit">
             {actionLabel}

@@ -2,13 +2,12 @@ import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
+import { freshBootstrapProposalSchema } from "@/lib/agent/fresh-bootstrap-schema";
 import {
   currentFreshBootstrapCapability,
   configuredFreshBootstrapEvalHooks,
   currentFreshBootstrapTestHooks,
 } from "@/lib/agent/fresh-bootstrap-capability";
-import { freshBootstrapProposalSchema } from "@/lib/agent/fresh-bootstrap-schema";
-import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 import {
   appBuilderWorkflowState,
   updateExactWorkflow,
@@ -21,11 +20,13 @@ import {
   deriveFreshBootstrapProposal,
   publishFreshBootstrap,
 } from "@/lib/repository/node-fresh-bootstrap";
+import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
-  approval: always(),
   description:
     "After a separate approval, atomically publish the exact reviewed fresh-template result to the approved absent or exact-empty local destination as one parentless SHA-1 Git commit. GitHub publication, remotes, release activation, and arbitrary target mutation remain unavailable.",
+  inputSchema: z.strictObject({ publication: freshBootstrapProposalSchema }),
+  approval: always(),
   async execute({ publication: expected }, ctx) {
     const capability = await currentFreshBootstrapCapability();
     const workflow = appBuilderWorkflowState.get();
@@ -34,12 +35,12 @@ export default defineTool({
       workflow.sourceReceipt.sourceKind !== "fresh-template"
     )
       throw new Error(
-        "Initial fresh bootstrap requires the exact reviewed fresh-template phase."
+        "Initial fresh bootstrap requires the exact reviewed fresh-template phase.",
       );
     assertExactFreshBootstrapProposal(expected);
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(
       /^\/workspace\//u,
-      ""
+      "",
     );
     const sandbox = await ctx.getSandbox();
     const readOverlayFile = async (path: string) =>
@@ -63,8 +64,7 @@ export default defineTool({
     if (!exactFreshBootstrapProposalMatch(proposal, expected))
       throw new Error("Fresh-bootstrap preconditions changed after approval.");
     let pendingWorkflow:
-      | ReturnType<typeof appBuilderWorkflowState.get>
-      | undefined;
+      ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const result = await publishFreshBootstrap({
       capability,
       proposal,
@@ -83,7 +83,7 @@ export default defineTool({
             transition: (current) => {
               if (current.phase !== "reviewed")
                 throw new Error(
-                  "The reviewed workflow changed before fresh bootstrap."
+                  "The reviewed workflow changed before fresh bootstrap.",
                 );
               return {
                 ...current,
@@ -99,7 +99,7 @@ export default defineTool({
     });
     if (pendingWorkflow === undefined)
       throw new Error(
-        "Durable fresh-bootstrap intent was not bound to workflow state."
+        "Durable fresh-bootstrap intent was not bound to workflow state.",
       );
     const exactPending = pendingWorkflow;
     updateExactWorkflow({
@@ -111,11 +111,11 @@ export default defineTool({
           current.freshBootstrapCallId !== ctx.callId ||
           !exactFreshBootstrapProposalMatch(
             current.freshBootstrapProposal,
-            proposal
+            proposal,
           )
         )
           throw new Error(
-            "The pending fresh-bootstrap workflow changed before terminal recording."
+            "The pending fresh-bootstrap workflow changed before terminal recording.",
           );
         return result.ok
           ? {
@@ -132,5 +132,4 @@ export default defineTool({
     });
     return result.receipt;
   },
-  inputSchema: z.strictObject({ publication: freshBootstrapProposalSchema }),
 });

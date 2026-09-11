@@ -1,5 +1,4 @@
-import { expect, test } from "playwright/test";
-import type { Page } from "playwright/test";
+import { expect, test, type Page } from "playwright/test";
 
 import {
   currentSession,
@@ -12,10 +11,10 @@ const html = (page: Page) => page.locator("html");
 async function expectTheme(
   page: Page,
   theme: "light" | "dark",
-  storedTheme?: "system" | "light" | "dark"
+  storedTheme?: "system" | "light" | "dark",
 ) {
   await expect(html(page)).toHaveClass(
-    new RegExp(`(^|\\s)${theme}(\\s|$)`, "u")
+    new RegExp(`(^|\\s)${theme}(\\s|$)`, "u"),
   );
   await expect(html(page)).toHaveCSS("color-scheme", theme);
   if (storedTheme) {
@@ -46,7 +45,7 @@ test("first visit follows System and reacts to an OS preference change", async (
   await page.goto("/");
   await expectTheme(page, "dark");
   await expect(
-    page.getByRole("heading", { name: "Build an app" })
+    page.getByRole("heading", { name: "Build an app" }),
   ).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => localStorage.theme ?? null))
@@ -99,7 +98,7 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
     await expectTheme(page, "light", "light");
     await expectTheme(secondPage, "light", "light");
     await expect(
-      secondPage.getByRole("radio", { name: "Light" })
+      secondPage.getByRole("radio", { name: "Light" }),
     ).toBeChecked();
 
     await secondPage.getByRole("radio", { name: "System" }).click();
@@ -119,7 +118,7 @@ test("explicit Dark remains active across anonymous, auth, builder, and account 
   await page.goto("/");
   await expectTheme(page, "dark", "dark");
   await expect(
-    page.getByRole("heading", { name: "Build an app" })
+    page.getByRole("heading", { name: "Build an app" }),
   ).toBeVisible();
 
   await page.goto("/auth/sign-in?callbackURL=%2F");

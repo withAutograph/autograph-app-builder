@@ -6,15 +6,15 @@ export async function prepareReviewedWorkflow(
   t: EveEvalContext,
   repository: string,
   appId: string,
-  sourceKind: "existing-repository" | "fresh-template" = "existing-repository"
+  sourceKind: "existing-repository" | "fresh-template" = "existing-repository",
 ): Promise<void> {
   await t.send(
     sourceKind === "fresh-template"
       ? `Prepare fresh template at ${repository}`
-      : `Prepare supported repository at ${repository}`
+      : `Prepare supported repository at ${repository}`,
   );
   await t.send(
-    `Accept build-ready AppSpec for ${appId}:\n${BUILD_READY_APP_SPEC}`
+    `Accept build-ready AppSpec for ${appId}:\n${BUILD_READY_APP_SPEC}`,
   );
 
   await t.send("Prepare offline target dependencies.");

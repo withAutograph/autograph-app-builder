@@ -3,16 +3,8 @@ import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 
 import { createGitHubTokenOctokit } from "../github/octokit";
-import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
-import { deploymentArrustedTemplateReader } from "./arrusted-template-reader";
-import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import { canAutoSelectDevelopmentSource } from "./development-source";
-import type { ImmutableGitHubSourceReceipt } from "./github-publication";
-import {
-  cloneGitHubSource,
-  inspectGitHubSourceSandboxWorkspace,
-  readSandboxGitHubSourceSnapshot,
-} from "./sandbox-github-source";
+
 import {
   ARRUSTED_TEMPLATE_REF,
   ARRUSTED_TEMPLATE_REPOSITORY,
@@ -20,15 +12,26 @@ import {
   parseCanonicalTemplateSnapshot,
   parseSourceReceipt,
   SOURCE_RECEIPT_VERSION,
+  type SourceReceipt,
 } from "./source-receipt";
-import type { SourceReceipt } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
   readPreparedSandboxWorkspaceRecord,
   recordPreparedSandboxWorkspace,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
+  type PreparedSandboxWorkspace,
 } from "./supported-template";
-import type { PreparedSandboxWorkspace } from "./supported-template";
+import {
+  deploymentArrustedTemplateReader,
+  type ArrustedTemplateReader,
+} from "./arrusted-template-reader";
+import {
+  cloneGitHubSource,
+  inspectGitHubSourceSandboxWorkspace,
+  readSandboxGitHubSourceSnapshot,
+} from "./sandbox-github-source";
+import type { ImmutableGitHubSourceReceipt } from "./github-publication";
+import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
@@ -45,14 +48,11 @@ export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
 type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
 
 type TemplateAcquisitionFailureStage =
-  | "reader"
-  | "sandbox_clone"
-  | "readiness"
-  | "workspace_record";
+  "reader" | "sandbox_clone" | "readiness" | "workspace_record";
 
 async function acquisitionStage<T>(
   stage: TemplateAcquisitionFailureStage,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
 ) {
   try {
     return await operation();
@@ -61,7 +61,7 @@ async function acquisitionStage<T>(
       JSON.stringify({
         event: "autograph.template-acquisition.failed",
         stage,
-      })
+      }),
     );
     throw error;
   }
@@ -78,27 +78,23 @@ function shellQuote(value: string) {
 export function classifySandboxCloneFailure(stderr: string) {
   if (
     /authentication failed|could not read username|repository not found/u.test(
-      stderr
+      stderr,
     )
-  ) {
+  )
     return "github-auth" as const;
-  }
   if (
     /could not resolve host|failed to connect|network is unreachable/u.test(
-      stderr
+      stderr,
     )
-  ) {
+  )
     return "network" as const;
-  }
-  if (/timed? out|operation timeout/u.test(stderr)) {
-    return "timeout" as const;
-  }
+  if (/timed? out|operation timeout/u.test(stderr)) return "timeout" as const;
   return "git-command" as const;
 }
 
 export function sandboxCloneFailureStage(stderr: string) {
   return stderr.match(
-    /AUTOGRAPH_CLONE_STAGE=(prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u
+    /AUTOGRAPH_CLONE_STAGE=(prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
   )?.[1];
 }
 
@@ -107,20 +103,16 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
     .replaceAll(token, "[redacted]")
     .replaceAll(/https?:\/\/[^\s]+/gu, "[url]")
     .replaceAll(/[\r\n]+/gu, " ")
-    .replaceAll(/[^\x20-\x7E]/gu, "?")
+    .replaceAll(/[^\x20-\x7e]/gu, "?")
     .trim();
-  if (sanitized.length <= 512) {
-    return sanitized;
-  }
+  if (sanitized.length <= 512) return sanitized;
 
   // Clone stage logs are deliberately detailed. Preserve a terminal inspector
   // error too, otherwise the successful stages can consume the full bound.
   const inspectorError = sanitized.lastIndexOf(
-    "AUTOGRAPH_CLONE_INSPECT_ERROR="
+    "AUTOGRAPH_CLONE_INSPECT_ERROR=",
   );
-  if (inspectorError === -1) {
-    return sanitized.slice(0, 512);
-  }
+  if (inspectorError === -1) return sanitized.slice(0, 512);
   const suffix = sanitized.slice(inspectorError);
   const prefixLength = Math.max(0, 512 - suffix.length - 4);
   return `${sanitized.slice(0, prefixLength)} ...${suffix}`;
@@ -271,9 +263,8 @@ function sandboxCloneCommand() {
 
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
   const raw = await sandbox.readTextFile({ path: SANDBOX_CLONE_INSPECTION });
-  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES) {
+  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES)
     throw new Error("The canonical Arrusted workspace inspection is missing.");
-  }
   try {
     return parseCanonicalTemplateSnapshot(JSON.parse(raw) as unknown);
   } catch (error) {
@@ -292,35 +283,34 @@ async function cloneCanonicalArrustedWorkspace(input: {
 }) {
   const existing = await inspectPreparedSandboxWorkspace(input.sandbox);
   if (existing.state === "prepared") {
-    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE) {
+    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE)
       throw new Error("This app build already owns a different workspace.");
-    }
     return {
       snapshot: await readCanonicalTemplateSnapshot(input.sandbox),
       workspaceDigest: existing.workspace.workspaceDigest,
     };
   }
 
-  let result = { exitCode: 1, stderr: "", stdout: "" };
+  let result = { exitCode: 1, stdout: "", stderr: "" };
   try {
     await input.sandbox.writeTextFile({
-      content: sandboxCloneInspectionProgram,
       path: SANDBOX_CLONE_INSPECTOR,
+      content: sandboxCloneInspectionProgram,
     });
     // This is a builder-owned working checkout. Recreate it through the
     // sandbox filesystem API so a stale file, symlink, or partial checkout
     // cannot make `mkdir -p` fail before ordinary Git initialization begins.
     await input.sandbox.removePath({
-      force: true,
       path: "repository",
       recursive: true,
+      force: true,
     });
     await input.sandbox.setNetworkPolicy("allow-all");
     result = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
       command: sandboxCloneCommand(),
-      env: { TERM: "dumb" },
       workingDirectory: "/workspace",
+      env: { TERM: "dumb" },
+      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     });
     // A provider-side command status is not a source-identity boundary. The
     // receipt below is the productive observation: it must still parse and
@@ -334,35 +324,34 @@ async function cloneCanonicalArrustedWorkspace(input: {
     ) {
       console.warn(
         JSON.stringify({
-          category: classifySandboxCloneFailure(
-            `${result.stderr}\n${result.stdout}`.toLowerCase()
-          ),
-          errorSummary: sanitizeSandboxCloneError(
-            `${result.stderr}\n${result.stdout}`,
-            input.token
-          ),
           event: "autograph.template-clone-command.failed",
+          category: classifySandboxCloneFailure(
+            `${result.stderr}\n${result.stdout}`.toLowerCase(),
+          ),
           exitCode: result.exitCode,
           outputWithinLimit:
             Buffer.byteLength(result.stdout) <=
               SANDBOX_OPERATION_OUTPUT_BYTES &&
             Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
-        })
+          errorSummary: sanitizeSandboxCloneError(
+            `${result.stderr}\n${result.stdout}`,
+            input.token,
+          ),
+        }),
       );
       throw new Error(
-        "The canonical Arrusted workspace clone could not be prepared."
+        "The canonical Arrusted workspace clone could not be prepared.",
       );
     }
   } finally {
     const cleanup = await Promise.allSettled(
       [SANDBOX_CLONE_INSPECTOR].map((path) =>
-        input.sandbox.removePath({ force: true, path })
-      )
+        input.sandbox.removePath({ path, force: true }),
+      ),
     );
     const failures = cleanup.filter((result) => result.status === "rejected");
-    if (failures.length > 0) {
+    if (failures.length > 0)
       throw new AggregateError(failures, "Sandbox clone cleanup failed.");
-    }
   }
   let observation: {
     sourceSha?: unknown;
@@ -375,16 +364,15 @@ async function cloneCanonicalArrustedWorkspace(input: {
       workspaceDigest?: unknown;
     };
   } catch {
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0)
       throw new Error(
-        "The canonical Arrusted workspace clone could not be prepared."
+        "The canonical Arrusted workspace clone could not be prepared.",
       );
-    }
     throw new Error(
-      "The canonical Arrusted workspace clone receipt is invalid."
+      "The canonical Arrusted workspace clone receipt is invalid.",
     );
   }
-  const { workspaceDigest } = observation;
+  const workspaceDigest = observation.workspaceDigest;
   if (
     typeof observation.sourceSha !== "string" ||
     !SHA.test(observation.sourceSha) ||
@@ -392,17 +380,15 @@ async function cloneCanonicalArrustedWorkspace(input: {
     !SHA.test(observation.sourceTree) ||
     typeof workspaceDigest !== "string" ||
     !DIGEST.test(workspaceDigest)
-  ) {
+  )
     throw new Error("The canonical Arrusted workspace clone drifted.");
-  }
   const snapshot = await readCanonicalTemplateSnapshot(input.sandbox);
   if (
     snapshot.sourceSha !== observation.sourceSha ||
     snapshot.sourceTree !== observation.sourceTree ||
     snapshot.dirtyPaths.length !== 0
-  ) {
+  )
     throw new Error("The canonical Arrusted workspace clone drifted.");
-  }
   return { snapshot, workspaceDigest };
 }
 
@@ -420,42 +406,41 @@ export async function acquireCanonicalArrustedTemplate(input: {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
   const access = await acquisitionStage("reader", () => reader.acquire());
   if (typeof input.sandbox === "function") {
-    if (input.sessionId === undefined) {
+    if (input.sessionId === undefined)
       throw new Error("The App Builder session is unavailable.");
-    }
     configureVercelSessionGitSource({
       sessionId: input.sessionId,
-      source: { token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY },
+      source: { url: ARRUSTED_TEMPLATE_REPOSITORY, token: access.token },
     });
   }
   const sandbox =
     typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
   await cloneGitHubSource({
     sandbox,
-    token: access.token,
     url: ARRUSTED_TEMPLATE_REPOSITORY,
+    token: access.token,
   });
   const snapshot = await acquisitionStage("sandbox_clone", () =>
-    readSandboxGitHubSourceSnapshot(sandbox)
+    readSandboxGitHubSourceSnapshot(sandbox),
   );
   const workspaceDigest = receiptReadinessDigest({
     sourceSha: snapshot.sourceSha,
     sourceTree: snapshot.sourceTree,
   });
   const receipt = inspectCanonicalTemplateSnapshotReceipt({
-    readinessDigest: workspaceDigest,
     snapshot,
+    readinessDigest: workspaceDigest,
   });
   await acquisitionStage("workspace_record", () =>
     recordPreparedSandboxWorkspace({
-      callId: input.callId,
-      eligibilityDigest: receipt.eligibilityDigest,
       sandbox,
+      callId: input.callId,
       sourcePath: SANDBOX_WORKSPACE,
       sourceSha: receipt.sourceSha,
       sourceTree: receipt.sourceTree,
+      eligibilityDigest: receipt.eligibilityDigest,
       workspaceDigest,
-    })
+    }),
   );
   return receipt;
 }
@@ -468,9 +453,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   let receipt: ClonedTemplateReceipt;
   try {
     const parsed = parseSourceReceipt(input.receipt);
-    if (parsed.version !== 4) {
-      throw new Error("not a cloned receipt");
-    }
+    if (parsed.version !== 4) throw new Error("not a cloned receipt");
     receipt = parsed;
   } catch (error) {
     throw new Error("Canonical Arrusted clone receipt is invalid.", {
@@ -485,22 +468,19 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     !SHA.test(receipt.sourceTree) ||
     !DIGEST.test(receipt.eligibilityDigest) ||
     !DIGEST.test(receipt.provenance.readinessDigest)
-  ) {
+  )
     throw new Error("Canonical Arrusted clone receipt is invalid.");
-  }
   const observed = await readPreparedSandboxWorkspaceRecord(input.sandbox);
-  if (observed === undefined) {
+  if (observed === undefined)
     throw new Error("The canonical Arrusted workspace is missing.");
-  }
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== SANDBOX_WORKSPACE ||
     observed.sourceSha !== receipt.sourceSha ||
     observed.sourceTree !== receipt.sourceTree ||
     observed.eligibilityDigest !== receipt.eligibilityDigest
-  ) {
+  )
     throw new Error("The canonical Arrusted workspace drifted.");
-  }
   return observed;
 }
 
@@ -518,23 +498,29 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   if (canAutoSelectDevelopmentSource()) {
     const status = await inspectPreparedSandboxWorkspace(
       input.sandbox,
-      "development-live"
+      "development-live",
     );
-    if (status.state !== "prepared") {
+    if (status.state !== "prepared")
       throw new Error("The prepared development workspace is missing.");
-    }
     const observed = status.workspace;
-    if (observed.workspaceId !== input.sandbox.id) {
+    if (observed.workspaceId !== input.sandbox.id)
       throw new Error(
-        "The prepared development workspace does not match the active workflow."
+        "The prepared development workspace does not match the active workflow.",
       );
-    }
     return observed;
   }
   const receipt = parseSourceReceipt(input.receipt);
   const observed =
-    input.githubSource === undefined
-      ? receipt.version === SOURCE_RECEIPT_VERSION
+    input.githubSource !== undefined
+      ? await inspectGitHubSourceSandboxWorkspace({
+          sandbox: input.sandbox,
+          receipt,
+          githubSource: input.githubSource,
+          ...(input.expectedWorkspace === undefined
+            ? {}
+            : { expectedWorkspace: input.expectedWorkspace }),
+        })
+      : receipt.version === SOURCE_RECEIPT_VERSION
         ? await inspectCanonicalArrustedSandboxWorkspace({
             sandbox: input.sandbox,
             receipt,
@@ -544,16 +530,8 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
               if (status.state !== "prepared")
                 throw new Error("The prepared source workspace is missing.");
               return status.workspace;
-            }
-          )
-      : await inspectGitHubSourceSandboxWorkspace({
-          sandbox: input.sandbox,
-          receipt,
-          githubSource: input.githubSource,
-          ...(input.expectedWorkspace === undefined
-            ? {}
-            : { expectedWorkspace: input.expectedWorkspace }),
-        });
+            },
+          );
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== receipt.sourcePath ||
@@ -562,11 +540,10 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     observed.eligibilityDigest !== receipt.eligibilityDigest ||
     (input.expectedWorkspace !== undefined &&
       JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
-  ) {
+  )
     throw new Error(
-      "The prepared workspace no longer matches its durable source receipt."
+      "The prepared workspace no longer matches its durable source receipt.",
     );
-  }
   return observed;
 }
 
@@ -580,13 +557,13 @@ export async function templateReadinessAttestationDigest(input: {
   let body: unknown;
   try {
     const response = await createGitHubTokenOctokit({
-      fetch: input.fetch,
       token: input.token,
+      fetch: input.fetch,
     }).request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
       owner: "withAutograph",
-      per_page: 100,
-      ref: sha,
       repo: "arrusted-development",
+      ref: sha,
+      per_page: 100,
     });
     body = response.data;
   } catch {
@@ -596,9 +573,8 @@ export async function templateReadinessAttestationDigest(input: {
     typeof body !== "object" ||
     body === null ||
     !Array.isArray((body as { check_runs?: unknown }).check_runs)
-  ) {
+  )
     throw new Error("Template-readiness evidence is invalid.");
-  }
   const checks = (body as { check_runs: unknown[] }).check_runs;
   const readiness = checks
     .filter(
@@ -608,7 +584,7 @@ export async function templateReadinessAttestationDigest(input: {
         !Array.isArray(check) &&
         (check as Record<string, unknown>)["name"] ===
           TEMPLATE_READINESS_CHECK &&
-        (check as Record<string, unknown>)["head_sha"] === sha
+        (check as Record<string, unknown>)["head_sha"] === sha,
     )
     .toSorted((left, right) => Number(right.id) - Number(left.id))[0];
   if (
@@ -620,22 +596,21 @@ export async function templateReadinessAttestationDigest(input: {
     readiness.id <= 0 ||
     typeof readiness.completed_at !== "string" ||
     !Number.isFinite(Date.parse(readiness.completed_at))
-  ) {
+  )
     throw new Error(
-      "The resolved Arrusted commit has no successful template-readiness evidence."
+      "The resolved Arrusted commit has no successful template-readiness evidence.",
     );
-  }
   return receiptReadinessDigest({
-    check: {
-      completedAt: readiness.completed_at,
-      conclusion: readiness.conclusion,
-      id: readiness.id,
-      name: TEMPLATE_READINESS_CHECK,
-    },
-    ref: ARRUSTED_TEMPLATE_REF,
+    version: 1,
     repository: ARRUSTED_TEMPLATE_REPOSITORY,
+    ref: ARRUSTED_TEMPLATE_REF,
     sha,
     tree,
-    version: 1,
+    check: {
+      id: readiness.id,
+      name: TEMPLATE_READINESS_CHECK,
+      completedAt: readiness.completed_at,
+      conclusion: readiness.conclusion,
+    },
   });
 }

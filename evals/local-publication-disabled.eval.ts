@@ -17,10 +17,10 @@ export default defineEval({
         (reply) =>
           typeof reply === "string" &&
           !/(?:local checkout publication is disabled|disabled on this host|host capability|APP_BUILDER_LOCAL_PUBLICATION)/iu.test(
-            reply
+            reply,
           ),
-        "capability reply omits disabled-host and local-publication boilerplate"
-      )
+        "capability reply omits disabled-host and local-publication boilerplate",
+      ),
     );
     t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("bash");

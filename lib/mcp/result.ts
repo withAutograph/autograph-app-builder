@@ -1,3 +1,5 @@
+import { AdapterNotConfiguredError } from "../eve/service";
+import { BuilderHandoffUnavailableError } from "../handoff/service";
 import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
   HostedCancellationUnsettledError,
@@ -8,8 +10,6 @@ import {
   HostedSessionRecoveryUnavailableError,
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
-import { AdapterNotConfiguredError } from "../eve/service";
-import { BuilderHandoffUnavailableError } from "../handoff/service";
 import type { EveSessionListResult, EveSessionResult } from "./contracts";
 
 export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
@@ -37,7 +37,7 @@ export function toolResult<
     (result.inputRequests?.length ?? 0) > 0;
 
   return {
-    content: [{ text, type: "text" as const }],
+    content: [{ type: "text" as const, text }],
     structuredContent: result,
     ...(needsInteractiveSessionUi
       ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } }
@@ -52,13 +52,13 @@ export function safeToolError(error: unknown, sessionId = "") {
     return {
       ...toolResult(
         {
-          cursor: 0,
-          error: { code: "provider_unavailable", message },
-          events: [],
           sessionId,
           status: "failed",
+          cursor: 0,
+          events: [],
+          error: { code: "provider_unavailable", message },
         },
-        message
+        message,
       ),
       isError: true,
     };
@@ -123,14 +123,14 @@ export function safeToolError(error: unknown, sessionId = "") {
                       ? "The operation was rejected before a durable result."
                       : "The operation failed safely.";
   const result: EveSessionResult = {
+    sessionId,
+    status: "failed",
     cursor: 0,
+    events: [],
     error: {
       code,
       message,
     },
-    events: [],
-    sessionId,
-    status: "failed",
   };
   return {
     ...toolResult(result, message),

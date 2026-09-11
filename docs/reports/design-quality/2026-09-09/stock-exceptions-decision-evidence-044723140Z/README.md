@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected record, evidence, and primary mock action form a clear review sequence. Selection is reinforced by a tinted row and matching detail title. Hierarchy is weakened slightly by the prominent but apparently contentless “Secondary supplier facts” disclosure and by the mock result not explaining why 72 units were modeled. |
-| layout | 3/4 | List rows, evidence labels and values, card boundaries, and action placement are consistently aligned with comfortable desktop density. The list-detail split is balanced at 1024–1920px, though the filter container is materially wider than the work area at 1440px and the wide empty state leaves the entire detail region visually unresolved. |
-| typography | 3/4 | Headings, product names, evidence values, and supporting metadata use a consistent, readable scale. Small muted metadata and 10px severity-pill text are visually delicate; automated evidence also flags these areas, so critical status depends on typography that is less robust than the main content even though the authoritative palette is preserved. |
-| responsive | 4/4 | The composition remains usable across the supplied 700, 1024, 1440, and 1920px desktop captures. Wide and regular windows use list-detail, while the 700px panel switches to a focused detail view with a clear “Back to exceptions” control. Controls remain visible, content does not overlap, and intentional document scrolling accommodates the expanded mock result. |
-| productClarity | 3/4 | The task is immediately understandable: filter exceptions, select a product, inspect stock and supplier evidence, and try a clearly labeled mock action. Filter synchronization, empty-state recovery, and the explicit statement that no order was placed reduce risk. Clarity is held back by the unexplained secondary-facts disclosure and limited rationale for the modeled replenishment quantity. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected record, evidence, and primary mock action form a clear review sequence. Selection is reinforced by a tinted row and matching detail title. Hierarchy is weakened slightly by the prominent but apparently contentless “Secondary supplier facts” disclosure and by the mock result not explaining why 72 units were modeled.                           |
+| layout         | 3/4   | List rows, evidence labels and values, card boundaries, and action placement are consistently aligned with comfortable desktop density. The list-detail split is balanced at 1024–1920px, though the filter container is materially wider than the work area at 1440px and the wide empty state leaves the entire detail region visually unresolved.                                                     |
+| typography     | 3/4   | Headings, product names, evidence values, and supporting metadata use a consistent, readable scale. Small muted metadata and 10px severity-pill text are visually delicate; automated evidence also flags these areas, so critical status depends on typography that is less robust than the main content even though the authoritative palette is preserved.                                            |
+| responsive     | 4/4   | The composition remains usable across the supplied 700, 1024, 1440, and 1920px desktop captures. Wide and regular windows use list-detail, while the 700px panel switches to a focused detail view with a clear “Back to exceptions” control. Controls remain visible, content does not overlap, and intentional document scrolling accommodates the expanded mock result.                               |
+| productClarity | 3/4   | The task is immediately understandable: filter exceptions, select a product, inspect stock and supplier evidence, and try a clearly labeled mock action. Filter synchronization, empty-state recovery, and the explicit statement that no order was placed reduce risk. Clarity is held back by the unexplained secondary-facts disclosure and limited rationale for the modeled replenishment quantity. |
 
 ## Strengths
 
@@ -51,32 +51,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/228) |
-| desktop-0 | typography | 0/0 | 0% (0/522) |
-| desktop-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/130) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/228) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/522) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/130) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/228) |
-| desktop-window-0 | typography | 0/0 | 0% (0/522) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/276) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/130) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/188) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/469) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/219) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/95) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/102) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/95) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/228) |
+| desktop-0                | typography | 0/0                         | 0% (0/522) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/276) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/130) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/228) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/522) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/276) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/130) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/228) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/522) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/276) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/130) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/188) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/469) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/219) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/95)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/102) |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/95)  |
 
 ## Latest-run screenshots
 

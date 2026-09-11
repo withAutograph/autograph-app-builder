@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, filters, exception list, selected-item header, evidence, and replenishment action form a clear review sequence. Selection is strongly indicated, but severity is rendered as ordinary bold text, so urgent records do not stand out as quickly as they could. |
-| layout | 3/4 | The two-column workspace is consistently aligned, uses compact list rows, and keeps detail actions in a predictable footer. The centered maximum-width composition remains balanced at 1440px and 1920px, though expanded content becomes less efficient in the height-constrained 1024px panel. |
-| typography | 3/4 | Headings, field labels, values, and secondary identifiers use a consistent, readable scale with useful weight differences. The small muted result count is visually weak, and the supplied audit reports borderline contrast for caption text; this can be addressed through a supported larger Typography variant without changing the palette. |
-| responsive | 3/4 | The composition adapts well across the supplied desktop widths: 1024px retains list-detail context, while 700px switches to a focused detail view with a Back control. At 1024×768, expanded and result states place additional sections inside a 403px internal scroll area with little visible indication that more content remains. |
-| productClarity | 3/4 | The interface clearly supports location and severity filtering, exception selection, stock and supplier review, and a distinctly labeled mock replenishment. The result explicitly states that no order was placed and offers Reset mock, but plain-text severity reduces rapid triage clarity. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| hierarchy      | 3/4   | The page title, filters, exception list, selected-item header, evidence, and replenishment action form a clear review sequence. Selection is strongly indicated, but severity is rendered as ordinary bold text, so urgent records do not stand out as quickly as they could.                                                                    |
+| layout         | 3/4   | The two-column workspace is consistently aligned, uses compact list rows, and keeps detail actions in a predictable footer. The centered maximum-width composition remains balanced at 1440px and 1920px, though expanded content becomes less efficient in the height-constrained 1024px panel.                                                 |
+| typography     | 3/4   | Headings, field labels, values, and secondary identifiers use a consistent, readable scale with useful weight differences. The small muted result count is visually weak, and the supplied audit reports borderline contrast for caption text; this can be addressed through a supported larger Typography variant without changing the palette. |
+| responsive     | 3/4   | The composition adapts well across the supplied desktop widths: 1024px retains list-detail context, while 700px switches to a focused detail view with a Back control. At 1024×768, expanded and result states place additional sections inside a 403px internal scroll area with little visible indication that more content remains.           |
+| productClarity | 3/4   | The interface clearly supports location and severity filtering, exception selection, stock and supplier review, and a distinctly labeled mock replenishment. The result explicitly states that no order was placed and offers Reset mock, but plain-text severity reduces rapid triage clarity.                                                  |
 
 ## Strengths
 
@@ -47,32 +47,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/233) |
-| desktop-0 | typography | 0/0 | 0% (0/526) |
-| desktop-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-0 | radius | 0/0 | 0% (0/116) |
-| desktop-0 | border | 0/0 | 0% (0/125) |
-| desktop-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-wide-0 | color | 0/0 | 0% (0/233) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/526) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/116) |
-| desktop-wide-0 | border | 0/0 | 0% (0/125) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-window-0 | color | 0/0 | 0% (0/233) |
-| desktop-window-0 | typography | 0/0 | 0% (0/526) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/275) |
-| desktop-window-0 | radius | 0/0 | 0% (0/116) |
-| desktop-window-0 | border | 0/0 | 0% (0/125) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/120) |
-| desktop-custom-700x900-0 | color | 0/0 | 0% (0/159) |
-| desktop-custom-700x900-0 | typography | 0/0 | 0% (0/400) |
-| desktop-custom-700x900-0 | spacing | 0/0 | 0% (0/182) |
-| desktop-custom-700x900-0 | radius | 0/0 | 0% (0/80) |
-| desktop-custom-700x900-0 | border | 0/0 | 0% (0/83) |
-| desktop-custom-700x900-0 | shadow | 0/0 | 0% (0/80) |
+| Viewport                 | Category   | Token references / assessed | Coverage   |
+| ------------------------ | ---------- | --------------------------- | ---------- |
+| desktop-0                | color      | 0/0                         | 0% (0/233) |
+| desktop-0                | typography | 0/0                         | 0% (0/526) |
+| desktop-0                | spacing    | 0/0                         | 0% (0/275) |
+| desktop-0                | radius     | 0/0                         | 0% (0/116) |
+| desktop-0                | border     | 0/0                         | 0% (0/125) |
+| desktop-0                | shadow     | 0/0                         | 0% (0/120) |
+| desktop-wide-0           | color      | 0/0                         | 0% (0/233) |
+| desktop-wide-0           | typography | 0/0                         | 0% (0/526) |
+| desktop-wide-0           | spacing    | 0/0                         | 0% (0/275) |
+| desktop-wide-0           | radius     | 0/0                         | 0% (0/116) |
+| desktop-wide-0           | border     | 0/0                         | 0% (0/125) |
+| desktop-wide-0           | shadow     | 0/0                         | 0% (0/120) |
+| desktop-window-0         | color      | 0/0                         | 0% (0/233) |
+| desktop-window-0         | typography | 0/0                         | 0% (0/526) |
+| desktop-window-0         | spacing    | 0/0                         | 0% (0/275) |
+| desktop-window-0         | radius     | 0/0                         | 0% (0/116) |
+| desktop-window-0         | border     | 0/0                         | 0% (0/125) |
+| desktop-window-0         | shadow     | 0/0                         | 0% (0/120) |
+| desktop-custom-700x900-0 | color      | 0/0                         | 0% (0/159) |
+| desktop-custom-700x900-0 | typography | 0/0                         | 0% (0/400) |
+| desktop-custom-700x900-0 | spacing    | 0/0                         | 0% (0/182) |
+| desktop-custom-700x900-0 | radius     | 0/0                         | 0% (0/80)  |
+| desktop-custom-700x900-0 | border     | 0/0                         | 0% (0/83)  |
+| desktop-custom-700x900-0 | shadow     | 0/0                         | 0% (0/80)  |
 
 ## Latest-run screenshots
 

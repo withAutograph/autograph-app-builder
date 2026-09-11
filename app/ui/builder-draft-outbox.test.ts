@@ -5,21 +5,21 @@ import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 describe("builder draft outbox", () => {
   it("uses a memory recovery outbox when IndexedDB is unavailable", async () => {
     const outbox = createBuilderDraftOutbox<{ brief: string }>({
-      indexedDB: null,
       key: `test-${crypto.randomUUID()}`,
+      indexedDB: null,
     });
 
     await outbox.write({
-      createdAt: 1,
+      version: 1,
       mutationId: "first",
       snapshot: { brief: "first" },
-      version: 1,
+      createdAt: 1,
     });
     await outbox.write({
-      createdAt: 2,
+      version: 1,
       mutationId: "second",
       snapshot: { brief: "second" },
-      version: 1,
+      createdAt: 2,
     });
 
     await expect(outbox.clearIfMutationId("first")).resolves.toBe(false);

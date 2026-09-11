@@ -20,13 +20,13 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 ## Ratings
 
-| Dimension | Score | Reason |
-| --- | --- | --- |
-| hierarchy | 3/4 | The page title, mapping panel, preview panel, count pills, save outcome, and exception card create a clear review sequence. Primary actions are easy to locate, though persistent field mappings and multiple full-width primary buttons continue to compete with the exception task after saving. |
-| layout | 3/4 | The two-column desktop composition is consistently aligned, uses comfortable spacing, and scales cleanly from 1440 to 1920 pixels. At 1024 pixels the right pane becomes constrained, causing the six-column preview to scroll horizontally and pushing exception details farther down the document. |
-| typography | 3/4 | Headings, field labels, body copy, numeric values, and table headers are visually consistent and generally readable. Small status and caption text has reported contrast concerns, and the muted candidate text in completed/deferred decisions is harder to scan, although those states appear intentionally inactive. |
-| responsive | 2/4 | The composition remains usable at all supplied desktop widths, with controls retaining sensible dimensions and document scrolling accommodating the expanded review state. However, the fixed two-column arrangement at 1024 pixels produces horizontal table overflow, can hide source-reference content, and leaves the secondary review pane narrower while the completed mapping form remains prominent. |
-| productClarity | 3/4 | Reviewers can inspect mappings, generate a representative preview before saving, see ready/review counts, and receive a save outcome stating that 38 rows imported while 4 remain in review. Exception choices and bounded actions are explicit, but original source data is asserted as unchanged rather than presented as a clearly labeled, distinct evidence block, and an enabled “Save import” action with 0 ready rows is ambiguous. |
+| Dimension      | Score | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| hierarchy      | 3/4   | The page title, mapping panel, preview panel, count pills, save outcome, and exception card create a clear review sequence. Primary actions are easy to locate, though persistent field mappings and multiple full-width primary buttons continue to compete with the exception task after saving.                                                                                                                                          |
+| layout         | 3/4   | The two-column desktop composition is consistently aligned, uses comfortable spacing, and scales cleanly from 1440 to 1920 pixels. At 1024 pixels the right pane becomes constrained, causing the six-column preview to scroll horizontally and pushing exception details farther down the document.                                                                                                                                        |
+| typography     | 3/4   | Headings, field labels, body copy, numeric values, and table headers are visually consistent and generally readable. Small status and caption text has reported contrast concerns, and the muted candidate text in completed/deferred decisions is harder to scan, although those states appear intentionally inactive.                                                                                                                     |
+| responsive     | 2/4   | The composition remains usable at all supplied desktop widths, with controls retaining sensible dimensions and document scrolling accommodating the expanded review state. However, the fixed two-column arrangement at 1024 pixels produces horizontal table overflow, can hide source-reference content, and leaves the secondary review pane narrower while the completed mapping form remains prominent.                                |
+| productClarity | 3/4   | Reviewers can inspect mappings, generate a representative preview before saving, see ready/review counts, and receive a save outcome stating that 38 rows imported while 4 remain in review. Exception choices and bounded actions are explicit, but original source data is asserted as unchanged rather than presented as a clearly labeled, distinct evidence block, and an enabled “Save import” action with 0 ready rows is ambiguous. |
 
 ## Strengths
 
@@ -49,32 +49,32 @@ This report evaluates the captured preview; evaluation itself does not regenerat
 
 Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.
 
-| Viewport | Category | Token references / assessed | Coverage |
-| --- | --- | --- | --- |
-| desktop-0 | color | 0/0 | 0% (0/115) |
-| desktop-0 | typography | 0/0 | 0% (0/275) |
-| desktop-0 | spacing | 0/0 | 0% (0/134) |
-| desktop-0 | radius | 0/0 | 0% (0/58) |
-| desktop-0 | border | 0/0 | 0% (0/67) |
-| desktop-0 | shadow | 0/0 | 0% (0/58) |
-| desktop-wide-0 | color | 0/0 | 0% (0/115) |
-| desktop-wide-0 | typography | 0/0 | 0% (0/275) |
-| desktop-wide-0 | spacing | 0/0 | 0% (0/134) |
-| desktop-wide-0 | radius | 0/0 | 0% (0/58) |
-| desktop-wide-0 | border | 0/0 | 0% (0/67) |
-| desktop-wide-0 | shadow | 0/0 | 0% (0/58) |
-| desktop-window-0 | color | 0/0 | 0% (0/115) |
-| desktop-window-0 | typography | 0/0 | 0% (0/275) |
-| desktop-window-0 | spacing | 0/0 | 0% (0/134) |
-| desktop-window-0 | radius | 0/0 | 0% (0/58) |
-| desktop-window-0 | border | 0/0 | 0% (0/67) |
-| desktop-window-0 | shadow | 0/0 | 0% (0/58) |
-| desktop-custom-1024x900-0 | color | 0/0 | 0% (0/115) |
-| desktop-custom-1024x900-0 | typography | 0/0 | 0% (0/275) |
-| desktop-custom-1024x900-0 | spacing | 0/0 | 0% (0/134) |
-| desktop-custom-1024x900-0 | radius | 0/0 | 0% (0/58) |
-| desktop-custom-1024x900-0 | border | 0/0 | 0% (0/67) |
-| desktop-custom-1024x900-0 | shadow | 0/0 | 0% (0/58) |
+| Viewport                  | Category   | Token references / assessed | Coverage   |
+| ------------------------- | ---------- | --------------------------- | ---------- |
+| desktop-0                 | color      | 0/0                         | 0% (0/115) |
+| desktop-0                 | typography | 0/0                         | 0% (0/275) |
+| desktop-0                 | spacing    | 0/0                         | 0% (0/134) |
+| desktop-0                 | radius     | 0/0                         | 0% (0/58)  |
+| desktop-0                 | border     | 0/0                         | 0% (0/67)  |
+| desktop-0                 | shadow     | 0/0                         | 0% (0/58)  |
+| desktop-wide-0            | color      | 0/0                         | 0% (0/115) |
+| desktop-wide-0            | typography | 0/0                         | 0% (0/275) |
+| desktop-wide-0            | spacing    | 0/0                         | 0% (0/134) |
+| desktop-wide-0            | radius     | 0/0                         | 0% (0/58)  |
+| desktop-wide-0            | border     | 0/0                         | 0% (0/67)  |
+| desktop-wide-0            | shadow     | 0/0                         | 0% (0/58)  |
+| desktop-window-0          | color      | 0/0                         | 0% (0/115) |
+| desktop-window-0          | typography | 0/0                         | 0% (0/275) |
+| desktop-window-0          | spacing    | 0/0                         | 0% (0/134) |
+| desktop-window-0          | radius     | 0/0                         | 0% (0/58)  |
+| desktop-window-0          | border     | 0/0                         | 0% (0/67)  |
+| desktop-window-0          | shadow     | 0/0                         | 0% (0/58)  |
+| desktop-custom-1024x900-0 | color      | 0/0                         | 0% (0/115) |
+| desktop-custom-1024x900-0 | typography | 0/0                         | 0% (0/275) |
+| desktop-custom-1024x900-0 | spacing    | 0/0                         | 0% (0/134) |
+| desktop-custom-1024x900-0 | radius     | 0/0                         | 0% (0/58)  |
+| desktop-custom-1024x900-0 | border     | 0/0                         | 0% (0/67)  |
+| desktop-custom-1024x900-0 | shadow     | 0/0                         | 0% (0/58)  |
 
 ## Latest-run screenshots
 

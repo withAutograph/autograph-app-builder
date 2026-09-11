@@ -1,18 +1,16 @@
 import { expect, it } from "vitest";
-
-import { scoreAdherence } from "./evidence";
-import type { Observation } from "./evidence";
+import { scoreAdherence, type Observation } from "./evidence";
 const row = (
   id: string,
   dimension: Observation["dimension"],
-  verdict: Observation["verdict"]
+  verdict: Observation["verdict"],
 ): Observation => ({
-  dimension,
-  evidence: "static",
   id,
-  provenance: "generated",
-  summary: id,
+  dimension,
   verdict,
+  provenance: "generated",
+  evidence: "static",
+  summary: id,
 });
 it("uses equally weighted available dimensions and retains denominators", () => {
   const result = scoreAdherence([
@@ -25,8 +23,8 @@ it("uses equally weighted available dimensions and retains denominators", () => 
   expect(result.status).toBe("complete");
   expect(result.dimensions.styling).toMatchObject({
     assessed: 2,
-    percent: 50,
     total: 2,
+    percent: 50,
   });
 });
 it("does not award shared, unknown, duplicated, or missing evidence credit", () => {
@@ -45,21 +43,21 @@ it("does not award shared, unknown, duplicated, or missing evidence credit", () 
 });
 it("shows no fabricated score for absent evidence", () => {
   expect(scoreAdherence([], [], false)).toMatchObject({
-    coveragePercent: null,
     score: null,
     status: "unassessed",
+    coveragePercent: null,
   });
   expect(scoreAdherence([row("x", "styling", "unassessed")])).toMatchObject({
-    coveragePercent: 0,
     score: null,
     status: "unassessed",
+    coveragePercent: 0,
   });
 });
 it("does not round sparse evidence down to zero coverage", () => {
   const observations = [
     row("known", "styling", "conforming"),
     ...Array.from({ length: 299 }, (_, i) =>
-      row(`unknown-${i}`, "styling", "unassessed")
+      row(`unknown-${i}`, "styling", "unassessed"),
     ),
   ];
   expect(scoreAdherence(observations).coveragePercent).toBe(0.33);

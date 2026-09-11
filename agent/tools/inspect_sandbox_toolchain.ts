@@ -2,23 +2,24 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import {
-  dependencyCacheReceiptDigest,
-  inspectDependencyCache,
-} from "@/lib/repository/dependency-cache";
-import { targetExecutionBinding } from "@/lib/repository/target-planning";
-import { sandboxBackendPlan } from "@/lib/sandbox/backend";
-import {
   configuredToolchainImage,
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
+import { sandboxBackendPlan } from "@/lib/sandbox/backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import {
+  dependencyCacheReceiptDigest,
+  inspectDependencyCache,
+} from "@/lib/repository/dependency-cache";
+import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
 export default defineTool({
   description:
     "Inspect the fixed sandbox build-tool allowlist without installing packages or mutating the workspace.",
+  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
@@ -37,7 +38,7 @@ export default defineTool({
             (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ??
             "",
         };
-      })
+      }),
     );
     const image = configuredToolchainImage();
     const backend = sandboxBackendPlan({
@@ -92,5 +93,4 @@ export default defineTool({
       tools,
     };
   },
-  inputSchema: z.object({}),
 });

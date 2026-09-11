@@ -2,5 +2,5 @@ import { createVercelInstallationDeploymentHandler } from "@/lib/integrations/ve
 
 export const POST = createVercelInstallationDeploymentHandler(
   "start",
-  process.env
+  process.env,
 );

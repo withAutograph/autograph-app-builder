@@ -7,30 +7,28 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-
-import { format, resolveConfig } from "prettier";
-
-import { readArchivedReport } from "./archive-entry";
-import { captureFilename } from "./archive-path";
 import { renderReport } from "./report";
+import { captureFilename } from "./archive-path";
+import { readArchivedReport } from "./archive-entry";
+import { formatWithOxfmt } from "../format-with-oxfmt.mts";
 
 async function writeFile(path: string, content: string) {
   await writeRawFile(
     path,
-    await format(content, { ...(await resolveConfig(path)), filepath: path })
+    await formatWithOxfmt(path, content),
   );
 }
 
 const { values } = parseArgs({
   options: {
-    help: { type: "boolean" },
-    name: { type: "string" },
     "report-dir": { type: "string" },
+    name: { type: "string" },
+    help: { type: "boolean" },
   },
 });
 if (values.help) {
   console.log(
-    "mise run eval:design-archive -- --report-dir PATH --name stock-exceptions"
+    "mise run eval:design-archive -- --report-dir PATH --name stock-exceptions",
   );
   process.exit(0);
 }
@@ -38,14 +36,13 @@ if (
   !values["report-dir"] ||
   !values.name ||
   !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(values.name)
-) {
+)
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
-}
 const input = resolve(values["report-dir"]);
-const report = JSON.parse(await readFile(join(input, "report.json"), "utf-8"));
+const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
 const timestamp = new Date(report.createdAt).toISOString();
-const date = timestamp.slice(0, 10);
-const time = timestamp.slice(11, 23).replaceAll(/[:.]/g, "");
+const date = timestamp.slice(0, 10),
+  time = timestamp.slice(11, 23).replace(/[:.]/g, "");
 const archiveRoot = resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
 const destination = join(archiveRoot, relative);
@@ -58,20 +55,20 @@ for (const capture of report.captures) {
   capture.path = filename;
 }
 report.archive = {
-  archivedAt: new Date().toISOString(),
-  evaluatedAt: timestamp,
   name: values.name,
+  evaluatedAt: timestamp,
+  archivedAt: new Date().toISOString(),
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
 await writeFile(
   join(destination, "report.json"),
-  `${JSON.stringify(report, null, 2)}\n`
+  JSON.stringify(report, null, 2) + "\n",
 );
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replaceAll(
+  String(v).replace(
     /[<>|]/g,
-    (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!
+    (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!,
   );
 const lines = [
   `# ${values.name} — ${timestamp}`,
@@ -106,11 +103,11 @@ if (report.adherence) {
         assessed: number;
         percent: number | null;
       };
-      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : `${Math.round(d.percent)}%`} (${d.conforming}/${d.assessed}) |`;
+      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : Math.round(d.percent) + "%"} (${d.conforming}/${d.assessed}) |`;
     }),
     "",
     "Scores from different evaluator versions or captured states are not directly comparable.",
-    ""
+    "",
   );
 }
 for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
@@ -118,15 +115,13 @@ for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
 }
 lines.push("", "## Strengths", "");
-for (const strength of report.judge.strengths ?? []) {
+for (const strength of report.judge.strengths ?? [])
   lines.push(`- ${md(strength)}`);
-}
 lines.push("", "## Improvements", "");
-for (const finding of report.judge.findings ?? []) {
+for (const finding of report.judge.findings ?? [])
   lines.push(
-    `- **${md(finding.severity)} — ${md(finding.image)}:** ${md(finding.explanation)} ${md(finding.improvement)}`
+    `- **${md(finding.severity)} — ${md(finding.image)}:** ${md(finding.explanation)} ${md(finding.improvement)}`,
   );
-}
 lines.push(
   "",
   "## Token evidence",
@@ -134,11 +129,11 @@ lines.push(
   "Percentages cover only assessed properties. Missing provenance and ambiguous CSS remain unassessed; matching literals are not proof of token usage.",
   "",
   "| Viewport | Category | Token references / assessed | Coverage |",
-  "| --- | --- | --- | --- |"
+  "| --- | --- | --- | --- |",
 );
-for (const capture of report.captures) {
+for (const capture of report.captures)
   for (const [category, summary] of Object.entries(
-    capture.styles?.categories ?? {}
+    capture.styles?.categories ?? {},
   )) {
     const s = summary as {
       counts: Record<string, number>;
@@ -147,55 +142,45 @@ for (const capture of report.captures) {
       coveragePercent: number | null;
     };
     lines.push(
-      `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`
+      `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }
-}
 lines.push("", "## Latest-run screenshots", "");
-for (const capture of report.captures) {
+for (const capture of report.captures)
   lines.push(
     `### ${md(capture.name)} — ${md(capture.state)}`,
     "",
     `Interaction: ${md(capture.interaction.status)}.`,
     "",
     `![${md(capture.name)} ${md(capture.state)}](${capture.path})`,
-    ""
+    "",
   );
-}
 lines.push("## Limitations", "");
-for (const limitation of report.judge.limitations ?? []) {
+for (const limitation of report.judge.limitations ?? [])
   lines.push(`- ${md(limitation)}`);
-}
-for (const limitation of report.evaluationNotes ?? []) {
+for (const limitation of report.evaluationNotes ?? [])
   lines.push(`- ${md(limitation)}`);
-}
-await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
-const rows: {
+await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
+const rows: Array<{
   path: string;
   name: string;
   date: string;
   score: unknown;
-}[] = [];
+}> = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
-  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(day.name)) {
-    continue;
-  }
+  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(day.name)) continue;
   for (const run of await readdir(join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {
-    if (!run.isDirectory()) {
-      continue;
-    }
+    if (!run.isDirectory()) continue;
     const saved = await readArchivedReport(
-      join(archiveRoot, day.name, run.name)
+      join(archiveRoot, day.name, run.name),
     );
-    if (saved === null) {
-      continue;
-    }
+    if (saved === null) continue;
     rows.push({
-      date: saved.createdAt,
-      name: saved.archive.name,
       path: `${day.name}/${run.name}`,
+      name: saved.archive.name,
+      date: saved.createdAt,
       score: saved.judge.subjectiveScore ?? "not scored",
     });
   }
@@ -227,9 +212,9 @@ await writeFile(
     "| Evaluated (UTC) | App | Subjective score / 100 |",
     "| --- | --- | --- |",
     ...rows.map(
-      (r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${r.score} |`
+      (r) => `| ${r.date} | [${r.name}](${r.path}/README.md) | ${r.score} |`,
     ),
     "",
-  ].join("\n")
+  ].join("\n"),
 );
 console.log(`Archived report: ${destination}`);

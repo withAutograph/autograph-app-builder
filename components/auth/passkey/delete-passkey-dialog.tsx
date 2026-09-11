@@ -21,17 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 
-export interface ListedPasskey {
+export type ListedPasskey = {
   id: string;
   name?: string | null;
   createdAt: Date;
-}
+};
 
-export interface DeletePasskeyDialogProps {
+export type DeletePasskeyDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   passkey: ListedPasskey;
-}
+};
 
 export function DeletePasskeyDialog({
   open,
@@ -48,7 +48,7 @@ export function DeletePasskeyDialog({
     authClient,
     {
       onSuccess: () => onOpenChange(false),
-    }
+    },
   );
 
   return (

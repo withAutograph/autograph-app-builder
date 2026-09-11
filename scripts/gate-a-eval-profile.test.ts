@@ -16,19 +16,19 @@ const repositoryRoot = resolve(import.meta.dirname, "..");
 
 function hostileEnvironment(): Record<string, string | undefined> {
   return Object.fromEntries(
-    gateAEnvironmentFields.map((field) => [field, `hostile-${field}`])
+    gateAEnvironmentFields.map((field) => [field, `hostile-${field}`]),
   );
 }
 
 function freshRoots() {
   const owner = realpathSync(
-    mkdtempSync(join(tmpdir(), "gate-a-eval-profile-"))
+    mkdtempSync(join(tmpdir(), "gate-a-eval-profile-")),
   );
   const stateRoot = join(owner, "state");
   const allowedRoot = join(owner, "destinations");
   mkdirSync(stateRoot, { mode: 0o700 });
   mkdirSync(allowedRoot, { mode: 0o700 });
-  return { allowedRoot, owner, stateRoot };
+  return { owner, stateRoot, allowedRoot };
 }
 
 describe("closed Gate A eval profile", () => {
@@ -37,8 +37,8 @@ describe("closed Gate A eval profile", () => {
     ["0", "0"],
   ])("installs only the general %s profile", (localPublication, expected) => {
     const profile = createGateAEvalProfile(
-      { localPublication, profile: "general" },
-      repositoryRoot
+      { profile: "general", localPublication },
+      repositoryRoot,
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
@@ -56,30 +56,30 @@ describe("closed Gate A eval profile", () => {
     const roots = freshRoots();
     const profile = createGateAEvalProfile(
       {
-        allowedRoot: roots.allowedRoot,
-        fault: "after-stage",
         profile: "fresh",
         stateRoot: roots.stateRoot,
+        allowedRoot: roots.allowedRoot,
+        fault: "after-stage",
       },
-      repositoryRoot
+      repositoryRoot,
     );
     expect(validateGateAEvalProfile(profile, repositoryRoot)).toEqual(profile);
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
-      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
-      APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT: roots.allowedRoot,
-      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "1",
-      APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT: "after-stage",
-      APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT: roots.stateRoot,
       APP_BUILDER_LOCAL_PUBLICATION: "1",
+      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
+      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "1",
+      APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT: roots.stateRoot,
+      APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT: roots.allowedRoot,
+      APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT: "after-stage",
     });
   });
 
   it("installs an unconfigured sandbox with the image truly absent", () => {
     const profile = createGateAEvalProfile(
-      { image: null, profile: "sandbox", sourceRoot: null },
-      repositoryRoot
+      { profile: "sandbox", image: null, sourceRoot: null },
+      repositoryRoot,
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
@@ -94,22 +94,22 @@ describe("closed Gate A eval profile", () => {
 
   it("projects the body timeout only from a closed sandbox launch profile", () => {
     const sandbox = createGateAEvalProfile(
-      { image: null, profile: "sandbox", sourceRoot: null },
-      repositoryRoot
+      { profile: "sandbox", image: null, sourceRoot: null },
+      repositoryRoot,
     );
     const general = createGateAEvalProfile(
-      { localPublication: "0", profile: "general" },
-      repositoryRoot
+      { profile: "general", localPublication: "0" },
+      repositoryRoot,
     );
     expect(gateAEvalWorkflowBodyTimeout(sandbox)).toBe("360000");
     expect(gateAEvalWorkflowBodyTimeout(general)).toBeUndefined();
     expect(
       gateAEvalWorkflowBodyTimeout({
-        image: null,
-        profile: "sandbox",
-        sourceRoot: null,
         version: 1,
-      })
+        profile: "sandbox",
+        image: null,
+        sourceRoot: null,
+      }),
     ).toBeUndefined();
   });
 
@@ -119,10 +119,10 @@ describe("closed Gate A eval profile", () => {
     installGateAEvalProfile(
       environment,
       createGateAEvalProfile(
-        { image, profile: "sandbox", sourceRoot: null },
-        repositoryRoot
+        { profile: "sandbox", image, sourceRoot: null },
+        repositoryRoot,
       ),
-      repositoryRoot
+      repositoryRoot,
     );
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBe(image);
     for (const hostile of [
@@ -130,14 +130,13 @@ describe("closed Gate A eval profile", () => {
       "ghcr.io/example/toolchain:latest",
       "@sha256:nope",
       `user:secret@ghcr.io/example/toolchain@sha256:${"a".repeat(64)}`,
-    ]) {
+    ])
       expect(() =>
         createGateAEvalProfile(
           { profile: "sandbox", image: hostile, sourceRoot: null },
-          repositoryRoot
-        )
+          repositoryRoot,
+        ),
       ).toThrow(/sandbox image/u);
-    }
   });
 
   it("installs the hosted artifact marker only from its closed sandbox profile", () => {
@@ -145,17 +144,17 @@ describe("closed Gate A eval profile", () => {
     const image = `ghcr.io/example/toolchain@sha256:${"c".repeat(64)}`;
     const profile = createGateAEvalProfile(
       {
-        image,
         profile: "hosted-artifact",
+        image,
         sourceRoot: roots.allowedRoot,
       },
-      repositoryRoot
+      repositoryRoot,
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
-      APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
       APP_BUILDER_REAL_SANDBOX: "1",
+      APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
@@ -167,13 +166,13 @@ describe("closed Gate A eval profile", () => {
     installGateAEvalProfile(
       ordinaryEnvironment,
       createGateAEvalProfile(
-        { image, profile: "sandbox", sourceRoot: roots.allowedRoot },
-        repositoryRoot
+        { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+        repositoryRoot,
       ),
-      repositoryRoot
+      repositoryRoot,
     );
     expect(
-      ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF
+      ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF,
     ).toBeUndefined();
   });
 
@@ -181,8 +180,8 @@ describe("closed Gate A eval profile", () => {
     const roots = freshRoots();
     const image = `ghcr.io/example/toolchain@sha256:${"b".repeat(64)}`;
     const profile = createGateAEvalProfile(
-      { image, profile: "sandbox", sourceRoot: roots.allowedRoot },
-      repositoryRoot
+      { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+      repositoryRoot,
     );
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
@@ -193,23 +192,22 @@ describe("closed Gate A eval profile", () => {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
-    if (profile?.profile !== "sandbox") {
+    if (profile?.profile !== "sandbox")
       throw new Error("Expected sandbox profile.");
-    }
     expect(() =>
       validateGateAEvalProfile(
         {
           ...profile,
           sourceRoot: { ...profile.sourceRoot, inode: "0" },
         },
-        repositoryRoot
-      )
+        repositoryRoot,
+      ),
     ).toThrow(/source root identity/u);
     expect(() =>
       validateGateAEvalProfile(
         { ...profile, image: "ghcr.io/example/toolchain:latest" },
-        repositoryRoot
-      )
+        repositoryRoot,
+      ),
     ).toThrow(/sandbox image/u);
   });
 
@@ -217,46 +215,45 @@ describe("closed Gate A eval profile", () => {
     expect(() =>
       validateGateAEvalProfile(
         {
-          image: null,
-          localPublication: "1",
-          profile: "general",
           version: 1,
+          profile: "general",
+          localPublication: "1",
+          image: null,
         },
-        repositoryRoot
-      )
+        repositoryRoot,
+      ),
     ).toThrow(/profile envelope/u);
     const roots = freshRoots();
     expect(() =>
       createGateAEvalProfile(
         {
-          allowedRoot: roots.allowedRoot,
-          fault: "before-write",
           profile: "fresh",
           stateRoot: roots.stateRoot,
+          allowedRoot: roots.allowedRoot,
+          fault: "before-write",
         },
-        repositoryRoot
-      )
+        repositoryRoot,
+      ),
     ).toThrow(/fresh fault/u);
     const profile = createGateAEvalProfile(
       {
-        allowedRoot: roots.allowedRoot,
-        fault: null,
         profile: "fresh",
         stateRoot: roots.stateRoot,
+        allowedRoot: roots.allowedRoot,
+        fault: null,
       },
-      repositoryRoot
+      repositoryRoot,
     );
-    if (profile?.profile !== "fresh") {
+    if (profile?.profile !== "fresh")
       throw new Error("Expected fresh profile.");
-    }
     expect(() =>
       validateGateAEvalProfile(
         {
           ...profile,
           stateRoot: { ...profile.stateRoot, inode: "0" },
         },
-        repositoryRoot
-      )
+        repositoryRoot,
+      ),
     ).toThrow(/root identity/u);
   });
 
@@ -268,12 +265,12 @@ describe("closed Gate A eval profile", () => {
     try {
       createGateAEvalProfile(
         {
-          allowedRoot: roots.allowedRoot,
-          fault: null,
           profile: "fresh",
           stateRoot: linked,
+          allowedRoot: roots.allowedRoot,
+          fault: null,
         },
-        repositoryRoot
+        repositoryRoot,
       );
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
@@ -284,12 +281,12 @@ describe("closed Gate A eval profile", () => {
     try {
       createGateAEvalProfile(
         {
-          allowedRoot: roots.allowedRoot,
-          fault: null,
           profile: "fresh",
           stateRoot: missing,
+          allowedRoot: roots.allowedRoot,
+          fault: null,
         },
-        repositoryRoot
+        repositoryRoot,
       );
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
