@@ -192,7 +192,6 @@ const integrationState = {
 };
 
 const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
-const refreshedHandoffId = "123e4567-e89b-42d3-a456-426614174002";
 
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {

@@ -65,10 +65,6 @@ import autographIcon from "../../assets/autograph-icon.png";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import {
-  activeProvisioningStorageKey,
-  clearActiveProvisioning,
-  clearBuilderDraft,
-  parseActiveProvisioning,
   persistActiveProvisioning,
   persistBuilderDraft,
 } from "./builder-session";
@@ -111,8 +107,6 @@ export type {
   ProviderField,
   StorageProvider,
 } from "./builder-types";
-
-type Screen = "builder" | "handoff" | "ready";
 
 export type ConnectionStage = "connect" | "configure" | "customize";
 export type ConnectionFlow = { name: string; stage: ConnectionStage };
@@ -1423,7 +1417,6 @@ export function Builder({
       connectedConnections,
       builderForm,
       deploymentProvider,
-      form,
       gitScope,
       model,
       search,
@@ -1700,7 +1693,7 @@ export function Builder({
     if (autosaveSnapshotFingerprint.current === fingerprint) return;
     autosaveSnapshotFingerprint.current = fingerprint;
     scheduleAutosave(snapshot);
-  }, [draftSnapshot, scheduleAutosave]);
+  }, [draftSnapshot, form, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
@@ -2299,7 +2292,6 @@ export function AppBuilder({
 }) {
   const router = useRouter();
   const [savedBrief, setSavedBrief] = useState("");
-  const [handoffError, setHandoffError] = useState("");
   const activeDraftId = useRef<string | undefined>(undefined);
   const completedHandoff = useRef<string | undefined>(undefined);
   const [continuation, dispatchContinuation, continuationPending] =
@@ -2312,10 +2304,7 @@ export function AppBuilder({
   }, []);
   useEffect(() => {
     if (!continuation || continuationPending) return;
-    if (continuation.status === "error") {
-      setHandoffError("We couldn’t prepare your handoff. Your saved draft is still available.");
-      return;
-    }
+    if (continuation.status === "error") return;
     if (completedHandoff.current === continuation.handoff.handoffId) return;
     completedHandoff.current = continuation.handoff.handoffId;
     if (activeDraftId.current)
@@ -2365,7 +2354,6 @@ export function AppBuilder({
           integrations={integrations}
           providerNotices={providerNotices}
           onCreate={(form, draftId) => {
-            setHandoffError("");
             activeDraftId.current = draftId ?? durableDraftId;
             startTransition(() =>
               dispatchContinuation({
@@ -2379,7 +2367,11 @@ export function AppBuilder({
           }}
         />
       )}
-      {handoffError ? <p role="alert">{handoffError}</p> : null}
+      {continuation?.status === "error" && !continuationPending ? (
+        <p role="alert">
+          We couldn’t prepare your handoff. Your saved draft is still available.
+        </p>
+      ) : null}
     </div>
   );
 }
