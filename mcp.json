@@ -1,9 +1,4 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-  "mcpServers": {
-    "app-builder": {
-      "type": "streamable-http",
-      "url": "http://127.0.0.1:3000/mcp"
-    }
-  }
+  "mcpServers": { "app-builder": { "type": "streamable-http", "url": "http://127.0.0.1:3000/mcp" } }
 }
