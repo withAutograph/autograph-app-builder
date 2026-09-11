@@ -2,4 +2,4 @@
 #MISE description="Lint repository sources with Oxlint"
 set -eu
 
-exec "$(mise which pnpm)" exec oxlint --config oxlint.config.ts .
+exec .config/mise/scripts/trusted-node-launcher "$(mise which pnpm)" exec oxlint --config oxlint.config.ts .
