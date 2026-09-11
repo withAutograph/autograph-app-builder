@@ -3,4 +3,4 @@
 set -eu
 
 exec .config/mise/scripts/trusted-node-launcher \
-  node_modules/oxfmt/bin/oxfmt --check .
+  "$(mise which pnpm)" exec oxfmt --check .
