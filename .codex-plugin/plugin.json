@@ -10,21 +10,21 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Autograph App Builder",
-    "shortDescription": "Design and create apps with Autograph",
-    "longDescription": "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
-    "developerName": "Autograph",
-    "category": "Developer Tools",
+    "brandColor": "#111827",
     "capabilities": ["Interactive", "Read", "Write"],
+    "category": "Developer Tools",
     "composerIcon": "./assets/autograph-icon.png",
-    "logo": "./assets/autograph-icon.png",
-    "websiteURL": "https://github.com/withAutograph/autograph-app-builder",
     "defaultPrompt": [
       "Create an app for [who it is for, what they need to do, and the outcome you want]",
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow"
     ],
-    "brandColor": "#111827",
-    "screenshots": []
+    "developerName": "Autograph",
+    "displayName": "Autograph App Builder",
+    "logo": "./assets/autograph-icon.png",
+    "longDescription": "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
+    "screenshots": [],
+    "shortDescription": "Design and create apps with Autograph",
+    "websiteURL": "https://github.com/withAutograph/autograph-app-builder"
   }
 }
