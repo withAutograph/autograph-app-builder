@@ -134,7 +134,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     void refresh();
     return () => {
       disposed = true;
-      stop();
+      clearTimeout(timer);
+      controller?.abort();
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [access, data.handoffId, data.status, renewing]);

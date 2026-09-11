@@ -78,11 +78,13 @@ export function SignIn({
   const continueSignIn = useSignInContinuation();
 
   const [password, setPassword] = useState("");
-  const currentSearch = useSyncExternalStore(
+  const currentLocation = useSyncExternalStore(
     () => () => undefined,
-    () => window.location.search,
+    () => window.location.href,
     () => "",
   );
+  const currentSearch = currentLocation ? new URL(currentLocation).search : "";
+  const currentOrigin = currentLocation ? new URL(currentLocation).origin : "";
 
   const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(
     authClient,
@@ -140,11 +142,7 @@ export function SignIn({
   const alternateRedirectTo =
     signUpRedirectTo ??
     (currentSearch
-      ? resolvePasskeyRedirectTo(
-          redirectTo,
-          currentSearch,
-          window.location.origin,
-        )
+      ? resolvePasskeyRedirectTo(redirectTo, currentSearch, currentOrigin)
       : redirectTo);
 
   return (
