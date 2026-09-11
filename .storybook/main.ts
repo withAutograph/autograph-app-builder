@@ -63,6 +63,10 @@ const config: StorybookConfig = {
       import.meta.dirname,
       "builder-actions.ts",
     );
+    const storybookBuilderDraftActions = path.join(
+      import.meta.dirname,
+      "builder-draft-actions.ts",
+    );
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
     viteConfig.define = {
@@ -82,6 +86,10 @@ const config: StorybookConfig = {
     viteConfig.resolve = {
       ...(viteConfig.resolve ?? {}),
       alias: [
+        {
+          find: "@/app/actions/builder-drafts",
+          replacement: storybookBuilderDraftActions,
+        },
         {
           find: "@/app/actions/builder",
           replacement: storybookBuilderActions,

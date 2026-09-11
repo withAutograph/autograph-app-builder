@@ -11,6 +11,10 @@ export async function provisionBuilderProvider(): Promise<never> {
   return unavailable();
 }
 
+export async function reserveBuilderProvider(): Promise<never> {
+  return unavailable();
+}
+
 export async function createBuilderHandoff(): Promise<never> {
   return unavailable();
 }
