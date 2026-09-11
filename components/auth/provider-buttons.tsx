@@ -3,7 +3,7 @@
 import { getProviderId } from "@better-auth-ui/core";
 import type { AuthView } from "@better-auth-ui/core";
 import { useAuth } from "@better-auth-ui/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,13 @@ export function ProviderButtons({
   view = "signIn",
 }: ProviderButtonsProps) {
   const { socialProviders } = useAuth();
+  const [isClientReady, setIsClientReady] = useState(false);
+
+  // Better Auth starts social sign-in through a client mutation. Keep its
+  // controls disabled until React has attached those event handlers.
+  useEffect(() => {
+    setIsClientReady(true);
+  }, []);
 
   const resolvedSocialLayout = useMemo(() => {
     if (socialLayout === "auto") {
@@ -42,6 +49,7 @@ export function ProviderButtons({
 
   return (
     <div
+      data-auth-social-ready={isClientReady ? "true" : "false"}
       className={cn(
         "gap-3",
         resolvedSocialLayout === "grid" && "grid grid-cols-2",
@@ -53,6 +61,7 @@ export function ProviderButtons({
         <ProviderButton
           key={getProviderId(provider)}
           provider={provider}
+          isReady={isClientReady}
           view={view}
           display={
             resolvedSocialLayout === "vertical"

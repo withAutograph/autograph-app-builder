@@ -1,7 +1,11 @@
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 
-import { currentSession, resetApplicationState } from "../support/harness";
+import {
+  currentSession,
+  resetApplicationState,
+  waitForSocialSignInReady,
+} from "../support/harness";
 
 const html = (page: Page) => page.locator("html");
 
@@ -59,6 +63,7 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/auth/sign-in?callbackURL=%2F");
+  await waitForSocialSignInReady(page);
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u, {
     timeout: 30_000,
@@ -119,6 +124,7 @@ test("explicit Dark remains active across anonymous, auth, builder, and account 
 
   await page.goto("/auth/sign-in?callbackURL=%2F");
   await expectTheme(page, "dark", "dark");
+  await waitForSocialSignInReady(page);
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect(page).toHaveURL(/\/local-oauth\/github\/authorize/u, {
     timeout: 30_000,
