@@ -63,7 +63,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     "ready"
   );
   const [renewing, setRenewing] = useState(false);
-  const renewalRequestId = useRef<string | undefined>();
+  const renewalRequestId = useRef<string | undefined>(undefined);
   const renewalInFlight = useRef(false);
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;

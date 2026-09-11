@@ -3,4 +3,4 @@
 set -eu
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/ultracite/dist/index.js check
+  "$(mise which pnpm)" exec ultracite check

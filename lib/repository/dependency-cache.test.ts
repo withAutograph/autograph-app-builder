@@ -214,7 +214,7 @@ function liveTemplateCacheFixture() {
       return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
     }
     if (command.includes("bun install")) {
-      return { exitCode: 0, stdout: observation(), stderr: "" };
+      return { exitCode: 0, stdout: observation(undefined), stderr: "" };
     }
     if (
       command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")

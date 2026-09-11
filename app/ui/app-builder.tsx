@@ -1559,7 +1559,7 @@ export function Builder({
             : undefined;
     if (!id) return;
     const frame = window.requestAnimationFrame(() => {
-      document.querySelector(`#${id}`)?.focus();
+      document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [

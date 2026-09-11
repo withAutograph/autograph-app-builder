@@ -161,7 +161,9 @@ describe("prepared provider continuity", () => {
         intent
       )
     ).toEqual({ repository: "acme/stock", selectedInstallationId: "20" });
-    expect(withPreparedGitHubSelection({ repository: "acme/stock" })).toEqual({
+    expect(
+      withPreparedGitHubSelection({ repository: "acme/stock" }, undefined)
+    ).toEqual({
       repository: "acme/stock",
     });
   });

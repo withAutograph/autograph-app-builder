@@ -818,7 +818,7 @@ export async function readExactGitHubFreshRepositoryContent(input: {
     ...observed,
     files: observed.files.map((file) => ({
       ...file,
-      bytes: [...file.bytes],
+      bytes: Uint8Array.from(file.bytes),
     })),
   };
   assertExactGitHubFreshRepositoryContent({
@@ -861,7 +861,7 @@ export async function readExactGitHubPublicationContent(input: {
         `The approved publication postimage is missing for ${change.path}.`
       );
     }
-    const bytes = [...observed.bytes];
+    const bytes = Uint8Array.from(observed.bytes);
     if (
       observed.mode !== change.after.mode ||
       observed.digest !== change.after.digest ||

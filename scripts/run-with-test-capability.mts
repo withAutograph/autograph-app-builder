@@ -18,7 +18,7 @@ if (
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & 0o022n) !== 0n
+  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
 ) {
   throw new Error("The structural test package root was not owner-bound.");
 }
@@ -164,8 +164,8 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     realpathSync(launcher) !== launcher ||
     !launcherStat.isFile() ||
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-    launcherStat.nlink !== 1n ||
-    (launcherStat.mode & 0o022n) !== 0n ||
+    launcherStat.nlink !== BigInt(1) ||
+    (launcherStat.mode & BigInt(0o022)) !== BigInt(0) ||
     createHash("sha256").update(readFileSync(launcher)).digest("hex") !==
       launcherDigest
   ) {

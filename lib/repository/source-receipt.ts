@@ -366,11 +366,11 @@ export function parseSourceReceiptEvidence(
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
-  const { digest, ...unsigned } = value as SourceReceiptEvidence;
+  const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
-  return value as SourceReceiptEvidence;
+  return value as unknown as SourceReceiptEvidence;
 }
 
 export function sourceReceiptEvidence(
@@ -474,7 +474,7 @@ export async function inspectClonedTemplateSourceReceipt(input: {
     sourceTree: fixedGit(
       eligibility.sourcePath,
       ["rev-parse", `${eligibility.sourceSha}^{tree}`],
-      "utf8"
+      "utf-8"
     ).trim(),
     version: SOURCE_RECEIPT_VERSION,
   };

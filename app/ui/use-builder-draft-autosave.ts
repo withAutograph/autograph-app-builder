@@ -97,9 +97,9 @@ export function useBuilderDraftAutosave<T>(
   const [status, setStatus] = useState<BuilderDraftAutosaveStatus>("idle");
   const [error, setError] = useState<Error>();
   const [lastSavedAt, setLastSavedAt] = useState<string>();
-  const queued = useRef<Pending<T> | undefined>();
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>();
-  const draining = useRef<Promise<boolean> | undefined>();
+  const queued = useRef<Pending<T> | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const draining = useRef<Promise<boolean> | undefined>(undefined);
   const mounted = useRef(true);
   const save = useRef(options.save);
   const isOnline = useRef(options.isOnline);

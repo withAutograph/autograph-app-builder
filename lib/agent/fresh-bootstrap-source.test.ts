@@ -70,7 +70,7 @@ function sandboxFixture() {
 describe("fresh bootstrap source workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue();
+    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue(undefined);
     mocks.readPreparedSandboxSourceManifest.mockResolvedValue([
       {
         mode: "100644",

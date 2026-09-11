@@ -1941,7 +1941,7 @@ async function atomicPublish(
   try {
     const parentState = await parent.stat();
     const expectedParentNlink = String(
-      BigInt(proposal.destinationPrestate.parent.nlink) + 1n
+      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(1)
     );
     const approvedEmpty =
       proposal.destinationPrestate.kind === "empty-directory"

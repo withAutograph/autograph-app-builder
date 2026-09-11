@@ -7,7 +7,7 @@ import { resolveRepositoryAccessForTool } from "./repository-access-tool";
 
 vi.mock("eve/context", () => ({
   defineState: () => ({
-    update: (fn: (value: undefined) => unknown) => fn(),
+    update: (fn: (value: undefined) => unknown) => fn(undefined),
   }),
 }));
 const ready: ReadyRepositoryAccess = {

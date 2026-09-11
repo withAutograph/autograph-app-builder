@@ -277,7 +277,7 @@ describe("builder handoff deployment", () => {
     const pageData = vi.fn();
     const status = createBuilderHandoffStatusRouteHandler({ pageData });
     const get = new Request(`${origin}/api/builder/handoffs/${handoffId}`);
-    pageData.mockResolvedValue();
+    pageData.mockResolvedValue(undefined);
     expect((await status(get, handoffId)).status).toBe(401);
     pageData.mockRejectedValue(new Error("database secret"));
     const failed = await status(get, handoffId);

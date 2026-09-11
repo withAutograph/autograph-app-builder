@@ -11,7 +11,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
     () => async (request: Request) => {
       const input = (await request.json()) as { operation: string };
       calls.push(
-        `${new URL(request.url).searchParams.get("mode") ?? "run"}:${input.operation}`,
+        `${new URL(request.url).searchParams.get("mode") ?? "run"}:${input.operation}`
       );
       const github = {
         status: "succeeded",
@@ -58,7 +58,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
             : { status: "skipped", code: "not_selected", retryable: false },
         updatedAt: "2026-09-10T00:00:00.000Z",
       });
-    },
+    }
   ),
 }));
 vi.mock("@/lib/handoff/deployment", () => ({

@@ -4,7 +4,6 @@
   "private": true,
   "description": "Autograph App Builder designs and creates apps in supported repositories.",
   "license": "MIT",
-  "type": "module",
   "scripts": {
     "dev": "mise run dev --",
     "internal:dev-emulated": "mise run app:dev-emulated",
@@ -114,6 +113,7 @@
     "oxlint": "latest",
     "playwright": "latest",
     "postcss": "8.5.28",
+    "prettier": "3.9.6",
     "storybook": "^10.6.0",
     "tailwindcss": "4.3.3",
     "tar": "7.5.22",

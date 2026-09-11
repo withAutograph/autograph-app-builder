@@ -121,7 +121,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
-    mocks.session.mockResolvedValue();
+    mocks.session.mockResolvedValue(undefined);
     expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.cursorReady).not.toHaveBeenCalled();

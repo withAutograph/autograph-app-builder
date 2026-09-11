@@ -230,7 +230,7 @@ export async function inspectTargetExecutionReadiness(input: {
           input.state.sourceReceipt.version,
           environment
         )
-      ).catch(() => {})
+      ).catch(() => undefined)
     : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
     cache,

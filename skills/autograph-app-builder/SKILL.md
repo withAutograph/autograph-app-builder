@@ -32,15 +32,6 @@ Read [session semantics](references/session-semantics.md) for cursor and status 
 
 ## App Builder web implementation
 
-For App Builder web-workflow changes, keep authenticated mutations server-first.
-Use a strict, typed Server Action with `useActionState` for provider
-continuation, durable draft acknowledgement, and handoff creation. The action,
-not client code, owns validation, tenant authority, provider ordering,
-idempotency, and the terminal result. Client leaves may only render that result
-and perform browser-only effects such as SSE display, clipboard, custom
-protocol launch, popup behavior, and post-success navigation.
+For App Builder web-workflow changes, keep authenticated mutations server-first. Use a strict, typed Server Action with `useActionState` for provider continuation, durable draft acknowledgement, and handoff creation. The action, not client code, owns validation, tenant authority, provider ordering, idempotency, and the terminal result. Client leaves may only render that result and perform browser-only effects such as SSE display, clipboard, custom protocol launch, popup behavior, and post-success navigation.
 
-Read [Server Action continuations](references/server-action-continuations.md)
-before changing these flows. Preserve Better Auth and opaque handoff boundaries;
-never substitute browser loopback requests or client-supplied authority for an
-authenticated Server Action.
+Read [Server Action continuations](references/server-action-continuations.md) before changing these flows. Preserve Better Auth and opaque handoff boundaries; never substitute browser loopback requests or client-supplied authority for an authenticated Server Action.

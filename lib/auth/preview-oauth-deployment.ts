@@ -58,14 +58,14 @@ function getPreviewOAuthDeploymentRuntime(
             .join(",")
         : "unknown";
     throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
-      error,
+      cause: error,
     });
   }
   let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
   try {
     config = readPreviewOAuthRuntimeConfig(environment);
   } catch (error) {
-    throw new Error("preview-oauth-config", { error });
+    throw new Error("preview-oauth-config", { cause: error });
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
@@ -104,7 +104,7 @@ function getPreviewOAuthDeploymentRuntime(
       userManagement: organizationAuthority,
     });
   } catch (error) {
-    throw new Error("preview-oauth-server", { error });
+    throw new Error("preview-oauth-server", { cause: error });
   }
   deploymentRuntime = {
     auth,
