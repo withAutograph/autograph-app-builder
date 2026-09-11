@@ -29,6 +29,7 @@ const deferredRules = Object.fromEntries([
   "eslint/no-unsafe-optional-chaining",
   "eslint/no-useless-concat",
   "eslint/no-useless-escape",
+  "eslint/no-useless-return",
   "eslint/no-void",
   "eslint/one-var",
   "eslint/prefer-destructuring",
