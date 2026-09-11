@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Check repository formatting with Oxfmt"
+#MISE description="Check repository formatting and lint with Ultracite"
 set -eu
 
-exec "$(mise which pnpm)" exec oxfmt --check .
+exec "$(mise which pnpm)" exec ultracite check
