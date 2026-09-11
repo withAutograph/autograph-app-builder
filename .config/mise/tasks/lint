@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Lint and format-check repository sources with Ultracite"
+#MISE description="Lint repository sources with Oxlint"
 set -eu
 
-exec "$(mise which pnpm)" exec ultracite check
+exec "$(mise which pnpm)" exec oxlint --config oxlint.config.ts .
