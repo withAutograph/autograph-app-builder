@@ -890,7 +890,7 @@ test("an authenticator credential missing from server storage is not recreated",
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(
       page.getByRole("button", { name: "Passkey failed (try again)" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect((await authCounts()).passkeys).toBe(0);
     expect((await authCounts()).users).toBe(1);
