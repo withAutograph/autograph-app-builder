@@ -10,7 +10,6 @@ export default defineConfig({
     "eslint/no-bitwise": "off",
     "eslint/no-shadow": "off",
     "eslint/no-nested-ternary": "off",
-    "eslint/prefer-destructuring": "off",
     "eslint/no-promise-executor-return": "off",
     "eslint/no-use-before-define": "off",
     "eslint/func-style": "off",
