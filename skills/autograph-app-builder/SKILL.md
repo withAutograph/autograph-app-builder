@@ -29,3 +29,18 @@ Treat tool-only progress as silent. Do not tell the user that you are waiting fo
 Describe only the product: concise inferred design choices, what is ready to explore in the prototype, and what the implementation plan will deliver. For example, say “I’m shaping the exception queue and detail workflow” or “The prototype and implementation plan are ready to review,” never that prototype or plan receipts are pending or complete.
 
 Read [session semantics](references/session-semantics.md) for cursor and status rules.
+
+## App Builder web implementation
+
+For App Builder web-workflow changes, keep authenticated mutations server-first.
+Use a strict, typed Server Action with `useActionState` for provider
+continuation, durable draft acknowledgement, and handoff creation. The action,
+not client code, owns validation, tenant authority, provider ordering,
+idempotency, and the terminal result. Client leaves may only render that result
+and perform browser-only effects such as SSE display, clipboard, custom
+protocol launch, popup behavior, and post-success navigation.
+
+Read [Server Action continuations](references/server-action-continuations.md)
+before changing these flows. Preserve Better Auth and opaque handoff boundaries;
+never substitute browser loopback requests or client-supplied authority for an
+authenticated Server Action.
