@@ -422,9 +422,7 @@ describe("closed GitHub publication contract", () => {
         after: { mode: "644", digest: reviewedBytesDigest },
       },
     ]);
-    const roundTripped = JSON.parse(
-      JSON.stringify(canonicalReview),
-    ) as typeof canonicalReview;
+    const roundTripped = structuredClone(canonicalReview);
     const proposal = createDraftPullRequestProposal({
       installation: adapter.identities.publish,
       repository: adapter.publishRepo,

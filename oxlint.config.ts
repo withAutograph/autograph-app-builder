@@ -32,7 +32,6 @@ export default defineConfig({
     "unicorn/no-array-sort": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/prefer-event-target": "off",
-    "unicorn/prefer-structured-clone": "off",
     "unicorn/require-post-message-target-origin": "off",
   },
 });

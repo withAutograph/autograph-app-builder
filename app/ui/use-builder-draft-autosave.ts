@@ -77,8 +77,7 @@ function createMutationId() {
 }
 
 function cloneSnapshot<T>(snapshot: T): T {
-  if (typeof structuredClone === "function") return structuredClone(snapshot);
-  return JSON.parse(JSON.stringify(snapshot)) as T;
+  return structuredClone(snapshot);
 }
 
 function browserIsOnline() {
