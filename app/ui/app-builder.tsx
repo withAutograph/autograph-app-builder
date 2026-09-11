@@ -54,9 +54,7 @@ import {
   type BuilderDraftPageData,
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
-import {
-  continueBuilderHandoff,
-} from "@/app/actions/builder";
+import { continueBuilderHandoff } from "@/app/actions/builder";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
@@ -98,12 +96,7 @@ const featuredConnections = [
 ] as const;
 
 const allConnectionNames = featuredConnections.map(([name]) => name);
-const comingSoonConnections = new Set([
-  "Ramp",
-  "NetSuite",
-  "Xero",
-  "Sage Intacct",
-]);
+const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage Intacct"]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
@@ -138,9 +131,7 @@ const connectionDescriptions: Record<string, string> = {
 };
 
 function connectionDescription(name: string) {
-  return (
-    connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`
-  );
+  return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
 }
 
 const suggestions = [
@@ -263,12 +254,8 @@ export function appNameFromBrief(brief: string) {
 
 function randomAppName(seed?: string) {
   if (!seed) {
-    const adjective =
-      randomNameAdjectives[
-        Math.floor(Math.random() * randomNameAdjectives.length)
-      ];
-    const noun =
-      randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
+    const adjective = randomNameAdjectives[Math.floor(Math.random() * randomNameAdjectives.length)];
+    const noun = randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
     return `${adjective} ${noun}`;
   }
   const hash = [...seed].reduce(
@@ -277,34 +264,20 @@ function randomAppName(seed?: string) {
   );
   const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
   const noun =
-    randomNameNouns[
-      Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length
-    ];
+    randomNameNouns[Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length];
   return `${adjective} ${noun}`;
 }
 
 export function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>
-      <Image
-        className={styles.brandMark}
-        src={autographIcon}
-        width={23}
-        height={23}
-        alt=""
-      />
+      <Image className={styles.brandMark} src={autographIcon} width={23} height={23} alt="" />
       <span>Autograph</span>
     </span>
   );
 }
 
-export function ConnectionIcon({
-  kind,
-  name,
-}: {
-  kind?: string;
-  name: string;
-}) {
+export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
     quickbooks: SiQuickbooks,
     xero: SiXero,
@@ -313,12 +286,7 @@ export function ConnectionIcon({
   const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
-    <span
-      className={styles.connectionIcon}
-      data-kind={kind}
-      data-name={name}
-      aria-hidden="true"
-    >
+    <span className={styles.connectionIcon} data-kind={kind} data-name={name} aria-hidden="true">
       {Icon ? <Icon size={18} /> : hasBrandAsset ? null : <Globe size={18} />}
     </span>
   );
@@ -352,15 +320,10 @@ export function ModelControls({
           onChange={(event) => onZdrChange(event.target.checked)}
         />{" "}
         Zero Data Retention
-        <InfoTooltip>
-          Only use providers that support Zero Data Retention.
-        </InfoTooltip>
+        <InfoTooltip>Only use providers that support Zero Data Retention.</InfoTooltip>
       </label>
       <SearchCombobox
-        label={
-          options.find((option) => option.value === model)?.label ??
-          "Select model"
-        }
+        label={options.find((option) => option.value === model)?.label ?? "Select model"}
         value={model}
         options={options}
         onChange={onModelChange}
@@ -519,9 +482,7 @@ export function StoreInSection({
       {selected === "github" && available ? (
         <div className={styles.providerPanel} id="storage-provider-github">
           <div className={styles.repoScope}>
-            <div
-              className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}
-            >
+            <div className={`${styles.repoRow} ${gitScope ? styles.repoRowWithRepository : ""}`}>
               <div className={styles.integrationField}>
                 <span className={styles.fieldLabel}>
                   Git Scope <small aria-hidden="true">Optional</small>
@@ -570,34 +531,22 @@ export function StoreInSection({
                         autoComplete="off"
                         spellCheck={false}
                         value={repository}
-                        onChange={(event) =>
-                          onRepositoryChange(event.target.value)
-                        }
+                        onChange={(event) => onRepositoryChange(event.target.value)}
                         placeholder="my-app"
                       />
-                      <label
-                        className={styles.privacyToggle}
-                        aria-label="Private repository"
-                      >
+                      <label className={styles.privacyToggle} aria-label="Private repository">
                         <input
                           type="checkbox"
                           checked={privateRepository}
-                          onChange={(event) =>
-                            onPrivacyChange(event.target.checked)
-                          }
+                          onChange={(event) => onPrivacyChange(event.target.checked)}
                         />
                         <span>
                           <i>
-                            {privateRepository ? (
-                              <FaLock size={11} />
-                            ) : (
-                              <FaLockOpen size={12} />
-                            )}
+                            {privateRepository ? <FaLock size={11} /> : <FaLockOpen size={12} />}
                           </i>
                         </span>
                         <em role="tooltip">
-                          This repository will be{" "}
-                          {privateRepository ? "private" : "public"}.
+                          This repository will be {privateRepository ? "private" : "public"}.
                         </em>
                       </label>
                     </div>
@@ -637,13 +586,8 @@ export function ConnectionsSection({
 }) {
   const normalizedSearch = search.trim().toLowerCase();
   const available = (
-    showMore || normalizedSearch
-      ? allConnectionNames
-      : allConnectionNames.slice(0, 2)
-  ).filter(
-    (name) =>
-      !normalizedSearch || name.toLowerCase().includes(normalizedSearch),
-  );
+    showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2)
+  ).filter((name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch));
   return (
     <SectionShell
       className={`${styles.sectionField} ${styles.connectionsSection}`}
@@ -685,9 +629,7 @@ export function ConnectionsSection({
               >
                 <ConnectionIcon kind={connectionKind.get(name)} name={name} />
                 {name}
-                {comingSoon ? (
-                  <span className={styles.comingSoon}>Coming soon</span>
-                ) : null}
+                {comingSoon ? <span className={styles.comingSoon}>Coming soon</span> : null}
               </button>
             );
           })}
@@ -711,11 +653,7 @@ export function ConnectionsSection({
               <button type="button" onClick={() => onCustomize(name)}>
                 {connected.includes(name) ? "Customize" : "Connect"}
               </button>
-              <button
-                type="button"
-                aria-label={`Remove ${name}`}
-                onClick={() => onRemove(name)}
-              >
+              <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemove(name)}>
                 <X size={17} />
               </button>
             </article>
@@ -741,9 +679,7 @@ export function ConnectionDrawer({
   const [connectionName, setConnectionName] = useState(
     flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-"),
   );
-  const [description, setDescription] = useState(
-    connectionDescription(flow.name),
-  );
+  const [description, setDescription] = useState(connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
   useEffect(() => {
@@ -797,10 +733,7 @@ export function ConnectionDrawer({
         </header>
 
         <div className={styles.drawerProvider}>
-          <ConnectionIcon
-            kind={connectionKind.get(flow.name)}
-            name={flow.name}
-          />
+          <ConnectionIcon kind={connectionKind.get(flow.name)} name={flow.name} />
           <strong>{flow.name}</strong>
         </div>
 
@@ -812,10 +745,7 @@ export function ConnectionDrawer({
             <div className={styles.connectPrompt}>
               <div className={styles.connectionMarks} aria-hidden="true">
                 <span>
-                  <ConnectionIcon
-                    kind={connectionKind.get(flow.name)}
-                    name={flow.name}
-                  />
+                  <ConnectionIcon kind={connectionKind.get(flow.name)} name={flow.name} />
                 </span>
                 <span>
                   <Image src={autographIcon} width={28} height={28} alt="" />
@@ -824,8 +754,7 @@ export function ConnectionDrawer({
               <h4>Connect your {flow.name} account</h4>
               <p>Authorize Autograph to access {flow.name} on your behalf.</p>
               <button type="button" onClick={() => setShowSuccess(true)}>
-                Connect {flow.name}{" "}
-                <ExternalLink size={14} aria-hidden="true" />
+                Connect {flow.name} <ExternalLink size={14} aria-hidden="true" />
               </button>
             </div>
           ) : (
@@ -833,10 +762,7 @@ export function ConnectionDrawer({
               <label>
                 {accountLabel}
                 <button type="button" className={styles.accountSelect}>
-                  <ConnectionIcon
-                    kind={connectionKind.get(flow.name)}
-                    name={flow.name}
-                  />
+                  <ConnectionIcon kind={connectionKind.get(flow.name)} name={flow.name} />
                   Autograph
                   <ChevronDown size={16} aria-hidden="true" />
                 </button>
@@ -898,9 +824,7 @@ export function ConnectionDrawer({
               <label className={styles.defaultConnection}>
                 <span>
                   Use as default
-                  <small>
-                    Prefer this connection when {flow.name} is used.
-                  </small>
+                  <small>Prefer this connection when {flow.name} is used.</small>
                 </span>
                 <input type="checkbox" />
               </label>
@@ -913,19 +837,15 @@ export function ConnectionDrawer({
           ) : null}
         </section>
         <p className={styles.connectionTerms}>
-          This connection is prepared locally. External authorization and
-          credentials are not stored by this prototype.
+          This connection is prepared locally. External authorization and credentials are not stored
+          by this prototype.
         </p>
       </div>
     </div>
   );
 }
 
-export function AnonymousBuilder({
-  onContinue,
-}: {
-  onContinue: (brief: string) => void;
-}) {
+export function AnonymousBuilder({ onContinue }: { onContinue: (brief: string) => void }) {
   const [brief, setBrief] = useState("");
   const isInteractive = useSyncExternalStore(
     subscribeToClientSnapshot,
@@ -976,18 +896,12 @@ export function AnonymousBuilder({
         <div className={styles.suggestions}>
           <span>Suggestions</span>
           {suggestions.map((suggestion) => (
-            <button
-              type="button"
-              key={suggestion}
-              onClick={() => setBrief(suggestion)}
-            >
+            <button type="button" key={suggestion} onClick={() => setBrief(suggestion)}>
               {suggestion}
             </button>
           ))}
         </div>
-        <p>
-          You’ll create or sign in to your Autograph account before building.
-        </p>
+        <p>You’ll create or sign in to your Autograph account before building.</p>
       </section>
     </main>
   );
@@ -1024,9 +938,7 @@ export function Builder({
   saveActiveBuilderDraftAction?: (
     input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
-  loadActiveBuilderDraftAction?: () => Promise<
-    BuilderDraftPageData | undefined
-  >;
+  loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
 }) {
   const router = useRouter();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
@@ -1047,9 +959,7 @@ export function Builder({
       detail: model.id,
     }));
   const defaultModel = allModelOptions[0]?.value ?? "";
-  const effectiveInitialBrief = initialBrief.trim()
-    ? initialBrief
-    : defaultBrief;
+  const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
   const initialAppName =
     appNameFromBrief(effectiveInitialBrief) || randomAppName(generatedNameSeed);
   const initialForm: BuilderForm = initialDraft
@@ -1095,15 +1005,9 @@ export function Builder({
     },
     [builderForm],
   );
-  const appNameEditedByUser = useRef(
-    initialDraft?.appNameEditedByUser ?? false,
-  );
-  const repositoryEditedByUser = useRef(
-    initialDraft?.repositoryEditedByUser ?? false,
-  );
-  const [initialActiveDraftId] = useState(
-    () => resumeKey ?? durableDraftId ?? crypto.randomUUID(),
-  );
+  const appNameEditedByUser = useRef(initialDraft?.appNameEditedByUser ?? false);
+  const repositoryEditedByUser = useRef(initialDraft?.repositoryEditedByUser ?? false);
+  const [initialActiveDraftId] = useState(() => resumeKey ?? durableDraftId ?? crypto.randomUUID());
   const activeDraftId = useRef(initialActiveDraftId);
   const resumedVercelConnection = providerNotices.some(
     (notice) => notice.provider === "vercel" && notice.status === "connected",
@@ -1127,9 +1031,7 @@ export function Builder({
     initialDraft?.showMoreConnections ?? false,
   );
   const [search, setSearch] = useState(initialDraft?.search ?? "");
-  const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(
-    null,
-  );
+  const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(null);
   const clientHydrated = useSyncExternalStore(
     subscribeToClientSnapshot,
     () => true,
@@ -1140,14 +1042,12 @@ export function Builder({
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     initialDraft?.connectedConnections ?? [],
   );
-  const [storageProvider, setStorageProvider] =
-    useState<StorageProvider | null>(
-      initialDraft?.storageProvider === null ? null : "github",
-    );
-  const [deploymentProvider, setDeploymentProvider] =
-    useState<DeploymentProvider | null>(
-      initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
-    );
+  const [storageProvider, setStorageProvider] = useState<StorageProvider | null>(
+    initialDraft?.storageProvider === null ? null : "github",
+  );
+  const [deploymentProvider, setDeploymentProvider] = useState<DeploymentProvider | null>(
+    initialDraft?.deploymentProvider === "vercel" ? "vercel" : null,
+  );
   const draftRevision = useRef(durableDraftRevision);
   const draftUpdatedAt = useRef(durableDraftUpdatedAt);
   // A Server Action may stream a route update before its promise continuation
@@ -1160,9 +1060,7 @@ export function Builder({
   // to this mounted builder; a provider-return route still hydrates directly
   // from its server-rendered draft.
   const localActionMutationVersions = useRef(new Map<number, number>());
-  const focusOrigin = useRef<ProviderField>(
-    initialDraft?.focusOrigin ?? "github",
-  );
+  const focusOrigin = useRef<ProviderField>(initialDraft?.focusOrigin ?? "github");
   const draftOutbox = useMemo(
     () =>
       createBuilderDraftOutbox<BuilderDraft>({
@@ -1195,10 +1093,7 @@ export function Builder({
       } catch (error) {
         return {
           mutationId: input.clientMutationId,
-          error:
-            error instanceof Error
-              ? error.message
-              : "builder-draft-save-failed",
+          error: error instanceof Error ? error.message : "builder-draft-save-failed",
         };
       }
     },
@@ -1208,11 +1103,7 @@ export function Builder({
     new Map<
       string,
       {
-        resolve: (saved: {
-    draftId: string;
-    revision: number;
-    updatedAt: string;
-}) => void;
+        resolve: (saved: { draftId: string; revision: number; updatedAt: string }) => void;
         reject: (error: Error) => void;
       }
     >(),
@@ -1294,9 +1185,7 @@ export function Builder({
             })
           : saveActiveBuilderDraftAction
             ? await requestServerSave(input)
-            : await Promise.reject(
-                new Error("builder-draft-action-unavailable"),
-              );
+            : await Promise.reject(new Error("builder-draft-action-unavailable"));
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
@@ -1338,8 +1227,7 @@ export function Builder({
     (notice) =>
       !(
         notice.status === "failed" &&
-        (notice.reason === "configuration-unavailable" ||
-          notice.provider === "github")
+        (notice.reason === "configuration-unavailable" || notice.provider === "github")
       ),
   );
   const draftSnapshot = useCallback(
@@ -1376,12 +1264,15 @@ export function Builder({
     ],
   );
   const applyAuthoritativeDraft = useCallback(
-    async (remote: {
-      draftId: string;
-      revision: number;
-      updatedAt: string;
-      record: BuilderDraftRecord;
-    }, expectedLocalMutationVersion?: number) => {
+    async (
+      remote: {
+        draftId: string;
+        revision: number;
+        updatedAt: string;
+        record: BuilderDraftRecord;
+      },
+      expectedLocalMutationVersion?: number,
+    ) => {
       // A polling request can begin before a user edit and return a server
       // snapshot that predates that edit. It is not an incoming concurrent
       // draft and must never reset the newer RHF state.
@@ -1435,8 +1326,7 @@ export function Builder({
   const modelOptions = zdrOnly
     ? allModelOptions.filter((option) =>
         integrations.models.entries.some(
-          (modelEntry) =>
-            modelEntry.id === option.value && modelEntry.zdr === "all",
+          (modelEntry) => modelEntry.id === option.value && modelEntry.zdr === "all",
         ),
       )
     : allModelOptions;
@@ -1448,23 +1338,20 @@ export function Builder({
   const canSubmit = Boolean(
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
-    (form.buildDestination !== "web" ||
-      (integrations.models.status === "ready" && model)),
+    (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
   );
   const submitGuidance =
     form.appName.trim() && !validAppId
       ? "Use an app name that can form a lowercase, URL-safe app ID."
       : !form.brief.trim()
         ? "Add an app brief to continue."
-        : form.buildDestination === "web" &&
-            (integrations.models.status !== "ready" || !model)
+        : form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
           ? "Choose an available model to continue."
           : undefined;
   const updateBrief = (brief: string) => {
     setForm((current) => {
       if (appNameEditedByUser.current) return { ...current, brief };
-      const appName =
-        appNameFromBrief(brief) || randomAppName(generatedNameSeed);
+      const appName = appNameFromBrief(brief) || randomAppName(generatedNameSeed);
       return {
         ...current,
         brief,
@@ -1489,16 +1376,12 @@ export function Builder({
       ...current,
       connections: current.connections.filter((item) => item !== name),
     }));
-    setConnectedConnections((current) =>
-      current.filter((item) => item !== name),
-    );
+    setConnectedConnections((current) => current.filter((item) => item !== name));
   };
   const completeConnection = () => {
     if (!connectionFlow) return;
     setConnectedConnections((current) =>
-      current.includes(connectionFlow.name)
-        ? current
-        : [...current, connectionFlow.name],
+      current.includes(connectionFlow.name) ? current : [...current, connectionFlow.name],
     );
     setConnectionFlow(null);
   };
@@ -1518,12 +1401,7 @@ export function Builder({
       document.getElementById(id)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [
-    initialDraft,
-    interactive,
-    resumedGitHubConnection,
-    resumedVercelConnection,
-  ]);
+  }, [initialDraft, interactive, resumedGitHubConnection, resumedVercelConnection]);
   useEffect(() => {
     let disposed = false;
     const recoveryStartVersion = localFormMutationVersion.current;
@@ -1540,14 +1418,11 @@ export function Builder({
         }
         // A recovery outbox is only useful when it is newer than the server
         // snapshot rendered for this visit. Server revisions remain canonical.
-        if (
-          draftUpdatedAt.current &&
-          entry.createdAt <= Date.parse(draftUpdatedAt.current)
-        ) {
+        if (draftUpdatedAt.current && entry.createdAt <= Date.parse(draftUpdatedAt.current)) {
           void discardPendingDraft();
           return;
         }
-        const {snapshot} = entry;
+        const { snapshot } = entry;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);
@@ -1618,9 +1493,7 @@ export function Builder({
   useEffect(() => {
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
-    const actionMutationVersion = localActionMutationVersions.current.get(
-      durableDraftRevision,
-    );
+    const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
     if (
       pendingActionExpectedRevision.current !== undefined &&
       durableDraftRevision === pendingActionExpectedRevision.current + 1
@@ -1682,9 +1555,7 @@ export function Builder({
     autosave.schedule(draft);
     await autosave.flush();
     if (await autosave.restorePending()) {
-      setDraftSaveError(
-        "We couldn’t save your form. Retry saving to connect a provider.",
-      );
+      setDraftSaveError("We couldn’t save your form. Retry saving to connect a provider.");
       return;
     }
     setDraftSaveError("");
@@ -1692,9 +1563,7 @@ export function Builder({
     // ID different from the optimistic local ID. Capture it only after the
     // Server Action checkpoint has completed so a provider return can never
     // target a stale, non-authoritative draft.
-    router.push(
-      `/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`,
-    );
+    router.push(`/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`);
   };
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1702,26 +1571,18 @@ export function Builder({
       autosave.schedule(draftSnapshot());
       await autosave.flush();
       if (await autosave.restorePending()) {
-        setDraftSaveError(
-          "We couldn’t save your form. Retry saving before creating your app.",
-        );
+        setDraftSaveError("We couldn’t save your form. Retry saving before creating your app.");
         return;
       }
       setDraftSaveError("");
-      const appName =
-        form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
+      const appName = form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
       onCreate(
         {
           ...form,
           appName,
-          repository:
-            form.repository.trim() || repositoryNameFromAppName(appName),
-          ...(deploymentProvider === "vercel" && team
-            ? { vercelInstallationId: team }
-            : {}),
-          ...(storageProvider === "github" && gitScope
-            ? { githubInstallationId: gitScope }
-            : {}),
+          repository: form.repository.trim() || repositoryNameFromAppName(appName),
+          ...(deploymentProvider === "vercel" && team ? { vercelInstallationId: team } : {}),
+          ...(storageProvider === "github" && gitScope ? { githubInstallationId: gitScope } : {}),
           modelId: preferredModelId,
         },
         activeDraftId.current,
@@ -1768,8 +1629,7 @@ export function Builder({
             <div>
               <h1>Build an app</h1>
               <p>
-                Describe what you want to build, then choose how it should be
-                created and delivered.
+                Describe what you want to build, then choose how it should be created and delivered.
               </p>
             </div>
           </div>
@@ -1792,10 +1652,7 @@ export function Builder({
               const currentIndex = briefExamples.indexOf(
                 form.brief as (typeof briefExamples)[number],
               );
-              const nextIndex =
-                currentIndex < 0
-                  ? 0
-                  : (currentIndex + 1) % briefExamples.length;
+              const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
               updateBrief(briefExamples[nextIndex]);
             }}
           />
@@ -1839,9 +1696,7 @@ export function Builder({
             repository={form.repository}
             privateRepository={form.privateRepository}
             onProviderChange={(provider) => {
-              setStorageProvider((current) =>
-                current === provider ? null : provider,
-              );
+              setStorageProvider((current) => (current === provider ? null : provider));
             }}
             onGitScopeChange={(value) => {
               setGitScope(value);
@@ -1863,9 +1718,7 @@ export function Builder({
             team={team}
             teamOptions={teamOptions}
             onProviderChange={(provider) => {
-              setDeploymentProvider((current) =>
-                current === provider ? null : provider,
-              );
+              setDeploymentProvider((current) => (current === provider ? null : provider));
             }}
             onTeamChange={(value) => {
               setTeam(value);
@@ -1886,9 +1739,7 @@ export function Builder({
               onCustomize={(name) =>
                 setConnectionFlow({
                   name,
-                  stage: connectedConnections.includes(name)
-                    ? "configure"
-                    : "connect",
+                  stage: connectedConnections.includes(name) ? "configure" : "connect",
                 })
               }
             />
@@ -1898,9 +1749,7 @@ export function Builder({
               className={styles.createButton}
               type="submit"
               disabled={!canSubmit}
-              aria-describedby={
-                submitGuidance ? "create-app-guidance" : undefined
-              }
+              aria-describedby={submitGuidance ? "create-app-guidance" : undefined}
             >
               Create App
             </button>
@@ -1917,9 +1766,7 @@ export function Builder({
           flow={connectionFlow}
           onClose={() => setConnectionFlow(null)}
           onStageChange={(stage) =>
-            setConnectionFlow((current) =>
-              current ? { ...current, stage } : current,
-            )
+            setConnectionFlow((current) => (current ? { ...current, stage } : current))
           }
           onConnected={completeConnection}
         />
@@ -1960,17 +1807,17 @@ export function AppBuilder({
   saveActiveBuilderDraftAction?: (
     input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
-  loadActiveBuilderDraftAction?: () => Promise<
-    BuilderDraftPageData | undefined
-  >;
+  loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
   clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
 }) {
   const router = useRouter();
   const [savedBrief, setSavedBrief] = useState("");
   const activeDraftId = useRef<string | undefined>(undefined);
   const completedHandoff = useRef<string | undefined>(undefined);
-  const [continuation, dispatchContinuation, continuationPending] =
-    useActionState(continueBuilderHandoff, undefined);
+  const [continuation, dispatchContinuation, continuationPending] = useActionState(
+    continueBuilderHandoff,
+    undefined,
+  );
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
@@ -1982,8 +1829,7 @@ export function AppBuilder({
     if (continuation.status === "error") return;
     if (completedHandoff.current === continuation.handoff.handoffId) return;
     completedHandoff.current = continuation.handoff.handoffId;
-    if (activeDraftId.current)
-      void clearBuilderDraftAction?.(activeDraftId.current);
+    if (activeDraftId.current) void clearBuilderDraftAction?.(activeDraftId.current);
     router.replace(`/handoff/${continuation.handoff.handoffId}`);
   }, [clearBuilderDraftAction, continuation, continuationPending, router]);
   // The server draft is authoritative after provider return. Browser storage
@@ -2043,9 +1889,7 @@ export function AppBuilder({
         />
       )}
       {continuation?.status === "error" && !continuationPending ? (
-        <p role="alert">
-          We couldn’t prepare your handoff. Your saved draft is still available.
-        </p>
+        <p role="alert">We couldn’t prepare your handoff. Your saved draft is still available.</p>
       ) : null}
     </div>
   );
