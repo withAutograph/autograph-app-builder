@@ -6,7 +6,9 @@ import { getDocumentContent } from "../docs-content";
 import { docs, getDocument } from "../docs-registry";
 import { DocsShell } from "../docs-shell";
 
-type PageProps = { params: Promise<{ slug: string }> };
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
 
 export function generateStaticParams() {
   return docs

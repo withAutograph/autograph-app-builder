@@ -1,6 +1,9 @@
-export type DocsTableOfContentsItem = { id: string; label: string };
+export interface DocsTableOfContentsItem {
+  id: string;
+  label: string;
+}
 
-export type DocsDocument = {
+export interface DocsDocument {
   slug:
     | "overview"
     | "install-autograph"
@@ -10,7 +13,7 @@ export type DocsDocument = {
   title: string;
   description: string;
   toc: DocsTableOfContentsItem[];
-};
+}
 
 export const docs: readonly DocsDocument[] = [
   {
