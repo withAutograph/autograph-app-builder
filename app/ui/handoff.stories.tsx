@@ -15,7 +15,11 @@ const meta = {
     requestId: storyProvisioning.requestId,
     handoffCreationRequestId: "123e4567-e89b-42d3-a456-426614174002",
     provisioningEnabled: false,
-    createHandoffTask: fn(async () => storyHandoff),
+    continuationAction: fn(async () => ({
+      status: "ready" as const,
+      provisioning: storyProvisioning,
+      handoff: storyHandoff,
+    })),
     onReady: fn(),
   },
   parameters: { layout: "fullscreen" },

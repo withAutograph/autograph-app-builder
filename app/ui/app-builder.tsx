@@ -47,9 +47,8 @@ import {
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
 import {
-  createBuilderHandoff as createBuilderHandoffAction,
-  provisionBuilderProvider,
-  reserveBuilderProvider,
+  continueBuilderHandoff,
+  type BuilderHandoffContinuationInput,
 } from "@/app/actions/builder";
 import {
   buildAppHandoffPrompt,
@@ -115,8 +114,6 @@ export type {
 
 type Screen = "builder" | "handoff" | "ready";
 
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 export type ConnectionStage = "connect" | "configure" | "customize";
 export type ConnectionFlow = { name: string; stage: ConnectionStage };
 
@@ -170,42 +167,6 @@ function attemptAppHandoff(
   } catch {
     return "blocked";
   }
-}
-
-async function createBuilderHandoff(input: {
-  form: BuilderForm;
-  provisioning: BuilderProvisionResponse;
-  creationRequestId: string;
-}): Promise<BuilderHandoffReference> {
-  const value = await createBuilderHandoffAction({
-    version: 1,
-    creationRequestId: input.creationRequestId,
-    destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
-    ...(input.provisioning.requestDigest === "0".repeat(64)
-      ? {}
-      : { provisioningRequestId: input.provisioning.requestId }),
-    appName: input.form.appName,
-    repository: {
-      name: input.form.repository,
-      private: input.form.privateRepository,
-    },
-    brief: input.form.brief,
-    modelId: activeBuilderModelId,
-    connections: input.form.connections,
-  });
-  if (
-    value.version !== 1 ||
-    typeof value.handoffId !== "string" ||
-    !uuidPattern.test(value.handoffId) ||
-    typeof value.expiresAt !== "string" ||
-    Number.isNaN(Date.parse(value.expiresAt))
-  )
-    throw new Error("handoff-response-invalid");
-  return {
-    version: 1,
-    handoffId: value.handoffId,
-    expiresAt: value.expiresAt,
-  };
 }
 
 const featuredConnections = [
@@ -1989,84 +1950,13 @@ export function Builder({
   );
 }
 
-function emptyProvisioning(
-  form: BuilderForm,
-  requestId: string,
-  code?: "feature_disabled" | "provider_unavailable",
-): BuilderProvisionResponse {
-  const selected = (provider: "github" | "vercel") =>
-    provider === "github"
-      ? Boolean(form.githubInstallationId)
-      : Boolean(form.vercelInstallationId);
-  const result = (provider: "github" | "vercel") =>
-    selected(provider)
-      ? code === "feature_disabled"
-        ? ({
-            status: "skipped",
-            code: "feature_disabled",
-            retryable: false,
-          } as const)
-        : ({
-            status: "failed",
-            code: "provider_unavailable",
-            retryable: true,
-          } as const)
-      : ({
-          status: "skipped",
-          code: "not_selected",
-          retryable: false,
-        } as const);
-  return {
-    version: 1,
-    requestId,
-    requestDigest: "0".repeat(64),
-    appId: deriveBuilderAppId(form.appName),
-    status: "settled",
-    github: result("github"),
-    vercel: result("vercel"),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function provisioningRequest(
-  form: BuilderForm,
-  requestId: string,
-  operation: "github" | "vercel",
-) {
-  return {
-    version: 1 as const,
-    requestId,
-    operation,
-    appName: form.appName,
-    repository: { name: form.repository, private: form.privateRepository },
-    providers: {
-      ...(form.githubInstallationId
-        ? { githubInstallationId: form.githubInstallationId }
-        : {}),
-      ...(form.vercelInstallationId
-        ? { vercelInstallationId: form.vercelInstallationId }
-        : {}),
-    },
-  };
-}
-
-async function provisionSelectedProvider(
-  form: BuilderForm,
-  requestId: string,
-  operation: "github" | "vercel",
-) {
-  return provisionBuilderProvider(
-    provisioningRequest(form, requestId, operation),
-  );
-}
-
 export function Handoff({
   form,
   requestId,
   handoffCreationRequestId,
   openedWindow,
   provisioningEnabled,
-  createHandoffTask = createBuilderHandoff,
+  continuationAction = continueBuilderHandoff,
   onReady,
 }: {
   form: BuilderForm;
@@ -2074,7 +1964,7 @@ export function Handoff({
   handoffCreationRequestId: string;
   openedWindow?: Window | null;
   provisioningEnabled: boolean;
-  createHandoffTask?: typeof createBuilderHandoff;
+  continuationAction?: typeof continueBuilderHandoff;
   onReady: (result: {
     provisioning: BuilderProvisionResponse;
     handoff: BuilderHandoffReference;
@@ -2085,7 +1975,8 @@ export function Handoff({
   const completedAttempt = useRef(-1);
   const mounted = useRef(false);
   const [attempt, setAttempt] = useState(0);
-  const [handoffError, setHandoffError] = useState(false);
+  const [continuation, dispatchContinuation, continuationPending] =
+    useActionState(continuationAction, undefined);
   const [streaming, setStreaming] = useState(false);
   const [streamSnapshot, setStreamSnapshot] =
     useState<BuilderProvisionResponse>();
@@ -2103,106 +1994,59 @@ export function Handoff({
         mounted.current = false;
       };
     completedAttempt.current = attempt;
-    setHandoffError(false);
     setStep(0);
-    void (async () => {
-      let provisioning = emptyProvisioning(
-        form,
-        requestId,
-        provisioningEnabled ? "provider_unavailable" : "feature_disabled",
-      );
-      if (provisioningEnabled) {
-        if (form.githubInstallationId) {
-          try {
-            await reserveBuilderProvider(
-              provisioningRequest(form, requestId, "github"),
-            );
-            if (!mounted.current) return;
-            setStreaming(true);
-            provisioning = await provisionSelectedProvider(
-              form,
-              requestId,
-              "github",
-            );
-          } catch {
-            if (form.vercelInstallationId)
-              provisioning = {
-                ...provisioning,
-                vercel: {
-                  status: "skipped",
-                  code: "github_required",
-                  retryable: false,
-                },
-              };
-          }
-          if (!mounted.current) return;
-          setStep((value) => value + 1);
-        }
-        if (form.vercelInstallationId) {
-          if (
-            !form.githubInstallationId ||
-            provisioning.github.status === "succeeded"
-          ) {
-            try {
-              await reserveBuilderProvider(
-                provisioningRequest(form, requestId, "vercel"),
-              );
-              if (!mounted.current) return;
-              setStreaming(true);
-              provisioning = await provisionSelectedProvider(
-                form,
-                requestId,
-                "vercel",
-              );
-            } catch {}
-          }
-          if (!mounted.current) return;
-          setStep((value) => value + 1);
-        }
-      }
-      if (!mounted.current) return;
-      setStep((value) => value + 1);
-      let handoff: BuilderHandoffReference;
-      try {
-        handoff = await createHandoffTask({
-          form,
-          provisioning,
-          creationRequestId: handoffCreationRequestId,
-        });
-      } catch {
-        if (mounted.current) setHandoffError(true);
-        return;
-      }
-      if (!mounted.current) return;
-      setStep((value) => value + 1);
-      setStep((value) => value + 1);
-      const handoffAttempt = attemptAppHandoff(
-        form.buildDestination,
-        handoff.handoffId,
-        openedWindow,
-      );
-      setStep(stages.length);
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
-      if (!mounted.current) return;
-      onReady({
-        provisioning,
-        handoff,
-        handoffAttempt,
-        clipboardState: "idle",
-      });
-    })();
+    setStreaming(
+      provisioningEnabled &&
+        Boolean(form.githubInstallationId || form.vercelInstallationId),
+    );
+    const input: BuilderHandoffContinuationInput = {
+      version: 1,
+      requestId,
+      creationRequestId: handoffCreationRequestId,
+      provisioningEnabled,
+      form,
+    };
+    startTransition(() => dispatchContinuation(input));
     return () => {
       mounted.current = false;
     };
   }, [
     attempt,
-    createHandoffTask,
+    continuationAction,
+    dispatchContinuation,
     form,
     handoffCreationRequestId,
     onReady,
     openedWindow,
     provisioningEnabled,
     requestId,
+    stages.length,
+  ]);
+  useEffect(() => {
+    if (!continuation || continuationPending) return;
+    if (continuation.status === "error") return;
+    const handoffAttempt = attemptAppHandoff(
+      form.buildDestination,
+      continuation.handoff.handoffId,
+      openedWindow,
+    );
+    const timer = window.setTimeout(() => {
+      if (!mounted.current) return;
+      setStep(stages.length);
+      onReady({
+        provisioning: continuation.provisioning,
+        handoff: continuation.handoff,
+        handoffAttempt,
+        clipboardState: "idle",
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    continuation,
+    continuationPending,
+    form.buildDestination,
+    onReady,
+    openedWindow,
     stages.length,
   ]);
   return (
@@ -2222,7 +2066,7 @@ export function Handoff({
             ? Math.max(step, form.githubInstallationId ? 1 : 0)
             : step
         }
-        handoffError={handoffError}
+        handoffError={continuation?.status === "error" && !continuationPending}
         onRetry={() => setAttempt((value) => value + 1)}
       />
     </>
@@ -2258,7 +2102,14 @@ codex plugin add app-builder@autograph`;
     useState<HandoffAttempt>(initialAttempt);
   const [provisioning, setProvisioning] = useState(initialProvisioning);
   const [handoff, setHandoff] = useState(initialHandoff);
-  const [retrying, setRetrying] = useState<"github" | "vercel">();
+  const [retryingProvider, setRetryingProvider] = useState<
+    "github" | "vercel"
+  >();
+  const [retryContinuation, dispatchRetryContinuation, retryPending] =
+    useActionState(continueBuilderHandoff, undefined);
+  const retryCreationRequestId = useRef<string | undefined>(undefined);
+  const retrying = retryPending ? retryingProvider : undefined;
+  const retryFailed = retryContinuation?.status === "error" && !retryPending;
   const destination = buildDestinationLabel(form.buildDestination);
   const hasProvisioningFailure = (["github", "vercel"] as const).some(
     (provider) => {
@@ -2269,8 +2120,9 @@ codex plugin add app-builder@autograph`;
       return selected && provisioning[provider].status === "failed";
     },
   );
-  const continueState =
-    retryClipboardState === "idle"
+  const continueState = retryFailed
+    ? "failed"
+    : retryClipboardState === "idle"
       ? initialClipboardState
       : retryClipboardState;
   const openSelectedClient = () => {
@@ -2291,39 +2143,46 @@ codex plugin add app-builder@autograph`;
       attemptAppHandoff(form.buildDestination, handoff.handoffId),
     );
   };
-  const retryProvider = async (provider: "github" | "vercel") => {
-    setRetrying(provider);
-    try {
-      const refreshed = await provisionSelectedProvider(
-        form,
+  const retryProvider = (provider: "github" | "vercel") => {
+    setRetryingProvider(provider);
+    const creationRequestId = crypto.randomUUID();
+    retryCreationRequestId.current = creationRequestId;
+    startTransition(() =>
+      dispatchRetryContinuation({
+        version: 1,
         requestId,
-        provider,
-      );
-      const nextCreationRequestId = crypto.randomUUID();
-      const refreshedHandoff = await createBuilderHandoff({
+        creationRequestId,
+        provisioningEnabled,
+        retryProvider: provider,
         form,
-        provisioning: refreshed,
-        creationRequestId: nextCreationRequestId,
-      });
-      setProvisioning(refreshed);
-      setHandoff(refreshedHandoff);
+      }),
+    );
+  };
+  useEffect(() => {
+    if (
+      !retryContinuation ||
+      retryPending ||
+      retryContinuation.status === "error"
+    )
+      return;
+    const timer = window.setTimeout(() => {
+      setProvisioning(retryContinuation.provisioning);
+      setHandoff(retryContinuation.handoff);
       persistActiveProvisioning({
         version: 1,
         requestId,
-        handoffCreationRequestId: nextCreationRequestId,
+        handoffCreationRequestId:
+          retryCreationRequestId.current ?? crypto.randomUUID(),
         form,
         phase: "ready",
-        provisioning: refreshed,
-        handoff: refreshedHandoff,
+        provisioning: retryContinuation.provisioning,
+        handoff: retryContinuation.handoff,
       });
       setHandoffAttempt("attempted");
       setRetryClipboardState("idle");
-    } catch {
-      setRetryClipboardState("failed");
-    } finally {
-      setRetrying(undefined);
-    }
-  };
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [form, requestId, retryContinuation, retryPending]);
   return (
     <main className={styles.flowPage} id="main-content">
       <section className={styles.readyCard}>
