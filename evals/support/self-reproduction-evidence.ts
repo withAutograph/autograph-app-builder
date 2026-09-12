@@ -11,12 +11,12 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
-        /((?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)|authorization|cookie|continuationToken)["']?\s*[:=]\s*["']?)[^\s"',}]+/giu,
-        "$1[REDACTED]",
+        /(?<prefix>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)|authorization|cookie|continuationToken)["']?\s*[:=]\s*["']?)[^\s"',}]+/giu,
+        "$<prefix>[REDACTED]",
       )
       .replaceAll(
-        /([?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        "$1[REDACTED]",
+        /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
+        "$<prefix>[REDACTED]",
       );
   if (Array.isArray(value)) return value.map(sanitizeEvidence);
   if (value && typeof value === "object")
@@ -158,8 +158,8 @@ export function candidateExportFromEvidence(
     }
     const appRoots = new Set(
       validated.flatMap((file) => {
-        const match = /^(apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
-        return match ? [match[1]] : [];
+        const match = /^(?<appRoot>apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
+        return match?.groups?.appRoot ? [match.groups.appRoot] : [];
       }),
     );
     if (appRoots.size === 1) {

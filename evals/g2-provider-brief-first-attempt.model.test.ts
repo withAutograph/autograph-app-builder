@@ -42,9 +42,9 @@ function terminalBuildHandoff(raw: string): {
   integrations: string[];
   hostedResources: string[];
 } {
-  const match = /\n## Build handoff\n\n```json\n([\s\S]+)\n```\s*$/u.exec(raw);
+  const match = /\n## Build handoff\n\n```json\n(?<handoff>[\s\S]+)\n```\s*$/u.exec(raw);
   expect(match, "raw output ends with the exact Build handoff block").not.toBeNull();
-  const parsed = JSON.parse(match?.[1] ?? "null") as {
+  const parsed = JSON.parse(match?.groups?.handoff ?? "null") as {
     optionalCapabilities?: {
       integrations?: unknown;
       hostedResources?: unknown;
@@ -100,7 +100,9 @@ ${productBrief}`,
     const rawFirstOutput = artifact.content;
     expect(validateBuildReadyAppSpec(rawFirstOutput)).toEqual({ valid: true });
 
-    const headings = [...rawFirstOutput.matchAll(/^## (.+)$/gmu)].map(([, heading]) => heading);
+    const headings = [...rawFirstOutput.matchAll(/^## (?<heading>.+)$/gmu)].map(
+      (match) => match.groups!.heading!,
+    );
     expect(headings).toEqual(REQUIRED_APP_SPEC_HEADINGS);
 
     const capabilities = terminalBuildHandoff(rawFirstOutput);

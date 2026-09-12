@@ -14,8 +14,8 @@ describe("high-fidelity design guidance", () => {
       "agent/skills/design-app/references/ui-preview-authoring.md",
       "utf-8",
     );
-    const content = reference.match(/```tsx\n([\s\S]*?)\n```/u)?.[1];
-    const manifest = reference.match(/```json\n([\s\S]*?)\n```/u)?.[1];
+    const content = reference.match(/```tsx\n(?<content>[\s\S]*?)\n```/u)?.groups?.content;
+    const manifest = reference.match(/```json\n(?<manifest>[\s\S]*?)\n```/u)?.groups?.manifest;
     expect(content).toBeDefined();
     expect(manifest).toBeDefined();
     const input = uiPreviewInputSchema.parse({

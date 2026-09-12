@@ -33,9 +33,9 @@ describe("build-ready AppSpec validation", () => {
       (file) => file.path === "design-app/references/app-spec.md",
     );
     expect(bundled?.content).toBe(reference);
-    const templates = [...reference.matchAll(/````markdown\n([\s\S]*?)\n````/gu)];
+    const templates = [...reference.matchAll(/````markdown\n(?<template>[\s\S]*?)\n````/gu)];
     expect(templates).toHaveLength(1);
-    const authored = templates[0]![1]!;
+    const authored = templates[0]!.groups!.template!;
     // Test the bytes shown to the model, before acceptance normalization.
     expect(validateBuildReadyAppSpec(authored)).toEqual({ valid: true });
     expect(authored.match(/^## .+$/gmu)).toEqual(
