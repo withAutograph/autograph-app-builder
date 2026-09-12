@@ -1564,6 +1564,13 @@ export function Builder({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (canSubmit && (await builderForm.trigger())) {
+      // `useWatch` intentionally updates on React's render cadence. A click
+      // immediately after the final input event can therefore observe the
+      // prior rendered value here, even though RHF and the autosave checkpoint
+      // already contain the current edit. Use the synchronous RHF mirror at
+      // this action boundary so the durable handoff cannot be created from a
+      // stale generated name (or any other last-keystroke value).
+      const currentForm = formSnapshot.current;
       autosave.schedule(draftSnapshot());
       await autosave.flush();
       if (await autosave.restorePending()) {
@@ -1571,12 +1578,13 @@ export function Builder({
         return;
       }
       setDraftSaveError("");
-      const appName = form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
+      const appName =
+        currentForm.appName.trim() || appNameFromBrief(currentForm.brief) || randomAppName();
       onCreate(
         {
-          ...form,
+          ...currentForm,
           appName,
-          repository: form.repository.trim() || repositoryNameFromAppName(appName),
+          repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
           ...(deploymentProvider === "vercel" && team ? { vercelInstallationId: team } : {}),
           ...(storageProvider === "github" && gitScope ? { githubInstallationId: gitScope } : {}),
           modelId: preferredModelId,
