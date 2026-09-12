@@ -99,6 +99,23 @@ afterEach(async () => {
 });
 
 describe("HandoffProvisioningProgress", () => {
+  it("keeps transport rejection inline and retries the same handoff successfully", async () => {
+    vi.stubGlobal("EventSource", TestEventSource);
+    actions.continue.mockRejectedValueOnce(new Error("connection interrupted"));
+    await render();
+    expect(container?.textContent).toContain("Provider setup paused. Your handoff is saved.");
+    const retry = [...(container?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Retry provider setup",
+    );
+    expect(retry).toBeDefined();
+    await act(async () => retry?.click());
+    expect(actions.continue).toHaveBeenCalledTimes(2);
+    expect(actions.continue).toHaveBeenLastCalledWith({ status: "error" }, { handoffId });
+    expect(container?.textContent).not.toContain("Provider setup paused");
+    expect(container?.textContent).not.toContain("Retry provider setup");
+    expect(TestEventSource.instances).toHaveLength(1);
+  });
+
   it("ignores malformed and regressive SSE snapshots, then refreshes once when a newer terminal revision arrives", async () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();

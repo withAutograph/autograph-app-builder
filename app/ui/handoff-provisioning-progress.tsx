@@ -3,7 +3,10 @@
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { continueHandoffProvisioning } from "@/app/actions/builder";
+import {
+  continueHandoffProvisioning,
+  type HandoffProvisioningContinuationState,
+} from "@/app/actions/builder";
 import {
   builderProvisionProjectionSchema,
   type BuilderProvisionProjection,
@@ -35,7 +38,21 @@ export function HandoffProvisioningProgress({
   const latestRevision = useRef(initial.revision);
   const settledRefresh = useRef(false);
   const dispatched = useRef(false);
-  const [actionState, dispatch, pending] = useActionState(continueHandoffProvisioning, undefined);
+  const [actionState, dispatch, pending] = useActionState(
+    async (
+      previous: HandoffProvisioningContinuationState | undefined,
+      input: { handoffId: string },
+    ): Promise<HandoffProvisioningContinuationState> => {
+      try {
+        return await continueHandoffProvisioning(previous, input);
+      } catch {
+        // Transport failures never discard the durable handoff or escape to
+        // the route error boundary. Retrying claims the same journal safely.
+        return { status: "error" };
+      }
+    },
+    undefined,
+  );
 
   useEffect(() => {
     if (initial.revision <= latestRevision.current) return;
