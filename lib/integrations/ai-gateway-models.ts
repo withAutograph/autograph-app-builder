@@ -12,6 +12,8 @@ const gatewayModelSchema = z
     name: z.string().min(1).max(256),
     owned_by: z.string().min(1).max(128),
     type: z.string().max(64),
+    // Zod's schema fallback API is not a Promise method.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     zdr: z.enum(["all", "some", "none"]).catch("none"),
     tags: z.array(z.string().min(1).max(128)).max(64).default([]),
   })

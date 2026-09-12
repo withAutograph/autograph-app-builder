@@ -65,6 +65,8 @@ function SessionAppContainer() {
       if (document.visibilityState === "hidden") return;
       const now = Date.now();
       if (!automaticRefresh.current.claim(authorizationRequestKey, now)) return;
+      // Refresh is deliberately fire-and-forget from the focus handler.
+      // oxlint-disable-next-line promise/prefer-await-to-then
       void refresh().catch(() => undefined);
     };
     window.addEventListener("focus", checkAfterReturn);

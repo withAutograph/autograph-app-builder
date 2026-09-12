@@ -93,6 +93,10 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
       reject(signal.reason);
     };
     signal.addEventListener("abort", onAbort, { once: true });
+    // Resolve and reject the abort-aware wrapper without changing its settlement race.
+    // oxlint-disable promise/prefer-await-to-callbacks
+    // oxlint-disable promise/prefer-await-to-then
+    // oxlint-disable-next-line promise/prefer-await-to-then
     operation
       .then((value) => {
         signal.removeEventListener("abort", onAbort);
@@ -104,6 +108,8 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
         signal.removeEventListener("abort", onAbort);
         reject(error);
       });
+    // oxlint-enable promise/prefer-await-to-callbacks
+    // oxlint-enable promise/prefer-await-to-then
   });
 }
 

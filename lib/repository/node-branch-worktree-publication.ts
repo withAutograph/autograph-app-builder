@@ -491,6 +491,8 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
       `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`,
     );
   };
+  // This derived promise intentionally races the terminal lease signal.
+  // oxlint-disable-next-line promise/prefer-await-to-then
   const lost = terminalPromise.then(() => {
     throw lockLostError();
   });

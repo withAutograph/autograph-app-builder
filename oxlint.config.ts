@@ -21,7 +21,6 @@ export default defineConfig({
     "eslint/complexity": "off",
     "eslint/require-unicode-regexp": "off",
     "eslint/sort-keys": "off",
-    "promise/prefer-await-to-then": "off",
     "promise/avoid-new": "off",
     "typescript/no-non-null-assertion": "off",
     "unicorn/filename-case": "off",

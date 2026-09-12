@@ -202,6 +202,10 @@ function createProcessSessionReusingBackend<BO, SO>(
         }),
       );
 
+      // Promise composition preserves the shared pending handle and cleanup identity.
+      // oxlint-disable promise/prefer-await-to-callbacks
+      // oxlint-disable promise/prefer-await-to-then
+      // oxlint-disable-next-line promise/prefer-await-to-then
       const pending: Promise<SandboxBackendHandle<SO>> = backend
         .create(input)
         .then((handle) => {
@@ -222,10 +226,13 @@ function createProcessSessionReusingBackend<BO, SO>(
         })
         // The backend promise cleanup must remain attached to the promise chain.
         // oxlint-disable-next-line promise/prefer-await-to-callbacks
+        // oxlint-disable-next-line promise/prefer-await-to-then
         .catch((error: unknown) => {
           if (sessions.get(key) === pending) sessions.delete(key);
           throw error;
         });
+      // oxlint-enable promise/prefer-await-to-callbacks
+      // oxlint-enable promise/prefer-await-to-then
       sessions.set(key, pending);
       return pending;
     },

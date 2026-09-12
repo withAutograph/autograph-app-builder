@@ -123,6 +123,8 @@ export async function runBoundedSandboxCommand(
       }),
     );
     process = await Promise.race([spawnPromise, wallTimeout.promise]);
+    // The losing promise is observed to prevent an unhandled rejection.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     spawnPromise.catch(() => undefined);
     const stdoutReader = process.stdout.getReader();
     const stderrReader = process.stderr.getReader();
@@ -135,6 +137,8 @@ export async function runBoundedSandboxCommand(
     const stdoutPromise = collectBounded(stdoutReader, outputState, observed);
     const stderrPromise = collectBounded(stderrReader, outputState, observed);
     const completion = Promise.all([stdoutPromise, stderrPromise, Promise.resolve(process.wait())]);
+    // The losing promise is observed to prevent an unhandled rejection.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     completion.catch(() => undefined);
     const [stdout, stderr, result] = await Promise.race([
       completion,
