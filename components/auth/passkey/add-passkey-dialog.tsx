@@ -35,7 +35,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
-  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>();
+  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {

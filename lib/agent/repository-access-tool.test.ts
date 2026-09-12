@@ -6,7 +6,8 @@ import { resolveRepositoryAccessForTool } from "./repository-access-tool";
 
 vi.mock("eve/context", () => ({
   defineState: () => ({
-    update: (fn: (value: undefined) => unknown) => fn(),
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The state test double must receive its undefined initial value.
+    update: (fn: (value: undefined) => unknown) => fn(undefined),
   }),
 }));
 const ready: ReadyRepositoryAccess = {

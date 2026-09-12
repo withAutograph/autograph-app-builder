@@ -17,7 +17,8 @@ function installCatalogFixture() {
   }
   if (installed) return;
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (input, init) => {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise<Response> fetch contract
+  globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url !== catalogUrl) return realFetch(input, init);
     upstreamCalls += 1;

@@ -4,6 +4,15 @@ import core from "ultracite/oxlint/core";
 export default defineConfig({
   extends: [core],
   ignorePatterns: core.ignorePatterns,
+  overrides: [
+    {
+      files: ["agent/tools/**/*.ts"],
+      rules: {
+        // Eve derives public tool identities from these filenames, which must remain snake_case.
+        "unicorn/filename-case": "off",
+      },
+    },
+  ],
   rules: {
     "unicorn/import-style": "off",
     "eslint/curly": "off",

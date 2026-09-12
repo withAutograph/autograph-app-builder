@@ -20,7 +20,9 @@ describe("self-reproduction evaluation", () => {
   });
 
   it("reports unavailable generated output as blocked instead of successful", () => {
-    expect(buildRequirements().every((item) => item.status === "blocked")).toBe(true);
+    // The explicit undefined candidate distinguishes unavailable output from an empty source set.
+    // oxlint-disable-next-line unicorn/no-useless-undefined
+    expect(buildRequirements(undefined).every((item) => item.status === "blocked")).toBe(true);
   });
 
   it("flags a static mock missing durable workflows", () => {

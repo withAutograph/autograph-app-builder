@@ -56,8 +56,8 @@ importers:
         specifier: 0.10.0
         version: 0.10.0(patch_hash=d51209b623d4600231afd907828a5cbaefea72f575ae88bd95509590b5bf8169)
       '@flags-sdk/vercel':
-        specifier: 1.4.7
-        version: 1.4.7(flags@4.3.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)
+        specifier: 1.4.8
+        version: 1.4.8(flags@4.3.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)
       '@geist-ui/icons':
         specifier: 1.0.2
         version: 1.0.2(@geist-ui/core@2.3.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
@@ -928,8 +928,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@flags-sdk/vercel@1.4.7':
-    resolution: {integrity: sha512-KylLwoY6Z0tkZJKplEiuOlv8q+FmWwqauDu9ZzGiJFAnFUV9MFbdNWL6FQWahRmt3Cv1L+nufG6AHpIwwJaDBg==}
+  '@flags-sdk/vercel@1.4.8':
+    resolution: {integrity: sha512-pSal4ti8Md8f/zv14OZJoEV6D19+v27Br8WRCqpyEydizlxFhwfkjL1klFy8NfxUAV3NGeHzojP1tpNcGxUTAg==}
     peerDependencies:
       flags: '*'
 
@@ -2659,8 +2659,8 @@ packages:
       eve:
         optional: true
 
-  '@vercel/flags-core@1.8.0':
-    resolution: {integrity: sha512-cBB1RMoKmWJ0oy8VCVPx3GVzkWRL3oV26SsYlZ25V0TDB5/icJ2121k5ZAPVw5phoqM/YiBh6nvKUqMERZ6u4Q==}
+  '@vercel/flags-core@1.8.1':
+    resolution: {integrity: sha512-Sm6N6zXKNCg4z898I/LVKQZMTVmtobfFuKhUUza7L/vJklmGn2ILQ9t8qYNKzUidXke49gEoFYrc8/nwRh13rg==}
     peerDependencies:
       '@openfeature/server-sdk': 1.18.0
       next: '*'
@@ -6552,9 +6552,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@flags-sdk/vercel@1.4.7(flags@4.3.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)':
+  '@flags-sdk/vercel@1.4.8(flags@4.3.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)':
     dependencies:
-      '@vercel/flags-core': 1.8.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)
+      '@vercel/flags-core': 1.8.1(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)
       flags: 4.3.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-web-identity'
@@ -7924,10 +7924,11 @@ snapshots:
       better-auth: 1.7.2(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10)
       eve: 0.44.4(@vercel/functions@3.9.5(ws@8.21.3))(ai@7.0.91(zod@4.5.4))(dotenv@17.4.2)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(jiti@2.7.0)(just-bash@3.4.2)(lru-cache@11.5.2)(microsandbox@0.5.10)(vite@8.3.0(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
-  '@vercel/flags-core@1.8.0(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)':
+  '@vercel/flags-core@1.8.1(next@16.3.4(@babel/core@7.29.7)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)':
     dependencies:
       '@vercel/functions': 3.9.5(ws@8.21.3)
       '@vercel/oidc': 3.5.0
+      dequal: 2.0.3
       jose: 5.2.1
       js-xxhash: 4.0.0
     optionalDependencies:
