@@ -2,7 +2,7 @@ import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto"
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve as pathResolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 
@@ -10,7 +10,7 @@ const MODE_MASK = 18;
 const ZERO = 0;
 const ONE = 1;
 
-const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = pathResolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
   !isAbsolute(repositoryRoot) ||
@@ -20,9 +20,11 @@ if (
   (repositoryRootStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO)
 )
   throw new Error("The structural test package root was not owner-bound.");
-const preload = pathToFileURL(resolve(repositoryRoot, "scripts/test-capability-preload.mjs")).href;
+const preload = pathToFileURL(
+  pathResolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
+).href;
 const maximumFrameBytes = 4096;
-const launcher = resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
+const launcher = pathResolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
 const launcherDigest = "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
 const allowedEnvironment = [
   "HOME",
@@ -170,7 +172,7 @@ export async function runWithTestCapability(options: {
   verifyTrustedLauncher(options.profile);
   if (process.env.NODE_OPTIONS !== undefined)
     throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
-  const expectedEntry = resolve(
+  const expectedEntry = pathResolve(
     repositoryRoot,
     options.profile === "vitest" ? "node_modules/vitest/vitest.mjs" : "node_modules/eve/bin/eve.js",
   );
@@ -195,7 +197,7 @@ export async function runWithTestCapability(options: {
       // after exit for failure diagnostics; it is not a dependency cache.
       WORKFLOW_LOCAL_DATA_DIR:
         options.profile === "eve"
-          ? mkdtempSync(resolve(tmpdir(), "app-builder-eval-workflow-"))
+          ? mkdtempSync(pathResolve(tmpdir(), "app-builder-eval-workflow-"))
           : undefined,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),

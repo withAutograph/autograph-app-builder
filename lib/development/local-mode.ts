@@ -16,7 +16,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { promisify } from "node:util";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
 
 const execFileAsync = promisify(execFile);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -137,7 +137,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 }
 
 async function canonicalOwnedDirectory(path: string, label: string) {
-  const requested = resolve(path);
+  const requested = pathResolve(path);
   if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path)
     throw new Error(`${label} must be an absolute canonical directory.`);
   const info = await lstat(path);
@@ -259,7 +259,7 @@ async function sourceEntry(sourceRoot: string, path: string) {
     if (info.isSymbolicLink()) {
       const target = await readlink(absolute);
       if (isAbsolute(target)) throw new Error(`Development source link must be relative: ${path}`);
-      const resolved = resolve(dirname(absolute), target);
+      const resolved = pathResolve(dirname(absolute), target);
       const escaped = relative(sourceRoot, resolved);
       if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped))
         throw new Error(`Development source link escapes the checkout: ${path}`);

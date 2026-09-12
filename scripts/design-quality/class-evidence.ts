@@ -35,7 +35,7 @@ function staticClassName(attribute: ts.JsxAttribute): string | undefined {
  */
 export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicClassSignature[] {
   const candidates: IntrinsicClassSignature[] = [];
-  for (const file of files.filter((file) => /\.tsx?$/iu.test(file.path))) {
+  for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,
@@ -50,10 +50,10 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
           return;
         }
         const attribute = node.attributes.properties.find(
-          (attribute): attribute is ts.JsxAttribute =>
-            ts.isJsxAttribute(attribute) &&
-            ts.isIdentifier(attribute.name) &&
-            attribute.name.text === "className",
+          (candidateAttribute): candidateAttribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(candidateAttribute) &&
+            ts.isIdentifier(candidateAttribute.name) &&
+            candidateAttribute.name.text === "className",
         );
         const value = attribute && staticClassName(attribute);
         const classes = value
@@ -100,7 +100,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
         },
       });
   };
-  for (const file of files.filter((file) => /\.tsx?$/iu.test(file.path))) {
+  for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,

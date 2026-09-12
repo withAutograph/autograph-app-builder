@@ -21,7 +21,7 @@ import {
 } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { arch, homedir, platform } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
 
 import {
   ARRUSTED_IMAGE_TARGET_SHA,
@@ -182,9 +182,9 @@ const git = (root: string, args: readonly string[]) =>
   }).trim();
 
 function ensureNoLinkPath(path: string, label: string): void {
-  const canonical = resolve(path);
+  const canonical = pathResolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
-  const root = resolve(canonical, "/") === canonical ? canonical : undefined;
+  const root = pathResolve(canonical, "/") === canonical ? canonical : undefined;
   if (root !== undefined) throw new Error(`${label} cannot be the filesystem root.`);
   let cursor = canonical;
   for (;;) {
@@ -197,7 +197,7 @@ function ensureNoLinkPath(path: string, label: string): void {
 }
 
 function assertAbsoluteInput(path: string, label: string): void {
-  if (!isAbsolute(path) || resolve(path) !== path)
+  if (!isAbsolute(path) || pathResolve(path) !== path)
     throw new Error(`${label} must be an absolute normalized path.`);
 }
 
@@ -280,7 +280,7 @@ export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
         const target = readlinkSync(absolute);
         if (isAbsolute(target))
           throw new Error(`Proof runtime symlink ${relativePath} has an absolute target.`);
-        const resolvedTarget = resolve(dirname(absolute), target);
+        const resolvedTarget = pathResolve(dirname(absolute), target);
         if (!containsPath(nodeModulesRoot, resolvedTarget))
           throw new Error(`Proof runtime symlink ${relativePath} escapes node_modules.`);
         const canonicalTarget = realpathSync(absolute);
@@ -585,9 +585,9 @@ export function observeImageProvenance(
   assertAbsoluteInput(builderRootInput, "Builder root");
   assertAbsoluteInput(approval.arrustedRoot, "Arrusted root");
   assertAbsoluteInput(approval.stateRoot, "Image lifecycle state root");
-  const builderRoot = resolve(builderRootInput);
-  const arrustedRoot = resolve(approval.arrustedRoot);
-  const stateRoot = resolve(approval.stateRoot);
+  const builderRoot = pathResolve(builderRootInput);
+  const arrustedRoot = pathResolve(approval.arrustedRoot);
+  const stateRoot = pathResolve(approval.stateRoot);
   ensureNoLinkPath(builderRoot, "Builder root");
   ensureNoLinkPath(arrustedRoot, "Arrusted root");
   if (!existsSync(stateRoot)) {

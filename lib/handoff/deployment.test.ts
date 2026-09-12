@@ -43,17 +43,17 @@ function route(input: { authenticated?: boolean } = {}) {
       async bindSession() {
         return undefined;
       },
-      async renewExpired(input) {
-        const record = rows.get(input.handoffId);
+      async renewExpired(renewalInput) {
+        const record = rows.get(renewalInput.handoffId);
         if (
           !record ||
-          JSON.stringify(record.authority) !== JSON.stringify(input.authority) ||
-          record.requestDigest !== input.requestDigest
+          JSON.stringify(record.authority) !== JSON.stringify(renewalInput.authority) ||
+          record.requestDigest !== renewalInput.requestDigest
         )
           return undefined;
-        if (record.sessionId !== undefined || record.expiresAt > input.now)
+        if (record.sessionId !== undefined || record.expiresAt > renewalInput.now)
           return { disposition: "existing", record };
-        const updated = { ...record, expiresAt: input.expiresAt };
+        const updated = { ...record, expiresAt: renewalInput.expiresAt };
         rows.set(record.handoffId, updated);
         return { disposition: "renewed", record: updated };
       },

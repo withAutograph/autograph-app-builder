@@ -56,8 +56,10 @@ vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
 }));
 vi.mock("@/lib/provisioning/deployment", () => ({
   getBuilderProvisioningDeploymentHandler: vi.fn(() => async (request: Request) => {
-    const input = (await request.json()) as { operation: string };
-    calls.push(`${new URL(request.url).searchParams.get("mode") ?? "run"}:${input.operation}`);
+    const requestInput = (await request.json()) as { operation: string };
+    calls.push(
+      `${new URL(request.url).searchParams.get("mode") ?? "run"}:${requestInput.operation}`,
+    );
     const github = {
       status: "succeeded",
       installationId: "101",
@@ -98,7 +100,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
       status: "settled",
       github,
       vercel:
-        input.operation === "vercel"
+        requestInput.operation === "vercel"
           ? vercel
           : { status: "skipped", code: "not_selected", retryable: false },
       updatedAt: "2026-09-10T00:00:00.000Z",

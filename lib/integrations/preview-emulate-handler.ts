@@ -41,7 +41,7 @@ export function createPreviewEmulateHandler(input: {
   });
   let pendingPersistence = Promise.resolve();
   let persistenceRevision = 0;
-  const handler = createEmulateHandler({
+  const emulateHandler = createEmulateHandler({
     services: {
       github: {
         emulator: github,
@@ -69,7 +69,7 @@ export function createPreviewEmulateHandler(input: {
       request: Parameters<Handler[(typeof methods)[number]]>[0],
       context: Parameters<Handler[(typeof methods)[number]]>[1],
     ) => {
-      const response = await handler[method](request, context);
+      const response = await emulateHandler[method](request, context);
       // adapter-next queues persistence after producing the response. Await its
       // save before returning so a serverless invocation cannot freeze with an
       // OAuth code only resident in memory.

@@ -138,7 +138,9 @@ export function validateUiPreview(input: UiPreviewInput): void {
     throw new Error(
       "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
     );
-  const screenRoutes = new Set(parsed.manifest.screens.map(({ route }) => route));
+  const screenRoutes = new Set(
+    parsed.manifest.screens.map(({ route: screenRoute }) => screenRoute),
+  );
   if (
     parsed.routes.some((value) => !screenRoutes.has(value)) ||
     parsed.manifest.screens.some(

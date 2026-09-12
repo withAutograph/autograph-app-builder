@@ -1,21 +1,21 @@
 import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { resolve as pathResolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { describe, expect, it } from "vitest";
 
-const repositoryRoot = resolve(import.meta.dirname, "..");
-const preload = pathToFileURL(resolve(import.meta.dirname, "test-capability-preload.mjs")).href;
+const repositoryRoot = pathResolve(import.meta.dirname, "..");
+const preload = pathToFileURL(pathResolve(import.meta.dirname, "test-capability-preload.mjs")).href;
 const workerFixture = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
+  pathResolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
 );
 const timeoutWorkerFixture = pathToFileURL(
-  resolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
+  pathResolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
 );
-const registryPath = resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs");
+const registryPath = pathResolve(repositoryRoot, "lib/testing/test-capability-registry.cjs");
 const capabilityExpression = `createRequire(import.meta.url)(${JSON.stringify(registryPath)}).current(process)`;
 const inspectionSource = `
   const { createRequire } = await import("node:module");

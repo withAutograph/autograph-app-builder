@@ -357,8 +357,8 @@ describe("GitHub App fixed-origin HTTP provider", () => {
   });
 
   it("continues all-repository pagination beyond five full pages", async () => {
-    const pages = Array.from({ length: 5 }, (_, page) =>
-      Array.from({ length: 100 }, (_, index) => page * 100 + index + 1),
+    const pages = Array.from({ length: 5 }, (_unusedPage, page) =>
+      Array.from({ length: 100 }, (_unusedItem, index) => page * 100 + index + 1),
     );
     pages.push([501]);
     const mock = providerFetch({

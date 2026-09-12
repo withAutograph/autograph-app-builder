@@ -1037,22 +1037,22 @@ const immutableSourceReceiptKeys = [
 ] as const;
 
 export function assertExactImmutableGitHubSourceReceipt(
-  receipt: ImmutableGitHubSourceReceipt,
+  sourceReceipt: ImmutableGitHubSourceReceipt,
 ): void {
-  if (!exactKeys(receipt, immutableSourceReceiptKeys))
+  if (!exactKeys(sourceReceipt, immutableSourceReceiptKeys))
     throw new Error("The immutable GitHub source receipt schema is not closed.");
-  assertExactRepositoryObservation(receipt.repository);
-  exactDigest(receipt, "Immutable GitHub source receipt");
+  assertExactRepositoryObservation(sourceReceipt.repository);
+  exactDigest(sourceReceipt, "Immutable GitHub source receipt");
   if (
-    receipt.version !== GITHUB_PUBLICATION_VERSION ||
-    !safeHeadRef(receipt.resolvedRef) ||
-    !isObjectId(receipt.resolvedSha) ||
-    !isObjectId(receipt.resolvedTree) ||
-    !isDigest(receipt.installationIdentityDigest) ||
-    receipt.resolvedByCallId.trim().length === 0 ||
-    receipt.repository.headSha !== receipt.resolvedSha ||
-    receipt.repository.headTree !== receipt.resolvedTree ||
-    receipt.repository.installationIdentityDigest !== receipt.installationIdentityDigest
+    sourceReceipt.version !== GITHUB_PUBLICATION_VERSION ||
+    !safeHeadRef(sourceReceipt.resolvedRef) ||
+    !isObjectId(sourceReceipt.resolvedSha) ||
+    !isObjectId(sourceReceipt.resolvedTree) ||
+    !isDigest(sourceReceipt.installationIdentityDigest) ||
+    sourceReceipt.resolvedByCallId.trim().length === 0 ||
+    sourceReceipt.repository.headSha !== sourceReceipt.resolvedSha ||
+    sourceReceipt.repository.headTree !== sourceReceipt.resolvedTree ||
+    sourceReceipt.repository.installationIdentityDigest !== sourceReceipt.installationIdentityDigest
   )
     throw new Error("The immutable GitHub source receipt is malformed.");
 }

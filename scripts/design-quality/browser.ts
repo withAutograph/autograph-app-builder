@@ -385,14 +385,14 @@ export async function measurePage(page: Page) {
       findings,
       // Diagnostics only: an intentional scroll region is not an automatic
       // pass/fail conclusion about the surrounding layout.
-      intentionalScrollContainers: scrolling.map((scrolling) => ({
-        label: label(scrolling.el),
-        axis: scrolling.axis,
-        scrollWidth: scrolling.scrollWidth,
-        scrollHeight: scrolling.scrollHeight,
-        clientWidth: scrolling.clientWidth,
-        clientHeight: scrolling.clientHeight,
-        region: rect(scrolling.el),
+      intentionalScrollContainers: scrolling.map((scrollContainer) => ({
+        label: label(scrollContainer.el),
+        axis: scrollContainer.axis,
+        scrollWidth: scrollContainer.scrollWidth,
+        scrollHeight: scrollContainer.scrollHeight,
+        clientWidth: scrollContainer.clientWidth,
+        clientHeight: scrollContainer.clientHeight,
+        region: rect(scrollContainer.el),
       })),
       controls: controls.map((el) => ({
         label: label(el),
@@ -517,14 +517,14 @@ export async function measureStyles(
     // Resolve tokens in the active browser theme. A detached element only sees a
     // flattened default cascade and is misleading for dark or inherited themes.
     const normalized = await page.evaluate(
-      ({ tokens, properties }) => {
+      ({ tokens: tokenValues, properties: styleProperties }) => {
         const el = document.createElement("span");
         el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
         document.body.append(el);
         const result: Record<string, string[]> = {};
-        for (const prop of Object.keys(properties)) {
+        for (const prop of Object.keys(styleProperties)) {
           result[prop] = [];
-          for (const [name] of Object.entries(tokens)) {
+          for (const [name] of Object.entries(tokenValues)) {
             const relevant = prop.includes("color")
               ? name.startsWith("--color-")
               : prop.includes("font") || prop.includes("line") || prop.includes("letter")
@@ -577,8 +577,8 @@ export async function measureStyles(
     );
     // Reserve controls before using a round-robin budget across each rendered
     // region and control/non-control bucket.
-    for (const bucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
-      const candidate = bucket.shift();
+    for (const interactiveBucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
+      const candidate = interactiveBucket.shift();
       if (candidate) selected.push(candidate);
     }
     while (selected.length < 120) {

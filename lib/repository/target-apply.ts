@@ -9,7 +9,7 @@ import { planningOverlayRoot } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
-const digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryPath = z
   .string()
   .refine(safeSourcePath, "path must remain inside the apply overlay");
@@ -25,8 +25,8 @@ export const targetApplyCommandReceiptSchema = z.strictObject({
   workspacePath: repositoryPath,
   topology: z.strictObject({
     path: z.literal("microfrontends.json"),
-    oldDigest: digest,
-    newDigest: digest,
+    oldDigest: digestSchema,
+    newDigest: digestSchema,
   }),
   mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
   recovered: z.boolean(),
@@ -185,8 +185,8 @@ export function assertCurrentTargetApplyReceipt(input: {
     input.version !== 2 ||
     input.appSpecPath === undefined ||
     !safeSourcePath(input.appSpecPath) ||
-    !digest.safeParse(input.appSpecDigest).success ||
-    !digest.safeParse(input.preparedTreeDigest).success
+    !digestSchema.safeParse(input.appSpecDigest).success ||
+    !digestSchema.safeParse(input.preparedTreeDigest).success
   )
     throw new Error("A canonical V2 target apply receipt is required.");
 }
@@ -221,7 +221,7 @@ function missingDependency(output: string): string | undefined {
 }
 
 export function applyOverlayRoot(proposalDigest: string): string {
-  if (!digest.safeParse(proposalDigest).success)
+  if (!digestSchema.safeParse(proposalDigest).success)
     throw new Error("The target proposal digest is invalid.");
   return `.app-builder/apply/${proposalDigest}/repository`;
 }
@@ -328,10 +328,10 @@ const visit = (directory, relativeDirectory) => {
     if (!entry.isFile()) continue;
     const stat = lstatSync(absolutePath);
     const mode = (stat.mode & 0o7777).toString(8);
-    const digest = createHash("sha256")
+    const fileDigest = createHash("sha256")
       .update(readFileSync(absolutePath))
       .digest("hex");
-    files.push({ path: relativePath, mode, digest });
+    files.push({ path: relativePath, mode, digest: fileDigest });
   }
 };
 

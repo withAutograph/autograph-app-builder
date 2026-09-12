@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve as pathResolve } from "node:path";
 
 import { archiveFiles, verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { deterministicGzip, deterministicTar, sha256 } from "./portable-release";
@@ -142,7 +142,7 @@ try {
   await verifyPortableProofArtifact({
     releaseRoot: first,
     installRoot: installs,
-    repositoryRoot: resolve("."),
+    repositoryRoot: pathResolve("."),
   });
 
   const mutateReceipt = async (
@@ -160,7 +160,7 @@ try {
         verifyPortableProofArtifact({
           releaseRoot: root,
           installRoot: installs,
-          repositoryRoot: resolve("."),
+          repositoryRoot: pathResolve("."),
         }),
       name,
     );
@@ -219,7 +219,7 @@ try {
       verifyPortableProofArtifact({
         releaseRoot: missingMarketplaceAsset,
         installRoot: installs,
-        repositoryRoot: resolve("."),
+        repositoryRoot: pathResolve("."),
       }),
     "marketplace archive with a missing manifest-referenced asset",
   );
@@ -243,7 +243,7 @@ try {
       verifyPortableProofArtifact({
         releaseRoot: tamperedMarketplaceAsset,
         installRoot: installs,
-        repositoryRoot: resolve("."),
+        repositoryRoot: pathResolve("."),
       }),
     "marketplace archive with tampered manifest-referenced asset bytes and a fully rebound receipt",
   );
@@ -251,7 +251,7 @@ try {
   const checkoutDriftRepository = join(temp, "checkout-drift-repository");
   execFileSync(
     "/usr/bin/git",
-    ["clone", "--quiet", "--no-hardlinks", resolve("."), checkoutDriftRepository],
+    ["clone", "--quiet", "--no-hardlinks", pathResolve("."), checkoutDriftRepository],
     {
       stdio: "inherit",
       env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
@@ -305,7 +305,7 @@ try {
       verifyPortableProofArtifact({
         releaseRoot: archiveTamper,
         installRoot: installs,
-        repositoryRoot: resolve("."),
+        repositoryRoot: pathResolve("."),
       }),
     "archive contents drift",
   );
@@ -321,7 +321,7 @@ try {
       verifyPortableProofArtifact({
         releaseRoot: first,
         installRoot: installedTamper,
-        repositoryRoot: resolve("."),
+        repositoryRoot: pathResolve("."),
       }),
     "installed client adapter drift",
   );

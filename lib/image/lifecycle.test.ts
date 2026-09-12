@@ -1045,7 +1045,9 @@ wait
   it("sends no Builder workspace files through the default build context", () => {
     expect(readFileSync(".dockerignore", "utf-8")).toBe("**\n");
     const dockerfile = readFileSync("containers/eve-sandbox/Dockerfile", "utf-8");
-    for (const line of dockerfile.split("\n").filter((line) => line.startsWith("COPY ")))
+    for (const line of dockerfile
+      .split("\n")
+      .filter((dockerLine) => dockerLine.startsWith("COPY ")))
       expect(line).toContain("--from=");
   });
 

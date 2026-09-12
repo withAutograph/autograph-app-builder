@@ -61,10 +61,10 @@ const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 await Promise.all(
   ["plugin.json", "mcp.json", "LICENSE", "skills"].map(async (sourcePath) => {
-    const source = resolve(repositoryRoot, sourcePath);
-    if ((await lstat(source)).isSymbolicLink())
+    const sourceFile = resolve(repositoryRoot, sourcePath);
+    if ((await lstat(sourceFile)).isSymbolicLink())
       throw new Error(`Portable source cannot be a symbolic link: ${sourcePath}`);
-    await cp(source, join(core, sourcePath), { recursive: true });
+    await cp(sourceFile, join(core, sourcePath), { recursive: true });
   }),
 );
 const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));

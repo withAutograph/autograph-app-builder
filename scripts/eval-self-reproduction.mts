@@ -1,10 +1,9 @@
 import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, join, resolve as pathResolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { capturePreview } from "./design-quality/browser";
-import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   auditFramework,
   buildRequirements,
@@ -12,6 +11,7 @@ import {
   prioritizedGaps,
   readSource,
 } from "../evals/support/self-reproduction";
+import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 
 const { values } = parseArgs({
   options: {
@@ -29,12 +29,14 @@ const { values } = parseArgs({
   },
 });
 
-const root = resolve(import.meta.dirname, "..");
+const root = pathResolve(import.meta.dirname, "..");
 const now = new Date().toISOString();
-const output = resolve(
+const output = pathResolve(
   values["output-dir"] ?? join(".artifacts", "self-reproduction", now.replaceAll(/[.:]/gu, "-")),
 );
-const briefFile = resolve(values["brief-file"] ?? join("evals", "self-reproduction", "brief.md"));
+const briefFile = pathResolve(
+  values["brief-file"] ?? join("evals", "self-reproduction", "brief.md"),
+);
 
 function usage() {
   return `Usage: mise run eval:self-reproduction -- [options]
@@ -91,8 +93,8 @@ function reportHtml(report: {
     : "<p>No failed or blocked requirements were recorded.</p>";
   const captures = report.captures
     .map(
-      (capture) =>
-        `<li><strong>${escape(capture.label)}</strong>: ${escape(capture.status)}${capture.files.length ? ` — ${capture.files.map(escape).join(", ")}` : ""}</li>`,
+      (captureResult) =>
+        `<li><strong>${escape(captureResult.label)}</strong>: ${escape(captureResult.status)}${captureResult.files.length ? ` — ${captureResult.files.map(escape).join(", ")}` : ""}</li>`,
     )
     .join("");
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Expected</th><th>Evidence</th><th>Layer</th><th>Recommended repair</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captures || "<li>Not captured.</li>"}</ul></main></html>`;
@@ -111,8 +113,8 @@ async function runGenerator(candidateRoot: string, transcript: string) {
   const args = values.generator
     ? (values["generator-arg"] ?? [])
     : ["--import", "tsx", "scripts/self-reproduction-live.mts"];
-  const resolvedArrustedRoot = arrustedRoot ? resolve(arrustedRoot) : undefined;
-  const answersPath = resolve("evals/self-reproduction/answers.json");
+  const resolvedArrustedRoot = arrustedRoot ? pathResolve(arrustedRoot) : undefined;
+  const answersPath = pathResolve("evals/self-reproduction/answers.json");
   const result = await new Promise<{ exitCode: number | null; output: string }>((resolve) => {
     const child = spawn(command, args, {
       cwd: root,
@@ -132,13 +134,15 @@ async function runGenerator(candidateRoot: string, transcript: string) {
         ...(resolvedArrustedRoot ? { SELF_REPRODUCTION_ARRUSTED_ROOT: resolvedArrustedRoot } : {}),
       },
     });
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => (output += String(chunk)));
-    child.stderr.on("data", (chunk: Buffer) => (output += String(chunk)));
-    child.on("error", () => resolve({ exitCode: null, output }));
-    child.on("close", (exitCode: number | null) => resolve({ exitCode, output }));
+    let generatorOutput = "";
+    child.stdout.on("data", (chunk: Buffer) => (generatorOutput += String(chunk)));
+    child.stderr.on("data", (chunk: Buffer) => (generatorOutput += String(chunk)));
+    child.on("error", () => resolve({ exitCode: null, output: generatorOutput }));
+    child.on("close", (exitCode: number | null) => resolve({ exitCode, output: generatorOutput }));
   });
-  await writeFile(join(resolve(transcript, ".."), "generator.log"), result.output, { mode: 0o600 });
+  await writeFile(join(pathResolve(transcript, ".."), "generator.log"), result.output, {
+    mode: 0o600,
+  });
   return {
     status: result.exitCode === 0 ? "completed" : result.exitCode === 75 ? "blocked" : "failed",
     exitCode: result.exitCode,
@@ -146,7 +150,11 @@ async function runGenerator(candidateRoot: string, transcript: string) {
   };
 }
 
-async function capture(label: string, url: string | undefined, sourceRoot: string | undefined) {
+async function capturePreviewEvidence(
+  label: string,
+  url: string | undefined,
+  sourceRoot: string | undefined,
+) {
   if (!url) return { label, files: [], status: "unassessed: URL not supplied" };
   const destination = join(output, "captures", label);
   try {
@@ -180,11 +188,14 @@ async function main() {
     return;
   }
   await mkdir(output, { recursive: true, mode: 0o700 });
-  const candidateRoot = resolve(values["candidate-root"] ?? join(output, "candidate"));
+  const candidateRoot = pathResolve(values["candidate-root"] ?? join(output, "candidate"));
   const generatorInput = join(output, "generator-input");
   await mkdir(generatorInput, { recursive: true, mode: 0o700 });
   await cp(briefFile, join(generatorInput, "brief.md"));
-  await cp(resolve("evals/self-reproduction/answers.json"), join(generatorInput, "answers.json"));
+  await cp(
+    pathResolve("evals/self-reproduction/answers.json"),
+    join(generatorInput, "answers.json"),
+  );
   const transcript = join(output, "generation-transcript.jsonl");
   const generation = await runGenerator(candidateRoot, transcript);
   const referenceFiles = await readSource(root);
@@ -213,8 +224,12 @@ async function main() {
         }))),
   ];
   const captures = await Promise.all([
-    capture("reference", values["reference-url"], root),
-    capture("candidate", values["candidate-url"], candidateFiles ? candidateRoot : undefined),
+    capturePreviewEvidence("reference", values["reference-url"], root),
+    capturePreviewEvidence(
+      "candidate",
+      values["candidate-url"],
+      candidateFiles ? candidateRoot : undefined,
+    ),
   ]);
   const report = {
     createdAt: now,

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
 
 import {
   parseLinkedVercelProject,
@@ -38,7 +38,7 @@ function required(environment: Environment, name: string) {
 }
 
 function ownerDirectory(path: string, label: string, ownerOnly = false) {
-  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
+  if (!isAbsolute(path) || pathResolve(path) !== path || realpathSync(path) !== path)
     throw new Error(`${label} was not an absolute canonical directory.`);
   const info = lstatSync(path);
   if (

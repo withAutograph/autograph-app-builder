@@ -13,7 +13,7 @@ import {
   rename,
   unlink,
 } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve as pathResolve, sep } from "node:path";
 
 import {
   assertCanonicalFreshBootstrapJournal,
@@ -179,7 +179,7 @@ export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
   .update(materializeAdapter)
   .digest("hex");
 
-const minimalEnvironment = (identity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
+const minimalEnvironment = (authorIdentity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
   NODE_ENV: "production",
   PATH: "/usr/bin:/bin",
   TMPDIR: "/tmp",
@@ -195,15 +195,15 @@ const minimalEnvironment = (identity?: FreshBootstrapIdentity): NodeJS.ProcessEn
   GIT_TERMINAL_PROMPT: "0",
   GIT_ASKPASS: "/usr/bin/false",
   SSH_ASKPASS: "/usr/bin/false",
-  ...(identity === undefined
+  ...(authorIdentity === undefined
     ? {}
     : {
-        GIT_AUTHOR_NAME: identity.authorName,
-        GIT_AUTHOR_EMAIL: identity.authorEmail,
-        GIT_AUTHOR_DATE: identity.commitTimestamp,
-        GIT_COMMITTER_NAME: identity.authorName,
-        GIT_COMMITTER_EMAIL: identity.authorEmail,
-        GIT_COMMITTER_DATE: identity.commitTimestamp,
+        GIT_AUTHOR_NAME: authorIdentity.authorName,
+        GIT_AUTHOR_EMAIL: authorIdentity.authorEmail,
+        GIT_AUTHOR_DATE: authorIdentity.commitTimestamp,
+        GIT_COMMITTER_NAME: authorIdentity.authorName,
+        GIT_COMMITTER_EMAIL: authorIdentity.authorEmail,
+        GIT_COMMITTER_DATE: authorIdentity.commitTimestamp,
       }),
 });
 
@@ -231,12 +231,12 @@ function git(
   capability: FreshBootstrapCapability,
   root: string,
   args: readonly string[],
-  identity?: FreshBootstrapIdentity,
+  commitIdentity?: FreshBootstrapIdentity,
   input?: Uint8Array,
 ): string {
   return execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     encoding: "utf-8",
-    env: minimalEnvironment(identity),
+    env: minimalEnvironment(commitIdentity),
     input,
     maxBuffer: 16 * 1024 * 1024,
     timeout: 30_000,
@@ -423,8 +423,8 @@ export async function productionFreshBootstrapCapability(
   ]);
   const capability: FreshBootstrapCapability = {
     kind: "fresh-bootstrap-local-v1",
-    stateRoot: await rootIdentity(resolve(stateRootPath)),
-    allowedRoot: await rootIdentity(resolve(allowedRootPath)),
+    stateRoot: await rootIdentity(pathResolve(stateRootPath)),
+    allowedRoot: await rootIdentity(pathResolve(allowedRootPath)),
     systemGit,
     systemPython,
     systemGitIdentity: await executableIdentity(systemGit),
@@ -461,7 +461,7 @@ async function assertContainedStatePath(
   const segments = relative(capability.stateRoot.path, candidate).split(sep);
   let cursor = capability.stateRoot.path;
   for (let index = 0; index < segments.length; index += 1) {
-    cursor = resolve(cursor, segments[index]);
+    cursor = pathResolve(cursor, segments[index]);
     let value;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -962,7 +962,7 @@ async function assertNoLinkRoute(root: PathIdentity, destination: string): Promi
   let cursor = root.path;
   for (const part of relative(root.path, dirname(destination)).split(sep)) {
     if (part === "") continue;
-    cursor = resolve(cursor, part);
+    cursor = pathResolve(cursor, part);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const value = await lstat(cursor);
     if (
@@ -986,7 +986,7 @@ async function inspectDestinationPrestate(input: {
 }): Promise<FreshBootstrapPrestate> {
   if (!isAbsolute(input.destinationPath))
     throw new Error("The fresh-bootstrap destination must be absolute.");
-  const destination = resolve(input.destinationPath);
+  const destination = pathResolve(input.destinationPath);
   await assertNoLinkRoute(input.capability.allowedRoot, destination);
   const parent = await identity(dirname(destination));
   if (
@@ -1056,7 +1056,7 @@ export async function deriveFreshBootstrapProposal(input: {
     sourceReceipt.sourcePath,
     ...(sourceGit === undefined ? [] : [sourceGit]),
     process.cwd(),
-  ].map((path) => resolve(path));
+  ].map((path) => pathResolve(path));
   if (
     protectedPaths.some(
       (path) =>
@@ -1078,19 +1078,19 @@ export async function deriveFreshBootstrapProposal(input: {
     readOverlayFile: input.readOverlayFile,
     sourceWorkspace: input.sourceWorkspace,
   });
-  const placeholder = resolve(capability.stateRoot.path, "pending");
+  const placeholder = pathResolve(capability.stateRoot.path, "pending");
   const destinationLockDigest = stableDigest({
     allowedRoot: capability.allowedRoot,
-    destinationPath: resolve(input.destinationPath),
+    destinationPath: pathResolve(input.destinationPath),
   });
   const preliminary = createFreshBootstrapProposal({
     capability,
-    destinationPath: resolve(input.destinationPath),
-    stagingPath: resolve(dirname(input.destinationPath), ".pending.stage"),
+    destinationPath: pathResolve(input.destinationPath),
+    stagingPath: pathResolve(dirname(input.destinationPath), ".pending.stage"),
     atomicAdapterDigest: FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST,
     materializeAdapterDigest: FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
     journalPath: placeholder,
-    lockPath: resolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
+    lockPath: pathResolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
     destinationPrestate,
     sourceReceipt: input.sourceReceipt,
     review: input.review,
@@ -1099,19 +1099,19 @@ export async function deriveFreshBootstrapProposal(input: {
   });
   const proposal = createFreshBootstrapProposal({
     capability,
-    destinationPath: resolve(input.destinationPath),
-    stagingPath: resolve(
+    destinationPath: pathResolve(input.destinationPath),
+    stagingPath: pathResolve(
       dirname(input.destinationPath),
       `.${basename(input.destinationPath)}.repository-bootstrap-${preliminary.publicationIdentityDigest}.stage`,
     ),
     atomicAdapterDigest: FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST,
     materializeAdapterDigest: FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
-    journalPath: resolve(
+    journalPath: pathResolve(
       capability.stateRoot.path,
       "journals",
       `${preliminary.publicationIdentityDigest}.json`,
     ),
-    lockPath: resolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
+    lockPath: pathResolve(capability.stateRoot.path, "locks", `${destinationLockDigest}.lock`),
     destinationPrestate,
     sourceReceipt: input.sourceReceipt,
     review: input.review,
@@ -1248,7 +1248,7 @@ async function createStage(
     (stageState.mode & 0o777) !== 0o700
   )
     throw new Error("The newly created bootstrap stage is unsafe.");
-  const marker = resolve(proposal.stagingPath, proposal.claimMarkerName);
+  const marker = pathResolve(proposal.stagingPath, proposal.claimMarkerName);
   const handle = await open(
     marker,
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
@@ -1317,7 +1317,7 @@ async function initializeGit(input: {
   hooks?: FreshBootstrapFaultHooks;
   recovery: boolean;
 }): Promise<void> {
-  const gitDirectory = resolve(input.proposal.stagingPath, ".git");
+  const gitDirectory = pathResolve(input.proposal.stagingPath, ".git");
   let initialized = false;
   try {
     const value = await lstat(gitDirectory);
@@ -1336,7 +1336,7 @@ async function initializeGit(input: {
       ".",
     ]);
     const configHandle = await open(
-      resolve(gitDirectory, "config"),
+      pathResolve(gitDirectory, "config"),
       fsConstants.O_WRONLY | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
     );
     try {
@@ -1425,7 +1425,7 @@ async function assertRawGitAuthority(
   root: string,
 ): Promise<void> {
   const rootState = await lstat(root);
-  const gitDirectory = resolve(root, ".git");
+  const gitDirectory = pathResolve(root, ".git");
   const gitState = await lstat(gitDirectory);
   if (
     rootState.isSymbolicLink() ||
@@ -1439,20 +1439,20 @@ async function assertRawGitAuthority(
     (gitState.mode & 0o022) !== 0 ||
     (await realpath(root)) !== root ||
     (await realpath(gitDirectory)) !== gitDirectory ||
-    (await readFile(resolve(gitDirectory, "config"), "utf-8")) !== exactGitConfig ||
-    (await readFile(resolve(gitDirectory, "HEAD"), "utf-8")) !==
+    (await readFile(pathResolve(gitDirectory, "config"), "utf-8")) !== exactGitConfig ||
+    (await readFile(pathResolve(gitDirectory, "HEAD"), "utf-8")) !==
       `ref: refs/heads/${proposal.repositoryIdentity.initialBranch}\n`
   )
     throw new Error("The fresh repository Git authority is not local and exact.");
   for (const forbidden of [
-    resolve(gitDirectory, "commondir"),
-    resolve(gitDirectory, "gitdir"),
-    resolve(gitDirectory, "hooks"),
-    resolve(gitDirectory, "objects", "info", "alternates"),
-    resolve(gitDirectory, "objects", "info", "http-alternates"),
-    resolve(gitDirectory, "info", "grafts"),
-    resolve(gitDirectory, "refs", "replace"),
-    resolve(gitDirectory, "shallow"),
+    pathResolve(gitDirectory, "commondir"),
+    pathResolve(gitDirectory, "gitdir"),
+    pathResolve(gitDirectory, "hooks"),
+    pathResolve(gitDirectory, "objects", "info", "alternates"),
+    pathResolve(gitDirectory, "objects", "info", "http-alternates"),
+    pathResolve(gitDirectory, "info", "grafts"),
+    pathResolve(gitDirectory, "refs", "replace"),
+    pathResolve(gitDirectory, "shallow"),
   ]) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1473,7 +1473,7 @@ async function rawWorktreeManifest(
   const output: FreshBootstrapFile[] = [];
   const directories = new Set<string>();
   const walk = async (relativePath: string): Promise<void> => {
-    const directory = relativePath === "" ? root : resolve(root, relativePath);
+    const directory = relativePath === "" ? root : pathResolve(root, relativePath);
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const path = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
@@ -1481,7 +1481,7 @@ async function rawWorktreeManifest(
       if (allowClaimMarker && path === proposal.claimMarkerName) continue;
       if (!safeSourcePath(path))
         throw new Error("The fresh repository contains an unsafe raw path.");
-      const absolute = resolve(root, path);
+      const absolute = pathResolve(root, path);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const state = await lstat(absolute);
       if (
@@ -1539,7 +1539,7 @@ async function assertExactRepository(
   remoteDigest: string;
   worktreeDigest: string;
 }> {
-  const gitDirectory = resolve(root, ".git");
+  const gitDirectory = pathResolve(root, ".git");
   await assertRawGitAuthority(proposal, root);
   const destinationIdentity = await identity(root);
   const gitDirectoryIdentity = await identity(gitDirectory);
@@ -1573,14 +1573,14 @@ async function assertExactRepository(
       .filter(Boolean)
       .map((line) => line.split(" ", 1)[0]),
   );
-  const objectDirectory = resolve(gitDirectory, "objects");
+  const objectDirectory = pathResolve(gitDirectory, "objects");
   const looseObjects = new Set<string>();
   for (const entry of await readdir(objectDirectory, { withFileTypes: true })) {
     if (entry.name === "info" || entry.name === "pack") {
       if (
         !entry.isDirectory() ||
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        (await readdir(resolve(objectDirectory, entry.name))).length !== 0
+        (await readdir(pathResolve(objectDirectory, entry.name))).length !== 0
       )
         throw new Error("The fresh repository contains unexpected packed or object authority.");
       continue;
@@ -1588,7 +1588,7 @@ async function assertExactRepository(
     if (!entry.isDirectory() || !/^[0-9a-f]{2}$/u.test(entry.name))
       throw new Error("The fresh repository contains malformed object storage.");
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    for (const object of await readdir(resolve(objectDirectory, entry.name))) {
+    for (const object of await readdir(pathResolve(objectDirectory, entry.name))) {
       if (!/^[0-9a-f]{38}$/u.test(object))
         throw new Error("The fresh repository contains malformed loose objects.");
       looseObjects.add(`${entry.name}${object}`);
@@ -1615,9 +1615,9 @@ async function assertExactRepository(
   )
     throw new Error("The final fresh repository failed exact verification.");
   for (const forbidden of [
-    resolve(gitDirectory, "objects", "info", "alternates"),
-    resolve(gitDirectory, "info", "grafts"),
-    resolve(gitDirectory, "refs", "replace"),
+    pathResolve(gitDirectory, "objects", "info", "alternates"),
+    pathResolve(gitDirectory, "info", "grafts"),
+    pathResolve(gitDirectory, "refs", "replace"),
   ]) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1877,7 +1877,7 @@ export async function readFreshBootstrapJournal(input: {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
     input.proposal.journalPath !==
-    resolve(
+    pathResolve(
       capability.stateRoot.path,
       "journals",
       `${input.proposal.publicationIdentityDigest}.json`,
@@ -2102,7 +2102,7 @@ async function executeBootstrap(input: {
       recovery: input.recoveryOfDigest !== undefined,
     });
     lease.assertHeld();
-    const marker = resolve(input.proposal.stagingPath, input.proposal.claimMarkerName);
+    const marker = pathResolve(input.proposal.stagingPath, input.proposal.claimMarkerName);
     const markerState = await pathState(marker);
     if (markerState === "other") {
       const markerBytes = await readFile(marker);

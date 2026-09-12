@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { join, resolve } from "node:path";
+import { join, resolve as pathResolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "..");
+const root = pathResolve(import.meta.dirname, "..");
 const candidateRoot = required("SELF_REPRODUCTION_CANDIDATE_ROOT");
 const arrustedRoot = required("SELF_REPRODUCTION_ARRUSTED_ROOT");
 const briefPath = required("SELF_REPRODUCTION_BRIEF_PATH");
 const answersPath = required("SELF_REPRODUCTION_ANSWERS_PATH");
 const transcriptPath = required("SELF_REPRODUCTION_TRANSCRIPT_PATH");
-const stateRoot = resolve(
+const stateRoot = pathResolve(
   process.env.SELF_REPRODUCTION_STATE_ROOT ?? join(candidateRoot, "..", "runtime"),
 );
 const configuredNextPort = process.env.SELF_REPRODUCTION_NEXT_PORT;
