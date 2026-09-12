@@ -223,6 +223,7 @@ describe("local Eve acceptance", () => {
         state: { sessionId: "wrun_closed_response", streamIndex: 0 },
         stream: vi.fn(async function* closedResponseStream() {
           await never;
+          yield* [];
         }),
         send: vi.fn(async () => response),
         respond: vi.fn(async () => response),
