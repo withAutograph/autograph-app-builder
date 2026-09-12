@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "responses": {
+    "authentication": "Use local development authentication with one seeded workspace and tenant-isolated durable records.",
+    "providers": "Use emulated GitHub and Vercel callbacks for this benchmark. Do not publish or provision hosted resources.",
+    "destination": "Create generated apps in the benchmark candidate workspace and expose a local preview URL.",
+    "design": "Use the standard App Builder visual language and public Arrusted components without receiving source or screenshots from the reference app."
+  }
+}

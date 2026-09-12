@@ -18,7 +18,6 @@ export type InjectedTestCapability = Readonly<{
 
 const exactCapabilities = (value: unknown): value is readonly TestCapability[] =>
   Array.isArray(value) &&
-  value.length > 0 &&
   new Set(value).size === value.length &&
   value.every((entry) => TEST_CAPABILITIES.includes(entry as TestCapability));
 

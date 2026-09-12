@@ -1,0 +1,43 @@
+name: App Builder self-reproduction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    # This runner is deliberately self-hosted: its project-scoped Vercel OIDC
+    # setup is the same local development boundary used by `mise run dev`.
+    # Do not replace it with repository secrets or static gateway credentials.
+    runs-on: [self-hosted, app-builder-eval]
+    timeout-minutes: 45
+    environment: self-reproduction
+    env:
+      SELF_REPRODUCTION_ARRUSTED_ROOT: ${{ vars.ARRUSTED_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run test:unit -- evals/support/self-reproduction.test.ts
+      - name: Run live self-reproduction eval
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/app-builder-self-reproduction"
+          mise run eval:self-reproduction -- --json \
+            > "$RUNNER_TEMP/app-builder-self-reproduction/eval.json" \
+            2> "$RUNNER_TEMP/app-builder-self-reproduction/eval.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-builder-self-reproduction-${{ github.sha }}
+          path: ${{ runner.temp }}/app-builder-self-reproduction
+          if-no-files-found: warn

@@ -52,6 +52,9 @@ const allowedWorkerEnvironment = new Set([
   "NO_COLOR",
   "FORCE_COLOR",
   "NODE_ENV",
+  "VERCEL_OIDC_TOKEN",
+  "VERCEL_TEAM_ID",
+  "VERCEL_PROJECT_ID",
 ]);
 delete process.env.NODE_OPTIONS;
 
