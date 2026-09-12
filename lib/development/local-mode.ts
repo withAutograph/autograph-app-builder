@@ -277,7 +277,7 @@ async function sourceEntry(sourceRoot: string, path: string) {
       `Development source supports only regular files and safe symbolic links: ${path}`,
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
 }
