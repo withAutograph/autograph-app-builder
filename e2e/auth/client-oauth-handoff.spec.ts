@@ -39,12 +39,12 @@ test.afterEach(async () => {
 
 const issuer = `${appOrigin}/api/auth`;
 const resource = `${appOrigin}/mcp`;
-type Tokens = {
+interface Tokens {
   access_token: string;
   refresh_token: string;
   token_type: string;
   scope: string;
-};
+}
 
 async function exchange(page: Page, form: Record<string, string>): Promise<Tokens> {
   // Catch transport/JSON failures so Playwright cannot render token request

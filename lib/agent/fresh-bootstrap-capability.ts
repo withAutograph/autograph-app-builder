@@ -5,10 +5,10 @@ import { productionFreshBootstrapCapability } from "@/lib/repository/node-fresh-
 import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-type FreshBootstrapTestContext = {
+interface FreshBootstrapTestContext {
   capability: FreshBootstrapCapability;
   hooks?: FreshBootstrapFaultHooks;
-};
+}
 const structurallyInjectedCapability = new AsyncLocalStorage<FreshBootstrapTestContext>();
 
 export function currentFreshBootstrapCapability(): Promise<FreshBootstrapCapability> {

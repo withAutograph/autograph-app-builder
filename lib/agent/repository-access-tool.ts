@@ -12,10 +12,10 @@ import {
 } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 
-export type RepositoryAccessToolInput = {
+export interface RepositoryAccessToolInput {
   repository: string;
   selectedInstallationId?: string;
-};
+}
 
 export async function resolveRepositoryAccessForTool(
   input: RepositoryAccessToolInput,

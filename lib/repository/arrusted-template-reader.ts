@@ -16,17 +16,17 @@ const requestedPermissions = {
   checks: "read" as const,
 };
 
-export type ArrustedTemplateReaderConfig = {
+export interface ArrustedTemplateReaderConfig {
   appId: string;
   privateKey: string;
   installationId: string;
-};
+}
 
-export type ArrustedTemplateReader = {
+export interface ArrustedTemplateReader {
   acquire: () => Promise<{
     token: string;
   }>;
-};
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

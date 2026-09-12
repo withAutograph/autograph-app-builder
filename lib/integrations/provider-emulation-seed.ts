@@ -6,7 +6,7 @@ export const EMULATED_GITHUB_INSTALLATION_ID = 1001;
 export const EMULATED_VERCEL_CONFIGURATION_ID = "icfg_local_1";
 export const EMULATED_VERCEL_TEAM_ID = "autograph-local";
 
-type SeedInput = {
+interface SeedInput {
   origin: string;
   githubAppPrivateKey?: string;
   githubClientId: string;
@@ -14,7 +14,7 @@ type SeedInput = {
   vercelClientId: string;
   vercelClientSecret: string;
   strictGitHubOAuth: boolean;
-};
+}
 
 export function providerEmulationSeed(input: SeedInput): {
   github: GitHubSeedConfig;

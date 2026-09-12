@@ -20,7 +20,7 @@ import styles from "./app-builder.module.css";
 import { Builder } from "./builder-form";
 import type { BuilderDraft } from "./builder-types";
 
-export type AuthenticatedBuilderProps = {
+export interface AuthenticatedBuilderProps {
   generatedNameSeed?: string;
   connectionsEnabled?: boolean;
   comingSoonEnabled?: boolean;
@@ -36,7 +36,7 @@ export type AuthenticatedBuilderProps = {
     input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
   loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
-};
+}
 
 /** Client-only form, draft, and continuation coordination below the server shell. */
 export function BuilderContinuation({

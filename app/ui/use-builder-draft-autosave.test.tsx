@@ -9,7 +9,9 @@ import type { BuilderDraftOutbox, BuilderDraftOutboxEntry } from "./builder-draf
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import type { BuilderDraftAutosave } from "./use-builder-draft-autosave";
 
-type Snapshot = { brief: string };
+interface Snapshot {
+  brief: string;
+}
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;

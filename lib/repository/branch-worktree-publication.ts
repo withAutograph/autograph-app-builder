@@ -8,7 +8,7 @@ import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template
 
 export const BRANCH_WORKTREE_PUBLICATION_VERSION = 2 as const;
 
-export type BranchWorktreePublicationProposal = {
+export interface BranchWorktreePublicationProposal {
   version: typeof BRANCH_WORKTREE_PUBLICATION_VERSION;
   sourcePath: string;
   sourceRootIdentity: { device: string; inode: string };
@@ -33,7 +33,7 @@ export type BranchWorktreePublicationProposal = {
   publicationIdentityDigest: string;
   intendedOutcome: "create-reviewed-branch-worktree";
   digest: string;
-};
+}
 
 type TerminalFields = Omit<BranchWorktreePublicationProposal, "digest"> & {
   proposalDigest: string;

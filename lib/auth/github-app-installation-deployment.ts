@@ -28,12 +28,12 @@ import {
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 import { signInForWorkspaceRedirect, workspaceOnboardingRedirect } from "./workspace-onboarding";
 
-type Authority = {
+interface Authority {
   issuer: string;
   audience: string;
   workspaceId: string;
   ownerUserId: string;
-};
+}
 
 type InstallationAuthorization = ReturnType<typeof createGitHubAppInstallationAuthorization>;
 

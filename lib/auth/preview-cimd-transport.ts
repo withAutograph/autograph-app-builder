@@ -23,11 +23,11 @@ type RequestHttps = (
   responseListener: (response: IncomingMessage) => void,
 ) => ClientRequest;
 
-export type PreviewCimdTransportDependencies = {
+export interface PreviewCimdTransportDependencies {
   resolveHostname: ResolveHostname;
   requestHttps: RequestHttps;
   timeoutSignal?: (milliseconds: number) => AbortSignal;
-};
+}
 
 function lookupError(hostname: string): NodeJS.ErrnoException {
   return Object.assign(

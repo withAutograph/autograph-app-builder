@@ -46,18 +46,18 @@ export type ArrustedComponentCompositionPolicy = z.infer<
   typeof arrustedComponentCompositionPolicySchema
 >;
 
-export type BoundArrustedComponentCompositionPolicy = {
+export interface BoundArrustedComponentCompositionPolicy {
   policy: ArrustedComponentCompositionPolicy;
   policyDigest: string;
   sourceSha: string;
   sourceTree: string;
-};
+}
 
 export type CompositionPolicyResolution =
   | { status: "available"; binding: BoundArrustedComponentCompositionPolicy }
   | { status: "unavailable"; reasons: readonly string[] };
 
-export type CompositionViolation = {
+export interface CompositionViolation {
   code:
     | "unapproved-public-import"
     | "local-component-file"
@@ -67,7 +67,7 @@ export type CompositionViolation = {
     | "inline-visual-style";
   path: string;
   message: string;
-};
+}
 
 export type AppliedAppCompositionResult =
   | {

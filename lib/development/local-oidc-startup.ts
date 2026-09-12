@@ -11,13 +11,13 @@ import {
 
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
 
-export type LocalOidcStartupInvocation = {
+export interface LocalOidcStartupInvocation {
   executable: string;
   args: readonly string[];
   cwd: string;
   environment: NodeJS.ProcessEnv;
   operation: "development-env-pull" | "owner-bind";
-};
+}
 
 export type LocalOidcStartupCommandRunner = (invocation: LocalOidcStartupInvocation) => void;
 

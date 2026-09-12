@@ -6,7 +6,7 @@ export type SpendTarget =
   | "source_record_ref"
   | "ignore";
 
-export type SpendFixture = {
+export interface SpendFixture {
   import: { batchId: string; rows: number };
   fieldMapping: Record<string, string>;
   preview: { creates: number; needsReview: number };
@@ -24,40 +24,40 @@ export type SpendFixture = {
     sourceRef: string;
     candidates: { id: string; label: string }[];
   }[];
-};
+}
 
 export type SpendMapping = Record<string, SpendTarget>;
 export type SpendStage = "mapping" | "preview" | "saved" | "review";
-export type SpendState = {
+export interface SpendState {
   stage: SpendStage;
   mapping: SpendMapping;
   selectedMatchId?: string;
   decision?: "resolved" | "deferred";
   saved?: SpendSaveOutcome;
-};
+}
 
-export type SpendPreviewRow = {
+export interface SpendPreviewRow {
   id: string;
   vendor: string;
   amount: string;
   date: string;
   sourceRef: string;
   result: "Ready" | "Needs review";
-};
+}
 
-export type SpendPreview = {
+export interface SpendPreview {
   rows: SpendPreviewRow[];
   ready: number;
   needsReview: number;
   mappingSummary: string;
-};
+}
 
-export type SpendSaveOutcome = {
+export interface SpendSaveOutcome {
   imported: number;
   reviewQueue: number;
   message: string;
   mapping: SpendMapping;
-};
+}
 
 export type SpendAction =
   | { type: "mapping-changed"; source: string; target: SpendTarget }

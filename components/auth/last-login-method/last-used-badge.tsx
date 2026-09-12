@@ -4,14 +4,14 @@ import { useLastLoginMethod } from "@better-auth-ui/react";
 
 import { Badge } from "@/components/ui/badge";
 
-export type LastUsedBadgeProps = {
+export interface LastUsedBadgeProps {
   /** Login method IDs that should display the indicator. */
   method: string | string[];
   /** Use the shorter label in constrained layouts. */
   compact?: boolean;
   /** Float the compact indicator over the top-right edge of its container. */
   floating?: boolean;
-};
+}
 
 /**
  * Displays an indicator when one of the supplied method IDs matches Better

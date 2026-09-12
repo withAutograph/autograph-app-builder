@@ -20,12 +20,14 @@ import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
-export type PasskeyButtonProps = {
+export interface PasskeyButtonProps {
   /** `AuthView` */
   view?: AuthView;
-};
+}
 
-type OnboardingResponse = { context?: unknown };
+interface OnboardingResponse {
+  context?: unknown;
+}
 
 const passkeyResponseTimeoutMs = 3000;
 

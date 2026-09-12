@@ -1,14 +1,17 @@
 import { parse } from "postcss";
 import type { Declaration } from "postcss";
 
-export type CssSourceFile = { path: string; content: string };
-export type CssRuleEvidence = {
+export interface CssSourceFile {
+  path: string;
+  content: string;
+}
+export interface CssRuleEvidence {
   selector: string;
   property: string;
   value: string;
   source: { path: string; line: number; column: number };
   ruleSignature: string;
-};
+}
 
 // Rule tuples are exact CSS evidence. In particular, collapsing whitespace can
 // change quoted strings and selectors, so only trim surrounding transport noise.

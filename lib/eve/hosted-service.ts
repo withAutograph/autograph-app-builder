@@ -139,14 +139,14 @@ function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionS
   return "planning";
 }
 
-type CheckpointInputProfile = {
+interface CheckpointInputProfile {
   titleBytes: number;
   descriptionBytes: number;
   optionCount: number;
   optionLabelBytes: number;
   authorizationInstructionBytes: number;
   repositoryScopeCount: number;
-};
+}
 
 const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
   {

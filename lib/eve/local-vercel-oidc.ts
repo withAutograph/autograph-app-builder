@@ -1,13 +1,13 @@
 import { lstatSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-type LinkedVercelProject = {
+interface LinkedVercelProject {
   projectId: string;
   orgId: string;
   projectName: string;
-};
+}
 
-type VercelOidcClaims = {
+interface VercelOidcClaims {
   iss: string;
   aud: string;
   sub: string;
@@ -19,7 +19,7 @@ type VercelOidcClaims = {
   project: string;
   project_id: string;
   environment: string;
-};
+}
 
 function assertOwnerNonWritable(path: string): void {
   const stat = statSync(path);

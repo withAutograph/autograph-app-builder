@@ -11,10 +11,10 @@ export type SandboxBackendKind =
   | "unsupported-development"
   | "unsupported-vercel";
 
-export type SandboxBackendPlan = {
+export interface SandboxBackendPlan {
   kind: SandboxBackendKind;
   blockers: string[];
-};
+}
 
 export function isHostedVercelRuntime(
   environment: Readonly<Record<string, string | undefined>> = process.env,

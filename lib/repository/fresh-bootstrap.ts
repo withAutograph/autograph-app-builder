@@ -7,18 +7,18 @@ import { safeSourcePath } from "./source-path";
 
 export const FRESH_BOOTSTRAP_VERSION = 3 as const;
 
-export type PathIdentity = {
+export interface PathIdentity {
   path: string;
   device: string;
   inode: string;
   uid: string;
   mode: string;
   nlink: string;
-};
+}
 
 export type ExecutableIdentity = PathIdentity & { sha256: string };
 
-export type FreshBootstrapCapability = {
+export interface FreshBootstrapCapability {
   kind: "fresh-bootstrap-local-v1";
   stateRoot: PathIdentity;
   allowedRoot: PathIdentity;
@@ -32,7 +32,7 @@ export type FreshBootstrapCapability = {
   lockHelper: string;
   lockHelperIdentity: ExecutableIdentity;
   authority: "configured-production" | "structural-test-injection";
-};
+}
 
 export type FreshBootstrapPrestate =
   | {
@@ -46,21 +46,21 @@ export type FreshBootstrapPrestate =
       parent: PathIdentity;
     };
 
-export type FreshBootstrapIdentity = {
+export interface FreshBootstrapIdentity {
   initialBranch: string;
   authorName: string;
   authorEmail: string;
   commitMessage: string;
   commitTimestamp: string;
-};
+}
 
-export type FreshBootstrapFile = {
+export interface FreshBootstrapFile {
   path: string;
   mode: "100644" | "100755";
   blob: string;
-};
+}
 
-export type FreshBootstrapProposal = {
+export interface FreshBootstrapProposal {
   version: typeof FRESH_BOOTSTRAP_VERSION;
   capability: {
     stateRoot: PathIdentity;
@@ -104,7 +104,7 @@ export type FreshBootstrapProposal = {
   githubOutcome: "unavailable";
   releaseEnabled: false;
   digest: string;
-};
+}
 
 type TerminalBase = Omit<FreshBootstrapProposal, "digest"> & {
   proposalDigest: string;
@@ -180,7 +180,10 @@ const sha1Object = (kind: "blob" | "tree" | "commit", bytes: Uint8Array) =>
     .update(bytes)
     .digest("hex");
 
-type Tree = { files: FreshBootstrapFile[]; directories: Map<string, Tree> };
+interface Tree {
+  files: FreshBootstrapFile[];
+  directories: Map<string, Tree>;
+}
 
 export function gitTreeId(files: readonly FreshBootstrapFile[]): string {
   const root: Tree = { files: [], directories: new Map() };

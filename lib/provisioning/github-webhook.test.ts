@@ -24,14 +24,14 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
 
 function database() {
   const updates: unknown[] = [];
-  type FakeDatabase = {
+  interface FakeDatabase {
     update: (table: unknown) => {
       set: () => {
         where: () => Promise<undefined>;
       };
     };
     transaction: <T>(operation: (transaction: FakeDatabase) => Promise<T>) => Promise<T>;
-  };
+  }
   const value: FakeDatabase = {
     update(table: unknown) {
       updates.push(table);

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { OverlayChange, TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
 
-export type NormalizedChangeSet = {
+export interface NormalizedChangeSet {
   version: 2;
   validationDigest: string;
   applyDigest: string;
@@ -34,7 +34,7 @@ export type NormalizedChangeSet = {
   changes: readonly OverlayChange[];
   approvedPaths: readonly string[];
   digest: string;
-};
+}
 
 export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
   changeSetDigest: string;

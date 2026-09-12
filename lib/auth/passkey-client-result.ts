@@ -1,7 +1,7 @@
-type PasskeyClientError = {
+interface PasskeyClientError {
   code?: unknown;
   message?: unknown;
-};
+}
 
 function passkeyResultError(result: unknown): PasskeyClientError | null {
   if (!result || typeof result !== "object" || !("error" in result)) {

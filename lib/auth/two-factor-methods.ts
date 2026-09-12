@@ -20,10 +20,10 @@ export const TWO_FACTOR_PLUGIN_ID = "twoFactor";
  */
 export const TWO_FACTOR_METHODS_STORAGE_KEY = "better-auth-ui.two-factor-methods";
 
-type TwoFactorRedirect = {
+interface TwoFactorRedirect {
   twoFactorRedirect: true;
   twoFactorMethods?: unknown;
-};
+}
 
 /** Detect the redirect payload Better Auth returns before a second factor. */
 export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {

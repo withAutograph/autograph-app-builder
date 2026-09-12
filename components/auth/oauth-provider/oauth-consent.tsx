@@ -34,9 +34,9 @@ import { oauthProviderPlugin } from "@/lib/auth/oauth-provider-plugin";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "../user/user-avatar";
 
-export type OAuthConsentProps = {
+export interface OAuthConsentProps {
   className?: string;
-};
+}
 
 const interpolateClient = (template: string, clientName: string) =>
   template.replace("{{client}}", clientName);

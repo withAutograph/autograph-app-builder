@@ -8,10 +8,10 @@ import { useMemo, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { ProviderButton } from "./provider-button";
 
-export type ProviderButtonsProps = {
+export interface ProviderButtonsProps {
   socialLayout?: SocialLayout;
   view?: AuthView;
-};
+}
 
 export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
 

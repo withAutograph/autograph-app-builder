@@ -143,13 +143,13 @@ export async function createRealOAuthHarness(
 }
 
 export type RealOAuthHarness = Awaited<ReturnType<typeof createRealOAuthHarness>>;
-export type OAuthTokens = {
+export interface OAuthTokens {
   access_token: string;
   refresh_token: string;
   expires_in: number;
   scope: string;
   token_type: string;
-};
+}
 
 /** Local test DB only; uses the same stable fields as deployment setup. */
 export async function registerTestCursorClient(harness: RealOAuthHarness) {

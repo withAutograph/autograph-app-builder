@@ -64,17 +64,17 @@ export const starterSourceManifestSchema = z
   .strict();
 
 export type StarterSourceManifest = z.infer<typeof starterSourceManifestSchema>;
-export type StarterSourceFile = {
+export interface StarterSourceFile {
   path: string;
   mode: "100644" | "100755";
   bytes: Uint8Array;
-};
-type StarterSourceProvenanceBase = {
+}
+interface StarterSourceProvenanceBase {
   sourceSha: string;
   sourceTree: string;
   repository: string;
   ref: "refs/heads/main";
-};
+}
 export type StarterSourceProvenance = StarterSourceProvenanceBase &
   (
     | {
@@ -87,13 +87,13 @@ export type StarterSourceProvenance = StarterSourceProvenanceBase &
       }
     | { method: "starter-archive-v3" }
   );
-export type StarterSource = {
+export interface StarterSource {
   /** Present only while recovering a legacy V3 starter acquisition. */
   manifest?: StarterSourceManifest;
   manifestSha256?: string;
   provenance?: StarterSourceProvenance;
   files: readonly StarterSourceFile[];
-};
+}
 
 const execFileAsync = promisify(execFile);
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";

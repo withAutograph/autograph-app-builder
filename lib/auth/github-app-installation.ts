@@ -41,7 +41,7 @@ export type GitHubOAuthErrorCategory =
 
 export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
-export type GitHubCallbackDiagnostic = {
+export interface GitHubCallbackDiagnostic {
   queryKeys: string[];
   keyCounts: Record<string, number>;
   unknownKeyCount: number;
@@ -51,9 +51,9 @@ export type GitHubCallbackDiagnostic = {
   statePresent: boolean;
   stateLength?: number;
   error?: GitHubOAuthCallbackError;
-};
+}
 
-export type GitHubStateValidationDiagnostic = {
+export interface GitHubStateValidationDiagnostic {
   substage:
     | "authority-parse"
     | "callback-parse"
@@ -64,7 +64,7 @@ export type GitHubStateValidationDiagnostic = {
     | "state-time";
   stateDigest?: string;
   callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
-};
+}
 
 export function githubInstallationAuthorizationDiagnostic(error: unknown) {
   if (!(error instanceof GitHubInstallationAuthorizationError)) return undefined;

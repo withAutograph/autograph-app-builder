@@ -83,14 +83,14 @@ const githubEmailsSchema = z
   )
   .max(100);
 
-type VercelOAuthTokens = {
+interface VercelOAuthTokens {
   accessToken?: string;
   idToken?: string;
-};
+}
 
-type GitHubOAuthTokens = {
+interface GitHubOAuthTokens {
   accessToken?: string;
-};
+}
 
 async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
   if (!response.ok) return null;

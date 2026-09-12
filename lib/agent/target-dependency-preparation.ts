@@ -20,12 +20,12 @@ export type DependencyReadyState = Exclude<
   { phase: "app_spec_accepted" }
 >;
 
-export type TargetDependencyPreparationResult = {
+export interface TargetDependencyPreparationResult {
   state: DependencyReadyState;
   sandbox: SandboxSession;
   receipt: DependencyPreparationReceipt;
   reused: boolean;
-};
+}
 
 /**
  * Records checkout-backed planning state. Repository commands own dependency

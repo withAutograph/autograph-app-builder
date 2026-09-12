@@ -63,7 +63,7 @@ export const builderProvisionJournalRecordSchema = z
 export type BuilderProvisionJournalRecord = z.infer<typeof builderProvisionJournalRecordSchema>;
 export type BuilderProvisionAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
-export type BuilderProvisionJournalRow = {
+export interface BuilderProvisionJournalRow {
   authority: BuilderProvisionAuthority;
   requestId: string;
   requestDigest: string;
@@ -72,7 +72,7 @@ export type BuilderProvisionJournalRow = {
   record: BuilderProvisionJournalRecord;
   createdAt: Date;
   updatedAt: Date;
-};
+}
 
 export interface BuilderProvisionJournalStore {
   reserve: (input: {

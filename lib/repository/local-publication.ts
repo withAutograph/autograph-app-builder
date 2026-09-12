@@ -19,7 +19,7 @@ export const stableDigest = (value: unknown): string =>
 export const contentDigest = (value: Uint8Array): string =>
   createHash("sha256").update(value).digest("hex");
 
-export type DirtyPathSnapshot = {
+export interface DirtyPathSnapshot {
   path: string;
   originalPath?: string;
   indexStatus: string;
@@ -31,9 +31,9 @@ export type DirtyPathSnapshot = {
   size?: number;
   contentDigest?: string;
   contentBase64?: string;
-};
+}
 
-export type DestinationSnapshot = {
+export interface DestinationSnapshot {
   canonicalPath: string;
   rootIdentity: { device: string; inode: string };
   gitDirectoryPath: string;
@@ -48,9 +48,9 @@ export type DestinationSnapshot = {
   index: readonly { path: string; entriesBase64: string; digest: string }[];
   dirtyDigest: string;
   statusDigest: string;
-};
+}
 
-export type LocalPublicationProposal = {
+export interface LocalPublicationProposal {
   version: typeof LOCAL_PUBLICATION_VERSION;
   destinationPath: string;
   rootIdentity: { device: string; inode: string };
@@ -72,14 +72,14 @@ export type LocalPublicationProposal = {
   preconditionStatusDigest: string;
   unrelatedProjectionDigest: string;
   digest: string;
-};
+}
 
-export type PublicationPathEvidence = {
+export interface PublicationPathEvidence {
   path: string;
   operation: OverlayChange["kind"];
   before?: { mode: string; digest: string };
   after?: { mode: string; digest: string };
-};
+}
 
 type LocalPublicationTerminal = Omit<LocalPublicationProposal, "digest"> & {
   proposalDigest: string;

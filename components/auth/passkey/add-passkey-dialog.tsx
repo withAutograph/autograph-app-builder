@@ -23,10 +23,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import { FreshSessionPrompt } from "../settings/security/fresh-session-prompt";
 
-export type AddPasskeyDialogProps = {
+export interface AddPasskeyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-};
+}
 
 export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();

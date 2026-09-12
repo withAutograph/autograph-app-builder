@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type ProviderConnectionProps = {
+interface ProviderConnectionProps {
   action: string;
   buttonLabel: string;
   children: ReactNode;
@@ -15,7 +15,7 @@ type ProviderConnectionProps = {
   returnTo: string;
   resumeKey?: string;
   title: string;
-};
+}
 
 export function ProviderConnection({
   action,

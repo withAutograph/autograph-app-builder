@@ -14,7 +14,7 @@ export type UseThemeHook = () => {
   themes?: string[];
 };
 
-type CommonThemeOptions = {
+interface CommonThemeOptions {
   /**
    * Override the plugin's default localization strings.
    * `ThemeLocalization`
@@ -25,7 +25,7 @@ type CommonThemeOptions = {
    * @default ["system", "light", "dark"]
    */
   themes?: string[];
-};
+}
 
 export type ThemePluginOptions = CommonThemeOptions &
   (

@@ -16,9 +16,9 @@ import { Passkey } from "./passkey";
 import { PasskeySkeleton } from "./passkey-skeleton";
 import { PasskeysEmpty } from "./passkeys-empty";
 
-export type PasskeysProps = {
+export interface PasskeysProps {
   className?: string;
-};
+}
 
 export function Passkeys({ className }: PasskeysProps) {
   const { authClient } = useAuth<PasskeyAuthClient>();
