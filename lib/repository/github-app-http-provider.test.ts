@@ -187,7 +187,7 @@ function providerFetch(input?: {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
-    let body: unknown = undefined;
+    let body;
     if (typeof init.body === "string") body = JSON.parse(init.body) as unknown;
     calls.push({ url, init, body });
     if (input?.fail) return json({ message: "private-key-material" }, 500);

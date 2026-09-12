@@ -11,7 +11,7 @@ describe("approval-bound implementation files", () => {
       },
     ]);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const writeTextFile = vi.fn(async () => undefined);
+    const writeTextFile = vi.fn(async () => {});
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const executor = vi.fn(async () => ({
       exitCode: 0,
