@@ -92,20 +92,48 @@ export default defineEval({
     await t.respondAll("approve");
     t.succeeded();
 
-    const validation = await send("Validate the applied creation.");
+    const workflow = await send("Report the current artifact workflow status without changing it.");
     t.succeeded();
-
-    const validationStatus = validation.toolCalls.find(
-      (call) => call.name === "validate_app_creation" && call.status === "completed",
-    )?.output as { status?: unknown } | undefined;
-    if (validationStatus?.status !== "validated") {
-      await send(
+    let phase = (
+      workflow.toolCalls.find(
+        (call) => call.name === "artifact_workflow_status" && call.status === "completed",
+      )?.output as { phase?: unknown } | undefined
+    )?.phase;
+    if (phase === "applied" || phase === "validation_pending") {
+      await send("Validate the applied creation, then report artifact workflow status.");
+      t.succeeded();
+      const refreshed = await send(
+        "Report the current artifact workflow status without changing it.",
+      );
+      t.succeeded();
+      phase = (
+        refreshed.toolCalls.find(
+          (call) => call.name === "artifact_workflow_status" && call.status === "completed",
+        )?.output as { phase?: unknown } | undefined
+      )?.phase;
+    }
+    if (phase === "validation_failed") {
+      const failedExport = await send(
         "Validation did not pass. Export the current applied candidate source for diagnosis by calling change_set_status with includeContent true, then report the validation failure without reviewing or accepting it.",
       );
       t.succeeded();
-      t.calledTool("change_set_status", { count: 1 });
       t.check(
-        validation.message,
+        failedExport.toolCalls,
+        satisfies(
+          (calls) =>
+            Array.isArray(calls) &&
+            calls.some(
+              (call) =>
+                call.name === "change_set_status" &&
+                call.status === "completed" &&
+                (call.input as { includeContent?: unknown }).includeContent === true &&
+                Array.isArray((call.output as { exportFiles?: unknown }).exportFiles),
+            ),
+          "validation-failed source was exported as unreviewed diagnostic evidence",
+        ),
+      );
+      t.check(
+        phase,
         satisfies(
           () => false,
           "the generated candidate passed repository validation before review",
@@ -121,17 +149,41 @@ export default defineEval({
       return;
     }
 
-    await send("Inspect the validated change set.");
-    t.succeeded();
+    t.check(
+      phase,
+      satisfies(
+        (value) => value === "validated" || value === "reviewed",
+        "the generated candidate reached validated or reviewed state",
+      ),
+    );
+
+    if (phase === "validated") {
+      await send("Inspect the validated change set.");
+      t.succeeded();
+    }
 
     await send("Accept the displayed change set.");
     t.succeeded();
 
-    await send(
+    const reviewedExport = await send(
       "Export the reviewed candidate source by calling change_set_status with includeContent true.",
     );
     t.succeeded();
-    t.calledTool("change_set_status", { count: 1 });
+    t.check(
+      reviewedExport.toolCalls,
+      satisfies(
+        (calls) =>
+          Array.isArray(calls) &&
+          calls.some(
+            (call) =>
+              call.name === "change_set_status" &&
+              call.status === "completed" &&
+              (call.input as { includeContent?: unknown }).includeContent === true &&
+              Array.isArray((call.output as { exportFiles?: unknown }).exportFiles),
+          ),
+        "the reviewed candidate source was exported with file contents",
+      ),
+    );
 
     await send("Report artifact workflow status.");
     t.succeeded();
