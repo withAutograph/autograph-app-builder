@@ -18,11 +18,24 @@ function ShellLoading() {
     <main
       id="main-content"
       aria-busy="true"
-      className="flex min-h-svh items-center justify-center p-6"
+      className="mx-auto flex min-h-svh w-full max-w-3xl flex-col gap-6 p-8"
     >
-      <p className="text-sm text-muted-foreground" role="status">
-        Loading App Builder…
-      </p>
+      <header className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">Autograph</p>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Autograph App Builder
+        </h1>
+        <p className="text-muted-foreground" role="status">
+          Loading your workspace…
+        </p>
+      </header>
+      <section
+        aria-label="App Builder loading"
+        className="rounded-xl border border-neutral-200 p-6 dark:border-neutral-800"
+      >
+        <div className="h-5 w-40 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
+        <div className="mt-4 h-10 animate-pulse rounded bg-neutral-100 dark:bg-neutral-900" />
+      </section>
     </main>
   );
 }
