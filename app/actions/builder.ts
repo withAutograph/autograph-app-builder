@@ -74,11 +74,13 @@ const handoffProvisioningContinuationInputSchema = z
 
 export type HandoffProvisioningContinuationState = { status: "updated" } | { status: "error" };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestUrl(path: string) {
   const preview = readPreviewOAuthRuntimeConfig(process.env);
   return `${new URL(preview.issuer).origin}${path}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sameOriginHeaders(contentType?: string) {
   const incoming = await headers();
   const forwarded = new Headers(incoming);
@@ -88,6 +90,7 @@ async function sameOriginHeaders(contentType?: string) {
   return forwarded;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
     const payload = (await response.json().catch(() => undefined)) as
@@ -98,6 +101,7 @@ async function readJson<T>(response: Response, fallback: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function provisionBuilderProvider(input: {
   version: 1;
   requestId: string;
@@ -120,6 +124,7 @@ export async function provisionBuilderProvider(input: {
   return readJson(response, "provisioning_unavailable");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reserveBuilderProvider(input: {
   version: 1;
   requestId: string;
@@ -142,6 +147,7 @@ export async function reserveBuilderProvider(input: {
   return readJson(response, "provisioning_unavailable");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readBuilderProviderProvisioning(requestId: string) {
   const path = `/api/builder/provision?requestId=${encodeURIComponent(requestId)}`;
   const response = await getBuilderProvisioningDeploymentHandler(process.env)(
@@ -153,6 +159,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
   return readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createBuilderHandoff(input: {
   version: 1;
   creationRequestId: string;
@@ -179,6 +186,7 @@ export async function createBuilderHandoff(input: {
   }>(response, "handoff_unavailable");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function provisioningInput(
   input: ResolvedHandoffContinuationInput,
   operation: "github" | "vercel",
@@ -203,6 +211,7 @@ function provisioningInput(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unavailableProvisioning(
   input: ResolvedHandoffContinuationInput,
   code: "feature_disabled" | "provider_unavailable",
@@ -242,7 +251,7 @@ function unavailableProvisioning(
   };
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
@@ -270,6 +279,7 @@ async function createContinuationHandoff(
  * Action. Client leaves receive a serializable terminal state through
  * `useActionState`; they never coordinate provider mutations themselves.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function continueBuilderHandoff(
   _previous: BuilderHandoffContinuationState | undefined,
   untrustedInput: BuilderHandoffContinuationInput,
@@ -324,6 +334,7 @@ export async function continueBuilderHandoff(
  * provider work, and `refresh()` folds the new read model into the action
  * response without a client-side status fetch.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function continueHandoffProvisioning(
   _previous: HandoffProvisioningContinuationState | undefined,
   untrustedInput: { handoffId: string; retryProvider?: "github" | "vercel" },

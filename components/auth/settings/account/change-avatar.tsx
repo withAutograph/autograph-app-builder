@@ -22,6 +22,7 @@ export interface ChangeAvatarProps {
   className?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ChangeAvatar({ className }: ChangeAvatarProps) {
   const { authClient, localization, avatar } = useAuth();
   const { data: session } = useSession(authClient);
@@ -34,6 +35,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   const isPending = updatePending || isUploading || isDeleting;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -62,7 +64,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(false);
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function handleDelete() {
     const currentImage = session?.user.image;
 
