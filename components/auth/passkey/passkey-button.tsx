@@ -9,7 +9,7 @@ import {
   useSignInPasskey,
 } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -65,6 +65,15 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const addPasskey = useAddPasskey(authClient, { retry: false });
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  // This is a client-only WebAuthn interaction, not a progressively enhanced
+  // form submit. Keep the streamed button disabled until its handler exists.
+  const isClientReady = useSyncExternalStore(
+    () => () => {
+      // Hydration readiness has no external subscription.
+    },
+    () => true,
+    () => false,
+  );
 
   // Surfaces passkeys in the browser's autofill dropdown while the sign-in
   // form is open. The button stays for anyone who dismisses it.
@@ -167,7 +176,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         // conditional request can permanently disable the explicit recovery
         // path. `pending` exclusively tracks a foreground ceremony started by
         // this button and prevents duplicate user-initiated requests.
-        disabled={pending}
+        disabled={!isClientReady || pending}
         className={cn(
           "w-full",
           pending && "pointer-events-none opacity-50",
