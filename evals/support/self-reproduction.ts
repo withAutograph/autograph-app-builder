@@ -20,15 +20,16 @@ const ignored = new Set([".git", ".next", ".artifacts", "node_modules", "coverag
 
 export async function readSource(root: string, current = root): Promise<SourceFile[]> {
   const entries = await readdir(current, { withFileTypes: true });
-  const output: SourceFile[] = [];
-  for (const entry of entries) {
-    if (ignored.has(entry.name) || entry.name.startsWith(".")) continue;
-    const path = join(current, entry.name);
-    if (entry.isDirectory()) output.push(...(await readSource(root, path)));
-    else if (entry.isFile() && /\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name))
-      output.push({ path: relative(root, path), content: await readFile(path, "utf-8") });
-  }
-  return output;
+  const sourceFiles = await Promise.all(
+    entries.map(async (entry): Promise<SourceFile[]> => {
+      if (ignored.has(entry.name) || entry.name.startsWith(".")) return [];
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) return readSource(root, path);
+      if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) return [];
+      return [{ path: relative(root, path), content: await readFile(path, "utf-8") }];
+    }),
+  );
+  return sourceFiles.flat();
 }
 
 function any(files: SourceFile[], expression: RegExp) {

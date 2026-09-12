@@ -86,6 +86,7 @@ function run(
 
 async function waitForEve(url: string, signal: AbortSignal) {
   const deadline = Date.now() + 120_000;
+  // oxlint-disable eslint/no-await-in-loop -- readiness polling must wait for each request before retrying.
   while (Date.now() < deadline && !signal.aborted) {
     try {
       const response = await fetch(url, { signal });
@@ -97,6 +98,7 @@ async function waitForEve(url: string, signal: AbortSignal) {
       setTimeout(resolve, 500);
     });
   }
+  // oxlint-enable eslint/no-await-in-loop
   throw new Error("The local Eve agent did not become ready within two minutes.");
 }
 
@@ -117,7 +119,9 @@ async function main() {
   const controller = new AbortController();
   const nextPort = await availableLoopbackPort(configuredNextPort);
   let evePort = await availableLoopbackPort(configuredEvePort);
+  // oxlint-disable eslint/no-await-in-loop -- each candidate port must be checked before another is requested.
   while (evePort === nextPort) evePort = await availableLoopbackPort(undefined);
+  // oxlint-enable eslint/no-await-in-loop
   const url = `http://127.0.0.1:${evePort}`;
   const development = spawn(
     "mise",
@@ -178,6 +182,7 @@ async function main() {
       { timeoutMs: generationTimeoutMs },
     );
     await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
+    // oxlint-disable eslint/no-await-in-loop -- each Eve continuation depends on the preceding invocation result.
     for (let turn = 0; turn < 8 && invocation.code === 3; turn += 1) {
       let result: unknown;
       try {
@@ -199,6 +204,7 @@ async function main() {
       );
       await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
     }
+    // oxlint-enable eslint/no-await-in-loop
     await writeFile(
       join(candidateRoot, "self-reproduction.workflow-results.json"),
       JSON.stringify(
