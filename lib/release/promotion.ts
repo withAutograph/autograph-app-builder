@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
 
 import { list as listTar } from "tar";
 import { z } from "zod";
@@ -167,7 +167,7 @@ function git(root: string, ...args: string[]) {
 
 export async function exactCleanGitSource(rootInput: string, label: string) {
   if (!isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
-  const requested = resolve(rootInput);
+  const requested = pathResolve(rootInput);
   const root = await realpath(requested);
   const info = await lstat(root);
   if (
@@ -316,7 +316,7 @@ function within(root: string, path: string) {
 }
 
 async function exactFile(root: string, path: string, expected: string) {
-  const absolute = resolve(root, path);
+  const absolute = pathResolve(root, path);
   if (!within(root, absolute) || basename(path) === "")
     throw new Error("Release receipt path escaped its candidate root.");
   let cursor = absolute;
@@ -326,7 +326,7 @@ async function exactFile(root: string, path: string, expected: string) {
     if (component.isSymbolicLink())
       throw new Error(`Release candidate path contained a link: ${path}`);
     if (cursor === root) break;
-    const parent = resolve(cursor, "..");
+    const parent = pathResolve(cursor, "..");
     if (!within(root, parent)) throw new Error("Release candidate path escaped its root.");
     cursor = parent;
   }
@@ -342,10 +342,10 @@ export async function verifyPromotionCandidate(input: {
   candidateRoot: string;
   receiptPath?: string;
 }) {
-  const root = await realpath(resolve(input.candidateRoot));
+  const root = await realpath(pathResolve(input.candidateRoot));
   const rootInfo = await lstat(root);
   if (
-    root !== resolve(input.candidateRoot) ||
+    root !== pathResolve(input.candidateRoot) ||
     !rootInfo.isDirectory() ||
     rootInfo.isSymbolicLink() ||
     rootInfo.uid !== process.getuid?.() ||
