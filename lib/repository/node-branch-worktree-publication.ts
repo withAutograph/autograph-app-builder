@@ -757,35 +757,37 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
   const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
   const result: TreeEntry[] = [];
   for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
-    const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40,64})\t(.+)$/u.exec(
-      record,
-    );
+    const match =
+      /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        record,
+      );
     if (match === null) throw new Error("The source tree contains an unsupported entry.");
-    if (match[1] === "160000" || match[2] !== "blob")
+    const { mode, type, objectId, path } = match.groups ?? {};
+    if (mode === "160000" || type !== "blob")
       throw new Error("Branch-worktree publication does not materialize Git submodules.");
-    const { 4: path } = match;
-    if (!safeSourcePath(path)) throw new Error("The source tree contains an unsafe path.");
-    const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
-    if (match[1] === "120000") {
+    if (path === undefined || objectId === undefined || !safeSourcePath(path))
+      throw new Error("The source tree contains an unsafe path.");
+    const bytes = gitBuffer(sourcePath, ["cat-file", "blob", objectId]);
+    if (mode === "120000") {
       const target = bytes.toString("utf-8");
       if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0"))
         throw new Error("The source tree contains an invalid symbolic link.");
       result.push({
         path,
         mode: "120000",
-        objectId: match[3],
+        objectId,
         bytes,
         state: { kind: "symlink", digest: contentDigest(bytes) },
       });
       continue;
     }
-    const mode = match[1] === "100755" ? "755" : "644";
+    const fileMode = mode === "100755" ? "755" : "644";
     result.push({
       path,
-      mode,
-      objectId: match[3],
+      mode: fileMode,
+      objectId,
       bytes,
-      state: { kind: "regular", mode, digest: contentDigest(bytes) },
+      state: { kind: "regular", mode: fileMode, digest: contentDigest(bytes) },
     });
   }
   return result;
@@ -966,7 +968,7 @@ async function materializeAtomically(
         await handle.sync();
       } finally {
         await handle.close();
-  }
+      }
     }
     await rename(temporary, target);
     await syncDirectory(dirname(target));

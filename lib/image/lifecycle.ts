@@ -11,8 +11,8 @@ export const ARRUSTED_IMAGE_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0
 
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
-const secretKey = /(authorization|cookie|credential|password|secret|token)/iu;
-const secretValue = /(bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
+const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
+const secretValue = /(?<value>bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
 const digestReference = new RegExp(
   `^${IMAGE_REPOSITORY.replaceAll(".", "[.]")}@sha256:[0-9a-f]{64}$`,
   "u",

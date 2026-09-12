@@ -249,13 +249,15 @@ export function inspectSupportedTemplateDependencyClosure(
   const tree = git(repositoryRoot, ["rev-parse", `${resolvedCommit}^{tree}`]);
   const files = SUPPORTED_TEMPLATE_DEPENDENCY_PATHS.map((path) => {
     const entry = git(repositoryRoot, ["ls-tree", resolvedCommit, "--", path]);
-    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
-    if (match === null || match[3] !== path)
+    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+      entry,
+    );
+    if (match === null || match.groups?.path !== path)
       throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
     return {
       path,
-      mode: match[1] as DependencyFile["mode"],
-      objectId: match[2],
+      mode: match.groups.mode as DependencyFile["mode"],
+      objectId: match.groups.objectId,
       sha256: sha256(gitBytes(repositoryRoot, ["show", `${resolvedCommit}:${path}`])),
     };
   });
@@ -384,8 +386,10 @@ export function inspectRepositoryReleasePolicyAtGitSnapshot(input: {
       "The existing-repository release policy is not bound to the reviewed Git snapshot.",
     );
   const entry = git(input.sourcePath, ["ls-tree", sourceSha, "--", repositoryReleasePolicyPath]);
-  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
-  if (match === null || match[3] !== repositoryReleasePolicyPath)
+  const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+    entry,
+  );
+  if (match === null || match.groups?.path !== repositoryReleasePolicyPath)
     return releasePolicyObservation({
       sourceSha,
       sourceTree,
@@ -396,8 +400,8 @@ export function inspectRepositoryReleasePolicyAtGitSnapshot(input: {
     sourceTree,
     workflow: {
       status: "present",
-      mode: match[1] as "100644" | "100755",
-      objectId: match[2]!,
+      mode: match.groups.mode as "100644" | "100755",
+      objectId: match.groups.objectId,
       bytes: gitBytes(input.sourcePath, ["show", `${sourceSha}:${repositoryReleasePolicyPath}`]),
     },
   });
@@ -431,8 +435,8 @@ function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
 
 function declaredMiseTasks(source: string): Map<string, number> {
   const tasks = new Map<string, number>();
-  for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
-    const [, name] = match;
+  for (const match of source.matchAll(/^\[tasks\."(?<name>[^"]+)"\]\s*$/gmu)) {
+    const name = match.groups?.name;
     if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
   }
   return tasks;
@@ -634,10 +638,12 @@ function inspectSupportedRepositoryAtPath(sourcePath: string): EligibilityResult
     [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map((path) => {
       if (sourceSha === undefined) return [path, undefined];
       const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
-      const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        entry,
+      );
       return [
         path,
-        match !== null && match[3] === path
+        match !== null && match.groups?.path === path
           ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString("utf-8")
           : undefined,
       ];
@@ -1114,9 +1120,11 @@ export async function prepareSupportedSandboxWorkspace(
     .split("\0")
     .filter(Boolean)
     .map((entry) => {
-      const match = /^(\d+) (\w+) ([0-9a-f]{40})\t(.+)$/u.exec(entry);
+      const match = /^(?<mode>\d+) (?<type>\w+) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+        entry,
+      );
       if (match === null) throw new Error("The reviewed Git tree contains an invalid entry.");
-      const [, mode, type, objectId, path] = match;
+      const { mode, type, objectId, path } = match.groups ?? {};
       if (
         type !== "blob" ||
         !["100644", "100755"].includes(mode!) ||
