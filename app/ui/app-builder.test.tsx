@@ -271,6 +271,8 @@ afterEach(async () => {
   builderActions.continueBuilderHandoff.mockReset();
   builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
   builderActions.loadActiveBuilderDraft.mockReset();
+  builderActions.saveActiveBuilderDraft.mockReset();
+  builderActions.clearBuilderDraft.mockReset();
   draftFetch.mockClear();
 });
 
@@ -591,17 +593,6 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(afterEditing.defaultPrevented).toBe(false);
   });
 
-  it("does not autosave an untouched hydrated builder", async () => {
-    vi.useFakeTimers();
-    await render(
-      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
-    );
-
-    await act(async () => vi.advanceTimersByTimeAsync(1_000));
-
-    expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
-  });
-
   it("autosaves the latest form revision after editing", async () => {
     vi.useFakeTimers();
     const view = await render(
@@ -622,6 +613,17 @@ describe("Vercel-faithful App Builder flow", () => {
       }),
     );
     expect(view.textContent).toContain("Draft saved");
+  });
+
+  it("does not autosave an untouched hydrated builder", async () => {
+    vi.useFakeTimers();
+    await render(
+      <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
   });
 
   it("replaces locally edited RHF values with a newer server revision", async () => {
