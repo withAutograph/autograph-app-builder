@@ -87,7 +87,7 @@ export function classifySandboxCloneFailure(stderr: string) {
 
 export function sandboxCloneFailureStage(stderr: string) {
   return stderr.match(
-    /AUTOGRAPH_CLONE_STAGE=(prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
+    /AUTOGRAPH_CLONE_STAGE=(?<stage>prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
   )?.[1];
 }
 

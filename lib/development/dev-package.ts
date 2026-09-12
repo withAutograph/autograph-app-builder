@@ -286,7 +286,7 @@ async function disableGlobalDevelopmentPackage(codexHome: string) {
       if (line.trimStart().startsWith("[")) {
         inPlugin = line.trim() === `[plugins."${DEVELOPMENT_PLUGIN_SELECTOR}"]`;
       }
-      if (inPlugin && /^\s*enabled\s*=\s*(true|false)\s*$/u.test(line)) {
+      if (inPlugin && /^\s*enabled\s*=\s*(?<enabled>true|false)\s*$/u.test(line)) {
         updated = true;
         return "enabled = false";
       }

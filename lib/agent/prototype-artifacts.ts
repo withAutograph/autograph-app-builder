@@ -7,7 +7,7 @@ import {
 import { sha256, validAppId } from "./workflow-state";
 
 export const prototypeArtifactPathPattern =
-  /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(app-spec\.md|decisions\.md|index\.html)$/u;
+  /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(?<fileName>app-spec\.md|decisions\.md|index\.html)$/u;
 
 export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as const;
 

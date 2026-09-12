@@ -68,7 +68,7 @@ const preview: Preview = {
     nextjs: { appDirectory: true },
     controls: {
       matchers: {
-        color: /(background|color)$/iu,
+        color: /(?<property>background|color)$/iu,
         date: /Date$/iu,
       },
     },

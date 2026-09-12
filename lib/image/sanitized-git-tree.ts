@@ -108,7 +108,10 @@ export function materializeSanitizedGitTree(
   mkdirSync(destinationRoot, { mode: 0o700 });
   try {
     for (const row of listing.split("\0").filter(Boolean)) {
-      const match = /^([0-9]{6}) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(row);
+      const match =
+        /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+          row,
+        );
       if (match === null) throw new Error("Sanitized context contains an unsupported Git entry.");
       const [, mode, type, objectId, path] = match;
       if (

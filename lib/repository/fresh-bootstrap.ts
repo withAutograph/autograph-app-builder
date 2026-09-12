@@ -257,7 +257,7 @@ function commitActor(identity: FreshBootstrapIdentity): string {
   )
     throw new Error("The fresh-bootstrap Git identity is invalid.");
   const milliseconds = Date.parse(identity.commitTimestamp);
-  const offset = /([+-])(\d{2}):(\d{2})$/u.exec(identity.commitTimestamp);
+  const offset = /(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2})$/u.exec(identity.commitTimestamp);
   if (!Number.isFinite(milliseconds) || offset === null)
     throw new Error("The fresh-bootstrap commit timestamp is invalid.");
   return `${identity.authorName} <${identity.authorEmail}> ${Math.floor(milliseconds / 1000)} ${offset[1]}${offset[2]}${offset[3]}`;

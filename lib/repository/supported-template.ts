@@ -249,7 +249,9 @@ export function inspectSupportedTemplateDependencyClosure(
   const tree = git(repositoryRoot, ["rev-parse", `${resolvedCommit}^{tree}`]);
   const files = SUPPORTED_TEMPLATE_DEPENDENCY_PATHS.map((path) => {
     const entry = git(repositoryRoot, ["ls-tree", resolvedCommit, "--", path]);
-    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+      entry,
+    );
     if (match === null || match[3] !== path)
       throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
     return {
@@ -384,7 +386,9 @@ export function inspectRepositoryReleasePolicyAtGitSnapshot(input: {
       "The existing-repository release policy is not bound to the reviewed Git snapshot.",
     );
   const entry = git(input.sourcePath, ["ls-tree", sourceSha, "--", repositoryReleasePolicyPath]);
-  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+  const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+    entry,
+  );
   if (match === null || match[3] !== repositoryReleasePolicyPath)
     return releasePolicyObservation({
       sourceSha,
@@ -431,7 +435,7 @@ function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
 
 function declaredMiseTasks(source: string): Map<string, number> {
   const tasks = new Map<string, number>();
-  for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
+  for (const match of source.matchAll(/^\[tasks\."(?<name>[^"]+)"\]\s*$/gmu)) {
     const [, name] = match;
     if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
   }
@@ -573,7 +577,9 @@ async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<Eli
     [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map((path) => {
       if (sourceSha === undefined) return [path, undefined];
       const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
-      const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        entry,
+      );
       return [
         path,
         match !== null && match[3] === path
@@ -1115,7 +1121,9 @@ export async function prepareSupportedSandboxWorkspace(
     .split("\0")
     .filter(Boolean)
     .map((entry) => {
-      const match = /^(\d+) (\w+) ([0-9a-f]{40})\t(.+)$/u.exec(entry);
+      const match = /^(?<mode>\d+) (?<type>\w+) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+        entry,
+      );
       if (match === null) throw new Error("The reviewed Git tree contains an invalid entry.");
       const [, mode, type, objectId, path] = match;
       if (

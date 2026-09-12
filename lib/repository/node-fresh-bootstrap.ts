@@ -842,9 +842,10 @@ function exactSourceTree(
   ]);
   const files: ExactFile[] = [];
   for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
-    const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(
-      record,
-    );
+    const match =
+      /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+        record,
+      );
     if (
       match === null ||
       match[1] === "120000" ||
@@ -1592,7 +1593,9 @@ async function assertExactRepository(
     .split("\0")
     .filter(Boolean)
     .map((record) => {
-      const match = /^(100644|100755) blob ([0-9a-f]{40})\t(.+)$/u.exec(record);
+      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+        record,
+      );
       if (match === null || !safeSourcePath(match[3]))
         throw new Error("The final repository tree is malformed.");
       return { path: match[3], mode: match[1], blob: match[2] };

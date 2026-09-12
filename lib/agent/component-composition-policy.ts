@@ -139,7 +139,7 @@ export function bindArrustedComponentCompositionPolicy(input: {
 
 function importsFrom(content: string): string[] {
   const imports = new Set<string>();
-  const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
+  const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu;
   for (const match of content.matchAll(pattern)) {
     const [, specifier] = match;
     if (specifier !== undefined) imports.add(specifier);

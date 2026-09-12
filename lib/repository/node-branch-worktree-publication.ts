@@ -770,7 +770,7 @@ async function assertOwnedPartialWorktree(
         if (!state.isFile() || state.isSymbolicLink())
           throw new Error("The partial worktree Git link is unsafe.");
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf-8"));
+        const match = /^gitdir: (?<gitdir>.+)\n?$/u.exec(await readFile(target, "utf-8"));
         if (match === null || !isAbsolute(match[1]) || pathResolve(match[1]) !== exactAdminPaths[0])
           throw new Error("The partial worktree Git link conflicts with intent.");
         exactGitLinkSeen = true;
@@ -882,9 +882,10 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
   const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
   const result: TreeEntry[] = [];
   for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
-    const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40,64})\t(.+)$/u.exec(
-      record,
-    );
+    const match =
+      /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        record,
+      );
     if (match === null) throw new Error("The source tree contains an unsupported entry.");
     if (match[1] === "160000" || match[2] !== "blob")
       throw new Error("Branch-worktree publication does not materialize Git submodules.");

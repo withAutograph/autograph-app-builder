@@ -14,7 +14,7 @@ const verifiedReleaseInstall = {
 
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
-  const match = section.match(/```sh\n([\s\S]*?)\n```/u);
+  const match = section.match(/```sh\n(?<shell>[\s\S]*?)\n```/u);
   if (!match) throw new Error(`${heading} has no shell block.`);
   return match[1];
 }

@@ -46,7 +46,7 @@ const unavailableConfirmationMessage = "I couldn't verify this action, so it was
 const unavailableContinuationMessage =
   "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
 const maximumPrototypeBytes = 8 * 1024 * 1024;
-const prototypePathPattern = /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
+const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const prefixedSha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);

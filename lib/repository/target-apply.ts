@@ -214,7 +214,7 @@ function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandF
 
 function missingDependency(output: string): string | undefined {
   const match =
-    /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
+    /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(?<dependency>@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
       output,
     );
   return match?.[1];
@@ -302,7 +302,7 @@ async function stageAcceptedAppSpec(input: {
   });
 }
 
-const snapshotLine = /^([0-7]{3,4})\t([0-9a-f]{64})\t(.+)$/u;
+const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)$/u;
 
 export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
 const { createHash } = require("node:crypto");

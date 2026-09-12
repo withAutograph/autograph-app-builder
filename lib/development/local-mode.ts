@@ -186,7 +186,7 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
   );
   const paths: string[] = [];
   for (const entry of stdout.toString("utf-8").split("\0").filter(Boolean)) {
-    const staged = /^(\d{6}) [0-9a-f]+ [0-3]\t([\s\S]*)$/u.exec(entry);
+    const staged = /^(?<mode>\d{6}) [0-9a-f]+ [0-3]\t(?<path>[\s\S]*)$/u.exec(entry);
     const path = staged?.[2] ?? entry;
     if (!safeRelativePath(path)) continue;
     if (staged?.[1] === "160000") {

@@ -97,7 +97,7 @@ export function normalizeBuildReadyAppSpec(content: string): string {
   const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
   if (heading === null) return normalizedContent;
   const section = normalizedContent.slice(heading.index + heading[0].length);
-  const block = /```json[ \t]*\n([\s\S]*?)\n[ \t]*```/iu.exec(section);
+  const block = /```json[ \t]*\n(?<content>[\s\S]*?)\n[ \t]*```/iu.exec(section);
   if (block?.[1] === undefined) return normalizedContent;
 
   let parsed: unknown;
@@ -156,7 +156,7 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
   const block =
     handoffSection === undefined
       ? null
-      : /^[ \t]*```json[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(handoffSection);
+      : /^[ \t]*```json[ \t]*\r?\n(?<content>[\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(handoffSection);
   if (block?.[1] === undefined) {
     issues.push({
       code: "build_handoff_format",

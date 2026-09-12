@@ -368,7 +368,7 @@ describe("trusted Node launcher", () => {
         );
         continue;
       }
-      if (!/(mise which (?:node|pnpm)|node_modules\/)/u.test(source)) continue;
+      if (!/(?<path>mise which (?:node|pnpm)|node_modules\/)/u.test(source)) continue;
       expect(source, path).toContain("trusted-node-launcher");
     }
   });
