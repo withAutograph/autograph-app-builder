@@ -148,11 +148,11 @@ export function createRepositoryAccessRuntime(input: {
   preparedIntent?: BuilderHandoffIntent;
   returnTo?: ProviderConnectionReturn["returnTo"];
 }): RepositoryAccessRuntime {
-  const classify = async (value: {
+  const classify = async (repositoryInput: {
     repository: string;
     selectedInstallationId?: string;
   }): Promise<RepositoryAccessResult> => {
-    const selected = withPreparedGitHubSelection(value, input.preparedIntent);
+    const selected = withPreparedGitHubSelection(repositoryInput, input.preparedIntent);
     const deniedInstallations = new Set<string>();
     let unavailable = false;
     const result = await classifyGitHubRepositoryAccess({
