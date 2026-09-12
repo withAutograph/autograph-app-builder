@@ -9,11 +9,11 @@ const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
 
 const copyPortablePackage = async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-package-"));
-  for (const entry of portableEntries)
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await cp(resolve(repositoryRoot, entry), resolve(root, entry), {
-      recursive: true,
-    });
+  await Promise.all(
+    portableEntries.map((entry) =>
+      cp(resolve(repositoryRoot, entry), resolve(root, entry), { recursive: true }),
+    ),
+  );
   return root;
 };
 
@@ -265,11 +265,11 @@ allowed-tools: "autograph_start autograph_get"
   it("rejects a linked artifact parent before removing output", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-output-"));
     const outside = await mkdtemp(resolve(tmpdir(), "agent-plugin-outside-"));
-    for (const entry of portableEntries)
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await cp(resolve(repositoryRoot, entry), resolve(root, entry), {
-        recursive: true,
-      });
+    await Promise.all(
+      portableEntries.map((entry) =>
+        cp(resolve(repositoryRoot, entry), resolve(root, entry), { recursive: true }),
+      ),
+    );
     await symlink(outside, resolve(root, ".artifacts"));
     await expect(
       buildAgentPluginPackage({

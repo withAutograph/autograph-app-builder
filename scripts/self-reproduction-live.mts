@@ -84,20 +84,37 @@ function run(
   );
 }
 
-async function waitForEve(url: string, signal: AbortSignal) {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline && !signal.aborted) {
-    try {
-      const response = await fetch(url, { signal });
-      if (response.status < 500) return;
-    } catch {
-      // The development process is expected to take time while it prepares its isolated runtime.
-    }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 500);
-    });
+const delay = (milliseconds: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+
+async function waitForEveAttempt(
+  url: string,
+  signal: AbortSignal,
+  deadline: number,
+): Promise<void> {
+  if (Date.now() >= deadline || signal.aborted)
+    throw new Error("The local Eve agent did not become ready within two minutes.");
+  try {
+    const response = await fetch(url, { signal });
+    if (response.status < 500) return;
+  } catch {
+    // The development process is expected to take time while it prepares its isolated runtime.
   }
-  throw new Error("The local Eve agent did not become ready within two minutes.");
+  await delay(500);
+  return waitForEveAttempt(url, signal, deadline);
+}
+
+const waitForEve = (url: string, signal: AbortSignal) =>
+  waitForEveAttempt(url, signal, Date.now() + 120_000);
+
+async function availableDistinctLoopbackPort(
+  excludedPort: number,
+  configured: string | undefined,
+): Promise<number> {
+  const port = await availableLoopbackPort(configured);
+  return port === excludedPort ? availableDistinctLoopbackPort(excludedPort, undefined) : port;
 }
 
 function answerFor(result: unknown, answers: Record<string, string>) {
@@ -105,6 +122,30 @@ function answerFor(result: unknown, answers: Record<string, string>) {
   if (serialized.includes("approve")) return "approve";
   for (const [key, value] of Object.entries(answers)) if (serialized.includes(key)) return value;
   return "continue with the benchmark defaults";
+}
+
+type Invocation = Awaited<ReturnType<typeof run>>;
+
+async function resumeInvocation(
+  invocation: Invocation,
+  remainingTurns: number,
+  url: string,
+  answers: Record<string, string>,
+): Promise<Invocation> {
+  if (remainingTurns === 0 || invocation.code !== 3) return invocation;
+  let result: unknown;
+  try {
+    result = JSON.parse(invocation.stdout);
+  } catch {
+    throw new Error("Eve paused without a parseable resumable result.");
+  }
+  const resumed = await run(
+    process.execPath,
+    ["node_modules/eve/bin/eve.js", "invoke", "--url", url, "--resume", answerFor(result, answers)],
+    { input: invocation.stdout, timeoutMs: generationTimeoutMs },
+  );
+  await appendFile(transcriptPath, `${resumed.stdout}\n${resumed.stderr}\n`);
+  return resumeInvocation(resumed, remainingTurns - 1, url, answers);
 }
 
 async function main() {
@@ -116,8 +157,7 @@ async function main() {
   ).responses;
   const controller = new AbortController();
   const nextPort = await availableLoopbackPort(configuredNextPort);
-  let evePort = await availableLoopbackPort(configuredEvePort);
-  while (evePort === nextPort) evePort = await availableLoopbackPort(undefined);
+  const evePort = await availableDistinctLoopbackPort(nextPort, configuredEvePort);
   const url = `http://127.0.0.1:${evePort}`;
   const development = spawn(
     "mise",
@@ -178,27 +218,7 @@ async function main() {
       { timeoutMs: generationTimeoutMs },
     );
     await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
-    for (let turn = 0; turn < 8 && invocation.code === 3; turn += 1) {
-      let result: unknown;
-      try {
-        result = JSON.parse(invocation.stdout);
-      } catch {
-        throw new Error("Eve paused without a parseable resumable result.");
-      }
-      invocation = await run(
-        process.execPath,
-        [
-          "node_modules/eve/bin/eve.js",
-          "invoke",
-          "--url",
-          url,
-          "--resume",
-          answerFor(result, answers),
-        ],
-        { input: invocation.stdout, timeoutMs: generationTimeoutMs },
-      );
-      await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
-    }
+    invocation = await resumeInvocation(invocation, 8, url, answers);
     await writeFile(
       join(candidateRoot, "self-reproduction.workflow-results.json"),
       JSON.stringify(

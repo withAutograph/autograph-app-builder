@@ -73,40 +73,26 @@ describe("Preview OAuth activation contract", () => {
         signingAlgorithm: "ES256",
       },
     ]);
-    for (const action of [
-      "create",
-      "read",
-      "update",
-      "delete",
-      "list",
-      "rotate",
-      "configure-client-credentials-scopes",
-    ] as const) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(
-        options.clientPrivileges?.({
-          headers: new Headers(),
-          action,
-        }),
-      ).resolves.toBe(false);
-    }
-    for (const action of [
-      "create",
-      "read",
-      "update",
-      "delete",
-      "list",
-      "link",
-      "unlink",
-    ] as const) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(
-        options.resourcePrivileges?.({
-          headers: new Headers(),
-          action,
-        }),
-      ).resolves.toBe(false);
-    }
+    await Promise.all([
+      ...(
+        [
+          "create",
+          "read",
+          "update",
+          "delete",
+          "list",
+          "rotate",
+          "configure-client-credentials-scopes",
+        ] as const
+      ).map((action) =>
+        expect(options.clientPrivileges?.({ headers: new Headers(), action })).resolves.toBe(false),
+      ),
+      ...(["create", "read", "update", "delete", "list", "link", "unlink"] as const).map((action) =>
+        expect(options.resourcePrivileges?.({ headers: new Headers(), action })).resolves.toBe(
+          false,
+        ),
+      ),
+    ]);
   });
 
   it("binds consent and token claims to the same live exact membership", async () => {
@@ -263,22 +249,23 @@ describe("Preview OAuth activation contract", () => {
   });
 
   it("rejects missing and private_key_jwt auth before CIMD persistence", async () => {
-    for (const tokenEndpointAuthMethod of [undefined, "private_key_jwt"]) {
-      const options = buildPreviewCimdOptions({
-        fetchClientMetadataResource: vi.fn(async () =>
-          Response.json({
-            client_name: "Privileged client",
-            redirect_uris: ["https://client.example/callback"],
-            ...(tokenEndpointAuthMethod === undefined
-              ? {}
-              : { token_endpoint_auth_method: tokenEndpointAuthMethod }),
-          }),
-        ),
-      });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(
-        options.fetchClientMetadataResource("https://client.example/metadata.json"),
-      ).rejects.toThrow("token_endpoint_auth_method none");
-    }
+    await Promise.all(
+      [undefined, "private_key_jwt"].map(async (tokenEndpointAuthMethod) => {
+        const options = buildPreviewCimdOptions({
+          fetchClientMetadataResource: vi.fn(async () =>
+            Response.json({
+              client_name: "Privileged client",
+              redirect_uris: ["https://client.example/callback"],
+              ...(tokenEndpointAuthMethod === undefined
+                ? {}
+                : { token_endpoint_auth_method: tokenEndpointAuthMethod }),
+            }),
+          ),
+        });
+        await expect(
+          options.fetchClientMetadataResource("https://client.example/metadata.json"),
+        ).rejects.toThrow("token_endpoint_auth_method none");
+      }),
+    );
   });
 });

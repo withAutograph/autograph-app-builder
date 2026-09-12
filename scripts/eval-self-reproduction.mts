@@ -4,14 +4,13 @@ import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { capturePreview } from "./design-quality/browser";
+import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   auditFramework,
   buildRequirements,
   frameworkRequirements,
   prioritizedGaps,
   readSource,
-  type Requirement,
-  type WorkflowEvidence,
 } from "../evals/support/self-reproduction";
 
 const { values } = parseArgs({

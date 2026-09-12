@@ -127,23 +127,23 @@ describe("opaque App Builder handoffs", () => {
     expect(await service.read(lookup)).toMatchObject({ intent });
     expect(await service.status(lookup)).toMatchObject({ status: "expired" });
     await expect(service.resolve(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
-    for (const foreign of [
-      { ...authority, ownerUserId: "user-two" },
-      { ...authority, workspaceId: "workspace-two" },
-    ]) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(service.read({ ...lookup, authority: foreign })).rejects.toBeInstanceOf(
-        BuilderHandoffUnavailableError,
-      );
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(
-        service.renew({
-          ...lookup,
-          authority: foreign,
-          creationRequestId: randomUUID(),
-        }),
-      ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
-    }
+    await Promise.all(
+      [
+        { ...authority, ownerUserId: "user-two" },
+        { ...authority, workspaceId: "workspace-two" },
+      ].flatMap((foreign) => [
+        expect(service.read({ ...lookup, authority: foreign })).rejects.toBeInstanceOf(
+          BuilderHandoffUnavailableError,
+        ),
+        expect(
+          service.renew({
+            ...lookup,
+            authority: foreign,
+            creationRequestId: randomUUID(),
+          }),
+        ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError),
+      ]),
+    );
   });
 
   it("renews the same start identity across concurrent tabs, lost replies, and service restart", async () => {
@@ -344,9 +344,11 @@ describe("opaque App Builder handoffs", () => {
               },
             };
       vi.spyOn(store, "read").mockResolvedValue(forged);
-      for (const read of [service.read, service.status, service.resolve])
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+      await Promise.all(
+        [service.read, service.status, service.resolve].map((read) =>
+          expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError),
+        ),
+      );
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),
       ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
