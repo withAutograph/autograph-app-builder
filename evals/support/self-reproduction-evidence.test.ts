@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   candidateExportFromEvidence,
+  candidateExportProvenanceFromEvidence,
   evidenceCompletion,
   evidencePrefix,
   evidenceSink,
@@ -138,6 +139,25 @@ describe("self-reproduction evidence persistence", () => {
         },
       ]),
     ).toBeUndefined();
+  });
+
+  it("labels validation-failed exports as unreviewed evidence", () => {
+    expect(
+      candidateExportProvenanceFromEvidence([
+        {
+          event: {
+            type: "action.result",
+            data: {
+              toolName: "change_set_status",
+              result: {
+                status: "validation_failed",
+                exportFiles: [{ path: "apps/replica/app/page.tsx", content: "failed" }],
+              },
+            },
+          },
+        },
+      ]),
+    ).toBe("native unreviewed validation-failed export");
   });
 
   it("flushes partial runs and preserves successful and failed tool outcomes in order", () => {

@@ -35,6 +35,7 @@ export default defineEval({
           toolCalls: turn.toolCalls,
           elapsedMs: Date.now() - started,
         });
+        return turn;
       } finally {
         clearInterval(timer);
         checkpoint();
@@ -91,8 +92,34 @@ export default defineEval({
     await t.respondAll("approve");
     t.succeeded();
 
-    await send("Validate the applied creation.");
+    const validation = await send("Validate the applied creation.");
     t.succeeded();
+
+    const validationStatus = validation.toolCalls.find(
+      (call) => call.name === "validate_app_creation" && call.status === "completed",
+    )?.output as { status?: unknown } | undefined;
+    if (validationStatus?.status !== "validated") {
+      await send(
+        "Validation did not pass. Export the current applied candidate source for diagnosis by calling change_set_status with includeContent true, then report the validation failure without reviewing or accepting it.",
+      );
+      t.succeeded();
+      t.calledTool("change_set_status", { count: 1 });
+      t.check(
+        validation.message,
+        satisfies(
+          () => false,
+          "the generated candidate passed repository validation before review",
+        ),
+      );
+      emit({
+        kind: "eval-completed",
+        candidate: {
+          status: "available",
+          source: "unreviewed validation-failed change_set_status.exportFiles",
+        },
+      });
+      return;
+    }
 
     await send("Inspect the validated change set.");
     t.succeeded();

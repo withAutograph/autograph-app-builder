@@ -18,6 +18,7 @@ import {
 import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   candidateExportFromEvidence,
+  candidateExportProvenanceFromEvidence,
   digest,
   evidenceCompletion,
   evidenceSink,
@@ -521,7 +522,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         }
         candidate = {
           status: "available",
-          provenance: "native reviewed change_set_status export",
+          provenance: candidateExportProvenanceFromEvidence(records),
           files: exported.map((file) => ({
             path: `candidate/${file.path}`,
             sha256: digest(file.content),

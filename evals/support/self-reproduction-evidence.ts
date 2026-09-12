@@ -98,6 +98,28 @@ export function evidenceSink(
 
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
+export function candidateExportProvenanceFromEvidence(
+  records: readonly Record<string, unknown>[],
+): "native reviewed change_set_status export" | "native unreviewed validation-failed export" {
+  for (const record of records.toReversed()) {
+    const event = record.event as
+      | {
+          type?: unknown;
+          data?: { toolName?: unknown; result?: { status?: unknown; exportFiles?: unknown } };
+        }
+      | undefined;
+    if (
+      event?.type === "action.result" &&
+      event.data?.toolName === "change_set_status" &&
+      Array.isArray(event.data.result?.exportFiles)
+    )
+      return event.data.result?.status === "validation_failed"
+        ? "native unreviewed validation-failed export"
+        : "native reviewed change_set_status export";
+  }
+  return "native reviewed change_set_status export";
+}
+
 export function candidateExportFromEvidence(
   records: readonly Record<string, unknown>[],
 ): CandidateExportFile[] | undefined {

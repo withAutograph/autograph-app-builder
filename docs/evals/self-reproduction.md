@@ -28,10 +28,11 @@ SIGINT/SIGTERM and the generation deadline terminate the launcher process group
 and finalize partial reports. A hard kill can leave the initial reports plus the
 incremental transcript for later inspection.
 
-Candidate export remains explicit: the native eval currently has no candidate
-export API wired to its reviewed sandbox change set. The report therefore writes
-an unavailable marker and blocks candidate framework/workflow conclusions. A
-successful native eval is not a successful visual comparison.
+Candidate export is evidence-aware. A passing run retains the reviewed sandbox
+change set. A validation failure retains the applied text source as explicitly
+unreviewed diagnostic evidence, so framework and implementation gaps can still
+be assessed without treating the candidate as successful. Binary artifacts are
+listed as omissions rather than decoded as text.
 
 For an independently exported candidate and running reference/candidate runtimes:
 
