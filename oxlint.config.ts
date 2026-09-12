@@ -11,7 +11,6 @@ const deferredRules = Object.fromEntries(
     "eslint/func-names",
     "eslint/max-classes-per-file",
     "eslint/no-duplicate-imports",
-    "eslint/no-useless-escape",
     "eslint/no-useless-return",
     "eslint/no-void",
     "eslint/one-var",

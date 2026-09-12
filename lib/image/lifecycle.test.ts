@@ -186,15 +186,15 @@ case "$*" in
   version) printf 'gh version 2.98.0 (fixture)\n' ;;
   *)
     [ "\${XDG_STATE_HOME:-}" = '${state}' ] || exit 42
-    /bin/mkdir -p "\$XDG_STATE_HOME/gh"
-    /bin/chmod 700 "\$XDG_STATE_HOME/gh"
-    printf '%s\n' 'fixture-device-id' > "\$XDG_STATE_HOME/gh/device-id"
-    /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"
+    /bin/mkdir -p "$XDG_STATE_HOME/gh"
+    /bin/chmod 700 "$XDG_STATE_HOME/gh"
+    printf '%s\n' 'fixture-device-id' > "$XDG_STATE_HOME/gh/device-id"
+    /bin/chmod 600 "$XDG_STATE_HOME/gh/device-id"
     case "$*" in
       'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"gitProtocol":"https","host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
       'auth token --hostname github.com --user withAutograph') ${
         mutateStateDuringTokenRead
-          ? `printf '%s\n' 'mutated-device-id' > "\$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"; `
+          ? `printf '%s\n' 'mutated-device-id' > "$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "$XDG_STATE_HOME/gh/device-id"; `
           : ""
       }printf '%s\n' '${token}' ;;
       'api /user --jq .login') printf '%s\n' 'withAutograph' ;;

@@ -4,7 +4,9 @@ const DIRECTORY_BATCH_SIZE = 256;
 const DIRECTORY_TIMEOUT_MS = 30_000;
 
 function quoteSandboxArgument(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
+  const singleQuote = String.fromCharCode(39);
+  const escapedQuote = `${singleQuote}"${singleQuote}"${singleQuote}`;
+  return `${singleQuote}${value.replaceAll(singleQuote, escapedQuote)}${singleQuote}`;
 }
 
 export async function ensureSandboxDirectories(
