@@ -163,7 +163,7 @@ describe("readReference", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: expect.any(Number),
-          message: expect.stringMatching(/possibly .*undefined/i),
+          message: expect.stringMatching(/possibly .*undefined/iu),
         }),
       ]),
     );

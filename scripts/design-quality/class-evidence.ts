@@ -32,7 +32,7 @@ function staticClassName(attribute: ts.JsxAttribute): string | undefined {
  */
 export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicClassSignature[] {
   const candidates: IntrinsicClassSignature[] = [];
-  for (const file of files.filter((file) => /\.tsx?$/i.test(file.path))) {
+  for (const file of files.filter((file) => /\.tsx?$/iu.test(file.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,
@@ -42,7 +42,7 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
     );
     const visit = (node: ts.Node) => {
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-        if (!ts.isIdentifier(node.tagName) || !/^[a-z]/.test(node.tagName.text)) {
+        if (!ts.isIdentifier(node.tagName) || !/^[a-z]/u.test(node.tagName.text)) {
           ts.forEachChild(node, visit);
           return;
         }
@@ -54,7 +54,7 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
         );
         const value = attribute && staticClassName(attribute);
         const classes = value
-          ? [...new Set(value.trim().split(/\s+/).filter(Boolean))].toSorted()
+          ? [...new Set(value.trim().split(/\s+/u).filter(Boolean))].toSorted()
           : [];
         if (!classes.length) {
           ts.forEachChild(node, visit);
@@ -87,7 +87,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
   const candidates: ClassTokenEvidence[] = [];
   const add = (source: ts.SourceFile, node: ts.Node, value: string) => {
     const start = source.getLineAndCharacterOfPosition(node.getStart(source));
-    for (const token of value.trim().split(/\s+/).filter(Boolean))
+    for (const token of value.trim().split(/\s+/u).filter(Boolean))
       candidates.push({
         token,
         source: {
@@ -97,7 +97,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
         },
       });
   };
-  for (const file of files.filter((file) => /\.tsx?$/i.test(file.path))) {
+  for (const file of files.filter((file) => /\.tsx?$/iu.test(file.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,
@@ -167,7 +167,7 @@ export function signatureAttribution(
 
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
 export function exactClassSelector(selector: string | undefined) {
-  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/.test(selector.trim())) return undefined;
+  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) return undefined;
   return selector.trim().slice(1);
 }
 
@@ -192,7 +192,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
       token += escaped;
       index += 1;
     } else if (character === "[") break;
-    else if (/[A-Za-z0-9_-]/.test(character)) token += character;
+    else if (/[A-Za-z0-9_-]/u.test(character)) token += character;
     else return undefined;
   }
   if (!token) return undefined;

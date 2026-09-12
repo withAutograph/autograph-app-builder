@@ -135,9 +135,12 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   await page.goto(`/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`);
   await waitForSocialSignInReady(page);
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
-  await expect(page).toHaveURL(new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`), {
-    timeout: 30_000,
-  });
+  await expect(page).toHaveURL(
+    new RegExp(`/local-oauth/${provider.toLowerCase()}/authorize`, "u"),
+    {
+      timeout: 30_000,
+    },
+  );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })

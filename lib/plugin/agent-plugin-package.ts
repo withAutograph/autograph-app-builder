@@ -26,12 +26,12 @@ const SKILL_FRONTMATTER_FIELDS = new Set([
   "metadata",
   "allowed-tools",
 ]);
-const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const HTTP_FIELD_VALUE = /^[\t\u0020-\u007E\u0080-\u00FF]*$/;
+const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
+const HTTP_FIELD_VALUE = /^[\t\u0020-\u007E\u0080-\u00FF]*$/u;
 const CREDENTIAL_HEADER =
-  /(?:^|[-_])(?:authorization|cookie|credential|password|secret|token|api[-_]?key|private[-_]?key)(?:$|[-_])/i;
+  /(?:^|[-_])(?:authorization|cookie|credential|password|secret|token|api[-_]?key|private[-_]?key)(?:$|[-_])/iu;
 const SECRET_LIKE_HEADER_VALUE =
-  /(?:\$\{|\{\{|\}\}|(?:^|\s)(?:bearer|basic)\s|(?:api[-_ ]?key|secret|password|credential|private[-_ ]?key)\s*[:=]|-----BEGIN [A-Z ]+PRIVATE KEY-----|^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$)/i;
+  /(?:\$\{|\{\{|\}\}|(?:^|\s)(?:bearer|basic)\s|(?:api[-_ ]?key|secret|password|credential|private[-_ ]?key)\s*[:=]|-----BEGIN [A-Z ]+PRIVATE KEY-----|^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$)/iu;
 
 type JsonObject = Record<string, unknown>;
 
@@ -94,7 +94,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
 
 const schemaVersion = (schema: unknown) => {
   if (typeof schema !== "string") return undefined;
-  return schema.match(/\/schemas\/([^/]+)\/(?:plugin|mcp)\.schema\.json$/)?.[1];
+  return schema.match(/\/schemas\/([^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
 };
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
@@ -159,7 +159,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
   const skillPath = resolve(skillDirectory, "SKILL.md");
   await assertRegularFile(pluginRoot, skillPath);
   const contents = await readFile(skillPath, "utf8");
-  const match = contents.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/);
+  const match = contents.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
   if (!match) throw new Error(`${relative(pluginRoot, skillPath)} has invalid frontmatter.`);
   const document = parseDocument(match[1], {
     prettyErrors: false,
@@ -187,7 +187,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     min: 1,
     max: 64,
   });
-  if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(name))
+  if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(name))
     throw new Error(`${relative(pluginRoot, skillPath)} has an invalid skill name.`);
   if (name !== basename(skillDirectory))
     throw new Error(`${relative(pluginRoot, skillPath)} name must match its directory.`);

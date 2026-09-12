@@ -51,7 +51,7 @@ function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const { status } = error as Error & { status?: unknown };
   if (typeof status === "number" && (status === 429 || status >= 500)) return true;
-  return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/i.test(
+  return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu.test(
     `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
   );
 }

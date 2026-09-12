@@ -36,7 +36,7 @@ export const SelectOption: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Select a Vercel Team"));
-    await userEvent.click(canvas.getByRole("option", { name: /Sandbox/ }));
+    await userEvent.click(canvas.getByRole("option", { name: /Sandbox/u }));
     await expect(args.onChange).toHaveBeenCalledWith("sandbox");
   },
 };

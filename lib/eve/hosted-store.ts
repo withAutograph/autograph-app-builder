@@ -302,7 +302,7 @@ const hostedOperationCommonShape = {
   principal: hostedPrincipalSchema,
   kind: hostedOperationKindSchema,
   clientRequestId: z.string().min(1).max(200),
-  requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   resumeSessionId: z.string().min(1).max(200).optional(),
   createdAtEpochMs: z.number().int().nonnegative(),
   updatedAtEpochMs: z.number().int().nonnegative(),
@@ -333,7 +333,7 @@ export const hostedOperationRecordSchema = z
         result: eveSessionResultSchema,
         sessionRecordDigest: z
           .string()
-          .regex(/^sha256:[a-f0-9]{64}$/)
+          .regex(/^sha256:[a-f0-9]{64}$/u)
           .optional(),
       })
       .strict(),

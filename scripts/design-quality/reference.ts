@@ -44,7 +44,7 @@ type PackageJson = {
 };
 type EntryPoint = { module: string; path: string };
 
-const relevantModule = /^@autograph\/(?:components|compositions|icons)(?:$|\/)/;
+const relevantModule = /^@autograph\/(?:components|compositions|icons)(?:$|\/)/u;
 const sourceExtensions = [".tsx", ".ts", ".jsx", ".js", ".d.ts"];
 
 async function walk(root: string, relative = ""): Promise<string[]> {
@@ -532,7 +532,7 @@ export function checkJsxAttributes({
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, arrustedRoot);
   const virtual = new Map(
     files
-      .filter((file) => /\.tsx?$/i.test(file.path))
+      .filter((file) => /\.tsx?$/iu.test(file.path))
       .map((file) => [resolve(arrustedRoot, ".design-quality-virtual", file.path), file.content]),
   );
   const host = ts.createCompilerHost({ ...parsed.options, jsx: ts.JsxEmit.Preserve }, true);

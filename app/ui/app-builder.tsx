@@ -661,7 +661,7 @@ export function ConnectionDrawer({
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [connectionName, setConnectionName] = useState(
-    flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-"),
+    flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-"),
   );
   const [description, setDescription] = useState(connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
