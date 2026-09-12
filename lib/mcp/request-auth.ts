@@ -107,7 +107,8 @@ export interface HostedAccessTokenVerifier {
   verify: (input: { token: string; nowEpochSeconds: number }) => Promise<VerifiedHostedClaims>;
 }
 
-const oauthScopeTokenPattern = /^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$/;
+const oauthScopeTokenPattern =
+  /^[\u0021\u0023-\u005B\u005D-\u007E]+(?: [\u0021\u0023-\u005B\u005D-\u007E]+)*$/;
 
 /**
  * Exact remote-JWKS verifier. Redirects are rejected and the configured URL,

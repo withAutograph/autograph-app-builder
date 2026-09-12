@@ -98,7 +98,7 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
     .replaceAll(token, "[redacted]")
     .replaceAll(/https?:\/\/[^\s]+/gu, "[url]")
     .replaceAll(/[\r\n]+/gu, " ")
-    .replaceAll(/[^\x20-\x7E]/gu, "?")
+    .replaceAll(/[^\u0020-\u007E]/gu, "?")
     .trim();
   if (sanitized.length <= 512) return sanitized;
 
