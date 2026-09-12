@@ -17,7 +17,7 @@ const gatewayModelSchema = z
   })
   .passthrough();
 
-const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1_000) }).passthrough();
+const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).passthrough();
 
 type ModelState = BuilderIntegrationState["models"];
 let cached: { value: ModelState; expiresAt: number } | undefined;
@@ -34,7 +34,7 @@ export async function loadGatewayModels(input?: {
   try {
     const response = await (input?.fetch ?? fetch)(GATEWAY_MODELS_URL, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(8000),
       cache: "no-store",
     });
     if (!response.ok) throw new Error("gateway-models-unavailable");

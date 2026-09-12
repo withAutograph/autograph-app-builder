@@ -242,7 +242,7 @@ export async function runWithTestCapability(options: {
         nonce: request.nonce,
         context: request.context,
         authorization: randomBytes(32).toString("hex"),
-        expiresAt: Date.now() + 5_000,
+        expiresAt: Date.now() + 5000,
         capabilities: options.capabilities,
         publicKey: publicKeySource,
         gateAEvalProfile: options.gateAEvalProfile ?? null,

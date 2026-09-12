@@ -122,7 +122,7 @@ type LocalEveRuntimeState = {
   metadata: Map<string, { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }>;
 };
 
-const localCancellationTimeoutMs = 5_000;
+const localCancellationTimeoutMs = 5000;
 // Repository apply and validation run inside the Vercel Sandbox.  Their
 // provider command budget is five minutes, so the local Eve watchdog must not
 // interrupt the model turn before that operation can settle.  The previous

@@ -87,7 +87,7 @@ function memoryStore(): BuilderDraftStore {
       return true;
     },
     async deleteInactiveSince({ now, maxAgeMs }) {
-      const cutoff = now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1_000);
+      const cutoff = now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000);
       let deleted = 0;
       for (let index = rows.length - 1; index >= 0; index -= 1) {
         const row = rows[index];

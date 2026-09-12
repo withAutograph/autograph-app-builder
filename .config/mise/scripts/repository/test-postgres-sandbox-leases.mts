@@ -83,9 +83,9 @@ async function waitForDatabase() {
 }
 
 async function expire(lease: SandboxExecutionLease) {
-  const expiresAtEpochMs = Date.now() - 1_000;
-  const heartbeatAtEpochMs = expiresAtEpochMs - 1_000;
-  const acquiredAtEpochMs = heartbeatAtEpochMs - 1_000;
+  const expiresAtEpochMs = Date.now() - 1000;
+  const heartbeatAtEpochMs = expiresAtEpochMs - 1000;
+  const acquiredAtEpochMs = heartbeatAtEpochMs - 1000;
   const record = {
     ...lease,
     acquiredAtEpochMs,

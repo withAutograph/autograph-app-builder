@@ -13,7 +13,7 @@ describe("Vercel workload identity", () => {
     expect(getToken).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["", " token", "token\n", `x${"y".repeat(8_192)}`])(
+  it.each(["", " token", "token\n", `x${"y".repeat(8192)}`])(
     "rejects malformed source credentials",
     async (token) => {
       const identity = createVercelWorkloadIdentity({

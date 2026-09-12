@@ -1408,7 +1408,7 @@ wait
       let output = "";
       const timeout = setTimeout(
         () => reject(new Error("Timed out waiting for lifecycle crash fixture.")),
-        3_000,
+        3000,
       );
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {

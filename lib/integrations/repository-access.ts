@@ -86,7 +86,7 @@ export const repositoryAccessSnapshotSchema = z
     defaultBranch: z.string().min(1).max(255),
     headSha: objectId,
     headTree: objectId,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)).max(1_000),
+    repositoryVariableNames: z.array(z.string().min(1).max(255)).max(1000),
   })
   .strict();
 

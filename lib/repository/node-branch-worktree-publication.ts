@@ -460,7 +460,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
     const timeout = setTimeout(() => {
       holder.kill();
       reject(new Error("The OS publication lock did not become ready."));
-    }, 5_000);
+    }, 5000);
     void terminalPromise.then((outcome) => {
       clearTimeout(timeout);
       reject(

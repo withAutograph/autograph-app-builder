@@ -27,7 +27,7 @@ export type PasskeyButtonProps = {
 
 type OnboardingResponse = { context?: unknown };
 
-const passkeyResponseTimeoutMs = 3_000;
+const passkeyResponseTimeoutMs = 3000;
 
 async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;

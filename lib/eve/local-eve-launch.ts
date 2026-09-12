@@ -151,7 +151,7 @@ function exactBinding(environment: Environment) {
   )
     throw new Error("Local Eve execution authority was not closed.");
   const port = required(environment, "APP_BUILDER_EVE_PORT");
-  if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65535)
+  if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65_535)
     throw new Error("Local Eve port was invalid.");
   if (environment.EVE_AGENT_HOST !== `http://127.0.0.1:${port}`)
     throw new Error("Local Eve loopback binding was invalid.");

@@ -17,7 +17,7 @@ import {
 } from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
-const maximumRequestBytes = 64 * 1_024;
+const maximumRequestBytes = 64 * 1024;
 
 class BuilderHandoffRequestError extends Error {
   name = "BuilderHandoffRequestError";

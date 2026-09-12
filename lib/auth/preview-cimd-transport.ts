@@ -8,7 +8,7 @@ import { isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
 const BODY_FORBIDDEN_RESPONSE_STATUSES = new Set([204, 205, 304]);
-const REQUEST_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 5000;
 
 type ResolveHostname = (
   hostname: string,

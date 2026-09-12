@@ -37,7 +37,7 @@ function validateBaseUrl(value) {
   )
     fail("base URL");
   const port = Number(url.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) fail("port");
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) fail("port");
   return { baseUrl: url.origin, port: String(port) };
 }
 

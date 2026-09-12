@@ -65,7 +65,7 @@ export async function stopDevelopmentChild(
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
   if (childExited && !options.processGroup) return;
-  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1_100 : 5_000);
+  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1100 : 5000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
     if (child.pid === undefined || process.platform === "win32") {
@@ -116,7 +116,7 @@ export async function waitForDevelopmentPortRelease(
   port: number,
   options: Readonly<{ timeoutMs?: number; pollMs?: number }> = {},
 ) {
-  const timeoutMs = options.timeoutMs ?? 5_000;
+  const timeoutMs = options.timeoutMs ?? 5000;
   const pollMs = options.pollMs ?? 50;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

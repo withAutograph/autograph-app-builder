@@ -54,7 +54,7 @@ const localEnvironment = readOwnerBoundLocalFile(resolve(repositoryRoot, ".env.l
 const token = validateLocalVercelOidcToken({
   token: parseLocalVercelOidcToken(localEnvironment),
   project: linkedProject,
-  nowEpochSeconds: Math.floor(Date.now() / 1_000),
+  nowEpochSeconds: Math.floor(Date.now() / 1000),
 });
 
 if (Object.hasOwn(process.env, "VERCEL_TOKEN") || Object.hasOwn(process.env, "AI_GATEWAY_API_KEY"))

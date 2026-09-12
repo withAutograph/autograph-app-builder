@@ -201,7 +201,7 @@ function parseOutput<T>(result: TargetCommandResult, schema: z.ZodType<T>, label
   if (result.exitCode !== 0) {
     const diagnostic = result.stderr.trim() || result.stdout.trim();
     throw new Error(
-      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2_000)}`}`,
+      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2000)}`}`,
     );
   }
   let parsed: unknown;

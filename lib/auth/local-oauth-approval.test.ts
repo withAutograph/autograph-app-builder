@@ -70,20 +70,20 @@ describe("local OAuth approval", () => {
         provider: "github",
         origin: emulation.canonicalOrigin,
         authorization,
-        expiresAt: 2_000,
+        expiresAt: 2000,
       },
       emulation.relaySecret,
     );
-    expect(verifyLocalOAuthApproval(approval, emulation.relaySecret, 1_000)).toEqual({
+    expect(verifyLocalOAuthApproval(approval, emulation.relaySecret, 1000)).toEqual({
       provider: "github",
       origin: emulation.canonicalOrigin,
       authorization,
-      expiresAt: 2_000,
+      expiresAt: 2000,
     });
-    expect(() => verifyLocalOAuthApproval(`${approval}x`, emulation.relaySecret, 1_000)).toThrow(
+    expect(() => verifyLocalOAuthApproval(`${approval}x`, emulation.relaySecret, 1000)).toThrow(
       "invalid-approval",
     );
-    expect(() => verifyLocalOAuthApproval(approval, emulation.relaySecret, 2_000)).toThrow(
+    expect(() => verifyLocalOAuthApproval(approval, emulation.relaySecret, 2000)).toThrow(
       "expired-approval",
     );
   });

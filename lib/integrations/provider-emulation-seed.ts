@@ -42,7 +42,7 @@ export function providerEmulationSeed(input: SeedInput): {
     },
     apps: [
       {
-        app_id: 12345,
+        app_id: 12_345,
         slug: "autograph-app-builder",
         name: "Autograph App Builder",
         ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),

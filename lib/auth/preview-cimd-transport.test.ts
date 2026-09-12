@@ -138,7 +138,7 @@ describe("Preview CIMD transport", () => {
     timeout.abort(new DOMException("Timed out.", "TimeoutError"));
 
     await rejection;
-    expect(timeoutSignal).toHaveBeenCalledWith(5_000);
+    expect(timeoutSignal).toHaveBeenCalledWith(5000);
     expect(requestHttps).not.toHaveBeenCalled();
   });
 

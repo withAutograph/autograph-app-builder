@@ -7,14 +7,14 @@ import type { ProviderEmulation } from "../integrations/local-provider-emulation
 export const localOAuthProviderSchema = z.enum(["github", "vercel"]);
 export type LocalOAuthProvider = z.infer<typeof localOAuthProviderSchema>;
 
-const scalar = z.string().min(1).max(2_048);
+const scalar = z.string().min(1).max(2048);
 const authorizationSchema = z
   .object({
     response_type: z.literal("code"),
     client_id: scalar,
     state: z.string().min(20).max(512),
-    scope: z.string().max(1_024).default(""),
-    redirect_uri: z.string().url().max(2_048),
+    scope: z.string().max(1024).default(""),
+    redirect_uri: z.string().url().max(2048),
     code_challenge: z.string().min(20).max(256).optional(),
     code_challenge_method: z.literal("S256").optional(),
   })

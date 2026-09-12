@@ -68,8 +68,8 @@ function jwt(subject: string, workspaceId: string) {
     workspace_id: workspaceId,
     scope:
       "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
-    nbf: 1_900,
-    exp: 2_100,
+    nbf: 1900,
+    exp: 2100,
   })}.signature`;
 }
 const primaryToken = jwt("proof-user-primary", "workspace-primary");
@@ -312,7 +312,7 @@ const proofInput = (fetcher: typeof fetch) => ({
   sourceTree: "0".repeat(40),
   releaseArchiveSha256: "1".repeat(64),
   permitApprovals: true,
-  nowEpochSeconds: 2_000,
+  nowEpochSeconds: 2000,
   fetcher,
 });
 
@@ -426,7 +426,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: primaryToken,
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
@@ -434,7 +434,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: jwt("proof-user-primary", "workspace-secondary"),
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
@@ -442,7 +442,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: jwt("proof-user-secondary", "workspace-primary"),
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
   });

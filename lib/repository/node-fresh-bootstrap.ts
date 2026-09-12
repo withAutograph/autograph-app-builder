@@ -664,7 +664,7 @@ async function acquireLease(
   let helperError = "";
   holder.stderr.setEncoding("utf8");
   holder.stderr.on("data", (chunk: string) => {
-    helperError = `${helperError}${chunk}`.slice(-2_000);
+    helperError = `${helperError}${chunk}`.slice(-2000);
   });
   let resolveExit!: () => void;
   const exited = new Promise<void>((resolve) => {
@@ -685,7 +685,7 @@ async function acquireLease(
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
       reject(new Error("Lease timeout."));
-    }, 5_000);
+    }, 5000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
@@ -780,7 +780,7 @@ async function quiesceAbandonedLease(
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
       reject(new Error("Lease quiescence timeout."));
-    }, 5_000);
+    }, 5000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);

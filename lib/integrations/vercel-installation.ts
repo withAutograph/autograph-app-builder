@@ -136,7 +136,7 @@ export function decryptVercelToken(input: {
   ]).toString("utf8");
 }
 
-const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8_192) }).passthrough();
+const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
 const teamSchema = z
   .object({
     id: z.string().min(1),
@@ -210,7 +210,7 @@ export function createVercelInstallationAuthorization(input: {
     async complete(callbackUrl: string, authorityInput: Authority) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       const url = new URL(callbackUrl);
-      const code = z.string().min(1).max(2_048).parse(url.searchParams.get("code"));
+      const code = z.string().min(1).max(2048).parse(url.searchParams.get("code"));
       const state = z.string().min(32).max(512).parse(url.searchParams.get("state"));
       const installationId = z
         .string()
@@ -258,7 +258,7 @@ export function createVercelInstallationAuthorization(input: {
                 config.issuer,
               ).toString(),
             }),
-            signal: AbortSignal.timeout(8_000),
+            signal: AbortSignal.timeout(8000),
           },
         );
         if (!tokenResponse.ok) {
@@ -282,7 +282,7 @@ export function createVercelInstallationAuthorization(input: {
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
             headers,
-            signal: AbortSignal.timeout(8_000),
+            signal: AbortSignal.timeout(8000),
           },
         );
         if (!response.ok) throw new Error("scope-read-failed");
@@ -300,7 +300,7 @@ export function createVercelInstallationAuthorization(input: {
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/user`,
           {
             headers,
-            signal: AbortSignal.timeout(8_000),
+            signal: AbortSignal.timeout(8000),
           },
         );
         if (!response.ok) throw new Error("scope-read-failed");

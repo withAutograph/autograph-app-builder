@@ -604,7 +604,7 @@ export function checkJsxAttributes({
             });
           }
           const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
-            [2531, 2532, 18047, 18048].includes(item.code),
+            [2531, 2532, 18_047, 18_048].includes(item.code),
           );
           const propDiagnostics = attributeDiagnostics.filter((item) =>
             [2322, 2353].includes(item.code),

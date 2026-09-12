@@ -112,11 +112,11 @@ export function createBuilderHandoffService(input: {
 }) {
   const now = input.now ?? (() => new Date());
   const createId = input.createId ?? randomUUID;
-  const lifetimeMs = input.lifetimeMs ?? 7 * 24 * 60 * 60 * 1_000;
+  const lifetimeMs = input.lifetimeMs ?? 7 * 24 * 60 * 60 * 1000;
   if (
     !Number.isSafeInteger(lifetimeMs) ||
     lifetimeMs < 60_000 ||
-    lifetimeMs > 7 * 24 * 60 * 60 * 1_000
+    lifetimeMs > 7 * 24 * 60 * 60 * 1000
   )
     throw new Error("builder-handoff-lifetime-invalid");
 

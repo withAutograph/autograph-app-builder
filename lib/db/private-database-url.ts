@@ -2,7 +2,7 @@ import { closeSync, readSync } from "node:fs";
 
 import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
 
-const MAX_SECRET_BYTES = 8_192;
+const MAX_SECRET_BYTES = 8192;
 
 export function readPrivateDatabaseUrl(fd: number): string {
   if (!Number.isInteger(fd) || fd < 0) {

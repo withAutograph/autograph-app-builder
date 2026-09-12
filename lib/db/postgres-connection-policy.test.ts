@@ -16,7 +16,7 @@ describe("hosted PostgreSQL connection policy", () => {
       prepare: false,
       connection: {
         statement_timeout: 30_000,
-        lock_timeout: 5_000,
+        lock_timeout: 5000,
         idle_in_transaction_session_timeout: 30_000,
       },
     });
@@ -28,7 +28,7 @@ describe("hosted PostgreSQL connection policy", () => {
       prepare: false,
       connection: {
         statement_timeout: 15_000,
-        lock_timeout: 5_000,
+        lock_timeout: 5000,
         idle_in_transaction_session_timeout: 15_000,
       },
     });

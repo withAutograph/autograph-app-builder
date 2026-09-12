@@ -126,7 +126,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         )
           timer = setTimeout(() => {
             refresh();
-          }, 5_000);
+          }, 5000);
       }
     };
     const visibilityChanged = () => {

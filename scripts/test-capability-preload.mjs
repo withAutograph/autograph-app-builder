@@ -303,7 +303,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           nonce: request.nonce,
           context: request.context,
           authorization: randomBytes(32).toString("hex"),
-          expiresAt: Date.now() + 5_000,
+          expiresAt: Date.now() + 5000,
           capabilities,
           publicKey,
           gateAEvalProfile: nestedGateAEvalProfile,

@@ -61,7 +61,7 @@ export const hostedProofScenarioSchema = z
     ),
     approvalReceipts: z.array(expectedApprovalSchema).length(3),
     maxPolls: z.number().int().min(1).max(120).default(30),
-    pollIntervalMs: z.number().int().min(100).max(10_000).default(1_000),
+    pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
   })
   .strict()
   .superRefine((scenario, context) => {
@@ -622,7 +622,7 @@ export async function runHostedProof(input: {
     primary: input.token,
     secondary: input.crossTenantToken,
     scenario: input.scenario,
-    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1_000),
+    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
   });
   const metadata = await verifyProtectedResourceMetadata({
     endpoint: input.endpoint,

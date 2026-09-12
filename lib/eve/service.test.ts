@@ -927,7 +927,7 @@ describe("local Eve acceptance", () => {
       const expectedCancellation = expect(cancellation).rejects.toThrow(
         "Cancellation was accepted",
       );
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(5000);
       await expectedCancellation;
     } finally {
       vi.useRealTimers();

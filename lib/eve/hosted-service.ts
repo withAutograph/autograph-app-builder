@@ -152,16 +152,16 @@ type CheckpointInputProfile = {
 
 const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
   {
-    titleBytes: 2_048,
-    descriptionBytes: 4_096,
+    titleBytes: 2048,
+    descriptionBytes: 4096,
     optionCount: 32,
     optionLabelBytes: 512,
-    authorizationInstructionBytes: 1_000,
+    authorizationInstructionBytes: 1000,
     repositoryScopeCount: 32,
   },
   {
     titleBytes: 512,
-    descriptionBytes: 1_024,
+    descriptionBytes: 1024,
     optionCount: 16,
     optionLabelBytes: 256,
     authorizationInstructionBytes: 512,
@@ -281,7 +281,7 @@ function checkpointForSnapshot(
       event.type === "assistant_message"
         ? { ...event, text: event.text.slice(-65_536) }
         : event.type === "progress"
-          ? { ...event, label: event.label.slice(-4_096) }
+          ? { ...event, label: event.label.slice(-4096) }
           : event.type === "error"
             ? {
                 ...event,

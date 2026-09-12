@@ -255,7 +255,7 @@ describe("test capability preload", () => {
       cwd: repositoryRoot,
       encoding: "utf8",
       env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
-      timeout: 5_000,
+      timeout: 5000,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("null");

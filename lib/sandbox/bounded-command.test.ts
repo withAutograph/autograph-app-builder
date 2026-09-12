@@ -81,7 +81,7 @@ describe("bounded sandbox command", () => {
       runBoundedSandboxCommand(
         { spawn: async () => process },
         { command: "idle" },
-        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
+        { noOutputTimeoutMs: 10, timeoutMs: 1000 },
       ),
     ).rejects.toMatchObject({ code: "no-output-timeout" });
     expect(kill).toHaveBeenCalledOnce();
@@ -106,7 +106,7 @@ describe("bounded sandbox command", () => {
       runBoundedSandboxCommand(
         { spawn: async () => process },
         { command: "progress-then-idle" },
-        { noOutputTimeoutMs: 10, timeoutMs: 1_000 },
+        { noOutputTimeoutMs: 10, timeoutMs: 1000 },
       ),
     ).rejects.toMatchObject({ code: "no-output-timeout" });
     expect(kill).toHaveBeenCalledOnce();

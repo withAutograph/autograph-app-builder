@@ -21,8 +21,8 @@ const operationRecord = {
   clientRequestId: "request_1",
   requestDigest: `sha256:${"a".repeat(64)}`,
   state: "reserved" as const,
-  createdAtEpochMs: 1_000,
-  updatedAtEpochMs: 1_000,
+  createdAtEpochMs: 1000,
+  updatedAtEpochMs: 1000,
 };
 
 const operationRow = {
@@ -37,8 +37,8 @@ const operationRow = {
   requestDigest: operationRecord.requestDigest,
   state: operationRecord.state,
   record: operationRecord,
-  createdAt: new Date(1_000),
-  updatedAt: new Date(1_000),
+  createdAt: new Date(1000),
+  updatedAt: new Date(1000),
 };
 
 const sessionRecord = {
@@ -47,8 +47,8 @@ const sessionRecord = {
   principal,
   adapterSessionId: "adapter_1",
   status: "waiting" as const,
-  createdAtEpochMs: 2_000,
-  updatedAtEpochMs: 2_000,
+  createdAtEpochMs: 2000,
+  updatedAtEpochMs: 2000,
 };
 
 const sessionRow = {
@@ -67,8 +67,8 @@ const sessionRow = {
   parentSessionId: null,
   lastProgressAt: null,
   record: sessionRecord,
-  createdAt: new Date(2_000),
-  updatedAt: new Date(2_000),
+  createdAt: new Date(2000),
+  updatedAt: new Date(2000),
 };
 
 describe("PostgreSQL hosted Eve row authority", () => {

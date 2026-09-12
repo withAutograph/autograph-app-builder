@@ -605,7 +605,7 @@ export function assertCanonicalFreshBootstrapJournal(journal: FreshBootstrapJour
       ].includes(journal.reason) ||
         typeof journal.failureMessage !== "string" ||
         journal.failureMessage.length === 0 ||
-        journal.failureMessage.length > 4_096)) ||
+        journal.failureMessage.length > 4096)) ||
     (journal.status === "succeeded" &&
       (typeof journal.headReference !== "string" ||
         typeof journal.headCommit !== "string" ||

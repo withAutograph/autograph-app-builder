@@ -6,7 +6,7 @@ import { parseGitHubAppHttpProviderCredentials } from "./github-app-http-provide
 export const ARRUSTED_TEMPLATE_OWNER = "withAutograph";
 export const ARRUSTED_TEMPLATE_NAME = "arrusted-development";
 export const ARRUSTED_TEMPLATE_FULL_NAME = `${ARRUSTED_TEMPLATE_OWNER}/${ARRUSTED_TEMPLATE_NAME}`;
-export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1221250267;
+export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1_221_250_267;
 
 const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);

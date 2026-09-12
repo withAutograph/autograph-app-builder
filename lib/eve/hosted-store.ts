@@ -26,8 +26,8 @@ export const hostedOperationStateSchema = z.enum([
   "rejected",
 ]);
 
-export const HOSTED_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
-export const HOSTED_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+export const HOSTED_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+export const HOSTED_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 export const hostedSessionTimeoutPolicySchema = z
   .object({
@@ -35,12 +35,12 @@ export const hostedSessionTimeoutPolicySchema = z
       .number()
       .int()
       .min(60_000)
-      .max(24 * 60 * 60 * 1_000),
+      .max(24 * 60 * 60 * 1000),
     maxLifetimeMs: z
       .number()
       .int()
       .min(60_000)
-      .max(7 * 24 * 60 * 60 * 1_000),
+      .max(7 * 24 * 60 * 60 * 1000),
   })
   .strict()
   .refine(
@@ -85,7 +85,7 @@ export const hostedSessionCheckpointSchema = z
   })
   .strict()
   .refine(
-    (checkpoint) => new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <= 512 * 1_024,
+    (checkpoint) => new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <= 512 * 1024,
     "Hosted session checkpoints must be at most 524288 bytes.",
   );
 

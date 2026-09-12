@@ -1511,7 +1511,7 @@ export function Builder({
   ]);
   useEffect(() => {
     if (!draftSyncNotice) return;
-    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4_000);
+    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4000);
     return () => window.clearTimeout(timer);
   }, [draftSyncNotice]);
   useEffect(() => {

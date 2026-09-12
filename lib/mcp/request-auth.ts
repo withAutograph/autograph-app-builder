@@ -123,7 +123,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
   const configuredJwksUrl = new URL(config.jwksUrl);
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const remoteJwks = createRemoteJWKSet(configuredJwksUrl, {
-    timeoutDuration: 5_000,
+    timeoutDuration: 5000,
     cooldownDuration: 30_000,
     cacheMaxAge: 600_000,
     [customFetch]: async (url, options) => {
@@ -158,7 +158,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         algorithms: [config.algorithm],
         requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
         clockTolerance: 0,
-        currentDate: new Date(nowEpochSeconds * 1_000),
+        currentDate: new Date(nowEpochSeconds * 1000),
       });
       if (
         payload.iss !== config.issuer ||
