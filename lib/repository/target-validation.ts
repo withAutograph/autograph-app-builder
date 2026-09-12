@@ -93,6 +93,7 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   reason: TargetValidationFailureReason;
   recoveryRequired: true;
   diagnostics?: readonly TargetValidationDiagnostic[];
+  output?: TargetValidationOutputExcerpt;
   commandFailure?: {
     name: TargetValidationCommandName;
     exitCode: number;
@@ -100,6 +101,12 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   };
   digest: string;
 };
+
+export interface TargetValidationOutputExcerpt {
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+}
 
 export interface TargetValidationDiagnostic {
   code: `TS${number}` | "VITEST";
@@ -114,6 +121,39 @@ export type TargetValidationResult =
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+const VALIDATION_OUTPUT_LIMIT = 6000;
+const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
+const sensitiveAssignmentPattern =
+  /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
+const bearerPattern = /Bearer\s+[^\s,;]+/giu;
+const repairLinePattern =
+  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found)/iu;
+
+// Keep enough compiler/build output for an agent to repair its own candidate,
+// while excluding control bytes and common credential forms from durable state.
+export function validationOutputExcerpt(
+  stdout: string,
+  stderr: string,
+): TargetValidationOutputExcerpt {
+  let truncated = false;
+  const sanitize = (value: string) => {
+    const cleaned = value
+      .replaceAll(ansiPattern, "")
+      .replaceAll(/[^\t\n\r\u0020-\u007E]/gu, "")
+      .replaceAll(bearerPattern, "Bearer [REDACTED]")
+      .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
+      .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "")
+      .split("\n")
+      .filter((line) => repairLinePattern.test(line))
+      .join("\n")
+      .trim();
+    if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) return cleaned;
+    truncated = true;
+    return `${cleaned.slice(0, VALIDATION_OUTPUT_LIMIT)}\n[output truncated]`;
+  };
+  return { stdout: sanitize(stdout), stderr: sanitize(stderr), truncated };
+}
 
 const compilerDiagnosticPatterns = [
   /^(?<file>.*?)\((?<line>\d+),(?<column>\d+)\):\s*error\s+(?<code>TS\d+):\s*(?<message>.+)$/u,
@@ -342,6 +382,7 @@ function failureReceipt(
   reason: TargetValidationFailureReason,
   commandFailure?: TargetValidationFailureReceipt["commandFailure"],
   diagnostics?: readonly TargetValidationDiagnostic[],
+  output?: TargetValidationOutputExcerpt,
 ): TargetValidationFailureReceipt {
   const unsigned = {
     version: 3 as const,
@@ -354,6 +395,7 @@ function failureReceipt(
     recoveryRequired: true as const,
     ...(commandFailure === undefined ? {} : { commandFailure }),
     ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
+    ...(output === undefined ? {} : { output }),
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
@@ -416,6 +458,7 @@ export async function executeProposalBoundValidation(input: {
               : {}),
           },
           compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
+          validationOutputExcerpt(result.stdout, result.stderr),
         ),
       };
   }
