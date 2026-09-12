@@ -231,8 +231,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("full-page step-by-step form"))
     return "I’ll call this **Vendor Onboarding** and use the requested full-page step-by-step form for a single requester. The conditional Finance review appears only when tax information makes it relevant.";
   if (message.includes("internal vendor-onboarding workflow")) {
-    const path = lastUserMessage?.match(/supported repository at (\/\S+)/iu)?.[1];
-    if (path === undefined)
+    const requestedRepositoryPath = lastUserMessage?.match(
+      /supported repository at (\/\S+)/iu,
+    )?.[1];
+    if (requestedRepositoryPath === undefined)
       return "I need the supported project location before I can start this prototype.";
     const inspection = toolResults.find(({ name }) => name === "inspect_source");
     if (inspection === undefined)
@@ -241,7 +243,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             name: "inspect_source",
             input: {
-              path: developmentInspectionPath({ requestedPath: path }),
+              path: developmentInspectionPath({ requestedPath: requestedRepositoryPath }),
               sourceKind: "existing-repository",
             },
           },
