@@ -309,15 +309,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const acceptanceResults = toolResults.filter(({ name }) => name === "accept_app_spec");
     const latestAcceptance = acceptanceResults.at(-1);
     const repairDiagnostic = (() => {
-      if (latestAcceptance?.isError !== true || typeof latestAcceptance.output !== "string")
-        return undefined;
+      if (latestAcceptance?.isError !== true || typeof latestAcceptance.output !== "string") return;
       try {
         return JSON.parse(latestAcceptance.output.replace(/^Error:\s*/u, "")) as {
           code?: string;
           issues?: { code?: string }[];
         };
       } catch {
-        return undefined;
+        // Invalid acceptance output has no repair diagnostic.
       }
     })();
     if (
