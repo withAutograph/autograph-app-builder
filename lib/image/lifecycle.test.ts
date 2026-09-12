@@ -275,7 +275,7 @@ function withFakeGhEnvironment(
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    callback();
+    return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
@@ -299,7 +299,7 @@ async function withFakeGhEnvironmentAsync(
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    await callback();
+    return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
