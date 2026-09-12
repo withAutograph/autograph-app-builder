@@ -252,7 +252,7 @@ export function createPreparedAppContextReader(input: {
               status: "provider-unavailable",
               repository: parseRepositoryReference(repository),
             }))
-        : Promise.resolve(undefined),
+        : Promise.resolve(),
       input.vercel(sessionAuth, intent).catch(unavailable),
     ]);
     const returnTo = preparedHandoffReturnPath(sessionAuth);
