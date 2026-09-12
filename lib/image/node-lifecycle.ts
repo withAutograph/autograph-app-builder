@@ -1115,7 +1115,7 @@ function execute(
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
     env: sanitizedEnvironment({
-      ...(command.environment ?? {}),
+      ...command.environment,
       ...extraEnvironment,
     }),
   });
