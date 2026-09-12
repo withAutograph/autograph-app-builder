@@ -14,7 +14,6 @@ const deferredRules = Object.fromEntries(
     "eslint/no-duplicate-imports",
     "eslint/no-else-return",
     "eslint/no-eq-null",
-    "eslint/no-multi-assign",
     "eslint/no-negated-condition",
     "eslint/no-plusplus",
     "eslint/no-script-url",

@@ -368,9 +368,9 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           const config = readVercelIntegrationEnvironment(environment);
           if (config.issuer !== authority.issuer || config.resource !== authority.audience)
             throw new Error("Provider authority is unavailable.");
-          const database = (providerDatabase ??= openHostedPostgresDatabase(
-            environment.DATABASE_URL ?? "",
-          ));
+          if (providerDatabase === undefined)
+            providerDatabase = openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
+          const database = providerDatabase;
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({
               principal,
