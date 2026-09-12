@@ -75,8 +75,7 @@ export function AuthenticatedBuilder({
     router.replace(`/handoff/${continuation.handoff.handoffId}`);
   }, [clearBuilderDraftAction, continuation, continuationPending, router]);
 
-  // The server draft is authoritative after provider return. Browser storage
-  // remains a write-only, short-lived redirect bridge and is never restored.
+  // The request-fresh server draft is authoritative after provider return.
   const resumedDraft = initialDurableDraft;
   const builderKey = providerResumeKey
     ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`

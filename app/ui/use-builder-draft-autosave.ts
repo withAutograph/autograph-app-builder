@@ -57,8 +57,6 @@ export type BuilderDraftAutosave<T> = {
    * settle; the next poll remains authoritative.
    */
   discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
-  /** Drops queued work superseded by a newer remote revision. */
-  discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -117,7 +115,7 @@ export function useBuilderDraftAutosave<T>(
   }, []);
 
   const dispatch = useCallback(
-    async (reason: BuilderDraftAutosaveReason) => {
+    async (reason: BuilderDraftAutosaveReason): Promise<boolean> => {
       if (timer.current) {
         clearTimeout(timer.current);
         timer.current = undefined;
@@ -170,7 +168,7 @@ export function useBuilderDraftAutosave<T>(
       const pending = run();
       draining.current = pending;
       try {
-        await pending;
+        return await pending;
       } finally {
         if (draining.current === pending) draining.current = undefined;
       }
@@ -276,13 +274,14 @@ export function useBuilderDraftAutosave<T>(
     };
   }, [flush]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // StrictMode replays setup after cleanup without recreating refs.
+    mounted.current = true;
+    return () => {
       mounted.current = false;
       if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+    };
+  }, []);
 
   return {
     status,
