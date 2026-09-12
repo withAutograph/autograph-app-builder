@@ -1,0 +1,19 @@
+{
+  "fixtureVersion": 1,
+  "clock": "2026-09-12T12:00:00.000Z",
+  "actors": ["owner-a", "unrelated-b"],
+  "workspace": "self-reproduction-parity",
+  "draft": {
+    "appName": "Stock Exceptions",
+    "repository": "stock-exceptions",
+    "brief": "Create an authenticated desktop workspace to review stock exceptions, assign an owner, and resolve an exception with a note.",
+    "privateRepository": true
+  },
+  "records": [
+    { "id": "exception-001", "item": "Packing tape", "status": "open", "owner": null },
+    { "id": "exception-002", "item": "Shipping carton", "status": "resolved", "owner": "owner-a" }
+  ],
+  "providerReturns": ["success", "denied", "replayed-state"],
+  "jobs": ["running-latched", "failed-retryable", "interrupted", "succeeded"],
+  "childGenerationDepth": 1
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "self-reproduction-parity/v1"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "visualScoresAdvisory": {
+      "type": "boolean",
+      "const": true
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": ["reference", "candidate"]
+          },
+          "requirementId": {
+            "type": "string",
+            "enum": [
+              "anonymous-entry",
+              "authentication",
+              "durable-draft",
+              "provider-return-success",
+              "provider-return-error",
+              "app-creation",
+              "preview-access",
+              "cancellation",
+              "retry",
+              "session-recovery",
+              "independent-child",
+              "documentation",
+              "server-first",
+              "narrow-client",
+              "server-writes",
+              "auth-cache-isolation",
+              "suspense",
+              "cache-components",
+              "partial-prefetching",
+              "instant-navigation",
+              "navigation-continuity",
+              "pending-optimistic",
+              "semantic-tokens",
+              "capture/desktop/panel-resize",
+              "capture/desktop/keyboard",
+              "capture/desktop/loading",
+              "capture/desktop/empty",
+              "capture/desktop/error",
+              "capture/desktop-wide/panel-resize",
+              "capture/desktop-wide/keyboard",
+              "capture/desktop-wide/loading",
+              "capture/desktop-wide/empty",
+              "capture/desktop-wide/error",
+              "capture/desktop-window/panel-resize",
+              "capture/desktop-window/keyboard",
+              "capture/desktop-window/loading",
+              "capture/desktop-window/empty",
+              "capture/desktop-window/error"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["workflow", "framework", "capture"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "blocked", "unassessed"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*\\/\\/)[^\\s]+(?<!\\/)$"
+            }
+          }
+        },
+        "required": ["side", "requirementId", "kind", "status", "reason", "artifacts"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "runId", "visualScoresAdvisory", "rows"],
+  "additionalProperties": false
+}
