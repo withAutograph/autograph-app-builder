@@ -271,6 +271,7 @@ async function identity(path: string): Promise<PathIdentity> {
     device: String(value.dev),
     inode: String(value.ino),
     uid: String(value.uid),
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
   };
@@ -296,7 +297,9 @@ async function assertExactIdentity(
     String(value.uid) !== expected.uid ||
     String(value.dev) !== expected.device ||
     String(value.ino) !== expected.inode ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (value.mode & 0o777).toString(8) !== expected.mode ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (value.mode & 0o777) !== (kind === "directory" ? 0o700 : 0o600) ||
     (kind === "file" && value.nlink !== 1)
   )
@@ -313,6 +316,7 @@ async function executableIdentity(path: string): Promise<ExecutableIdentity> {
     device: String(value.dev),
     inode: String(value.ino),
     uid: String(value.uid),
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
     sha256: createHash("sha256")
@@ -440,6 +444,7 @@ export async function productionFreshBootstrapCapability(
 }
 
 async function syncDirectory(path: string): Promise<void> {
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     if (!(await handle.stat()).isDirectory())
@@ -476,10 +481,12 @@ async function assertContainedStatePath(
       value.uid !== process.geteuid?.() ||
       value.dev.toString() !== capability.stateRoot.device ||
       (!isLeaf && !value.isDirectory()) ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (value.isDirectory() && (value.mode & 0o777) !== 0o700) ||
       (isLeaf && leaf === "directory" && !value.isDirectory()) ||
       (isLeaf &&
         leaf === "absent-or-file" &&
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (!value.isFile() || (value.mode & 0o777) !== 0o600 || value.nlink !== 1)) ||
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       (await realpath(cursor)) !== cursor
@@ -508,6 +515,7 @@ async function atomicWrite(
   await assertContainedStatePath(capability, temporary, "absent-or-file");
   const handle = await open(
     temporary,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -517,6 +525,7 @@ async function atomicWrite(
       !opened.isFile() ||
       opened.uid !== process.geteuid?.() ||
       String(opened.dev) !== capability.stateRoot.device ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777) !== 0o600 ||
       opened.nlink !== 1
     )
@@ -541,6 +550,7 @@ async function createInitialJournal(
   const candidate = `${path}.${randomUUID()}.pending`;
   const handle = await open(
     candidate,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -550,6 +560,7 @@ async function createInitialJournal(
       !opened.isFile() ||
       opened.uid !== process.geteuid?.() ||
       String(opened.dev) !== capability.stateRoot.device ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777) !== 0o600 ||
       opened.nlink !== 1
     )
@@ -611,6 +622,7 @@ async function acquireLease(
   try {
     const handle = await open(
       path,
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
       0o600,
     );
@@ -620,6 +632,7 @@ async function acquireLease(
         !opened.isFile() ||
         opened.uid !== process.geteuid?.() ||
         String(opened.dev) !== capability.stateRoot.device ||
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (opened.mode & 0o777) !== 0o600 ||
         opened.nlink !== 1
       )
@@ -652,6 +665,7 @@ async function acquireLease(
       String(state.dev),
       String(state.ino),
       String(state.uid),
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       String(state.mode & 0o777),
       marker,
       expectedPriorDigest ?? "-",
@@ -761,6 +775,7 @@ async function quiesceAbandonedLease(
       String(state.dev),
       String(state.ino),
       String(state.uid),
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       String(state.mode & 0o777),
       expectedActiveDigest,
       marker,
@@ -970,6 +985,7 @@ async function assertNoLinkRoute(root: PathIdentity, destination: string): Promi
       !value.isDirectory() ||
       value.uid !== process.geteuid?.() ||
       value.dev.toString() !== root.device ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (value.mode & 0o022) !== 0 ||
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       (await realpath(cursor)) !== cursor
@@ -1012,6 +1028,7 @@ async function inspectDestinationPrestate(input: {
     !value.isDirectory() ||
     value.uid !== process.geteuid?.() ||
     value.dev.toString() !== input.capability.allowedRoot.device ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (value.mode & 0o777) !== 0o700 ||
     (await realpath(destination)) !== destination ||
     (await readdir(destination)).length !== 0
@@ -1246,12 +1263,14 @@ async function createStage(
     stageState.isSymbolicLink() ||
     stageState.uid !== process.geteuid?.() ||
     String(stageState.dev) !== capability.allowedRoot.device ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stageState.mode & 0o777) !== 0o700
   )
     throw new Error("The newly created bootstrap stage is unsafe.");
   const marker = pathResolve(proposal.stagingPath, proposal.claimMarkerName);
   const handle = await open(
     marker,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -1261,6 +1280,7 @@ async function createStage(
       !markerState.isFile() ||
       markerState.uid !== process.geteuid?.() ||
       markerState.dev !== stageState.dev ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (markerState.mode & 0o777) !== 0o600 ||
       markerState.nlink !== 1
     )
@@ -1282,6 +1302,7 @@ async function materializeFile(
   stageIdentity: PathIdentity,
 ): Promise<void> {
   await assertExactExecutable(capability.systemPythonIdentity);
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const stage = await open(proposal.stagingPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const opened = await stage.stat();
@@ -1290,6 +1311,7 @@ async function materializeFile(
       String(opened.dev) !== stageIdentity.device ||
       String(opened.ino) !== stageIdentity.inode ||
       String(opened.uid) !== stageIdentity.uid ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777).toString(8) !== stageIdentity.mode
     )
       throw new Error("The fd-bound bootstrap stage changed after its durable layout receipt.");
@@ -1338,6 +1360,7 @@ async function initializeGit(input: {
     ]);
     const configHandle = await open(
       pathResolve(gitDirectory, "config"),
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional binary open-flag combination.
       fsConstants.O_WRONLY | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
     );
     try {
@@ -1436,7 +1459,9 @@ async function assertRawGitAuthority(
     rootState.uid !== process.geteuid?.() ||
     gitState.uid !== process.geteuid?.() ||
     rootState.dev !== gitState.dev ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootState.mode & 0o022) !== 0 ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (gitState.mode & 0o022) !== 0 ||
     (await realpath(root)) !== root ||
     (await realpath(gitDirectory)) !== gitDirectory ||
@@ -1489,10 +1514,12 @@ async function rawWorktreeManifest(
         state.isSymbolicLink() ||
         state.uid !== process.geteuid?.() ||
         state.dev !== rootState.dev ||
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (state.mode & 0o022) !== 0
       )
         throw new Error("The fresh repository raw tree is unsafe.");
       if (state.isDirectory()) {
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         if ((state.mode & 0o777) !== 0o755)
           throw new Error("The fresh repository contains a directory with an unexpected mode.");
         directories.add(path);
@@ -1504,11 +1531,13 @@ async function rawWorktreeManifest(
         throw new Error("The fresh repository contains a special raw entry.");
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const bytes = await readFile(absolute);
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       const exactMode = (state.mode & 0o777).toString(8);
       if (exactMode !== "644" && exactMode !== "755")
         throw new Error("The fresh repository contains a file with an unexpected mode.");
       output.push({
         path,
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         mode: (state.mode & 0o111) === 0 ? "100644" : "100755",
         blob: blobId(bytes),
       });
@@ -1643,6 +1672,7 @@ async function atomicPublish(
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<void> {
   const parentPath = dirname(proposal.destinationPath);
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const parent = await open(parentPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const parentState = await parent.stat();
@@ -1658,6 +1688,7 @@ async function atomicPublish(
       String(parentState.dev) !== proposal.destinationPrestate.parent.device ||
       String(parentState.ino) !== proposal.destinationPrestate.parent.inode ||
       String(parentState.uid) !== proposal.destinationPrestate.parent.uid ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (parentState.mode & 0o777).toString(8) !== proposal.destinationPrestate.parent.mode ||
       String(parentState.nlink) !== expectedParentNlink
     )

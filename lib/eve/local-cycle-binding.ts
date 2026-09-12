@@ -21,6 +21,7 @@ export function readLocalEveCycleBinding(path: string) {
     !info.isFile() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
   )
     throw new Error("The local Eve cycle binding was not owner-only.");
@@ -38,6 +39,7 @@ export async function rotateLocalEveCycleBinding(path: string) {
     !parentInfo.isDirectory() ||
     parentInfo.isSymbolicLink() ||
     parentInfo.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (parentInfo.mode & 0o077) !== 0
   )
     throw new Error("The local Eve cycle binding directory was not owner-only.");

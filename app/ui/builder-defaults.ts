@@ -113,6 +113,7 @@ export function randomAppName(seed?: string) {
     return `${adjective} ${noun}`;
   }
   const hash = [...seed].reduce(
+    // oxlint-disable-next-line eslint/no-bitwise -- Keep the hash within uint32 bounds.
     (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
     0,
   );

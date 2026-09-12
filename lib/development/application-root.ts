@@ -38,6 +38,7 @@ async function makeDevelopmentWorkAreaWritable(
     }
     return;
   }
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   await chmod(path, info.mode & 0o111 ? 0o700 : 0o600);
 }
 
@@ -64,6 +65,7 @@ export async function createDevelopmentApplication(input: {
       !modulesInfo.isDirectory() ||
       modulesInfo.isSymbolicLink() ||
       modulesInfo.uid !== process.getuid?.() ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (modulesInfo.mode & 0o022) !== 0
     )
       throw new Error("App Builder node_modules was not owner-bound.");

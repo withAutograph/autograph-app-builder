@@ -45,6 +45,7 @@ function ownerDirectory(path: string, label: string, ownerOnly = false) {
     info.isSymbolicLink() ||
     !info.isDirectory() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & (ownerOnly ? 0o777 : 0o022)) !== (ownerOnly ? 0o700 : 0)
   )
     throw new Error(`${label} was not owner-bound.`);

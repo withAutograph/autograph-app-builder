@@ -71,6 +71,7 @@ if (!isAbsolute(input.miseBin) || basename(input.miseBin) !== "mise")
 const miseStat = statSync(input.miseBin);
 if (
   !miseStat.isFile() ||
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   (miseStat.mode & 0o022) !== 0 ||
   !/^[0-9a-f]{64}$/u.test(input.artifactSha256) ||
   sha256(readFileSync(input.artifact)) !== input.artifactSha256

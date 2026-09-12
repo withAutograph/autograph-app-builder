@@ -1275,6 +1275,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     const content = readFileSync(absolutePath);
     return [
       {
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
         // The live working tree has no stable Git object for edited/untracked
         // files. Its byte digest is the development-generation identity.

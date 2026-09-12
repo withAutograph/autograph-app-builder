@@ -250,6 +250,7 @@ function publicationRoot(): string {
       state.isSymbolicLink() ||
       canonical !== resolved ||
       state.uid !== currentUid ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o777) !== 0o700
     )
       throw new Error(
@@ -330,11 +331,13 @@ async function assertContainedNoLinkPath(
       throw new Error("The builder-owned publication file is unsafe.");
     if (state.uid !== rootState.uid || state.dev !== rootState.dev)
       throw new Error("The builder-owned publication path changed owner or filesystem.");
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (state.isDirectory() && (state.mode & 0o777) !== 0o700)
       throw new Error("The builder-owned publication directory is not owner-only.");
     if (
       isLeaf &&
       (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
     )
       throw new Error("The builder-owned publication file is not an exclusive owner-only inode.");
@@ -367,6 +370,7 @@ async function assertOwnedPublicationFileHandle(
     !state.isFile() ||
     state.uid !== rootState.uid ||
     state.dev !== rootState.dev ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (state.mode & 0o777) !== 0o600 ||
     state.nlink !== 1
   )
@@ -387,6 +391,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
     try {
       const handle = await open(
         path,
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
         0o600,
       );
@@ -415,6 +420,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
         : undefined;
   if (helper === undefined)
     throw new Error("Branch-worktree publication requires the OS flock or lockf utility.");
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const lockHandle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   let lockState: Awaited<ReturnType<typeof lockHandle.stat>>;
   try {
@@ -523,6 +529,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
 
 async function syncDirectory(path: string, builderOwned = false): Promise<void> {
   if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     if (!(await handle.stat()).isDirectory())
@@ -567,6 +574,7 @@ async function atomicWrite(path: string, value: string): Promise<void> {
   await assertContainedNoLinkPath(temporary, { leaf: "absent-or-regular" });
   const handle = await open(
     temporary,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -592,6 +600,7 @@ async function createInitialJournal(
   await assertContainedNoLinkPath(candidate, { leaf: "absent-or-regular" });
   const handle = await open(
     candidate,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -629,6 +638,7 @@ export async function readBranchWorktreePublicationJournal(
   try {
     const path = journalPath(identity);
     await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     let contents: string;
     try {
@@ -1107,6 +1117,7 @@ async function fileState(path: string): Promise<FileState> {
     const bytes = await readFile(path);
     return {
       kind: "regular",
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (info.mode & 0o777).toString(8),
       digest: contentDigest(bytes),
     };

@@ -210,6 +210,7 @@ function tarFiles(archive: Uint8Array) {
     const end = start + size;
     if (end > tar.byteLength) throw new Error("starter-archive-invalid");
     files.set(path, {
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: rawMode & 0o111 ? "100755" : "100644",
       bytes: new Uint8Array(tar.subarray(start, end)),
     });
@@ -376,6 +377,7 @@ export async function cloneStarterSource(input?: {
           throw new Error("starter-source-file-invalid");
         return {
           path,
+          // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           mode: stat.mode & 0o111 ? "100755" : "100644",
           bytes: await readFile(filePath),
         };

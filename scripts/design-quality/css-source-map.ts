@@ -16,8 +16,10 @@ function decodeVlq(value: string, start: number) {
     const digit = base64.indexOf(value[index]!);
     if (digit === -1) return undefined;
     index += 1;
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     result += (digit & 31) << shift;
     shift += 5;
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (!(digit & 32)) return { value: result & 1 ? -(result >> 1) : result >> 1, index };
   }
   return undefined;

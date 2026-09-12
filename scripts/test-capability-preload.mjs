@@ -34,6 +34,7 @@ if (
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   (repositoryRootStat.mode & 0o022n) !== 0n
 )
   throw new Error("Structural test package root was not owner-bound.");

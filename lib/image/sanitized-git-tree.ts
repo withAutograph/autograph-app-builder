@@ -67,6 +67,7 @@ function containsPath(root: string, candidate: string): boolean {
 function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   const descriptor = openSync(
     path,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
     mode,
   );

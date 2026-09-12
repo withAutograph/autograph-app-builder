@@ -276,6 +276,7 @@ export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
       const absolute = join(directory, name);
       const relativePath = relative(nodeModulesRoot, absolute);
       const stat = lstatSync(absolute);
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       const mode = (stat.mode & 0o777).toString(8).padStart(3, "0");
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(absolute);
@@ -328,6 +329,7 @@ function assertLifecycleStateScope(approval: LifecycleApproval): void {
 
 function assertOwnedPrivateDirectory(path: string, label: string): void {
   const stat = lstatSync(path);
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
     throw new Error(`${label} must be a mode 0700 directory.`);
   const uid = process.getuid?.();
@@ -369,6 +371,7 @@ function removeBuildxRuntime(path: string, uid: number): void {
     !stat.isDirectory() ||
     stat.isSymbolicLink() ||
     stat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & 0o777) !== 0o700
   )
     throw new Error("Unsafe interrupted Buildx state requires review.");
@@ -390,6 +393,7 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
         !entry.isFile() ||
         entry.isSymbolicLink() ||
         stat.uid !== uid ||
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (stat.mode & 0o777) !== 0o600
       )
         throw new Error("Unsafe interrupted receipt artifact requires review.");
@@ -399,6 +403,7 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
         !entry.isDirectory() ||
         entry.isSymbolicLink() ||
         stat.uid !== uid ||
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (stat.mode & 0o777) !== 0o700
       )
         throw new Error("Unsafe interrupted build context requires review.");
@@ -427,6 +432,7 @@ export function withBuildxRuntime<T>(
 function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   const descriptor = openSync(
     path,
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
     mode,
   );
@@ -478,6 +484,7 @@ function writeReceipt(
   try {
     descriptor = openSync(
       temporary,
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
       0o600,
     );
@@ -486,6 +493,7 @@ function writeReceipt(
     closeSync(descriptor);
     descriptor = undefined;
     renameSync(temporary, path);
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const directory = openSync(root, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       fsyncSync(directory);
@@ -513,6 +521,7 @@ function readReceipt(
   if (
     !stat.isFile() ||
     stat.isSymbolicLink() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & 0o777) !== 0o600 ||
     uid === undefined ||
     stat.uid !== uid
@@ -747,6 +756,7 @@ function ensureGithubStateRoot(stateRoot: string): string {
   const path = join(stateRoot, githubStateRootName);
   if (!existsSync(path)) {
     mkdirSync(path, { recursive: false, mode: 0o700 });
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const directory = openSync(stateRoot, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       fsyncSync(directory);
@@ -768,6 +778,7 @@ function assertExactGhcrDockerConfig(stateRoot: string): void {
     stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & 0o777) !== 0o600
   )
     throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
@@ -791,6 +802,7 @@ function assertExactGhcrBoundHelper(stateRoot: string): void {
     stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & 0o777) !== 0o700
   )
     throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
@@ -1104,6 +1116,7 @@ function execute(
             stat.isSymbolicLink() ||
             stat.uid !== (process.getuid?.() ?? -1) ||
             stat.nlink !== 1 ||
+            // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
             (stat.mode & 0o022) !== 0
           )
             throw new Error("The image lifecycle trusted Node launcher is invalid.");

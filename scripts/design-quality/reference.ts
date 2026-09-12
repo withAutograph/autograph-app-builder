@@ -133,11 +133,14 @@ function sourcePath(packageRoot: string, target: string): string | undefined {
 
 function literalValues(type: ts.Type): string[] | undefined {
   const members = (type.isUnion() ? type.types : [type]).filter(
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
   );
   const values = members
     .map((member) => {
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       if (member.flags & ts.TypeFlags.StringLiteral) return (member as ts.StringLiteralType).value;
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       if (member.flags & ts.TypeFlags.NumberLiteral)
         return String((member as ts.NumberLiteralType).value);
       return undefined;
@@ -150,17 +153,22 @@ function literalValues(type: ts.Type): string[] | undefined {
 
 function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
   const members = (type.isUnion() ? type.types : [type]).filter(
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (member) => !(member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)),
   );
   if (
     !members.length ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     members.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
   )
     return undefined;
   const kinds = new Set<"string" | "number" | "boolean">();
   for (const member of members) {
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) kinds.add("string");
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)) kinds.add("number");
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     else if (member.flags & ts.TypeFlags.BooleanLike) kinds.add("boolean");
     else return undefined;
   }
@@ -184,6 +192,7 @@ function propsForExport(
     const values = literalValues(propertyType);
     const primitive = values ? undefined : primitiveKinds(propertyType);
     props[property.getName()] = {
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       required: !(property.flags & ts.SymbolFlags.Optional),
       ...(values ? { values } : {}),
       ...(primitive ? { primitiveKinds: primitive } : {}),
@@ -278,6 +287,7 @@ function reliableExpressionType(
   seen = new Set<ts.Type>(),
 ): boolean {
   if (depth > 5 || seen.has(type)) return false;
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
     return false;
   const nextSeen = new Set([...seen, type]);
@@ -290,6 +300,7 @@ function reliableExpressionType(
       .getTypeArguments(type as ts.TypeReference)
       .every((item) => reliableExpressionType(item, checker, depth + 1, nextSeen));
   if (type.getCallSignatures().length || type.getConstructSignatures().length) return false;
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (!(type.flags & ts.TypeFlags.Object)) return true;
   return checker.getPropertiesOfType(type).every((property) => {
     const declaration = property.valueDeclaration ?? property.declarations?.[0];
@@ -314,12 +325,15 @@ function reliableExpectedAssignment(
     return reliableExpressionType(expected, checker)
       ? checker.isTypeAssignableTo(actual, expected)
       : undefined;
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (expected.types.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)))
     return undefined;
   if (expected.types.every((member) => reliableExpressionType(member, checker)))
     return checker.isTypeAssignableTo(actual, expected);
   const primitiveActual = Boolean(
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     actual.flags &
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (ts.TypeFlags.String |
       ts.TypeFlags.StringLiteral |
       ts.TypeFlags.Number |
@@ -348,6 +362,7 @@ function finiteLiteralEvidence(
   seen = new Set<ts.Symbol>(),
 ): true | undefined {
   if (depth > 8) return undefined;
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return undefined;
   // A JSX element or fragment is a concrete expression with a compiler-owned
   // element type. Its descendants may still be dynamic, but that does not make
@@ -360,8 +375,10 @@ function finiteLiteralEvidence(
   ) {
     const actual = checker.getTypeAtLocation(expression);
     if (
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
       (expected.isUnion() &&
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         expected.types.some((member) => member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)))
     )
       return undefined;
@@ -385,6 +402,7 @@ function finiteLiteralEvidence(
       declaration.getSourceFile() !== expression.getSourceFile() ||
       !list ||
       !ts.isVariableDeclarationList(list) ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       !(list.flags & ts.NodeFlags.Const)
     )
       return undefined;
@@ -428,6 +446,7 @@ function finiteLiteralEvidence(
   }
   if (ts.isObjectLiteralExpression(expression)) {
     if (
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       !(expected.flags & ts.TypeFlags.Object) ||
       expected.isIntersection() ||
       expected.getCallSignatures().length ||
@@ -468,6 +487,7 @@ function finiteLiteralEvidence(
   }
   if (expression.kind === ts.SyntaxKind.NullKeyword) {
     const actual = checker.getTypeAtLocation(expression);
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     return actual.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
       ? undefined
       : checker.isTypeAssignableTo(actual, expected)
@@ -506,6 +526,7 @@ function requiresFiniteIdentifierEvidence(
   // Scalar values retain the existing reliable type-only path. JSX and object
   // aliases need finite ownership proof because a matching type alone does not
   // say whether a mutable/generated/shared value supplied the prop.
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   return members.some((member) => member.flags & ts.TypeFlags.Object);
 }
 
@@ -580,6 +601,7 @@ export function checkJsxAttributes({
             ? checker.getStringLiteralType(node.initializer.text)
             : checker.getTypeAtLocation(expression);
           let expected = checker.getContextualType(expression);
+          // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           if (!expected || expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
             expected = jsxAttributeExpectedType(node, checker);
           const key = {

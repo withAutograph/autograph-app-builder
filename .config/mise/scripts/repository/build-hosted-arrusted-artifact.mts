@@ -204,6 +204,7 @@ function normalizeTree(root: string): void {
       const target = realpathSync(path);
       if (!within(root, target)) throw new Error("Artifact symlink escapes its root.");
     } else if (entry.isFile()) {
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       chmodSync(path, entry.mode & 0o111 ? 0o755 : 0o644);
     } else {
       throw new Error("Artifact contains an unsupported filesystem entry.");

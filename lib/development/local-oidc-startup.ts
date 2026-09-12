@@ -102,6 +102,7 @@ function installedOidcNeedsRefresh(input: {
       stat.nlink === 1 &&
       ownerId !== undefined &&
       stat.uid === ownerId &&
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (stat.mode & 0o077) !== 0
     ) {
       // `vercel link` and `vercel env pull` may create this owner-owned file

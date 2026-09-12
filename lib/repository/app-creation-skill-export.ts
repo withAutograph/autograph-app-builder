@@ -67,6 +67,7 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-bitwise -- Preserve sequential traversal and permission-mode bitmask.
         const mode = (await lstat(path)).mode & 0o777;
         if (mode !== 0o644 && mode !== 0o755)
           throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);

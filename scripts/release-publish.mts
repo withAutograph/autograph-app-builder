@@ -66,6 +66,7 @@ async function ownerToken(path: string) {
     !info.isFile() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
   )
     throw new Error("Release OAuth token must be a canonical owner-only file.");

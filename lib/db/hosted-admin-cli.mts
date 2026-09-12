@@ -34,6 +34,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   if (
     !metadata.isFile() ||
     metadata.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (metadata.mode & 0o077) !== 0 ||
     metadata.size === 0 ||
     metadata.size > MAX_REQUEST_BYTES
