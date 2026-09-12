@@ -508,7 +508,7 @@ export async function measureStyles(
       ({ tokens, properties }) => {
         const el = document.createElement("span");
         el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
-        document.body.appendChild(el);
+        document.body.append(el);
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
           result[prop] = [];
