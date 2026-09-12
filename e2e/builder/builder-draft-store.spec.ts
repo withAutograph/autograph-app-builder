@@ -110,7 +110,7 @@ test("PostgreSQL keeps one active draft across simultaneous device creation and 
       store.saveActive(saveInput(randomUUID(), "Device B")),
     ]);
     expect(first.row.draftId).toBe(second.row.draftId);
-    expect([first.row.revision, second.row.revision].sort()).toEqual([1, 2]);
+    expect([first.row.revision, second.row.revision].toSorted()).toEqual([1, 2]);
     const current = await store.readActive({ authority });
     expect(current?.revision).toBe(2);
     await expect(
