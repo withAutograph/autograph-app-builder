@@ -917,7 +917,7 @@ export function Builder({
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
-      const current = formSnapshot.current;
+      const { current } = formSnapshot;
       const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
       (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {

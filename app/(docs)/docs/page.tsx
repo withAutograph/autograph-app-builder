@@ -4,7 +4,7 @@ import { DocsContent } from "./docs-content";
 import { docs } from "./docs-registry";
 import { DocsShell } from "./docs-shell";
 
-const overview = docs[0];
+const [overview] = docs;
 
 export const metadata: Metadata = {
   title: "Documentation",
