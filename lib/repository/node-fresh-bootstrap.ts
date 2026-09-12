@@ -1634,8 +1634,9 @@ async function atomicPublish(
   const parent = await open(parentPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const parentState = await parent.stat();
+    const increment = 1;
     const expectedParentNlink = String(
-      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(1),
+      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(increment),
     );
     const approvedEmpty =
       proposal.destinationPrestate.kind === "empty-directory"

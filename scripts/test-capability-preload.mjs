@@ -34,7 +34,7 @@ if (
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+  (repositoryRootStat.mode & 0o022n) !== 0n
 )
   throw new Error("Structural test package root was not owner-bound.");
 const require = createRequire(import.meta.url);

@@ -6,6 +6,10 @@ import { isAbsolute, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 
+const MODE_MASK = 18;
+const ZERO = 0;
+const ONE = 1;
+
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
@@ -13,7 +17,7 @@ if (
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+  (repositoryRootStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO)
 )
   throw new Error("The structural test package root was not owner-bound.");
 const preload = pathToFileURL(resolve(repositoryRoot, "scripts/test-capability-preload.mjs")).href;
@@ -130,8 +134,8 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     realpathSync(launcher) !== launcher ||
     !launcherStat.isFile() ||
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-    launcherStat.nlink !== BigInt(1) ||
-    (launcherStat.mode & BigInt(0o022)) !== BigInt(0) ||
+    launcherStat.nlink !== BigInt(ONE) ||
+    (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO) ||
     createHash("sha256").update(readFileSync(launcher)).digest("hex") !== launcherDigest
   )
     throw new Error("The structural test launcher source was invalid.");
