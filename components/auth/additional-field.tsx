@@ -483,7 +483,9 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
           type="text"
           name={name}
           value={formValue}
-          onChange={() => {}}
+          onChange={() => {
+            // This field is display-only in the current authentication flow.
+          }}
           required={field.required}
           tabIndex={-1}
           className="sr-only"

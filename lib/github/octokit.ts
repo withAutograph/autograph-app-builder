@@ -17,7 +17,9 @@ const silentConsole = new Proxy(console, {
       property === "error" ||
       property === "log"
     )
-      return () => {};
+      return () => {
+        // The mocked request has no teardown.
+      };
     return Reflect.get(target, property, receiver) as unknown;
   },
 });
@@ -159,10 +161,18 @@ export function createGitHubApp(input: { appId: string; privateKey: string; fetc
     privateKey: input.privateKey,
     Octokit: octokitClass(input.fetch ?? fetch),
     log: {
-      debug() {},
-      info() {},
-      warn() {},
-      error() {},
+      debug() {
+        // Keep the test logger silent.
+      },
+      info() {
+        // Keep the test logger silent.
+      },
+      warn() {
+        // Keep the test logger silent.
+      },
+      error() {
+        // Keep the test logger silent.
+      },
     },
   });
 }

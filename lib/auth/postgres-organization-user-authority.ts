@@ -227,7 +227,9 @@ export function createPostgresPreviewOrganizationAuthority(
         let selfServiceSignupEnabled = false;
         try {
           selfServiceSignupEnabled = (await options.isSelfServiceSignupEnabled?.()) === true;
-        } catch {}
+        } catch {
+          // Treat an unavailable feature flag as disabled.
+        }
         if (!selfServiceSignupEnabled) {
           throw new OrganizationProvisioningError("signup-disabled");
         }

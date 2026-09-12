@@ -134,7 +134,9 @@ const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
 
 function subscribeToClientSnapshot() {
-  return () => {};
+  return () => {
+    // The client snapshot has no external subscription.
+  };
 }
 
 const briefExamples = [
@@ -1281,7 +1283,9 @@ export function Builder({
   try {
     deriveBuilderAppId(form.appName);
     validAppId = true;
-  } catch {}
+  } catch {
+    // Invalid app names simply keep submission disabled.
+  }
   const canSubmit = Boolean(
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&

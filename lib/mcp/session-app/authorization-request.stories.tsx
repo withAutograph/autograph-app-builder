@@ -10,8 +10,12 @@ const meta = {
   args: {
     canOpen: true,
     canRefresh: true,
-    onOpenLink: fn(async () => {}),
-    onRefresh: fn(async () => {}),
+    onOpenLink: fn(async () => {
+      // Story fixture callback.
+    }),
+    onRefresh: fn(async () => {
+      // Story fixture callback.
+    }),
     request: authorizationRequest,
   },
   decorators: [

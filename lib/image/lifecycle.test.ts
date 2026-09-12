@@ -907,7 +907,9 @@ wait
       token.fill(0);
       try {
         process.kill(-child.pid!, "SIGKILL");
-      } catch {}
+      } catch {
+        // The process may already have exited.
+      }
       rmSync(root, { force: true, recursive: true });
     }
   });

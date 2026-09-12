@@ -152,7 +152,7 @@ try {
     vercel: requiredExecutable("APP_BUILDER_RELEASE_VERCEL_BIN"),
   };
 
-  async function exactGithubReleaseExists() {
+  const exactGithubReleaseExists = async () => {
     let metadataRaw: string;
     try {
       const result = await execFileAsync(
@@ -241,7 +241,7 @@ try {
       await rm(downloadRoot, { recursive: true, force: true });
     }
     return true;
-  }
+  };
   const outputs: { tool: string; stdoutSha256: string }[] = [];
   const commands = releasePublicationCommands(receipt);
   const releaseCommand = commands.at(-1);

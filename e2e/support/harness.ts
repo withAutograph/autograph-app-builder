@@ -275,7 +275,9 @@ export async function installBrowserBoundaries(
       const value = String(url ?? "");
       if (value !== "about:blank") state.opened.push(value);
       return {
-        close() {},
+        close() {
+          // The emulated window has no resources to close.
+        },
         location: {
           set href(next: string) {
             state.opened.push(next);

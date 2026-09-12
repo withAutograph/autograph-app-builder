@@ -220,7 +220,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
       database,
       config: readGitHubUserCredentialEnvironment(environment),
     });
-  } catch {}
+  } catch {
+    // Fall back to the default credential store when configuration is unavailable.
+  }
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     issuer: previewConfig.issuer,
     audience: previewConfig.resource,

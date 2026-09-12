@@ -446,7 +446,7 @@ export function projectInstalledEveEvent(
                 : "failed",
         },
       ];
-    case "input.requested":
+    case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);
       return projectedRequests.some((request) => request === undefined)
         ? [
@@ -463,6 +463,7 @@ export function projectInstalledEveEvent(
             index,
             request,
           }));
+    }
     case "input.resolved":
       return [
         {
@@ -479,7 +480,7 @@ export function projectInstalledEveEvent(
           requestIds: [event.data.requestId],
         },
       ];
-    case "authorization.required":
+    case "authorization.required": {
       const { authorization } = event.data;
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
         authorization === undefined ? undefined : Reflect.get(authorization, "repositoryAccess"),
@@ -533,6 +534,7 @@ export function projectInstalledEveEvent(
           },
         },
       ];
+    }
     case "turn.cancelled":
       return [{ type: "status", index, status: "cancelled" }];
     case "session.waiting":

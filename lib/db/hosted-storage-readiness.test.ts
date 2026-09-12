@@ -169,7 +169,7 @@ describe("hosted storage read-only readiness", () => {
     expect(cli).toContain("constraint_record.contype <> 'n'");
     expect(cli).toContain("hostedStorageExpectedColumns");
     expect(cli).toContain("new Set(hostedStorageExpectedColumns.map(([table]) => table))");
-    expect(cli.match(/= ANY\(\$\{managedTables\}\)/gu)).toHaveLength(3);
+    expect(cli.match(/[=] ANY\(\$\{managedTables\}\)/gu)).toHaveLength(3);
     expect(cli).not.toContain("process.env.DATABASE_URL");
     expect(contract).toContain('providerRestorePointStatus: "not-proven" as const');
     expect(contract).toContain("githubJournalExcludedFromTenantRetention");

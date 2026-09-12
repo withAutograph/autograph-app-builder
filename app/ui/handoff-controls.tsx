@@ -142,12 +142,16 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         let saved: string | null = null;
         try {
           saved = sessionStorage.getItem(storageKey);
-        } catch {}
+        } catch {
+          // Session storage is optional; generate a new request id below.
+        }
         renewalRequestId.current =
           saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
         try {
           sessionStorage.setItem(storageKey, renewalRequestId.current);
-        } catch {}
+        } catch {
+          // Session storage is optional.
+        }
       }
       const response = await fetch(
         `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}/renew`,
