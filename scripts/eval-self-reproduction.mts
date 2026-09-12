@@ -141,6 +141,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
   const args = values.generator
     ? (values["generator-arg"] ?? [])
     : [
+        process.execPath,
         "--import",
         "tsx",
         "scripts/run-eve-eval.mts",
@@ -157,7 +158,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
         "--timeout",
         String(deadline),
       ];
-  const command = values.generator ?? process.execPath;
+  const command = values.generator ?? resolve(root, ".config/mise/scripts/trusted-node-launcher");
   settings = {
     ...settings,
     command,
