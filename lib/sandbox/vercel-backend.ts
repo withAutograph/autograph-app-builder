@@ -220,6 +220,8 @@ function createProcessSessionReusingBackend<BO, SO>(
             shutdown: () => close("shutdown"),
           } satisfies SandboxBackendHandle<SO>;
         })
+        // The backend promise cleanup must remain attached to the promise chain.
+        // oxlint-disable-next-line promise/prefer-await-to-callbacks
         .catch((error: unknown) => {
           if (sessions.get(key) === pending) sessions.delete(key);
           throw error;

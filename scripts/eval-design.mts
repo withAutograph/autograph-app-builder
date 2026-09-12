@@ -244,6 +244,8 @@ async function main() {
     `AI review: ${judge.status}. Scores are advisory; no generation or publication was performed.`,
   );
 }
+// Keep the CLI's terminal error handler attached to the promise.
+// oxlint-disable-next-line promise/prefer-await-to-callbacks
 main().catch((error) => {
   // Do not print network errors that can contain secret preview query strings.
   console.error(

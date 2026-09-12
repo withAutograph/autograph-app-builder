@@ -24,6 +24,8 @@ export function createHostedBunRuntimeInstaller() {
         if (result.exitCode !== 0)
           throw new Error("The hosted Bun runtime could not be installed.");
       })
+      // Preserve the shared lazy promise while clearing it after a failed install.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       .catch((error: unknown) => {
         if (installs.get(sandbox.id) === install) installs.delete(sandbox.id);
         throw error;

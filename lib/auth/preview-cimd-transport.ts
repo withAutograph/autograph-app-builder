@@ -55,6 +55,8 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
     family,
   }));
 
+  // Node's dns.lookup contract is callback-based.
+  // oxlint-disable promise/prefer-await-to-callbacks
   return (hostname, options, callback) => {
     const eligible = addressesForOptions(pinnedAddresses, options);
     if (eligible.length === 0) {
@@ -67,6 +69,7 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
     }
     callback(null, eligible[0].address, eligible[0].family);
   };
+  // oxlint-enable promise/prefer-await-to-callbacks
 }
 
 function responseHeaders(headers: IncomingMessage["headers"]): Headers {
@@ -95,6 +98,8 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
       })
+      // Promise cleanup is intentionally attached to the operation chain.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       .catch((error: unknown) => {
         signal.removeEventListener("abort", onAbort);
         reject(error);

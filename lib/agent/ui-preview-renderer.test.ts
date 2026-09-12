@@ -55,6 +55,8 @@ describe("preview runtime initialization", () => {
       React: { createElement: (component: unknown) => component },
       document: { getElementById: () => ({}) },
       location,
+      // The generated browser entrypoint uses the DOM callback contract.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       addEventListener: (_event: string, callback: () => void) => {
         navigate = callback;
       },

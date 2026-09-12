@@ -260,6 +260,9 @@ process.stdout.write("preloaded\\n");
   };
 }
 
+// These helpers intentionally expose callback-based setup for synchronous and
+// asynchronous test scopes.
+// oxlint-disable promise/prefer-await-to-callbacks
 function withFakeGhEnvironment(
   fixture: ReturnType<typeof installFakeGhBoundary>,
   callback: () => void,
@@ -307,6 +310,7 @@ async function withFakeGhEnvironmentAsync(
     }
   }
 }
+// oxlint-enable promise/prefer-await-to-callbacks
 
 function seedFakeGhState(fixture: ReturnType<typeof installFakeGhBoundary>): string {
   mkdirSync(join(fixture.state, "gh"), { mode: 0o700 });

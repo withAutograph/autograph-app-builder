@@ -23,7 +23,6 @@ export default defineConfig({
     "eslint/sort-keys": "off",
     "promise/prefer-await-to-then": "off",
     "promise/avoid-new": "off",
-    "promise/prefer-await-to-callbacks": "off",
     "typescript/no-non-null-assertion": "off",
     "unicorn/filename-case": "off",
     "unicorn/consistent-function-scoping": "off",

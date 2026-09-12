@@ -31,6 +31,8 @@ describe("safe MCP tool errors", () => {
     [new HostedSessionBusyError(), "already_continuing"],
     [new HostedSessionRecoveryUnavailableError(), "restart_required"],
     [new Error("secret provider detail"), "internal_error"],
+    // Vitest's table test API is callback-based.
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
   ])("projects %s without exposing internal details", (error, code) => {
     const result = safeToolError(error, "session-one");
     expect(result.structuredContent.error?.code).toBe(code);

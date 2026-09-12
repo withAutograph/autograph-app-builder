@@ -110,6 +110,8 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     if (input.openDatabase === undefined) {
       throw new Error("Hosted GitHub publication database is unconfigured.");
     }
+    // Preserve the shared lazy promise while clearing it after a failed open.
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
     databasePromise ??= Promise.resolve(input.openDatabase()).catch((error) => {
       databasePromise = undefined;
       throw error;

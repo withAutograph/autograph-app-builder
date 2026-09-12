@@ -9,6 +9,8 @@ describe("non-authorizing structural test protocol relay", () => {
     const source = new PassThrough();
     let output = "";
     let writes = 0;
+    // Writable's implementation contract is callback-based.
+    // oxlint-disable promise/prefer-await-to-callbacks
     const target = new Writable({
       highWaterMark: 1,
       write(chunk, _encoding, callback) {
@@ -19,6 +21,7 @@ describe("non-authorizing structural test protocol relay", () => {
         }, 2);
       },
     });
+    // oxlint-enable promise/prefer-await-to-callbacks
     const relay = relayBoundedFrames({ source, target, expectedFrames: 2 });
     source.write('{"version":');
     source.write("2}\n");

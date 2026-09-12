@@ -25,7 +25,10 @@ function createDatabase(results: unknown[]) {
     if (results.length === 0) throw new Error("Unexpected database query.");
     return results.shift();
   });
+  // Drizzle's transaction fixture intentionally models its callback API.
+  // oxlint-disable-next-line promise/prefer-await-to-callbacks
   const transaction = vi.fn(async (callback: (database: { execute: typeof execute }) => unknown) =>
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
     callback({ execute }),
   );
   return {
