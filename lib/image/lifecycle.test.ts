@@ -278,7 +278,7 @@ function withFakeGhEnvironment(
     return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
       else process.env[key] = value;
     }
   }
@@ -302,7 +302,7 @@ async function withFakeGhEnvironmentAsync(
     return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
       else process.env[key] = value;
     }
   }

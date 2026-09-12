@@ -212,7 +212,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
 
 export function installGateAEvalProfile(environment, value, repositoryRoot) {
   const profile = validateGateAEvalProfile(value, repositoryRoot);
-  for (const field of gateAEnvironmentFields) delete environment[field];
+  for (const field of gateAEnvironmentFields) Reflect.deleteProperty(environment, field);
   if (profile.profile === "general") {
     environment.APP_BUILDER_LOCAL_PUBLICATION = profile.localPublication;
     environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION = "1";

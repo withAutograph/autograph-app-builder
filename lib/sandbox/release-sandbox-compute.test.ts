@@ -15,7 +15,7 @@ const originalEnvironment = {
 
 function restoreEnvironment() {
   for (const [key, value] of Object.entries(originalEnvironment)) {
-    if (value === undefined) delete process.env[key];
+    if (value === undefined) Reflect.deleteProperty(process.env, key);
     else process.env[key] = value;
   }
 }

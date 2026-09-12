@@ -109,6 +109,6 @@ try {
     await handle?.shutdown();
   } finally {
     delete process.env.VERCEL_OIDC_TOKEN;
-    for (const key of requiredEnvironmentKeys) delete process.env[key];
+    for (const key of requiredEnvironmentKeys) Reflect.deleteProperty(process.env, key);
   }
 }

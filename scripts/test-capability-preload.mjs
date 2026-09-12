@@ -142,7 +142,7 @@ function requestAuthorization() {
     port.postMessage({ version: 2, ...request });
     response = readPortFrame(port);
     port.close();
-    delete workerData[workerPortKey];
+    Reflect.deleteProperty(workerData, workerPortKey);
   }
   if (
     Buffer.byteLength(JSON.stringify(response)) > maxBytes ||
@@ -340,11 +340,11 @@ try {
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;
   if (eveProfile) installGateAEvalProfile(process.env, gateAEvalProfileToInstall, repositoryRoot);
-  else for (const name of gateAEnvironmentFields) delete process.env[name];
-  if (!isMainThread) delete workerData[gateAEvalProfileKey];
+  else for (const name of gateAEnvironmentFields) Reflect.deleteProperty(process.env, name);
+  if (!isMainThread) Reflect.deleteProperty(workerData, gateAEvalProfileKey);
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
-    delete workerData[eveWorkerEnvelopeKey];
+    Reflect.deleteProperty(workerData, eveWorkerEnvelopeKey);
   } else if (eveProfile) process.env.EVE_DEV = "1";
   else {
     for (const name of [
@@ -356,7 +356,7 @@ try {
       "EVE_EVALUATION",
       "EVE_EVALUATION_RUN_ID",
     ])
-      delete process.env[name];
+      Reflect.deleteProperty(process.env, name);
   }
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;

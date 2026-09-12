@@ -79,7 +79,7 @@ function fixedGitEnvironment(): NodeJS.ProcessEnv {
     "GIT_CONFIG_KEY_0",
     "GIT_CONFIG_VALUE_0",
   ])
-    delete environment[name];
+    Reflect.deleteProperty(environment, name);
   return environment;
 }
 

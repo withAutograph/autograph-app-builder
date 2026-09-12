@@ -1083,7 +1083,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       "worktreeStatusDigest",
       "postconditionDigest",
     ])
-      delete proposal[key];
+      Reflect.deleteProperty(proposal, key);
     if (recover) {
       if (output.status === "succeeded")
         return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
