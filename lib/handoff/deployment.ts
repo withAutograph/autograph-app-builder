@@ -364,7 +364,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
       return await createBuilderHandoffRenewRouteHandler({
         origin: new URL(context.preview.issuer).origin,
         handoffs: context.handoffs,
-        authorityForRequest: (request) => context.authorityForHeaders(request.headers),
+        authorityForRequest: (innerRequest) => context.authorityForHeaders(innerRequest.headers),
       })(request, handoffId);
     } catch (error) {
       return handoffErrorResponse(error);
