@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-import { AutographMark } from "./app-builder";
+import { AutographMark } from "./autograph-mark";
 
 const meta = {
   title: "Components/Create App/Primitives/Brand",

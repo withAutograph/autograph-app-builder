@@ -19,7 +19,6 @@ import {
   X,
 } from "@geist-ui/icons";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
@@ -54,7 +53,6 @@ import {
   type BuilderDraftPageData,
   type SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
-import { continueBuilderHandoff } from "@/app/actions/builder";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
 import { SectionShell } from "../../components/create-app/choice-card";
@@ -63,8 +61,12 @@ import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
-import { persistBuilderDraft } from "./builder-session";
-import { Header, ProviderNotices } from "./builder-shell";
+import {
+  clearBuilderDraft as clearSessionBuilderDraft,
+  persistBuilderDraft,
+  readBuilderDraftResume,
+} from "./builder-session";
+import { ProviderNotices } from "./builder-shell";
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 import { AppDetailsSection } from "./builder-app-details";
@@ -75,7 +77,6 @@ import { SearchCombobox, type ComboOption } from "./search-combobox";
 export { AppDetailsSection } from "./builder-app-details";
 export { BuildWithSection } from "./builder-destination";
 export { InfoTooltip } from "./builder-info-tooltip";
-export { SearchCombobox, type ComboOption } from "./search-combobox";
 export type {
   BuilderDraft,
   BuilderForm,
@@ -133,11 +134,6 @@ const connectionDescriptions: Record<string, string> = {
 function connectionDescription(name: string) {
   return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
 }
-
-const suggestions = [
-  "Build a customer feedback portal",
-  "Create an internal operations dashboard",
-] as const;
 
 const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
@@ -266,15 +262,6 @@ function randomAppName(seed?: string) {
   const noun =
     randomNameNouns[Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length];
   return `${adjective} ${noun}`;
-}
-
-export function AutographMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className={styles.brand} data-compact={compact || undefined}>
-      <Image className={styles.brandMark} src={autographIcon} width={23} height={23} alt="" />
-      <span>Autograph</span>
-    </span>
-  );
 }
 
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
@@ -845,68 +832,6 @@ export function ConnectionDrawer({
   );
 }
 
-export function AnonymousBuilder({ onContinue }: { onContinue: (brief: string) => void }) {
-  const [brief, setBrief] = useState("");
-  const isInteractive = useSyncExternalStore(
-    subscribeToClientSnapshot,
-    () => true,
-    () => false,
-  );
-
-  return (
-    <main className={styles.anonymousPage} id="main-content">
-      <a className={styles.skipLink} href="#anonymous-brief">
-        Skip to content
-      </a>
-      <header className={styles.publicHeader}>
-        <AutographMark />
-        <span>New App</span>
-        <div>
-          <Link href="/docs">Docs</Link>
-          <a href="/auth/sign-in?callbackURL=%2F">Sign In</a>
-          <a className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
-            Sign Up
-          </a>
-        </div>
-      </header>
-      <section className={styles.promptCard}>
-        <div className={styles.cardTitle}>
-          <h1>Build an app</h1>
-          <AutographMark compact />
-        </div>
-        <label htmlFor="anonymous-brief">What should this app do?</label>
-        <div className={styles.promptField}>
-          <textarea
-            id="anonymous-brief"
-            name="app-brief"
-            autoComplete="off"
-            disabled={!isInteractive}
-            value={brief}
-            onChange={(event) => setBrief(event.target.value)}
-            placeholder="Help me create a customer portal, build an internal dashboard, or launch a new workflow…"
-          />
-          <button
-            type="button"
-            disabled={!isInteractive || !brief.trim()}
-            onClick={() => onContinue(brief)}
-          >
-            Continue
-          </button>
-        </div>
-        <div className={styles.suggestions}>
-          <span>Suggestions</span>
-          {suggestions.map((suggestion) => (
-            <button type="button" key={suggestion} onClick={() => setBrief(suggestion)}>
-              {suggestion}
-            </button>
-          ))}
-        </div>
-        <p>You’ll create or sign in to your Autograph account before building.</p>
-      </section>
-    </main>
-  );
-}
-
 export function Builder({
   initialBrief,
   generatedNameSeed,
@@ -1006,6 +931,13 @@ export function Builder({
     [builderForm],
   );
   const appNameEditedByUser = useRef(initialDraft?.appNameEditedByUser ?? false);
+  // Keep the provenance of an inferred name separate from the persisted
+  // marker. A streamed action acknowledgement can briefly replay an older
+  // marker while RHF already holds a user-entered name; that acknowledgement
+  // must not turn the next brief edit into an instruction to replace it.
+  const generatedAppName = useRef<string | undefined>(
+    initialDraft?.appNameEditedByUser ? undefined : initialForm.appName,
+  );
   const repositoryEditedByUser = useRef(initialDraft?.repositoryEditedByUser ?? false);
   const [initialActiveDraftId] = useState(() => resumeKey ?? durableDraftId ?? crypto.randomUUID());
   const activeDraftId = useRef(initialActiveDraftId);
@@ -1304,6 +1236,7 @@ export function Builder({
       setDeploymentProvider(snapshot.deploymentProvider ?? null);
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
+      generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
       autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
       setDraftSyncNotice("Updated from another device");
@@ -1350,8 +1283,17 @@ export function Builder({
           : undefined;
   const updateBrief = (brief: string) => {
     setForm((current) => {
-      if (appNameEditedByUser.current) return { ...current, brief };
+      // Preserve a name that RHF knows was entered directly, even if an older
+      // Server Action/RSC acknowledgement has not yet caught up with the
+      // persisted ownership marker. A newer authoritative remote revision
+      // updates generatedAppName above and is still allowed to replace it.
+      if (
+        appNameEditedByUser.current ||
+        (generatedAppName.current !== undefined && generatedAppName.current !== current.appName)
+      )
+        return { ...current, brief };
       const appName = appNameFromBrief(brief) || randomAppName(generatedNameSeed);
+      generatedAppName.current = appName;
       return {
         ...current,
         brief,
@@ -1435,6 +1377,7 @@ export function Builder({
         setDeploymentProvider(snapshot.deploymentProvider ?? null);
         focusOrigin.current = snapshot.focusOrigin;
         appNameEditedByUser.current = snapshot.appNameEditedByUser;
+        generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
         repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
         autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
         if (!disposed) void resumePending();
@@ -1446,6 +1389,40 @@ export function Builder({
       disposed = true;
     };
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
+  useEffect(() => {
+    // The provider popup/window is the one short-lived browser-local bridge.
+    // Only a snapshot whose Server Action checkpoint was acknowledged at the
+    // same revision as the request-fresh RSC read can participate. This makes
+    // the bridge resilient to streamed acknowledgement ordering without
+    // making browser storage a normal builder source of truth.
+    if (!resumeKey || !durableDraftId || durableDraftRevision === undefined) return;
+    const resumed = readBuilderDraftResume(resumeKey);
+    if (
+      !resumed ||
+      resumed.acknowledgedRevision === undefined ||
+      resumed.acknowledgedRevision !== durableDraftRevision
+    )
+      return;
+    const snapshot = resumed.draft;
+    builderForm.reset(snapshot.form);
+    activeDraftId.current = durableDraftId;
+    draftRevision.current = durableDraftRevision;
+    setTeam(snapshot.team);
+    setGitScope(snapshot.gitScope);
+    setModel(snapshot.model);
+    setZdrOnly(snapshot.zdrOnly);
+    setShowMoreConnections(snapshot.showMoreConnections);
+    setSearch(snapshot.search);
+    setConnectedConnections(snapshot.connectedConnections);
+    setStorageProvider(snapshot.storageProvider ?? null);
+    setDeploymentProvider(snapshot.deploymentProvider ?? null);
+    focusOrigin.current = snapshot.focusOrigin;
+    appNameEditedByUser.current = snapshot.appNameEditedByUser;
+    generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
+    repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
+    autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
+    clearSessionBuilderDraft(resumeKey);
+  }, [builderForm, durableDraftId, durableDraftRevision, resumeKey]);
   useEffect(() => {
     let disposed = false;
     let wasHidden = document.visibilityState === "hidden";
@@ -1559,6 +1536,10 @@ export function Builder({
       return;
     }
     setDraftSaveError("");
+    // Mark this popup bridge as safe only after its Server Action checkpoint
+    // has been acknowledged. Provider-return hydration rejects unacknowledged
+    // session snapshots and otherwise remains server-authoritative.
+    persistBuilderDraft(activeDraftId.current, draft, draftRevision.current);
     // The service owns the one active draft and may acknowledge a canonical
     // ID different from the optimistic local ID. Capture it only after the
     // Server Action checkpoint has completed so a provider return can never
@@ -1639,6 +1620,7 @@ export function Builder({
             brief={form.brief}
             onAppNameChange={(appName) => {
               appNameEditedByUser.current = true;
+              generatedAppName.current = undefined;
               setForm((current) => ({
                 ...current,
                 appName,
@@ -1772,125 +1754,5 @@ export function Builder({
         />
       ) : null}
     </main>
-  );
-}
-
-export function AppBuilder({
-  authenticated,
-  generatedNameSeed = "app-builder",
-  connectionsEnabled = false,
-  comingSoonEnabled = false,
-  provisioningEnabled = false,
-  integrations,
-  providerNotices = [],
-  providerResumeKey,
-  initialDurableDraft,
-  durableDraftId,
-  durableDraftRevision,
-  durableDraftUpdatedAt,
-  saveActiveBuilderDraftAction,
-  loadActiveBuilderDraftAction,
-  clearBuilderDraftAction,
-}: {
-  authenticated: boolean;
-  generatedNameSeed?: string;
-  connectionsEnabled?: boolean;
-  comingSoonEnabled?: boolean;
-  provisioningEnabled?: boolean;
-  integrations: BuilderIntegrationState;
-  providerNotices?: ProviderConnectionNotice[];
-  providerResumeKey?: string;
-  initialDurableDraft?: BuilderDraft;
-  durableDraftId?: string;
-  durableDraftRevision?: number;
-  durableDraftUpdatedAt?: string;
-  saveActiveBuilderDraftAction?: (
-    input: SaveActiveBuilderDraftInput,
-  ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
-  loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
-  clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
-}) {
-  const router = useRouter();
-  const [savedBrief, setSavedBrief] = useState("");
-  const activeDraftId = useRef<string | undefined>(undefined);
-  const completedHandoff = useRef<string | undefined>(undefined);
-  const [continuation, dispatchContinuation, continuationPending] = useActionState(
-    continueBuilderHandoff,
-    undefined,
-  );
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setSavedBrief(sessionStorage.getItem("autograph-app-brief") ?? "");
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-  useEffect(() => {
-    if (!continuation || continuationPending) return;
-    if (continuation.status === "error") return;
-    if (completedHandoff.current === continuation.handoff.handoffId) return;
-    completedHandoff.current = continuation.handoff.handoffId;
-    if (activeDraftId.current) void clearBuilderDraftAction?.(activeDraftId.current);
-    router.replace(`/handoff/${continuation.handoff.handoffId}`);
-  }, [clearBuilderDraftAction, continuation, continuationPending, router]);
-  // The server draft is authoritative after provider return. Browser storage
-  // remains a write-only, short-lived redirect bridge and is never restored.
-  const resumedDraft = initialDurableDraft;
-  const builderKey = providerResumeKey
-    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
-    : savedBrief || "new";
-
-  if (!authenticated)
-    return (
-      <AnonymousBuilder
-        onContinue={(value) => {
-          sessionStorage.setItem("autograph-app-brief", value);
-          router.push("/auth/sign-in?callbackURL=%2F");
-        }}
-      />
-    );
-  return (
-    <div className={styles.appShell}>
-      <Header />
-      {continuationPending ? (
-        <main className={styles.flowPage} id="main-content">
-          <section className={styles.readyCard} aria-busy="true">
-            <h1>Preparing your handoff</h1>
-            <p>Your saved app is being prepared.</p>
-          </section>
-        </main>
-      ) : (
-        <Builder
-          key={builderKey}
-          initialBrief={savedBrief}
-          generatedNameSeed={generatedNameSeed}
-          initialDraft={resumedDraft}
-          resumeKey={providerResumeKey}
-          durableDraftId={durableDraftId}
-          durableDraftRevision={durableDraftRevision}
-          durableDraftUpdatedAt={durableDraftUpdatedAt}
-          saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
-          loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
-          connectionsEnabled={connectionsEnabled}
-          comingSoonEnabled={comingSoonEnabled}
-          integrations={integrations}
-          providerNotices={providerNotices}
-          onCreate={(form, draftId) => {
-            activeDraftId.current = draftId ?? durableDraftId;
-            startTransition(() =>
-              dispatchContinuation({
-                version: 1,
-                requestId: crypto.randomUUID(),
-                creationRequestId: crypto.randomUUID(),
-                provisioningEnabled,
-                form,
-              }),
-            );
-          }}
-        />
-      )}
-      {continuation?.status === "error" && !continuationPending ? (
-        <p role="alert">We couldn’t prepare your handoff. Your saved draft is still available.</p>
-      ) : null}
-    </div>
   );
 }

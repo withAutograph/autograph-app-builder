@@ -4,11 +4,6 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  appNameFromBrief,
-  AppBuilder as AppBuilderComponent,
-  repositoryNameFromAppName,
-} from "./app-builder";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -114,6 +109,11 @@ vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
 
+import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
+import { AnonymousBuilder } from "./anonymous-builder";
+import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
+import { Header } from "./builder-shell";
+import styles from "./app-builder.module.css";
 const integrationState = {
   vercel: {
     status: "connected" as const,
@@ -192,21 +192,27 @@ const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
 
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
+    authenticated?: boolean;
     user?: { name: string; email: string };
   },
 ) {
   const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
   void user;
+  if (!componentProps.authenticated) return <AnonymousBuilder />;
+  const { authenticated: _authenticated, ...authenticatedProps } = componentProps;
   return (
-    <AppBuilderComponent
-      {...componentProps}
-      connectionsEnabled={connectionsEnabled}
-      comingSoonEnabled={comingSoonEnabled}
-      integrations={integrationState}
-      saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
-      loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
-      clearBuilderDraftAction={builderActions.clearBuilderDraft}
-    />
+    <div className={styles.appShell}>
+      <Header />
+      <AppBuilderComponent
+        {...authenticatedProps}
+        connectionsEnabled={connectionsEnabled}
+        comingSoonEnabled={comingSoonEnabled}
+        integrations={integrationState}
+        saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
+        loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
+        clearBuilderDraftAction={builderActions.clearBuilderDraft}
+      />
+    </div>
   );
 }
 
@@ -269,9 +275,7 @@ afterEach(async () => {
 
 describe("Vercel-faithful App Builder flow", () => {
   it("hides Coming soon elements by default", async () => {
-    const view = await render(
-      <AppBuilderComponent authenticated integrations={integrationState} />,
-    );
+    const view = await render(<AppBuilderComponent integrations={integrationState} />);
 
     expect(view.textContent).not.toContain("Coming soon");
     expect(view.textContent).not.toContain("Web Chat");
@@ -433,7 +437,6 @@ describe("Vercel-faithful App Builder flow", () => {
   it("places model controls directly after Build with for Web Chat only", async () => {
     const view = await render(
       <AppBuilderComponent
-        authenticated
         comingSoonEnabled
         integrations={integrationState}
         initialDurableDraft={{
@@ -486,7 +489,6 @@ describe("Vercel-faithful App Builder flow", () => {
   it("renders unavailable providers as coming soon and preserves callback outcomes", async () => {
     const view = await render(
       <AppBuilderComponent
-        authenticated
         comingSoonEnabled
         integrations={{
           ...integrationState,
@@ -544,7 +546,6 @@ describe("Vercel-faithful App Builder flow", () => {
   it("keeps GitHub failures out of the shared provider notice area", async () => {
     const view = await render(
       <AppBuilderComponent
-        authenticated
         connectionsEnabled
         integrations={integrationState}
         providerNotices={[{ provider: "github", status: "failed", reason: "callback-invalid" }]}
@@ -558,7 +559,6 @@ describe("Vercel-faithful App Builder flow", () => {
   it("waits to show repository controls until a GitHub scope is available", async () => {
     const view = await render(
       <AppBuilderComponent
-        authenticated
         integrations={{
           ...integrationState,
           github: { status: "disconnected", scopes: [] },

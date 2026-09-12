@@ -66,6 +66,22 @@ async function clear() {
   await client`truncate table sandbox_execution_lease`;
 }
 
+async function waitForDatabase() {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await client`select 1`;
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
+    }
+  }
+  throw lastError;
+}
+
 async function expire(lease: SandboxExecutionLease) {
   const expiresAtEpochMs = Date.now() - 1_000;
   const heartbeatAtEpochMs = expiresAtEpochMs - 1_000;
@@ -87,6 +103,7 @@ async function expire(lease: SandboxExecutionLease) {
 }
 
 try {
+  await waitForDatabase();
   await client.unsafe(await readFile("drizzle/0008_sandbox_execution_lease.sql", "utf8"));
 
   const sameSubject = await Promise.all([
