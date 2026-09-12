@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { uiPreviewInputSchema, uiPreviewSourceDigest, validateUiPreview } from "./ui-preview";
+import {
+  publicPreviewIcons,
+  uiPreviewInputSchema,
+  uiPreviewSourceDigest,
+  validateUiPreview,
+} from "./ui-preview";
 import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 const preview = {
@@ -206,6 +211,43 @@ export default function Page() {
         ],
       }),
     ).toThrow(/missing from its manifest/u);
+  });
+
+  it("rejects invented icons with the exact public inventory", () => {
+    expect(publicPreviewIcons).toContain("ChevronLeft");
+    expect(publicPreviewIcons).not.toContain("ArrowLeft");
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content:
+              'import { ArrowLeft } from "@autograph/icons"; export default function Page() { return <ArrowLeft />; }',
+          },
+        ],
+        manifest: {
+          ...preview.manifest,
+          productionComponents: [],
+          productionIcons: [{ name: "ArrowLeft", source: "@autograph/icons" }],
+        },
+      }),
+    ).toThrow(/not a public @autograph\/icons export.*ChevronLeft/u);
+  });
+
+  it("rejects unrepairable single-line preview source", () => {
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content: `export default function Page() { return <main>${"x".repeat(2100)}</main>; }`,
+          },
+        ],
+        manifest: { ...preview.manifest, productionComponents: [] },
+      }),
+    ).toThrow(/format JSX/u);
   });
 
   it("binds manifest decisions and assumptions into the immutable revision", () => {

@@ -95,4 +95,14 @@ describe("high-fidelity design guidance", () => {
     expect(skill).toContain("call `record_ui_preview` with React route wiring");
     expect(skill).toMatch(/never substitute a generic\s+file writer/u);
   });
+
+  it("requires exact icon exports and repairable preview source", () => {
+    const reference = readFileSync(
+      "agent/skills/design-app/references/ui-preview-authoring.md",
+      "utf-8",
+    );
+    expect(reference).toMatch(/`ChevronLeft`; `ArrowLeft` is not an\s+export/u);
+    expect(reference).toContain("Keep TSX formatted with normal line breaks");
+    expect(reference).toMatch(/Call `accept_ui_preview`\s+only after/u);
+  });
 });

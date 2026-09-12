@@ -20,12 +20,22 @@ such as `buttonClassName`, `cn`, or `buttonVariants`; the preview schema cannot
 inventory lowercase names, even if a production consumer uses the helper.
 Adding a made-up name to the manifest cannot make it a package export. Select
 an existing public component or simplify the design when an API is unavailable.
+For icons, use only the exact names exported by the inspected icon barrel. For
+example, a left-pointing navigation icon is `ChevronLeft`; `ArrowLeft` is not an
+export. Do not infer a symmetric icon name from another export.
 
 Raw `button`, `input`, `select`, `textarea`, `dialog`, and `table` JSX is rejected
 in every submitted file. A route function, local wrapper, or styled HTML control
 does not bypass that rule. Use public components and pass local fixture state
 and handlers through their observed APIs. Layout and text HTML can arrange them.
 Do not submit `src/components/` implementations or catalog-gap components.
+Keep TSX formatted with normal line breaks. Do not compress a screen into a
+single line or a giant JSX expression: preview source must remain readable so a
+compiler error can be located and repaired.
+
+If `record_ui_preview` reports an import, syntax, or compilation error, repair
+the reported source and call `record_ui_preview` again. Call `accept_ui_preview`
+only after `record_ui_preview` has returned a current valid preview revision.
 
 ## Minimal source and matching manifest
 

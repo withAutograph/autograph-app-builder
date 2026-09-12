@@ -82,6 +82,43 @@ export const uiPreviewInputSchema = z.strictObject({
 
 export type UiPreviewInput = z.infer<typeof uiPreviewInputSchema>;
 
+export const publicPreviewIcons = [
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowsPointingIn",
+  "Bolt",
+  "Calendar",
+  "Check",
+  "CheckCircle",
+  "CheckCircleSolid",
+  "ChevronDown",
+  "ChevronLeft",
+  "ChevronRight",
+  "ChevronUp",
+  "ClipboardDocumentList",
+  "Close",
+  "CurrencyDollar",
+  "FingerPrint",
+  "Inbox",
+  "ListBullet",
+  "Minus",
+  "NoSymbol",
+  "Plus",
+  "Refresh",
+  "Search",
+  "Sparkles",
+  "SparklesSolid",
+  "Spinner",
+  "Stop",
+  "TableCells",
+  "Tag",
+  "Trash",
+  "Undo",
+  "User",
+] as const;
+
+const publicPreviewIconSet = new Set<string>(publicPreviewIcons);
+
 const publicImports = new Set([
   "@autograph/components",
   "@autograph/compositions",
@@ -159,8 +196,17 @@ export function validateUiPreview(input: UiPreviewInput): void {
     "@autograph/compositions",
   );
   const iconNames = manifestNames(parsed.manifest.productionIcons, "@autograph/icons");
+  for (const name of iconNames)
+    if (!publicPreviewIconSet.has(name))
+      throw new Error(
+        `UI preview icon is not a public @autograph/icons export: ${name}. Available icons: ${publicPreviewIcons.join(", ")}`,
+      );
 
   for (const file of parsed.files) {
+    if (file.content.split(/\r?\n/u).some((line) => line.length > 2000))
+      throw new Error(
+        "UI preview source must remain readable and repairable; format JSX instead of submitting lines longer than 2,000 characters.",
+      );
     if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path))
       throw new Error("UI previews cannot contain backend, schema, or API files.");
     if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content))
