@@ -31,6 +31,7 @@ export function ProviderConnection({
     <main className="min-h-svh bg-background text-foreground">
       <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
         <Link
+          prefetch={true}
           className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           href={resumeKey ? { pathname: returnTo, query: { resume: resumeKey } } : returnTo}
         >

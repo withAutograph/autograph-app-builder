@@ -90,6 +90,28 @@ test("sign-up exposes its useful shell on client navigation", async ({ page }) =
   await expect(page.getByRole("button", { name: "Continue with Passkey" })).toBeVisible();
 });
 
+for (const { label, pathname } of [
+  { label: "Sign In", pathname: "/auth/sign-in" },
+  { label: "Sign Up", pathname: "/auth/sign-up" },
+]) {
+  test(`the primary ${label} link navigates instantly from the builder`, async ({ page }) => {
+    await page.goto("/?mode=anonymous");
+    await expect(page.getByLabel("What should this app do?")).toBeEnabled();
+    await instant(page, async () => {
+      await page.getByRole("link", { name: label, exact: true }).click();
+      await page.waitForURL((url) => url.pathname === pathname);
+      await expect(
+        page
+          .getByRole("region", { name: "Authentication form loading" })
+          .or(page.getByRole("button", { name: "Continue with Passkey" }))
+          .filter({ visible: true })
+          .first(),
+      ).toBeVisible();
+    });
+    await expect(page.getByRole("button", { name: "Continue with Passkey" })).toBeEnabled();
+  });
+}
+
 test("a real provider back link exposes the labelled builder shell immediately", async ({
   page,
 }) => {

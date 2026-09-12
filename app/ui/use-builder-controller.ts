@@ -12,9 +12,6 @@ import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import {
-  createContext,
-  useContext,
-  type ReactNode,
   startTransition,
   useActionState,
   useCallback,
@@ -36,22 +33,11 @@ import {
 } from "@/lib/builder-drafts/contracts";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
-import styles from "./app-builder.module.css";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
-import { ProviderNotices } from "./builder-shell";
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
-import { AppDetailsSection } from "./builder-app-details";
-import { BuildWithSection } from "./builder-destination";
 
-import { ModelControls } from "./builder-model-controls";
-import { DeployToSection, StoreInSection } from "./builder-provider-controls";
-import {
-  ConnectionsSection,
-  ConnectionDrawer,
-  comingSoonConnections,
-  type ConnectionFlow,
-} from "./builder-connections";
+import { comingSoonConnections, type ConnectionFlow } from "./builder-connections";
 import {
   appNameFromBrief,
   defaultBrief,
@@ -59,27 +45,6 @@ import {
   randomAppName,
   briefExamples,
 } from "./builder-defaults";
-
-export { AppDetailsSection } from "./builder-app-details";
-export { BuildWithSection } from "./builder-destination";
-export { InfoTooltip } from "./builder-info-tooltip";
-export type {
-  BuilderDraft,
-  BuilderForm,
-  DeploymentProvider,
-  ProviderField,
-  StorageProvider,
-} from "./builder-types";
-export { ModelControls } from "./builder-model-controls";
-export { DeployToSection, StoreInSection } from "./builder-provider-controls";
-export {
-  ConnectionIcon,
-  ConnectionsSection,
-  ConnectionDrawer,
-  type ConnectionFlow,
-  type ConnectionStage,
-} from "./builder-connections";
-export { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults";
 
 const preferredModelId = activeBuilderModelId;
 
@@ -89,12 +54,11 @@ function subscribeToClientSnapshot() {
   };
 }
 
-function useBuilderController({
+export function useBuilderController({
   initialBrief,
   generatedNameSeed,
   onCreate,
   submissionPending = false,
-  connectionsEnabled,
   comingSoonEnabled,
   integrations,
   providerNotices,
@@ -110,7 +74,6 @@ function useBuilderController({
   generatedNameSeed: string;
   onCreate: (checkpoint: { draftId: string; revision: number }, intentKey: string) => void;
   submissionPending?: boolean;
-  connectionsEnabled: boolean;
   comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
   providerNotices: ProviderConnectionNotice[];
@@ -907,63 +870,4 @@ function useBuilderController({
     briefExamples,
     repositoryNameFromAppName,
   };
-}
-
-const BuilderControllerContext = createContext<ReturnType<typeof useBuilderController> | null>(
-  null,
-);
-
-export function useBuilderControllerContext() {
-  const controller = useContext(BuilderControllerContext);
-  if (!controller) throw new Error("Builder fields require the builder controller.");
-  return controller;
-}
-
-/** Browser behavior wraps server-composed form content without importing it. */
-export function Builder({
-  children,
-  draftStatus,
-  ...props
-}: Parameters<typeof useBuilderController>[0] & { children: ReactNode; draftStatus: ReactNode }) {
-  const controller = useBuilderController(props);
-  const {
-    submissionPending,
-    preparingSubmission,
-    submit,
-    interactive,
-    connectionFlow,
-    setConnectionFlow,
-    completeConnection,
-  } = controller;
-  return (
-    <BuilderControllerContext value={controller}>
-      <main
-        className={styles.authenticatedPage}
-        id="main-content"
-        inert={submissionPending || preparingSubmission}
-        aria-busy={submissionPending || preparingSubmission}
-      >
-        <form className={styles.builderCard} onSubmit={submit}>
-          {draftStatus}
-          <fieldset
-            className={styles.builderControls}
-            disabled={!interactive}
-            aria-busy={!interactive}
-          >
-            {children}
-          </fieldset>
-        </form>
-        {connectionFlow ? (
-          <ConnectionDrawer
-            flow={connectionFlow}
-            onClose={() => setConnectionFlow(null)}
-            onStageChange={(stage) =>
-              setConnectionFlow((current) => (current ? { ...current, stage } : current))
-            }
-            onConnected={completeConnection}
-          />
-        ) : null}
-      </main>
-    </BuilderControllerContext>
-  );
 }

@@ -4,7 +4,8 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 
-import { AppDetailsSection, appNameFromBrief } from "./app-builder";
+import { AppDetailsSection } from "./builder-app-details";
+import { appNameFromBrief } from "./builder-defaults";
 
 const meta = {
   title: "Components/Create App/Sections/App Details",

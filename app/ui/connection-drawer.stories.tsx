@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { ConnectionDrawer } from "./app-builder";
+import { ConnectionDrawer } from "./builder-connections";
 
 const meta = {
   title: "Components/Connections/Connection Drawer",

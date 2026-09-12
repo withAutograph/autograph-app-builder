@@ -4,7 +4,7 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
+import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults";
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";

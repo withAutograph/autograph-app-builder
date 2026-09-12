@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-import { ConnectionsSection } from "./app-builder";
+import { ConnectionsSection } from "./builder-connections";
 
 const meta = {
   title: "Components/Create App/Sections/Connections",

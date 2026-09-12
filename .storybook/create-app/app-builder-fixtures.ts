@@ -1,4 +1,4 @@
-import type { BuilderForm } from "@/app/ui/app-builder";
+import type { BuilderForm } from "@/app/ui/builder-types";
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 

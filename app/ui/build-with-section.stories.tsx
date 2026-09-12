@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
-import { BuildWithSection } from "./app-builder";
+import { BuildWithSection } from "./builder-destination";
 
 const meta = {
   title: "Components/Create App/Sections/Build With",

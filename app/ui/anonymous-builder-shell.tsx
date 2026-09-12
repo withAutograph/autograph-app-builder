@@ -15,8 +15,10 @@ export function AnonymousBuilderShell({ children }: { children: ReactNode }) {
         <span>New App</span>
         <div>
           <Link href="/docs">Docs</Link>
-          <Link href="/auth/sign-in?callbackURL=%2F">Sign In</Link>
-          <Link className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F">
+          <Link href="/auth/sign-in?callbackURL=%2F" prefetch={true}>
+            Sign In
+          </Link>
+          <Link className={styles.darkButton} href="/auth/sign-up?callbackURL=%2F" prefetch={true}>
             Sign Up
           </Link>
         </div>

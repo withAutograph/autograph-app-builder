@@ -1,15 +1,12 @@
 "use client";
 
-import {
-  useBuilderControllerContext,
-  ModelControls,
-  StoreInSection,
-  DeployToSection,
-  ConnectionsSection,
-} from "./app-builder";
+import { useBuilderControllerContext } from "./builder-form-context";
+import { ModelControls } from "./builder-model-controls";
+import { StoreInSection, DeployToSection } from "./builder-provider-controls";
+import { ConnectionsSection } from "./builder-connections";
 import { AppDetailsSection } from "./builder-app-details";
 import { BuildWithSection } from "./builder-destination";
-import { ProviderNotices } from "./builder-shell";
+import { ProviderNotices } from "./builder-provider-notices";
 import styles from "./app-builder.module.css";
 
 export function BuilderDraftStatus() {

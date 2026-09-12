@@ -23,7 +23,7 @@ import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import type { ProviderConnectionNotice } from "@/lib/integrations/provider-connection-status";
 
 import styles from "./app-builder.module.css";
-import { Builder } from "./app-builder";
+import { Builder } from "./builder-form";
 import type { BuilderDraft } from "./builder-types";
 
 export type AuthenticatedBuilderProps = {
@@ -49,7 +49,6 @@ export function BuilderContinuation({
   children,
   draftStatus,
   generatedNameSeed = "app-builder",
-  connectionsEnabled = false,
   comingSoonEnabled = false,
   provisioningEnabled = false,
   integrations,
@@ -126,7 +125,6 @@ export function BuilderContinuation({
         durableDraftUpdatedAt={durableDraftUpdatedAt}
         saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
         loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
-        connectionsEnabled={connectionsEnabled}
         comingSoonEnabled={comingSoonEnabled}
         integrations={integrations}
         providerNotices={providerNotices}
