@@ -26,7 +26,7 @@ const renewedHandoffSchema = z
   })
   .strict();
 
-export type HandoffControlData = {
+export interface HandoffControlData {
   version: 1;
   handoffId: string;
   expiresAt: string;
@@ -34,7 +34,7 @@ export type HandoffControlData = {
   destination: HandoffDestination;
   cursorInstallReady: boolean;
   mcpUrl: string;
-};
+}
 
 export type HandoffRenewalActionState =
   | { status: "renewed"; handoff: HandoffControlData }

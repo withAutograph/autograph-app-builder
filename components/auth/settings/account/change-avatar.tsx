@@ -18,9 +18,9 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-export type ChangeAvatarProps = {
+export interface ChangeAvatarProps {
   className?: string;
-};
+}
 
 export function ChangeAvatar({ className }: ChangeAvatarProps) {
   const { authClient, localization, avatar } = useAuth();

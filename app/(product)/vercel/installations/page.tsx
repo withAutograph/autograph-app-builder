@@ -8,14 +8,14 @@ import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { Suspense } from "react";
 import { SiVercel } from "react-icons/si";
 
-type Props = {
+interface Props {
   searchParams: Promise<{
     status?: string | string[];
     reason?: string | string[];
     returnTo?: string | string[];
     resume?: string | string[];
   }>;
-};
+}
 
 async function VercelInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;

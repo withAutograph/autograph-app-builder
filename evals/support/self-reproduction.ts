@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 
 export type RequirementStatus = "passed" | "failed" | "blocked" | "unassessed";
 
-export type Requirement = {
+export interface Requirement {
   id: string;
   title: string;
   expected: string;
@@ -11,9 +11,12 @@ export type Requirement = {
   status: RequirementStatus;
   likelyLayer: string;
   recommendation: string;
-};
+}
 
-export type SourceFile = { path: string; content: string };
+export interface SourceFile {
+  path: string;
+  content: string;
+}
 export type WorkflowEvidence = Record<string, { status: RequirementStatus; evidence?: string }>;
 
 const ignored = new Set([".git", ".next", ".artifacts", "node_modules", "coverage"]);

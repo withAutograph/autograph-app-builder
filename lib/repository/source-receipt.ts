@@ -93,14 +93,14 @@ export const ARRUSTED_TEMPLATE_REPOSITORY =
   "https://github.com/withAutograph/arrusted-development.git" as const;
 export const ARRUSTED_TEMPLATE_REF = "refs/heads/main" as const;
 
-export type ClonedTemplateProvenance = {
+export interface ClonedTemplateProvenance {
   repository: typeof ARRUSTED_TEMPLATE_REPOSITORY;
   ref: typeof ARRUSTED_TEMPLATE_REF;
   method: "git-clone-v1";
   readinessDigest: string;
-};
+}
 
-type SourceReceiptEvidenceBase = {
+interface SourceReceiptEvidenceBase {
   sourceKind: SourceKind;
   sourceSha: string;
   sourceTree: string;
@@ -115,7 +115,7 @@ type SourceReceiptEvidenceBase = {
    */
   releaseEnabled: false;
   digest: string;
-};
+}
 
 type LegacySourceReceiptEvidence = SourceReceiptEvidenceBase & {
   version: typeof LEGACY_SOURCE_RECEIPT_VERSION;
@@ -304,10 +304,10 @@ export function parseSourceReceiptEvidence(value: unknown): SourceReceiptEvidenc
     (version === SOURCE_RECEIPT_VERSION && !validProvenance(value.provenance))
   )
     throw new Error("Source receipt evidence is invalid.");
-  const { digest, ...unsigned } = value as SourceReceiptEvidence;
+  const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned))
     throw new Error("Source receipt evidence digest is invalid.");
-  return value as SourceReceiptEvidence;
+  return value as unknown as SourceReceiptEvidence;
 }
 
 export function sourceReceiptEvidence(receipt: SourceReceipt): SourceReceiptEvidence {

@@ -20,13 +20,13 @@ import { cn } from "@/lib/utils";
 import { UserAvatar } from "./user-avatar";
 import { UserView } from "./user-view";
 
-export type UserButtonProps = {
+export interface UserButtonProps {
   className?: string;
   align?: "center" | "end" | "start" | undefined;
   sideOffset?: number;
   size?: "default" | "icon";
   variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
-};
+}
 
 /**
  * Render the stock user dropdown with identity, settings, and authentication actions.

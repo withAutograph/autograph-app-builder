@@ -148,11 +148,11 @@ disable = ["bun"]
 `;
 
 export type TargetCommand = "identity" | "planning";
-export type TargetCommandResult = {
+export interface TargetCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
-};
+}
 export type TargetCommandExecutor = (input: {
   command: TargetCommand;
   appId: string;

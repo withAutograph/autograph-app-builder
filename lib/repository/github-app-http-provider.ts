@@ -60,11 +60,11 @@ export function parseGitHubAppHttpProviderConfig(input: unknown): GitHubAppHttpP
   return { ...credentials, installationId: parsed.data.installationId };
 }
 
-export type GitHubPublicationFile = {
+export interface GitHubPublicationFile {
   path: string;
   mode: "100644" | "100755";
   content: Uint8Array;
-};
+}
 
 export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
@@ -74,14 +74,14 @@ export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
 }
 
 type Fetch = typeof fetch;
-type PermissionSnapshot = {
+interface PermissionSnapshot {
   metadata: "read";
   contents: "read" | "write";
   workflows: "none" | "write";
   pullRequests: "none" | "write";
   administration: "none" | "write";
   variables: "read";
-};
+}
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 

@@ -5,12 +5,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "./app-builder.module.css";
 
-export type ComboOption = {
+export interface ComboOption {
   value: string;
   label: string;
   detail?: string;
   icon?: string;
-};
+}
 export type ComboFooter = ComboOption & { disabled?: boolean };
 
 /** Browser-only combobox island. The builder owns data and persistence; this leaf owns interaction. */

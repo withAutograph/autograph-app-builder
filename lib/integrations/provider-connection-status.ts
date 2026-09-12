@@ -9,11 +9,11 @@ export const providerConnectionFailureReasonSchema = z.enum([
 
 export type ProviderConnectionFailureReason = z.infer<typeof providerConnectionFailureReasonSchema>;
 
-export type ProviderConnectionNotice = {
+export interface ProviderConnectionNotice {
   provider: "github" | "vercel";
   status: "connected" | "failed";
   reason?: ProviderConnectionFailureReason;
-};
+}
 
 export function parseProviderConnectionFailureReason(input: unknown) {
   const parsed = providerConnectionFailureReasonSchema.safeParse(input);

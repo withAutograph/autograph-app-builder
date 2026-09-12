@@ -17,16 +17,16 @@ export type GitHubOperation =
   | "create-fresh-repository"
   | "publish-draft-pull-request";
 
-type GitHubPermissions = {
+interface GitHubPermissions {
   metadata: "read";
   contents: "read" | "write";
   workflows: "none" | "write";
   pullRequests: "none" | "write";
   administration: "none" | "write";
   variables: "read";
-};
+}
 
-export type GitHubInstallationIdentity = {
+export interface GitHubInstallationIdentity {
   version: typeof GITHUB_PUBLICATION_VERSION;
   operation: GitHubOperation;
   installationId: string;
@@ -37,9 +37,9 @@ export type GitHubInstallationIdentity = {
   selectedRepositoryIds: readonly string[];
   permissions: GitHubPermissions;
   digest: Digest;
-};
+}
 
-export type GitHubRepositoryObservation = {
+export interface GitHubRepositoryObservation {
   version: typeof GITHUB_PUBLICATION_VERSION;
   repositoryId: string;
   owner: string;
@@ -54,9 +54,9 @@ export type GitHubRepositoryObservation = {
     configured: boolean;
   };
   digest: Digest;
-};
+}
 
-export type ImmutableGitHubSourceReceipt = {
+export interface ImmutableGitHubSourceReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   repository: GitHubRepositoryObservation;
   resolvedRef: string;
@@ -65,9 +65,9 @@ export type ImmutableGitHubSourceReceipt = {
   installationIdentityDigest: Digest;
   resolvedByCallId: string;
   digest: Digest;
-};
+}
 
-export type FreshRepositoryProposal = {
+export interface FreshRepositoryProposal {
   version: typeof GITHUB_PUBLICATION_VERSION;
   installationIdentityDigest: Digest;
   destinationOwner: string;
@@ -89,9 +89,9 @@ export type FreshRepositoryProposal = {
   idempotencyKey: Digest;
   intendedOutcome: "create-private-fresh-history-repository";
   digest: Digest;
-};
+}
 
-export type DraftPullRequestProposal = {
+export interface DraftPullRequestProposal {
   version: typeof GITHUB_PUBLICATION_VERSION;
   installationIdentityDigest: Digest;
   repositoryId: string;
@@ -116,11 +116,11 @@ export type DraftPullRequestProposal = {
   idempotencyKey: Digest;
   intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request";
   digest: Digest;
-};
+}
 
 type MutationKind = "fresh-repository" | "draft-pull-request";
 
-export type GitHubMutationPendingReceipt = {
+export interface GitHubMutationPendingReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: MutationKind;
   status: "pending";
@@ -128,9 +128,9 @@ export type GitHubMutationPendingReceipt = {
   idempotencyKey: Digest;
   approvedByCallId: string;
   digest: Digest;
-};
+}
 
-export type GitHubMutationFailureReceipt = {
+export interface GitHubMutationFailureReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: MutationKind;
   status: "failed";
@@ -141,9 +141,9 @@ export type GitHubMutationFailureReceipt = {
   providerCode: string;
   recoveryRequired: true;
   digest: Digest;
-};
+}
 
-export type FreshRepositorySuccessReceipt = {
+export interface FreshRepositorySuccessReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: "fresh-repository";
   status: "succeeded";
@@ -160,9 +160,9 @@ export type FreshRepositorySuccessReceipt = {
   recoveredFromPending: boolean;
   providerReadBackDigest: Digest;
   digest: Digest;
-};
+}
 
-export type DraftPullRequestSuccessReceipt = {
+export interface DraftPullRequestSuccessReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: "draft-pull-request";
   status: "succeeded";
@@ -186,7 +186,7 @@ export type DraftPullRequestSuccessReceipt = {
   recoveredFromPending: boolean;
   providerReadBackDigest: Digest;
   digest: Digest;
-};
+}
 
 export type GitHubMutationReceipt =
   | GitHubMutationPendingReceipt
@@ -194,16 +194,18 @@ export type GitHubMutationReceipt =
   | FreshRepositorySuccessReceipt
   | DraftPullRequestSuccessReceipt;
 
-export type FreshRepositoryReadBack = {
+export interface FreshRepositoryReadBack {
   version: typeof GITHUB_PUBLICATION_VERSION;
   idempotencyKey: Digest;
   repository: GitHubRepositoryObservation;
   initialCommit: { sha: ObjectId; tree: ObjectId; parents: readonly [] };
   digest: Digest;
-};
+}
 
-type AbsentBranch = { status: "absent" };
-type PresentBranch = {
+interface AbsentBranch {
+  status: "absent";
+}
+interface PresentBranch {
   status: "present";
   branchName: string;
   branchSha: ObjectId;
@@ -211,9 +213,11 @@ type PresentBranch = {
   normalizedChangedPaths: readonly string[];
   changedContentDigest: Digest;
   idempotencyKey: Digest;
-};
-type AbsentPullRequest = { status: "absent" };
-type PresentPullRequest = {
+}
+interface AbsentPullRequest {
+  status: "absent";
+}
+interface PresentPullRequest {
   status: "present";
   pullRequestId: string;
   pullRequestNumber: number;
@@ -226,9 +230,9 @@ type PresentPullRequest = {
   baseSha: ObjectId;
   changeSetDigest: Digest;
   idempotencyKey: Digest;
-};
+}
 
-export type DraftPublicationReadBack = {
+export interface DraftPublicationReadBack {
   version: typeof GITHUB_PUBLICATION_VERSION;
   idempotencyKey: Digest;
   repository: GitHubRepositoryObservation;
@@ -236,24 +240,24 @@ export type DraftPublicationReadBack = {
   branch: AbsentBranch | PresentBranch;
   pullRequest: AbsentPullRequest | PresentPullRequest;
   digest: Digest;
-};
+}
 
 export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
   | { status: "rejected"; code: string };
 
-type GitHubPublicationFileState = {
+interface GitHubPublicationFileState {
   mode: string;
   digest: Digest;
-};
+}
 
-export type GitHubFreshRepositoryContentFile = {
+export interface GitHubFreshRepositoryContentFile {
   path: string;
   mode: "100644" | "100755";
   objectId: ObjectId;
   digest: Digest;
   bytes: Uint8Array;
-};
+}
 
 export type GitHubPublicationContentChange =
   | {
@@ -278,15 +282,15 @@ export type GitHubPublicationContentChange =
  * provider mutation port and is deliberately absent from proposals, workflow
  * state, and durable receipt storage.
  */
-export type GitHubFreshRepositoryContent = {
+export interface GitHubFreshRepositoryContent {
   version: 1;
   kind: "fresh-repository-source-tree";
   sourceSha: ObjectId;
   sourceTree: ObjectId;
   files: readonly GitHubFreshRepositoryContentFile[];
-};
+}
 
-export type GitHubDraftPullRequestContent = {
+export interface GitHubDraftPullRequestContent {
   version: 1;
   kind: "draft-reviewed-change-set";
   reviewDigest: Digest;
@@ -294,7 +298,7 @@ export type GitHubDraftPullRequestContent = {
   changedContentDigest: Digest;
   approvedPaths: readonly string[];
   changes: readonly GitHubPublicationContentChange[];
-};
+}
 
 export type GitHubPublicationContent = GitHubFreshRepositoryContent | GitHubDraftPullRequestContent;
 

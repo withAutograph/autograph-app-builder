@@ -38,7 +38,7 @@ import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cach
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
 
-export type AcceptedAppSpec = {
+export interface AcceptedAppSpec {
   appId: string;
   artifactPath: string;
   content: string;
@@ -48,9 +48,9 @@ export type AcceptedAppSpec = {
   approvalReceipt?: ApprovalReceipt;
   /** Exact UI revision accepted before this functional handoff, if any. */
   uiRevision?: string;
-};
+}
 
-export type PrototypeArtifact = {
+export interface PrototypeArtifact {
   appId: string;
   path: string;
   mediaType: "text/markdown" | "text/html";
@@ -59,14 +59,14 @@ export type PrototypeArtifact = {
   revision: string;
   sessionId: string;
   recordedByCallId: string;
-};
+}
 
 /**
  * A UI preview is source-first. The Browser HTML is a renderer output, never
  * the authored design input.  Keeping the small source set in durable state
  * lets a later functionality pass promote the exact reviewed UI.
  */
-export type UiPreviewRevision = {
+export interface UiPreviewRevision {
   appId: string;
   revision: string;
   sourceDigest: string;
@@ -79,9 +79,9 @@ export type UiPreviewRevision = {
   catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
   previewHtml: string;
   createdByCallId: string;
-};
+}
 
-type TargetExecutionBinding = {
+interface TargetExecutionBinding {
   sourceSha: string;
   sourceTree: string;
   sourceReceiptDigest: string;
@@ -91,7 +91,7 @@ type TargetExecutionBinding = {
   dependencyCacheDigest: string;
   appSpecDigest: string;
   artifactRevision: string;
-};
+}
 
 export type DependencyPreparationReceipt = TargetExecutionBinding & {
   version: 2;
@@ -134,21 +134,21 @@ export type AppCreationProposal = TargetExecutionBinding & {
   digest: string;
 };
 
-type WorkspacePhase = {
+interface WorkspacePhase {
   workspace: PreparedSandboxWorkspace;
   sourceReceipt: SourceReceipt;
   githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
   artifacts: readonly PrototypeArtifact[];
-};
+}
 
 type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
 
-export type GitHubDraftProposalBinding = {
+export interface GitHubDraftProposalBinding {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
   githubSourceDigest: string;
-};
+}
 
 type ReviewedPhase = WorkspacePhase & {
   appSpec: AcceptedAppSpec;

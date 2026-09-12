@@ -6,7 +6,6 @@ export default defineConfig({
   ignorePatterns: core.ignorePatterns,
   rules: {
     "unicorn/import-style": "off",
-    "typescript/consistent-type-definitions": "off",
     "eslint/curly": "off",
     "eslint/no-bitwise": "off",
     "eslint/no-shadow": "off",

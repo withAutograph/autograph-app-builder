@@ -37,12 +37,12 @@ import { LastUsedBadge } from "./last-login-method/last-used-badge";
 import { ProviderButtons } from "./provider-buttons";
 import type { SocialLayout } from "./provider-buttons";
 
-export type SignInProps = {
+export interface SignInProps {
   className?: string;
   signUpRedirectTo?: string;
   socialLayout?: SocialLayout;
   socialPosition?: "top" | "bottom";
-};
+}
 
 /**
  * Render the sign-in form UI with email/password, magic link, and social provider options.

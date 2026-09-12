@@ -6,14 +6,14 @@ import { validateUiPreview } from "../../../lib/agent/ui-preview";
 
 export type DesignQualityExampleId = "spend-import-review" | "compensation-planning";
 
-type ExampleConfig = {
+interface ExampleConfig {
   appId: string;
   route: string;
   entry: string;
   source: string;
   stateSource: string;
   stateTarget: string;
-};
+}
 
 async function text(root: string, path: string) {
   return readFile(resolve(root, path), "utf-8");

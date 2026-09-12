@@ -8,7 +8,7 @@ import type {
 
 export type BuilderDraftAuthority = ReturnType<typeof hostedTenantAuthoritySchema.parse>;
 
-export type BuilderDraftRow = {
+export interface BuilderDraftRow {
   authority: BuilderDraftAuthority;
   draftId: string;
   status: BuilderDraftStatus;
@@ -17,9 +17,9 @@ export type BuilderDraftRow = {
   lastClientMutationId?: string;
   createdAt: Date;
   updatedAt: Date;
-};
+}
 
-export type BuilderDraftStore = {
+export interface BuilderDraftStore {
   read: (input: {
     authority: BuilderDraftAuthority;
     draftId: string;
@@ -51,7 +51,7 @@ export type BuilderDraftStore = {
     expectedRevision?: number;
   }) => Promise<boolean>;
   deleteInactiveSince: (input: { now: Date; maxAgeMs?: number }) => Promise<number>;
-};
+}
 
 export function createBuilderDraftService(input: { store: BuilderDraftStore; now?: () => Date }) {
   const now = input.now ?? (() => new Date());

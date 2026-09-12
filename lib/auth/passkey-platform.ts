@@ -1,6 +1,6 @@
-type PlatformAuthenticatorCapability = {
+interface PlatformAuthenticatorCapability {
   isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
-};
+}
 
 /**
  * Prefer the device authenticator when the browser confirms one is available.

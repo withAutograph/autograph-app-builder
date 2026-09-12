@@ -103,7 +103,7 @@ export function supportedValidationCommands(
   ];
 }
 
-export type EligibilityResult = {
+export interface EligibilityResult {
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligible: boolean;
   planningEligible: boolean;
@@ -132,38 +132,38 @@ export type EligibilityResult = {
     releaseGate: string;
   };
   digest: string;
-};
+}
 
 /**
  * Git metadata and the small, closed set of source files the V0 adapter
  * needs to determine eligibility.  It lets a canonical sandbox clone be
  * inspected without creating a second host-side checkout.
  */
-export type SupportedTemplateSnapshot = {
+export interface SupportedTemplateSnapshot {
   sourcePath: string;
   sourceSha?: string;
   dirtyPaths: string[];
   failures?: string[];
   contents: Partial<Record<string, string>>;
-};
+}
 
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-type DependencyFile = {
+interface DependencyFile {
   path: (typeof SUPPORTED_TEMPLATE_DEPENDENCY_PATHS)[number];
   mode: "100644" | "100755";
   objectId: string;
   sha256: string;
-};
+}
 
-export type SupportedTemplateDependencyClosure = {
+export interface SupportedTemplateDependencyClosure {
   commit: string;
   tree: string;
   files: DependencyFile[];
   digest: string;
-};
+}
 
 function git(path: string, args: string[]): string {
   const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
@@ -316,7 +316,7 @@ function supportsReleaseGate(workflowSource: string): boolean {
   );
 }
 
-export type RepositoryReleasePolicyObservation = {
+export interface RepositoryReleasePolicyObservation {
   gate: "REPOSITORY_RELEASE_ENABLED";
   eligible: boolean;
   sourceSha: string;
@@ -331,7 +331,7 @@ export type RepositoryReleasePolicyObservation = {
         sha256: string;
       };
   digest: string;
-};
+}
 
 function releasePolicyObservation(input: {
   sourceSha: string;
@@ -673,7 +673,7 @@ export function inspectSupportedTemplateSnapshot(
   };
 }
 
-export type PreparedSandboxWorkspace = {
+export interface PreparedSandboxWorkspace {
   workspaceId: string;
   workspacePath: "/workspace/repository";
   sourcePath: string;
@@ -682,7 +682,7 @@ export type PreparedSandboxWorkspace = {
   workspaceDigest: string;
   adapter: typeof SUPPORTED_TEMPLATE_ADAPTER;
   eligibilityDigest: string;
-};
+}
 
 const sandboxRecordPath = ".app-builder/prepared-workspace.json";
 const sandboxSourceFilesPath = ".app-builder/source-files.json";
@@ -693,12 +693,12 @@ const sandboxOperationOutputBytes = 262_144;
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
-export type PreparedSourceFile = {
+export interface PreparedSourceFile {
   mode: "100644" | "100755";
   objectId: string;
   path: string;
   sha256: string;
-};
+}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const actual = Object.keys(value);

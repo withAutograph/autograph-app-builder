@@ -1,6 +1,6 @@
-type AuthLoadingShellProps = {
+interface AuthLoadingShellProps {
   title: string;
-};
+}
 
 /**
  * Static, route-local fallbacks are intentionally free of request state. They
@@ -29,10 +29,10 @@ export function AuthLoadingShell({ title }: AuthLoadingShellProps) {
   );
 }
 
-type ProviderConnectionLoadingShellProps = {
+interface ProviderConnectionLoadingShellProps {
   description: string;
   title: string;
-};
+}
 
 export function ProviderConnectionLoadingShell({
   description,

@@ -22,7 +22,7 @@ export type ValidationCommandExecutor = (input: {
   validationRoot: string;
 }) => Promise<ApplyCommandResult>;
 
-type TargetValidationBinding = {
+interface TargetValidationBinding {
   appId: string;
   testShards: readonly string[];
   appValidationSha256: string;
@@ -43,13 +43,13 @@ type TargetValidationBinding = {
   applyDigest: string;
   appliedTreeDigest: string;
   changedContentDigest: string;
-};
+}
 
-export type PlannedValidationCommand = {
+export interface PlannedValidationCommand {
   name: TargetValidationCommandName;
   command: TargetValidationCommand;
   validationRoot: string;
-};
+}
 
 export type TargetValidationAttemptReceipt = TargetValidationBinding & {
   version: 3;
@@ -101,13 +101,13 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   digest: string;
 };
 
-export type TargetValidationDiagnostic = {
+export interface TargetValidationDiagnostic {
   code: `TS${number}` | "VITEST";
   path: string;
   line: number;
   column: number;
   message: string;
-};
+}
 
 export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }

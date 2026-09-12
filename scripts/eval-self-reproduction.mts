@@ -12,6 +12,7 @@ import {
   prioritizedGaps,
   readSource,
 } from "../evals/support/self-reproduction";
+import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 
 const { values } = parseArgs({
   options: {

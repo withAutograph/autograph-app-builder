@@ -15,9 +15,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 import { cn } from "@/lib/utils";
 
-export type AppearanceProps = {
+export interface AppearanceProps {
   className?: string;
-};
+}
 
 /**
  * Renders a theme selector card with visual theme previews.

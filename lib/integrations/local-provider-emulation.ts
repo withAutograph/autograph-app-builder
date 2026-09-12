@@ -47,7 +47,7 @@ const branchSchema = z
   .max(255)
   .refine((value) => !/[\0\r\n]/u.test(value));
 
-type SharedProviderEmulation = {
+interface SharedProviderEmulation {
   canonicalOrigin: string;
   vercelOrigin: string;
   githubOrigin: string;
@@ -58,7 +58,7 @@ type SharedProviderEmulation = {
   githubClientSecret: string;
   vercelClientId: string;
   vercelClientSecret: string;
-};
+}
 
 export type LocalProviderEmulation = SharedProviderEmulation & {
   mode: "local";

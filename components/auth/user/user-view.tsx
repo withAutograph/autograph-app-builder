@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "./user-avatar";
 
-export type UserViewProps = {
+export interface UserViewProps {
   className?: string;
   isPending?: boolean;
   /**
@@ -21,7 +21,7 @@ export type UserViewProps = {
     username?: string | null;
     displayUsername?: string | null;
   };
-};
+}
 
 /**
  * Render a compact user item with an avatar, a primary label (display username, name, or email), and an optional subtitle (email).

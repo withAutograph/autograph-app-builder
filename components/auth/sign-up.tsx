@@ -37,7 +37,7 @@ import { PasswordStrengthMeter } from "./password-strength-meter";
 import { ProviderButtons } from "./provider-buttons";
 import type { SocialLayout } from "./provider-buttons";
 
-export type SignUpProps = {
+export interface SignUpProps {
   className?: string;
   signInRedirectTo?: string;
   socialLayout?: SocialLayout;
@@ -48,7 +48,7 @@ export type SignUpProps = {
    * priority, and social sign-ups are unaffected.
    */
   onSignUpSuccess?: () => void;
-};
+}
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.

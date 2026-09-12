@@ -41,13 +41,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-export type AdditionalFieldProps = {
+export interface AdditionalFieldProps {
   name: string;
   field: AdditionalFieldConfig;
   isPending?: boolean;
   /** Complete suffix appended to labels for fields that are not required. */
   optionalLabel?: string;
-};
+}
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
 function toDate(value: unknown): Date | undefined {

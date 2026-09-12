@@ -49,7 +49,7 @@ import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
 
-export type FreshBootstrapFaultHooks = {
+export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
   afterPendingJournal?: () => void | Promise<void>;
   afterStageCreation?: () => void | Promise<void>;
@@ -66,15 +66,15 @@ export type FreshBootstrapFaultHooks = {
   afterAtomicPublication?: () => void | Promise<void>;
   beforeTerminalJournal?: () => void | Promise<void>;
   preserveNonterminalJournal?: boolean;
-};
+}
 
 type ExactFile = FreshBootstrapFile & { bytes: Buffer };
 
-export type FreshBootstrapSourceWorkspace = {
+export interface FreshBootstrapSourceWorkspace {
   files: readonly PreparedSourceFile[];
   readSourceFile: (path: string) => Promise<Uint8Array | null>;
   reverify: () => Promise<void>;
-};
+}
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
 mode, stage, destination, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink, parent_dev, parent_ino, parent_uid, parent_mode, parent_nlink = sys.argv[1:]
@@ -594,12 +594,12 @@ process.stdin.on("end", () => { if (command === "RELEASE\n") { fs.ftruncateSync(
 process.stdin.resume();
 `;
 
-type Lease = {
+interface Lease {
   pid: number;
   markerDigest: string;
   assertHeld: () => void;
   release: () => Promise<void>;
-};
+}
 
 async function acquireLease(
   capability: FreshBootstrapCapability,

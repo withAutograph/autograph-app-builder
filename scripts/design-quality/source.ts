@@ -6,9 +6,12 @@ import type { Observation } from "./evidence";
 import { checkJsxAttributes } from "./reference";
 import type { Reference } from "./reference";
 
-export type SourceFile = { path: string; content: string };
+export interface SourceFile {
+  path: string;
+  content: string;
+}
 
-export type SourceAnalysis = {
+export interface SourceAnalysis {
   imports: {
     path: string;
     source: string;
@@ -30,7 +33,7 @@ export type SourceAnalysis = {
     message: string;
   }[];
   limitations: string[];
-};
+}
 
 const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/gu;
 const cssLiteral =

@@ -1,4 +1,4 @@
-export type CompensationFixture = {
+export interface CompensationFixture {
   proposal: {
     baseSalary: number;
     targetBonus: number;
@@ -9,22 +9,22 @@ export type CompensationFixture = {
     bandMidpoint: number;
     plannedIncrease: number;
   };
-};
+}
 
-export type CompensationAssumptions = {
+export interface CompensationAssumptions {
   baseSalary: number;
   targetBonus: number;
   annualBenefits: number;
   employerTaxRate: number;
   bandMidpoint: number;
   plannedIncrease: number;
-};
+}
 
-export type CompensationState = {
+export interface CompensationState {
   assumptions: CompensationAssumptions;
   assumptionsApplied: boolean;
   decision: "none" | "recommended" | "held";
-};
+}
 
 export type CompensationAction =
   | {

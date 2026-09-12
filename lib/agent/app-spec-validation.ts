@@ -57,7 +57,7 @@ export const buildReadyHandoffSchema = z
   })
   .strict();
 
-export type AppSpecValidationIssue = {
+export interface AppSpecValidationIssue {
   code:
     | "missing_heading"
     | "duplicate_heading"
@@ -66,7 +66,7 @@ export type AppSpecValidationIssue = {
     | "build_handoff_shape";
   message: string;
   path?: string;
-};
+}
 
 export type AppSpecValidationResult =
   | { valid: true }

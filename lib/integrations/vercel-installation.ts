@@ -45,7 +45,7 @@ export function readVercelIntegrationEnvironment(
   });
 }
 
-export type VercelAuthorizationStateStore = {
+export interface VercelAuthorizationStateStore {
   create: (input: {
     stateDigest: string;
     authority: Authority;
@@ -65,7 +65,7 @@ export type VercelAuthorizationStateStore = {
     authority: Authority;
     authorityDigest: string;
   }) => Promise<ProviderConnectionReturn | undefined>;
-};
+}
 
 export class VercelInstallationAuthorizationError extends Error {
   readonly reason: string;
@@ -79,7 +79,7 @@ export class VercelInstallationAuthorizationError extends Error {
   }
 }
 
-export type VercelInstallationBinding = {
+export interface VercelInstallationBinding {
   installationId: string;
   scopeId: string;
   scopeType: "team" | "user";
@@ -88,9 +88,9 @@ export type VercelInstallationBinding = {
   plan: string;
   active: boolean;
   updatedAt: Date;
-};
+}
 
-export type VercelInstallationStore = {
+export interface VercelInstallationStore {
   list: (authority: Authority) => Promise<VercelInstallationBinding[]>;
   bind: (input: {
     authority: Authority;
@@ -99,7 +99,7 @@ export type VercelInstallationStore = {
     now: Date;
   }) => Promise<VercelInstallationBinding>;
   deactivate: (installationId: string, now: Date) => Promise<number>;
-};
+}
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");

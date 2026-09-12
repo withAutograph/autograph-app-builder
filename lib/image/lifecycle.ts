@@ -310,7 +310,7 @@ export function sandboxProofCommand(reference: string, sourceRoot: string): Comm
   };
 }
 
-type ImageInspect = {
+interface ImageInspect {
   Id?: unknown;
   Architecture?: unknown;
   Os?: unknown;
@@ -323,7 +323,7 @@ type ImageInspect = {
     size?: unknown;
     platform?: unknown;
   };
-};
+}
 
 export function parseLocalImageInspection(
   raw: string,
@@ -401,38 +401,41 @@ function isPositiveSize(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
-type RemotePlatform = { architecture?: unknown; os?: unknown };
-type RemoteIndexEntry = {
+interface RemotePlatform {
+  architecture?: unknown;
+  os?: unknown;
+}
+interface RemoteIndexEntry {
   annotations?: unknown;
   digest?: unknown;
   mediaType?: unknown;
   platform?: RemotePlatform;
   size?: unknown;
-};
-type RemoteIndex = {
+}
+interface RemoteIndex {
   digest?: unknown;
   manifests?: unknown;
   mediaType?: unknown;
   schemaVersion?: unknown;
   size?: unknown;
-};
-type RemoteManifestDescriptor = {
+}
+interface RemoteManifestDescriptor {
   digest?: unknown;
   mediaType?: unknown;
   size?: unknown;
-};
-type RemoteManifest = {
+}
+interface RemoteManifest {
   config?: RemoteManifestDescriptor;
   layers?: unknown;
   mediaType?: unknown;
   schemaVersion?: unknown;
-};
-type RemoteImage = {
+}
+interface RemoteImage {
   architecture?: unknown;
   os?: unknown;
   config?: { Labels?: Record<string, unknown> };
   rootfs?: { diff_ids?: unknown };
-};
+}
 
 export type RemoteIndexSelection = Readonly<{
   indexDigest: string;

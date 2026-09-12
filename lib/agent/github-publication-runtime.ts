@@ -28,7 +28,7 @@ const supportedOperations = [
   "recover-lost-response-by-idempotency-key",
 ] as const;
 
-export type GitHubPublicationRuntimeStatus = {
+export interface GitHubPublicationRuntimeStatus {
   version: 3;
   enabled: boolean;
   adapterConfigured: boolean;
@@ -49,7 +49,7 @@ export type GitHubPublicationRuntimeStatus = {
     };
   };
   reason: string;
-};
+}
 
 export interface GitHubPublicationRuntime {
   status: () => Promise<GitHubPublicationRuntimeStatus>;
