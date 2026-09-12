@@ -356,17 +356,6 @@ async function assertPublicationLayoutSafe(): Promise<void> {
 }
 
 interface PublicationLock {
-async function syncDirectory(path: string, builderOwned = false): Promise<void> {
-  if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
-  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-  try {
-    if (!(await handle.stat()).isDirectory())
-      throw new Error("The builder-owned publication directory is unsafe.");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
   pid: number;
   assertHeld: () => void;
   lost: Promise<never>;
@@ -388,6 +377,18 @@ async function assertOwnedPublicationFileHandle(
     throw new Error("The builder-owned publication file descriptor is unsafe.");
 }
 
+async function syncDirectory(path: string, builderOwned = false): Promise<void> {
+  if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
+  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    if (!(await handle.stat()).isDirectory())
+      throw new Error("The builder-owned publication directory is unsafe.");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function durableDirectory(path: string): Promise<void> {
   const root = publicationRoot();
   if (!within(root, path))
@@ -395,7 +396,7 @@ async function durableDirectory(path: string): Promise<void> {
   let cursor = root;
   for (const segment of relative(root, path).split(sep).filter(Boolean)) {
     const parent = cursor;
-    cursor = resolve(cursor, segment);
+    cursor = pathResolve(cursor, segment);
     let created = false;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -565,45 +566,6 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
   };
 }
 
-async function syncDirectory(path: string, builderOwned = false): Promise<void> {
-  if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-  try {
-    if (!(await handle.stat()).isDirectory())
-      throw new Error("The builder-owned publication directory is unsafe.");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-async function durableDirectory(path: string): Promise<void> {
-  const root = publicationRoot();
-  if (!within(root, path))
-    throw new Error("The builder-owned publication directory escapes its root.");
-  let cursor = root;
-  for (const segment of relative(root, path).split(sep).filter(Boolean)) {
-    const parent = cursor;
-    cursor = pathResolve(cursor, segment);
-    let created = false;
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await mkdir(cursor, { mode: 0o700 });
-      created = true;
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (created) await chmod(cursor, 0o700);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertContainedNoLinkPath(cursor, { leaf: "directory" });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await syncDirectory(cursor, true);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await syncDirectory(parent, true);
-  }
-}
 async function atomicWrite(path: string, value: string): Promise<void> {
   await durableDirectory(dirname(path));
   await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
@@ -987,9 +949,9 @@ async function materializeAtomically(
   bytes: Uint8Array,
   mode: string | "120000",
 ): Promise<void> {
-  const staging = resolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
+  const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
   await durableDirectory(staging);
-  const temporary = resolve(staging, randomUUID());
+  const temporary = pathResolve(staging, randomUUID());
   try {
     if (mode === "120000") {
       await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
@@ -1013,11 +975,11 @@ async function materializeAtomically(
 
 async function safeTarget(root: string, path: string, createParents: boolean): Promise<string> {
   if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
-  const target = resolve(root, path);
+  const target = pathResolve(root, path);
   if (!within(root, target)) throw new Error("The approved path escapes the publication worktree.");
   let cursor = root;
   for (const segment of path.split("/").slice(0, -1)) {
-    cursor = resolve(cursor, segment);
+    cursor = pathResolve(cursor, segment);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor);
     if (state.kind === "absent" && createParents) {
@@ -1233,98 +1195,6 @@ async function assertExactSource(input: {
     );
 }
 
-async function fileState(path: string): Promise<FileState> {
-  try {
-    const info = await lstat(path);
-    if (info.isSymbolicLink())
-      return {
-        kind: "symlink",
-        digest: contentDigest(Buffer.from(await readlink(path))),
-      };
-    if (info.isDirectory()) return { kind: "directory" };
-    if (!info.isFile()) return { kind: "special" };
-    const bytes = await readFile(path);
-    return {
-      kind: "regular",
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      mode: (info.mode & 0o777).toString(8),
-      digest: contentDigest(bytes),
-    };
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
-    throw error;
-  }
-}
-
-function matches(
-  state: FileState,
-  expected: { mode: string; digest: string } | undefined,
-): boolean {
-  return expected === undefined
-    ? state.kind === "absent"
-    : state.kind === "regular" && state.mode === expected.mode && state.digest === expected.digest;
-}
-
-function exactStateMatches(state: FileState, expected: FileState): boolean {
-  return (
-    state.kind === expected.kind && state.mode === expected.mode && state.digest === expected.digest
-  );
-}
-
-async function safeTarget(root: string, path: string, createParents: boolean): Promise<string> {
-  if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
-  const target = pathResolve(root, path);
-  if (!within(root, target)) throw new Error("The approved path escapes the publication worktree.");
-  let cursor = root;
-  for (const segment of path.split("/").slice(0, -1)) {
-    cursor = pathResolve(cursor, segment);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const state = await fileState(cursor);
-    if (state.kind === "absent" && createParents) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await mkdir(cursor, { mode: 0o755 });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await syncDirectory(dirname(cursor));
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await syncDirectory(cursor);
-    } else if (state.kind !== "directory" && state.kind !== "absent")
-      throw new Error("The approved path traverses a non-directory entry.");
-  }
-  const state = await fileState(target);
-  if (["directory", "symlink", "special"].includes(state.kind))
-    throw new Error("The approved path names a non-regular entry.");
-  return target;
-}
-
-async function materializeAtomically(
-  proposal: BranchWorktreePublicationProposal,
-  target: string,
-  bytes: Uint8Array,
-  mode: string | "120000",
-): Promise<void> {
-  const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
-  await durableDirectory(staging);
-  const temporary = pathResolve(staging, randomUUID());
-  try {
-    if (mode === "120000") {
-      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
-      await syncDirectory(staging, true);
-    } else {
-      const handle = await open(temporary, "wx", Number.parseInt(mode, 8));
-      try {
-        await handle.writeFile(bytes);
-        await handle.chmod(Number.parseInt(mode, 8));
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-    }
-    await rename(temporary, target);
-    await syncDirectory(dirname(target));
-  } finally {
-    await unlink(temporary).catch(() => undefined);
-  }
-}
 async function writePostimage(
   proposal: BranchWorktreePublicationProposal,
   path: string,

@@ -249,9 +249,7 @@ export function inspectSupportedTemplateDependencyClosure(
   const tree = git(repositoryRoot, ["rev-parse", `${resolvedCommit}^{tree}`]);
   const files = SUPPORTED_TEMPLATE_DEPENDENCY_PATHS.map((path) => {
     const entry = git(repositoryRoot, ["ls-tree", resolvedCommit, "--", path]);
-    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-      entry,
-    );
+    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
     if (match === null || match[3] !== path)
       throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
     return {
@@ -386,9 +384,7 @@ export function inspectRepositoryReleasePolicyAtGitSnapshot(input: {
       "The existing-repository release policy is not bound to the reviewed Git snapshot.",
     );
   const entry = git(input.sourcePath, ["ls-tree", sourceSha, "--", repositoryReleasePolicyPath]);
-  const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-    entry,
-  );
+  const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
   if (match === null || match[3] !== repositoryReleasePolicyPath)
     return releasePolicyObservation({
       sourceSha,
@@ -435,7 +431,7 @@ function declaredNextRuntime(packageSource: string): "nextjs" | "unsupported" {
 
 function declaredMiseTasks(source: string): Map<string, number> {
   const tasks = new Map<string, number>();
-  for (const match of source.matchAll(/^\[tasks\."(?<name>[^"]+)"\]\s*$/gmu)) {
+  for (const match of source.matchAll(/^\[tasks\."([^"]+)"\]\s*$/gmu)) {
     const [, name] = match;
     if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
   }
@@ -494,109 +490,6 @@ function inspectPlanningCompatibility(contents: SupportedTemplateSnapshot["conte
       }),
     ),
   };
-}
-
-function allowedRoots(): string[] {
-  const value = process.env.REPOSITORY_LOCAL_ROOTS;
-  if (value === undefined || value.trim() === "") {
-    if (hasTestCapability("simulated-target")) return [tmpdir()];
-    throw new Error("REPOSITORY_LOCAL_ROOTS must name at least one allowed local source root.");
-  }
-  return value
-    .split(delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => resolve(entry));
-}
-
-function within(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
-
-export async function resolveAllowedRepository(input: string): Promise<string> {
-  const candidate = await realpath(resolve(input));
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-  const roots = await Promise.all(allowedRoots().map(async (root) => realpath(root)));
-  if (!roots.some((root) => within(root, candidate))) {
-    throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
-  }
-  return candidate;
-}
-
-async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<EligibilityResult> {
-  const failures: string[] = [];
-  let sourceSha: string | undefined;
-  const dirtyPaths: string[] = [];
-  try {
-    sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
-    const statusRecords = gitBytes(sourcePath, [
-      "status",
-      "--porcelain=v1",
-      "-z",
-      "--untracked-files=all",
-    ])
-      .toString("utf-8")
-      .split("\0");
-    for (let index = 0; index < statusRecords.length; index += 1) {
-      const record = statusRecords[index];
-      if (record === undefined || record === "") continue;
-      if (record.length < 4 || record[2] !== " ")
-        throw new Error("Git returned a malformed worktree status record.");
-      dirtyPaths.push(record.slice(3));
-      if (/[RC]/u.test(record.slice(0, 2))) {
-        const originalPath = statusRecords[index + 1];
-        if (originalPath === undefined || originalPath === "")
-          throw new Error("Git returned a malformed rename status record.");
-        dirtyPaths.push(originalPath);
-        index += 1;
-      }
-    }
-  } catch {
-    failures.push("source is not a readable Git worktree");
-  }
-
-  const contents = Object.fromEntries(
-    [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map((path) => {
-      if (sourceSha === undefined) return [path, undefined];
-      const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
-      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-        entry,
-      );
-      return [
-        path,
-        match !== null && match[3] === path
-          ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString("utf-8")
-          : undefined,
-      ];
-    }),
-  );
-  // Keep this adapter snapshot validator below the repository reader to keep
-  // the contract and its implementation together.
-  // oxlint-disable-next-line eslint/no-use-before-define
-  return inspectSupportedTemplateSnapshot({
-    sourcePath,
-    sourceSha,
-    dirtyPaths,
-    failures,
-    contents,
-  });
-}
-
-export async function inspectSupportedRepository(input: string): Promise<EligibilityResult> {
-  const sourcePath = await resolveAllowedRepository(input);
-  return inspectSupportedRepositoryAtPath(sourcePath);
-}
-
-/**
- * Inspects a path that was created by the builder's canonical template-clone
- * transport. It is deliberately not exported through a tool boundary: callers
- * must first prove the fixed remote/ref/SHA transport contract.
- */
-export async function inspectBuilderOwnedSupportedRepository(
-  input: string,
-): Promise<EligibilityResult> {
-  return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
 }
 
 export function inspectSupportedTemplateSnapshot(
@@ -677,6 +570,109 @@ export function inspectSupportedTemplateSnapshot(
     digest: sha256(JSON.stringify(normalized)),
   };
 }
+
+function allowedRoots(): string[] {
+  const value = process.env.REPOSITORY_LOCAL_ROOTS;
+  if (value === undefined || value.trim() === "") {
+    if (hasTestCapability("simulated-target")) return [tmpdir()];
+    throw new Error("REPOSITORY_LOCAL_ROOTS must name at least one allowed local source root.");
+  }
+  return value
+    .split(delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => resolve(entry));
+}
+
+function within(root: string, candidate: string): boolean {
+  const path = relative(root, candidate);
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+}
+
+export async function resolveAllowedRepository(input: string): Promise<string> {
+  const candidate = await realpath(resolve(input));
+  const roots = await Promise.all(allowedRoots().map(async (root) => realpath(root)));
+  if (!roots.some((root) => within(root, candidate))) {
+    throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
+  }
+  return candidate;
+}
+
+async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<EligibilityResult> {
+  const failures: string[] = [];
+  let sourceSha: string | undefined;
+  const dirtyPaths: string[] = [];
+  try {
+    sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
+    const statusRecords = gitBytes(sourcePath, [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+    ])
+      .toString("utf-8")
+      .split("\0");
+    for (let index = 0; index < statusRecords.length; index += 1) {
+      const record = statusRecords[index];
+      if (record === undefined || record === "") continue;
+      if (record.length < 4 || record[2] !== " ")
+        throw new Error("Git returned a malformed worktree status record.");
+      dirtyPaths.push(record.slice(3));
+      if (/[RC]/u.test(record.slice(0, 2))) {
+        const originalPath = statusRecords[index + 1];
+        if (originalPath === undefined || originalPath === "")
+          throw new Error("Git returned a malformed rename status record.");
+        dirtyPaths.push(originalPath);
+        index += 1;
+      }
+    }
+  } catch {
+    failures.push("source is not a readable Git worktree");
+  }
+
+  const contents = Object.fromEntries(
+    [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map((path) => {
+      if (sourceSha === undefined) return [path, undefined];
+      const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
+      const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+      return [
+        path,
+        match !== null && match[3] === path
+          ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString("utf-8")
+          : undefined,
+      ];
+    }),
+  );
+  return inspectSupportedTemplateSnapshot({
+    sourcePath,
+    sourceSha,
+    dirtyPaths,
+    failures,
+    contents,
+  });
+}
+
+export async function inspectSupportedRepository(input: string): Promise<EligibilityResult> {
+  const sourcePath = await resolveAllowedRepository(input);
+  return inspectSupportedRepositoryAtPath(sourcePath);
+}
+
+/**
+ * Inspects a path that was created by the builder's canonical template-clone
+ * transport. It is deliberately not exported through a tool boundary: callers
+ * must first prove the fixed remote/ref/SHA transport contract.
+ */
+export async function inspectBuilderOwnedSupportedRepository(
+  input: string,
+): Promise<EligibilityResult> {
+  return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
+}
+
+/**
+ * Evaluate the repository-owned adapter contract from an already captured
+ * snapshot.  The same function is used for ordinary local repositories and
+ * for the fixed canonical clone inside an Eve session.
+ */
 
 export interface PreparedSandboxWorkspace {
   workspaceId: string;
@@ -1118,9 +1114,7 @@ export async function prepareSupportedSandboxWorkspace(
     .split("\0")
     .filter(Boolean)
     .map((entry) => {
-      const match = /^(?<mode>\d+) (?<type>\w+) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
-        entry,
-      );
+      const match = /^(\d+) (\w+) ([0-9a-f]{40})\t(.+)$/u.exec(entry);
       if (match === null) throw new Error("The reviewed Git tree contains an invalid entry.");
       const [, mode, type, objectId, path] = match;
       if (
@@ -1280,7 +1274,6 @@ export async function prepareDevelopmentSandboxWorkspace(
     const content = readFileSync(absolutePath);
     return [
       {
-        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
         // The live working tree has no stable Git object for edited/untracked
         // files. Its byte digest is the development-generation identity.
@@ -1438,7 +1431,6 @@ export async function prepareDevelopmentSandboxWorkspace(
 }
 
 /** Materializes a source only after the canonical clone transport has proven it. */
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function prepareBuilderOwnedSupportedSandboxWorkspace(
   sourcePathInput: string,
   expectedSha: string,
