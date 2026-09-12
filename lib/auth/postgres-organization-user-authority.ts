@@ -290,10 +290,8 @@ export function createPostgresPreviewOrganizationAuthority(
       if (issuer !== authority.issuer || audience !== authority.audience) {
         return false;
       }
-      return (
-        (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId ===
-        workspaceId
-      );
+      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      return activeOrganization?.workspaceId === workspaceId;
     },
   };
 }

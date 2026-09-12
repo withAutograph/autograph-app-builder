@@ -60,9 +60,8 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   const files: ExportedSkillFile[] = [];
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function visit(directory: string): Promise<void> {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).toSorted(
-      (left, right) => left.name.localeCompare(right.name),
-    )) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink())
         throw new Error("App-creation skill exports do not accept symbolic links.");

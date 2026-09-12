@@ -382,8 +382,8 @@ async function syncDirectory(path: string, builderOwned = false): Promise<void> 
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional binary open-flag combination.
   const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
-    if (!(await handle.stat()).isDirectory())
-      throw new Error("The builder-owned publication directory is unsafe.");
+    const stats = await handle.stat();
+    if (!stats.isDirectory()) throw new Error("The builder-owned publication directory is unsafe.");
     await handle.sync();
   } finally {
     await handle.close();

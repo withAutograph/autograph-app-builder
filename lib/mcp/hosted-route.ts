@@ -144,10 +144,11 @@ export function createDeploymentMcpRequestHandler(input: {
             },
             async beforeRead({ principal, adapterSessionId, sourceHandoffId }) {
               try {
+                const repositoryRuntime =
+                  await import("../agent/deployment-repository-access-runtime");
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
-                  (await import("../agent/deployment-repository-access-runtime"))
-                    .resumeAuthorizedRepositoryAccessForSession;
+                  repositoryRuntime.resumeAuthorizedRepositoryAccessForSession;
                 await resumeRepositoryAccess({
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
