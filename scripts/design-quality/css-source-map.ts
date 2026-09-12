@@ -14,7 +14,7 @@ function decodeVlq(value: string, start: number) {
   let index = start;
   while (index < value.length) {
     const digit = base64.indexOf(value[index]!);
-    if (digit < 0) return undefined;
+    if (digit === -1) return undefined;
     index += 1;
     result += (digit & 31) << shift;
     shift += 5;

@@ -7,7 +7,7 @@ import { sha256 } from "./portable-release";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index < 0) return undefined;
+  if (index === -1) return undefined;
   const value = process.argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;

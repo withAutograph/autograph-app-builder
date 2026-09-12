@@ -126,7 +126,7 @@ const vitestLocationPattern = /^\s*❯\s+(.+?):(\d+):(\d+)$/u;
 function safeDiagnosticPath(value: string): string | undefined {
   const normalized = value.replaceAll("\\", "/");
   const appsOffset = normalized.indexOf("apps/");
-  const path = appsOffset >= 0 ? normalized.slice(appsOffset) : normalized;
+  const path = appsOffset === -1 ? normalized : normalized.slice(appsOffset);
   if (
     path.length === 0 ||
     path.length > 500 ||

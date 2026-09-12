@@ -18,7 +18,7 @@ import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbo
 
 function argument(name: string) {
   const index = process.argv.indexOf(name);
-  const value = index < 0 ? undefined : process.argv[index + 1];
+  const value = index === -1 ? undefined : process.argv[index + 1];
   if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
   return value;
 }

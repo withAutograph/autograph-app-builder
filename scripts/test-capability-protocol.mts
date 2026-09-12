@@ -41,7 +41,7 @@ export async function relayBoundedFrames(options: {
     const processBuffered = () => {
       while (true) {
         const newline = buffered.indexOf(0x0a);
-        if (newline < 0) {
+        if (newline === -1) {
           if (buffered.byteLength > maximumFrameBytes)
             fail(new Error("Protocol frame exceeded its byte limit."));
           else if (sourceEnded) finishIfComplete();

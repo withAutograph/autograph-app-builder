@@ -451,7 +451,7 @@ export async function measureStyles(
       if (url?.startsWith("data:application/json")) {
         try {
           const comma = url.indexOf(",");
-          if (comma >= 0) {
+          if (comma !== -1) {
             const body = url.slice(comma + 1);
             text = /;base64/i.test(url.slice(0, comma))
               ? Buffer.from(body, "base64").toString("utf8")

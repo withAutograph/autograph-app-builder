@@ -210,9 +210,9 @@ export async function runWithTestCapability(options: {
     if (answered) return;
     buffered += chunk;
     const newline = buffered.indexOf("\n");
-    if (newline < 0 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
+    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
     if (
-      newline < 0 ||
+      newline === -1 ||
       Buffer.byteLength(buffered.slice(0, newline + 1)) > maximumFrameBytes ||
       newline !== buffered.length - 1
     ) {

@@ -10,14 +10,18 @@ import {
 
 const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
-const connectionId = connectionIndex >= 0 ? process.argv[connectionIndex + 1] : undefined;
+const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
 const endpointIndex = process.argv.indexOf("--endpoint");
-const suppliedEndpoint = endpointIndex >= 0 ? process.argv[endpointIndex + 1] : undefined;
+const suppliedEndpoint = endpointIndex === -1 ? undefined : process.argv[endpointIndex + 1];
 const endpoint =
   suppliedEndpoint ?? (connectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
 
-if (connectionIndex >= 0 && !connectionId) throw new Error("Missing value for --connection-id.");
-if (endpointIndex >= 0 && !suppliedEndpoint) throw new Error("Missing value for --endpoint.");
+if (connectionIndex === -1 || connectionId) {
+  // The option is absent or has a value.
+} else throw new Error("Missing value for --connection-id.");
+if (endpointIndex === -1 || suppliedEndpoint) {
+  // The option is absent or has a value.
+} else throw new Error("Missing value for --endpoint.");
 
 if (connectionId && suppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");

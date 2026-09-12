@@ -98,8 +98,8 @@ function readFdFrame() {
     source += buffer.subarray(0, count).toString("utf8");
     const newline = source.indexOf("\n");
     if (
-      (newline < 0 && Buffer.byteLength(source) > maxBytes) ||
-      (newline >= 0 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
+      (newline === -1 && Buffer.byteLength(source) > maxBytes) ||
+      (newline !== -1 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
     )
       throw new Error("Structural test authorization was oversized.");
   }

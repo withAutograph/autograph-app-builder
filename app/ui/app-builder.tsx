@@ -1630,7 +1630,7 @@ export function Builder({
               const currentIndex = briefExamples.indexOf(
                 form.brief as (typeof briefExamples)[number],
               );
-              const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
+              const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
               updateBrief(briefExamples[nextIndex]);
             }}
           />
