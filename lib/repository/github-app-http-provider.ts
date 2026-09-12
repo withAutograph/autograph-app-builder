@@ -229,7 +229,7 @@ export function createGitHubAppHttpProvider(input: {
     fetch: request,
   });
 
-  async function github(input: {
+  async function github(requestInput: {
     method?: "GET" | "POST";
     path: string;
     authorization: string;
@@ -238,12 +238,12 @@ export function createGitHubAppHttpProvider(input: {
   }): Promise<{ status: number; body: unknown; requestId: string }> {
     try {
       const response = await createGitHubTokenOctokit({
-        token: input.authorization,
+        token: requestInput.authorization,
         fetch: request,
-      }).request(`${input.method ?? "GET"} ${input.path}`, {
-        ...(record(input.body) ? input.body : {}),
+      }).request(`${requestInput.method ?? "GET"} ${requestInput.path}`, {
+        ...(record(requestInput.body) ? requestInput.body : {}),
       });
-      if (!input.expected.includes(response.status))
+      if (!requestInput.expected.includes(response.status))
         throw new Error(`github-status-${response.status}`);
       return {
         status: response.status,
@@ -253,7 +253,7 @@ export function createGitHubAppHttpProvider(input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (typeof status === "number" && input.expected.includes(status))
+      if (typeof status === "number" && requestInput.expected.includes(status))
         return {
           status,
           body: record(response) ? response.data : undefined,
