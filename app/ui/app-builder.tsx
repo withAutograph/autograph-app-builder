@@ -910,12 +910,19 @@ export function Builder({
     control: builderForm.control,
     defaultValue: initialForm,
   }) as BuilderForm;
+  // RHF remains the form owner. This ref is only its synchronous mutation
+  // mirror for action boundaries: a provider click can immediately follow an
+  // input event while React is still publishing useWatch's render update.
+  // Reading this mirror prevents a checkpoint from observing the prior field
+  // value during that narrow window.
+  const formSnapshot = useRef<BuilderForm>(initialForm);
   const localFormMutationVersion = useRef(0);
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
-      const current = builderForm.getValues();
+      const current = formSnapshot.current;
       const next = typeof update === "function" ? update(current) : update;
+      formSnapshot.current = next;
       (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
@@ -982,10 +989,12 @@ export function Builder({
   );
   const draftRevision = useRef(durableDraftRevision);
   const draftUpdatedAt = useRef(durableDraftUpdatedAt);
-  // A Server Action may stream a route update before its promise continuation
-  // runs. Remember its expected revision so that update is treated as an ack,
-  // never as a form replacement.
-  const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
+  // Server Actions can overlap at the React/RSC boundary even though the
+  // autosave transport serializes their database writes: the next action may
+  // have started by the time an earlier RSC acknowledgement arrives. Track
+  // every in-flight base revision, rather than one mutable slot, so an older
+  // completion cannot clear the newer action's hydration guard.
+  const pendingActionExpectedRevisions = useRef(new Set<number>());
   // The RSC payload for a local action can arrive after the action promise has
   // settled. Remember the local edit version that initiated each revision so a
   // delayed acknowledgement cannot replace a newer RHF edit. This only applies
@@ -1094,7 +1103,7 @@ export function Builder({
         } satisfies BuilderDraftRecord,
       };
       if (!keepalive) {
-        pendingActionExpectedRevision.current = input.expectedRevision;
+        pendingActionExpectedRevisions.current.add(input.expectedRevision);
         localActionMutationVersions.current.set(
           input.expectedRevision + 1,
           localFormMutationVersion.current,
@@ -1127,7 +1136,7 @@ export function Builder({
           savedAt: saved.updatedAt,
         };
       } finally {
-        pendingActionExpectedRevision.current = undefined;
+        if (!keepalive) pendingActionExpectedRevisions.current.delete(input.expectedRevision);
       }
     },
     [requestServerSave, saveActiveBuilderDraftAction],
@@ -1163,25 +1172,31 @@ export function Builder({
       ),
   );
   const draftSnapshot = useCallback(
-    (origin = focusOrigin.current): BuilderDraft => ({
-      version: 1,
-      // A provider redirect can follow the final input event immediately.
-      // Read RHF synchronously so the durable checkpoint always contains that
-      // event even before useWatch has produced the next render.
-      form: builderForm.getValues(),
-      team,
-      gitScope,
-      model,
-      zdrOnly,
-      showMoreConnections,
-      search,
-      connectedConnections,
-      storageProvider,
-      deploymentProvider,
-      focusOrigin: origin,
-      appNameEditedByUser: appNameEditedByUser.current,
-      repositoryEditedByUser: repositoryEditedByUser.current,
-    }),
+    (origin = focusOrigin.current): BuilderDraft => {
+      // React Hook Form is the live form authority. `useWatch` deliberately
+      // renders later, and the convenience mirror can be stale while React
+      // processes an input event. Read RHF synchronously at every durable
+      // boundary so autosave, provider redirects, and handoff creation all
+      // checkpoint exactly the values the user just entered.
+      const currentForm = builderForm.getValues();
+      formSnapshot.current = currentForm;
+      return {
+        version: 1,
+        form: currentForm,
+        team,
+        gitScope,
+        model,
+        zdrOnly,
+        showMoreConnections,
+        search,
+        connectedConnections,
+        storageProvider,
+        deploymentProvider,
+        focusOrigin: origin,
+        appNameEditedByUser: appNameEditedByUser.current,
+        repositoryEditedByUser: repositoryEditedByUser.current,
+      };
+    },
     [
       connectedConnections,
       builderForm,
@@ -1224,6 +1239,7 @@ export function Builder({
       draftUpdatedAt.current = remote.updatedAt;
       activeDraftId.current = remote.draftId;
       const snapshot = remote.record.draft;
+      formSnapshot.current = snapshot.form;
       builderForm.reset(snapshot.form);
       setTeam(snapshot.team);
       setGitScope(snapshot.gitScope);
@@ -1283,15 +1299,21 @@ export function Builder({
           : undefined;
   const updateBrief = (brief: string) => {
     setForm((current) => {
+      // `formSnapshot` is updated atomically by every builder field handler.
+      // Do not read RHF's per-field store here: while an RSC acknowledgement
+      // is hydrating it can briefly combine the latest name with the incoming
+      // brief. That transient composite must never become a durable generated
+      // name on an OAuth-return checkpoint.
+      const currentAppName = current.appName;
       // Preserve a name that RHF knows was entered directly, even if an older
       // Server Action/RSC acknowledgement has not yet caught up with the
       // persisted ownership marker. A newer authoritative remote revision
       // updates generatedAppName above and is still allowed to replace it.
       if (
         appNameEditedByUser.current ||
-        (generatedAppName.current !== undefined && generatedAppName.current !== current.appName)
+        (generatedAppName.current !== undefined && generatedAppName.current !== currentAppName)
       )
-        return { ...current, brief };
+        return { ...current, appName: currentAppName, brief };
       const appName = appNameFromBrief(brief) || randomAppName(generatedNameSeed);
       generatedAppName.current = appName;
       return {
@@ -1365,6 +1387,7 @@ export function Builder({
           return;
         }
         const { snapshot } = entry;
+        formSnapshot.current = snapshot.form;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);
@@ -1404,6 +1427,7 @@ export function Builder({
     )
       return;
     const snapshot = resumed.draft;
+    formSnapshot.current = snapshot.form;
     builderForm.reset(snapshot.form);
     activeDraftId.current = durableDraftId;
     draftRevision.current = durableDraftRevision;
@@ -1433,14 +1457,14 @@ export function Builder({
       // its acknowledgement advances draftRevision. Do not reinterpret that
       // device-local save as a remote revision and replace edits made while
       // the action was in flight.
-      if (pendingActionExpectedRevision.current !== undefined) return;
+      if (pendingActionExpectedRevisions.current.size > 0) return;
       try {
         if (!loadActiveBuilderDraftAction) return;
         const remote = await loadActiveBuilderDraftAction();
         if (
           disposed ||
           !remote ||
-          pendingActionExpectedRevision.current !== undefined ||
+          pendingActionExpectedRevisions.current.size > 0 ||
           localFormMutationVersion.current !== localMutationVersion
         )
           return;
@@ -1471,10 +1495,7 @@ export function Builder({
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
     const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
-    if (
-      pendingActionExpectedRevision.current !== undefined &&
-      durableDraftRevision === pendingActionExpectedRevision.current + 1
-    ) {
+    if (pendingActionExpectedRevisions.current.has(durableDraftRevision - 1)) {
       activeDraftId.current = durableDraftId;
       draftRevision.current = durableDraftRevision;
       draftUpdatedAt.current = durableDraftUpdatedAt;
@@ -1549,6 +1570,13 @@ export function Builder({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (canSubmit && (await builderForm.trigger())) {
+      // `useWatch` intentionally updates on React's render cadence. A click
+      // immediately after the final input event can therefore observe the
+      // prior rendered value here. Read RHF synchronously at this action
+      // boundary so the durable handoff cannot be created from a stale
+      // generated name (or any other last-keystroke value).
+      const currentForm = builderForm.getValues();
+      formSnapshot.current = currentForm;
       autosave.schedule(draftSnapshot());
       await autosave.flush();
       if (await autosave.restorePending()) {
@@ -1556,12 +1584,13 @@ export function Builder({
         return;
       }
       setDraftSaveError("");
-      const appName = form.appName.trim() || appNameFromBrief(form.brief) || randomAppName();
+      const appName =
+        currentForm.appName.trim() || appNameFromBrief(currentForm.brief) || randomAppName();
       onCreate(
         {
-          ...form,
+          ...currentForm,
           appName,
-          repository: form.repository.trim() || repositoryNameFromAppName(appName),
+          repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
           ...(deploymentProvider === "vercel" && team ? { vercelInstallationId: team } : {}),
           ...(storageProvider === "github" && gitScope ? { githubInstallationId: gitScope } : {}),
           modelId: preferredModelId,
@@ -1618,6 +1647,8 @@ export function Builder({
           <AppDetailsSection
             appName={form.appName}
             brief={form.brief}
+            appNameRegistration={builderForm.register("appName")}
+            briefRegistration={builderForm.register("brief")}
             onAppNameChange={(appName) => {
               appNameEditedByUser.current = true;
               generatedAppName.current = undefined;

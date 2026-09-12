@@ -1,6 +1,6 @@
 "use client";
 
-import { type AuthView, authMutationKeys } from "@better-auth-ui/core";
+import { type AuthView } from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {
@@ -8,7 +8,6 @@ import {
   usePasskeyAutoFill,
   useSignInPasskey,
 } from "@better-auth-ui/react/plugins/passkey";
-import { useIsMutating } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
 import { useState } from "react";
 
@@ -76,14 +75,6 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         to: resolvePasskeyRedirectTo(redirectTo, window.location.search, window.location.origin),
       }),
   });
-
-  const signInMutating = useIsMutating({
-    mutationKey: authMutationKeys.signIn.all,
-  });
-  const signUpMutating = useIsMutating({
-    mutationKey: authMutationKeys.signUp.all,
-  });
-  const isPending = signInMutating + signUpMutating > 0;
 
   const continueWithPasskey = async () => {
     setPending(true);
@@ -170,10 +161,16 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       <Button
         type="button"
         variant="outline"
-        disabled={isPending || pending}
+        // Conditional WebAuthn autofill is intentionally a long-lived mutation:
+        // it waits for the browser's credential picker until this page unmounts.
+        // Do not use the global Better Auth mutation count here or a stale
+        // conditional request can permanently disable the explicit recovery
+        // path. `pending` exclusively tracks a foreground ceremony started by
+        // this button and prevents duplicate user-initiated requests.
+        disabled={pending}
         className={cn(
           "w-full",
-          (isPending || pending) && "pointer-events-none opacity-50",
+          pending && "pointer-events-none opacity-50",
           failed &&
             "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}

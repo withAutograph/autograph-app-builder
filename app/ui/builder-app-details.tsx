@@ -1,5 +1,6 @@
 import { RefreshCw } from "@geist-ui/icons";
 import Link from "next/link";
+import type { UseFormRegisterReturn } from "react-hook-form";
 
 import styles from "./app-builder.module.css";
 
@@ -9,12 +10,21 @@ export function AppDetailsSection({
   onAppNameChange,
   onBriefChange,
   onCycleBrief,
+  appNameRegistration,
+  briefRegistration,
 }: {
   appName: string;
   brief: string;
   onAppNameChange: (value: string) => void;
   onBriefChange: (value: string) => void;
   onCycleBrief: () => void;
+  /**
+   * The builder supplies RHF registrations so ordinary parent renders cannot
+   * replay a stale watched value over an in-progress native input edit.
+   * Stories may omit these and retain their small controlled harnesses.
+   */
+  appNameRegistration?: UseFormRegisterReturn<"appName">;
+  briefRegistration?: UseFormRegisterReturn<"brief">;
 }) {
   return (
     <fieldset
@@ -32,8 +42,15 @@ export function AppDetailsSection({
           aria-label="App Name"
           autoComplete="off"
           spellCheck={false}
-          value={appName}
-          onChange={(event) => onAppNameChange(event.target.value)}
+          {...(appNameRegistration ?? { value: appName })}
+          // Keep RHF's native event path intact. The derived-field callback
+          // then updates the synchronous draft checkpoint. Replacing the
+          // registration handler left a narrow concurrent-render window where
+          // a browser fill could append a manual name to the generated one.
+          onChange={(event) => {
+            appNameRegistration?.onChange(event);
+            onAppNameChange(event.target.value);
+          }}
           placeholder="support-app"
         />
       </label>
@@ -47,8 +64,11 @@ export function AppDetailsSection({
             name="app-brief"
             aria-label="App Brief"
             autoComplete="off"
-            value={brief}
-            onChange={(event) => onBriefChange(event.target.value)}
+            {...(briefRegistration ?? { value: brief })}
+            onChange={(event) => {
+              briefRegistration?.onChange(event);
+              onBriefChange(event.target.value);
+            }}
             placeholder="Describe the app you want to build…"
           />
           <button type="button" aria-label="Try another app brief example" onClick={onCycleBrief}>
