@@ -662,11 +662,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: {
-              ...(existingAppChanges === undefined || existingAppChanges.length === 0
+            input:
+              existingAppChanges === undefined || existingAppChanges.length === 0
                 ? {}
-                : { existingAppChanges }),
-            },
+                : { existingAppChanges },
           },
         ],
       };

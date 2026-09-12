@@ -22,11 +22,10 @@ function createVercelDefinition() {
   }
   return defineSandbox({
     backend: createHostedVercelBackend({
-      ...(process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
-        ? {
-            sandboxEnvironment: DEVELOPMENT_SANDBOX_ENVIRONMENT,
-          }
-        : { sandboxEnvironment: HOSTED_BUN_RUNTIME_ENVIRONMENT }),
+      sandboxEnvironment:
+        process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
+          ? DEVELOPMENT_SANDBOX_ENVIRONMENT
+          : HOSTED_BUN_RUNTIME_ENVIRONMENT,
     }),
     async onSession({ use }) {
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.

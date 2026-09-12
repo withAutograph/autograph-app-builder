@@ -44,9 +44,7 @@ async function planAcceptedAppSpec(
       latest.phase === "reviewed",
     plan: async () => {
       await planAppCreation.execute(
-        {
-          ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
-        },
+        existingAppChanges === undefined ? {} : { existingAppChanges },
         ctx,
       );
     },
