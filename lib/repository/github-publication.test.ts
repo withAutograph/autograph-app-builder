@@ -31,13 +31,13 @@ import {
   type GitHubPublicationAdapter,
   type GitHubDraftPullRequestContent,
   type GitHubFreshRepositoryContent,
-  type GitHubPublicationReceiptStore,
   type GitHubRepositoryObservation,
 } from "./github-publication";
 import { createReviewedChangeSetReceipt, type NormalizedChangeSet } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 import { compareOverlayPaths } from "./target-apply";
+import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
@@ -266,22 +266,6 @@ function draftReadBack(
     pullRequest,
   };
   return { ...unsigned, digest: hash(unsigned) };
-}
-
-class Store implements GitHubPublicationReceiptStore {
-  readonly values = new Map<string, GitHubMutationReceipt>();
-  rejectTerminal = false;
-
-  async read(key: string) {
-    return this.values.get(key);
-  }
-
-  async compareAndSet(key: string, expected: string | undefined, value: GitHubMutationReceipt) {
-    if (this.values.get(key)?.digest !== expected) return false;
-    if (this.rejectTerminal && value.status !== "pending") return false;
-    this.values.set(key, value);
-    return true;
-  }
 }
 
 class Adapter implements GitHubPublicationAdapter {

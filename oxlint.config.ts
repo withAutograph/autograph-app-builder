@@ -19,7 +19,6 @@ export default defineConfig({
     "eslint/prefer-named-capture-group": "off",
     "eslint/require-await": "off",
     "eslint/complexity": "off",
-    "eslint/max-classes-per-file": "off",
     "eslint/require-unicode-regexp": "off",
     "eslint/sort-keys": "off",
     "promise/prefer-await-to-then": "off",

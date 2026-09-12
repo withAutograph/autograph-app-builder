@@ -11,6 +11,9 @@ import {
   type BuilderHandoffIntent,
   type BuilderHandoffRecord,
 } from "./contracts";
+import { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./errors";
+
+export { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./errors";
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 
@@ -50,20 +53,6 @@ export interface BuilderHandoffStore {
     sessionId: string;
     now: Date;
   }) => Promise<BuilderHandoffRecord | undefined>;
-}
-
-export class BuilderHandoffUnavailableError extends Error {
-  constructor() {
-    super("This App Builder handoff is unavailable.");
-    this.name = "BuilderHandoffUnavailableError";
-  }
-}
-
-export class BuilderHandoffConflictError extends Error {
-  constructor() {
-    super("This App Builder handoff request is already bound.");
-    this.name = "BuilderHandoffConflictError";
-  }
 }
 
 function requireOwnedRecord(

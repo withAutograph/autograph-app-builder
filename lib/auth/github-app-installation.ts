@@ -2,6 +2,12 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 import { z } from "zod";
 
+import {
+  GitHubCallbackParseError,
+  GitHubInstallationAuthorizationError,
+  GitHubStateValidationError,
+} from "./github-app-installation-errors";
+
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   providerConnectionReturnToSchema,
@@ -15,6 +21,7 @@ import { createGitHubOAuthApp, createGitHubTokenOctokit } from "../github/octoki
 const GITHUB_ORIGIN = "https://github.com";
 const STATE_LIFETIME_MS = 10 * 60 * 1000;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
+export { GitHubInstallationAuthorizationError } from "./github-app-installation-errors";
 
 export type GitHubInstallationAuthorizationFailureStage =
   | "callback-state-validation"
@@ -36,7 +43,7 @@ export type GitHubOAuthErrorCategory =
 
 export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
-type GitHubCallbackDiagnostic = {
+export type GitHubCallbackDiagnostic = {
   queryKeys: string[];
   keyCounts: Record<string, number>;
   unknownKeyCount: number;
@@ -48,7 +55,7 @@ type GitHubCallbackDiagnostic = {
   error?: GitHubOAuthCallbackError;
 };
 
-type GitHubStateValidationDiagnostic = {
+export type GitHubStateValidationDiagnostic = {
   substage:
     | "authority-parse"
     | "callback-parse"
@@ -60,50 +67,6 @@ type GitHubStateValidationDiagnostic = {
   stateDigest?: string;
   callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
 };
-
-class GitHubCallbackParseError extends Error {
-  readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>;
-
-  constructor(reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>) {
-    super("invalid-callback");
-    this.name = "GitHubCallbackParseError";
-    this.reason = reason;
-  }
-}
-
-class GitHubStateValidationError extends Error {
-  readonly diagnostic: GitHubStateValidationDiagnostic;
-
-  constructor(diagnostic: GitHubStateValidationDiagnostic) {
-    super("invalid-state");
-    this.name = "GitHubStateValidationError";
-    this.diagnostic = diagnostic;
-  }
-}
-
-export class GitHubInstallationAuthorizationError extends Error {
-  readonly stage: GitHubInstallationAuthorizationFailureStage;
-  readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
-  readonly returnState?: ProviderConnectionReturn;
-  readonly callback?: GitHubCallbackDiagnostic;
-  readonly stateValidation?: GitHubStateValidationDiagnostic;
-
-  constructor(
-    stage: GitHubInstallationAuthorizationFailureStage,
-    category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
-    returnState?: ProviderConnectionReturn,
-    callback?: GitHubCallbackDiagnostic,
-    stateValidation?: GitHubStateValidationDiagnostic,
-  ) {
-    super(FAILURE_MESSAGE);
-    this.name = "GitHubInstallationAuthorizationError";
-    this.stage = stage;
-    this.category = category;
-    this.returnState = returnState;
-    this.callback = callback;
-    this.stateValidation = stateValidation;
-  }
-}
 
 export function githubInstallationAuthorizationDiagnostic(error: unknown) {
   if (!(error instanceof GitHubInstallationAuthorizationError)) return undefined;
