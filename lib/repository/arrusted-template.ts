@@ -333,7 +333,7 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
   const cleanup = await Promise.allSettled(
     [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ path, force: true })),
   );
-  const failures = cleanup.filter((result) => result.status === "rejected");
+  const failures = cleanup.filter((cleanupResult) => cleanupResult.status === "rejected");
   if (failures.length > 0) throw new AggregateError(failures, "Sandbox clone cleanup failed.");
   if (cloneError !== undefined) throw cloneError;
   let observation: {
