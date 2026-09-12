@@ -21,7 +21,7 @@ import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
 export type PasskeyButtonProps = {
-  /** @remarks `AuthView` */
+  /** `AuthView` */
   view?: AuthView;
 };
 

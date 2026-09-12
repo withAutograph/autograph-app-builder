@@ -16,7 +16,7 @@ export type UserViewProps = {
    * @default false
    */
   hideSubtitle?: boolean;
-  /** @remarks `User` */
+  /** `User` */
   user?: Partial<User> & {
     username?: string | null;
     displayUsername?: string | null;

@@ -19,7 +19,7 @@ export type UseThemeHook = () => {
 type CommonThemeOptions = {
   /**
    * Override the plugin's default localization strings.
-   * @remarks `ThemeLocalization`
+   * `ThemeLocalization`
    */
   localization?: Partial<ThemeLocalization>;
   /**
@@ -47,7 +47,7 @@ export type ThemePluginOptions = CommonThemeOptions &
          * components can highlight the active option. Pass it from a
          * stateful source (e.g. `useState`, Context) so updates flow
          * through `<AuthProvider>` and re-render slot components.
-         * @remarks Do not memoize the static call (e.g. wrap
+         * Do not memoize the static call (e.g. wrap
          * `themePlugin({ theme, setTheme })` in `useMemo`): `theme` is
          * captured at factory-creation time, so a memoized closure will
          * keep returning the stale value and slot components will stop
