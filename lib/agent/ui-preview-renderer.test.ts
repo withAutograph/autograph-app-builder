@@ -111,6 +111,6 @@ describe("preview stylesheet provenance", () => {
     expect(renderer).not.toContain('themeCss + "\\n@source "');
     expect(renderer).toContain("const themeStyle = css.css.replace");
     expect(renderer).toContain("const bundledStyle = bundledCss.join");
-    expect(renderer).toContain("</style><style>" + "' + bundledStyle");
+    expect(renderer).toContain("</style><style>' + bundledStyle");
   });
 });
