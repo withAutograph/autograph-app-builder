@@ -21,10 +21,12 @@ export type EveEvalPrewarmLockReceipt = Readonly<{
   reason?: string;
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isErrno(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
   return (
     typeof info.uid === "number" &&
@@ -36,6 +38,7 @@ function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameFile(
   first: Awaited<ReturnType<typeof lstat>>,
   second: Awaited<ReturnType<typeof lstat>>,
@@ -48,6 +51,7 @@ function sameFile(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function defaultProcessAlive(pid: number) {
   try {
     process.kill(pid, 0);
@@ -59,6 +63,7 @@ function defaultProcessAlive(pid: number) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function contained(root: string, path: string) {
   const candidate = relative(root, path);
   return (
@@ -69,6 +74,7 @@ function contained(root: string, path: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readLockOwner(lock: string) {
   const ownerPath = join(lock, "owner.json");
   const info = await lstat(ownerPath);
@@ -99,6 +105,7 @@ async function readLockOwner(lock: string) {
  * lock whose exact owner file is trustworthy, unchanged, and demonstrably
  * dead. Active and malformed locks remain visible instead of being hidden.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reconcileDeadEveEvalPrewarmLocks(
   appRoot: string,
   options: Readonly<{ processAlive?: (pid: number) => boolean }> = {},
@@ -192,6 +199,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
   return receipts;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createEveEvalRuntimeDirectories(
   parent: string = tmpdir(),
 ): Readonly<{ home: string; root: string; workflowData: string }> {
@@ -216,6 +224,7 @@ export function createEveEvalRuntimeDirectories(
   return { home, root, workflowData };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function signalExitCode(signal: NodeJS.Signals | null) {
   return signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 128;
 }
@@ -225,6 +234,7 @@ function signalExitCode(signal: NodeJS.Signals | null) {
  * shutdown hooks. The detached process group is task-owned and provides a
  * bounded final backstop for listeners or descendants left by an interruption.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForEveEvalChild(
   input: Readonly<{
     authorization: Duplex;

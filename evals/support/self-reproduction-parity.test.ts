@@ -8,6 +8,7 @@ import {
 import type { ParityEvidence } from "./self-reproduction-parity";
 import { independenceAssertions } from "./self-reproduction-independence";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture(): ParityEvidence {
   return {
     schemaVersion: parityVersion,
@@ -28,6 +29,7 @@ function fixture(): ParityEvidence {
     },
   };
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observed(input: ParityEvidence, id: string) {
   const row = requirements.find((item) => item.id === id)!;
   input.candidate.observations.push({
@@ -45,6 +47,7 @@ function observed(input: ParityEvidence, id: string) {
   });
   return input.candidate.observations.at(-1)!;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function status(input: ParityEvidence, id: string, retained = true) {
   return (await assessParity(input, () => Promise.resolve(retained))).rows.find(
     (row) => row.side === "candidate" && row.requirementId === id,

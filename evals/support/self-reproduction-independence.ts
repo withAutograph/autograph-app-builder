@@ -1,5 +1,6 @@
 /** Egress comes from evaluator-owned browser AND server instrumentation, never
  * the generated app's self-report. Absence of coverage cannot prove isolation. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function independenceAssertions(input: {
   referenceOrigins: string[];
   browserOrigins: string[];

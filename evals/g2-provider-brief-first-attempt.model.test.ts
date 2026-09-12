@@ -26,6 +26,7 @@ const recordPrototypeArtifactInput = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function productionAppSpecInstructions(): Promise<string> {
   const paths = [
     "agent/instructions.md",
@@ -38,6 +39,7 @@ async function productionAppSpecInstructions(): Promise<string> {
   return contents.join("\n\n");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function terminalBuildHandoff(raw: string): {
   integrations: string[];
   hostedResources: string[];

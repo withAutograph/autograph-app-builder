@@ -23,6 +23,7 @@ import {
   waitForEveEvalChild,
 } from "./eve-eval-lifecycle";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function lockFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "eve-eval-locks-")));
   const backend = join(root, ".eve", "sandbox-cache", "template-locks", "vercel-authorized");
@@ -38,6 +39,7 @@ function lockFixture() {
   return { addLock, backend, root };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startServer(port: number) {
   const child = spawn(
     process.execPath,

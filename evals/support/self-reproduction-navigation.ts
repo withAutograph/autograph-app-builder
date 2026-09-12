@@ -6,6 +6,7 @@ import type { Page } from "playwright";
  * Installed 16.3.4 guide: instant-navigation.md#prevent-regressions-with-e2e-tests.
  * Assertions inside instant see only immediately available UI. Assertions after
  * it prove the paused dynamic content actually resolves. No stopwatch proxy. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function assertParityNavigation(
   page: Page,
   recipe: {
