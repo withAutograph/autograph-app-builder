@@ -322,6 +322,7 @@ function assertDisjointRoots(stateRoot: string, repositoryRoot: string, label: s
 
 function assertOwnedPrivateDirectory(path: string, label: string): void {
   const stat = lstatSync(path);
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
   if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
     throw new Error(`${label} must be a mode 0700 directory.`);
   const uid = process.getuid?.();
@@ -478,6 +479,7 @@ function readReceipt(
   if (
     !stat.isFile() ||
     stat.isSymbolicLink() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (stat.mode & 0o777) !== 0o600 ||
     uid === undefined ||
     stat.uid !== uid
@@ -570,6 +572,7 @@ function assertExactGhcrBoundHelper(stateRoot: string): void {
     stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (stat.mode & 0o777) !== 0o700
   )
     throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
@@ -587,6 +590,7 @@ function assertExactGhcrDockerConfig(stateRoot: string): void {
     stat.isSymbolicLink() ||
     uid === undefined ||
     stat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (stat.mode & 0o777) !== 0o600
   )
     throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");

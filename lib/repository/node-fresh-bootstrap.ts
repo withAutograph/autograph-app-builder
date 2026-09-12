@@ -1359,7 +1359,9 @@ async function assertRawGitAuthority(
     rootState.uid !== process.geteuid?.() ||
     gitState.uid !== process.geteuid?.() ||
     rootState.dev !== gitState.dev ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (rootState.mode & 0o022) !== 0 ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
     (gitState.mode & 0o022) !== 0 ||
     (await realpath(root)) !== root ||
     (await realpath(gitDirectory)) !== gitDirectory ||

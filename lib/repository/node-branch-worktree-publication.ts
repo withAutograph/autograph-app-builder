@@ -379,6 +379,7 @@ async function assertOwnedPublicationFileHandle(
 
 async function syncDirectory(path: string, builderOwned = false): Promise<void> {
   if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional binary open-flag combination.
   const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     if (!(await handle.stat()).isDirectory())
@@ -742,6 +743,7 @@ async function fileState(path: string): Promise<FileState> {
     const bytes = await readFile(path);
     return {
       kind: "regular",
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
       mode: (info.mode & 0o777).toString(8),
       digest: contentDigest(bytes),
     };

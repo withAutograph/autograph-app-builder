@@ -591,14 +591,14 @@ function within(root: string, candidate: string): boolean {
 
 export async function resolveAllowedRepository(input: string): Promise<string> {
   const candidate = await realpath(resolve(input));
-  const roots = await Promise.all(allowedRoots().map(async (root) => realpath(root)));
+  const roots = await Promise.all(allowedRoots().map((root) => realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
   }
   return candidate;
 }
 
-async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<EligibilityResult> {
+function inspectSupportedRepositoryAtPath(sourcePath: string): EligibilityResult {
   const failures: string[] = [];
   let sourceSha: string | undefined;
   const dirtyPaths: string[] = [];
@@ -1274,6 +1274,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     const content = readFileSync(absolutePath);
     return [
       {
+        // oxlint-disable-next-line eslint/no-bitwise -- Intentional executable-mode bitmask.
         mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
         // The live working tree has no stable Git object for edited/untracked
         // files. Its byte digest is the development-generation identity.
@@ -1431,7 +1432,7 @@ export async function prepareDevelopmentSandboxWorkspace(
 }
 
 /** Materializes a source only after the canonical clone transport has proven it. */
-export async function prepareBuilderOwnedSupportedSandboxWorkspace(
+export function prepareBuilderOwnedSupportedSandboxWorkspace(
   sourcePathInput: string,
   expectedSha: string,
   expectedEligibilityDigest: string,

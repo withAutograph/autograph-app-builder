@@ -49,11 +49,11 @@ const snapshot: HostedEngineSnapshot = {
 
 function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
-    get: vi.fn(async () => snapshot),
-    send: vi.fn(async () => snapshot),
-    respond: vi.fn(async () => snapshot),
-    cancel: vi.fn(async () => snapshot),
+    start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
+    get: vi.fn(() => Promise.resolve(snapshot)),
+    send: vi.fn(() => Promise.resolve(snapshot)),
+    respond: vi.fn(() => Promise.resolve(snapshot)),
+    cancel: vi.fn(() => Promise.resolve(snapshot)),
   };
   return { ...base, ...overrides };
 }

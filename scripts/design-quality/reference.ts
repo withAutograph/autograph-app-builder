@@ -100,7 +100,7 @@ function sourcePath(packageRoot: string, target: string): string | undefined {
   return possibilities.find(existsSync);
 }
 
-async function aliasEntryPoints(root: string, limitations: string[]): Promise<EntryPoint[]> {
+function aliasEntryPoints(root: string, limitations: string[]): EntryPoint[] {
   let parsed: ts.ParsedCommandLine;
   try {
     const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);

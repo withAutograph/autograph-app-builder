@@ -330,7 +330,7 @@ async function dirtyEntry(root: string, parsed: ParsedGitStatus): Promise<DirtyP
   };
 }
 
-async function gitOwnedPath(root: string, name: string): Promise<string> {
+function gitOwnedPath(root: string, name: string): string {
   return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
 }
 
