@@ -33,7 +33,7 @@ const { values } = parseArgs({
 const root = resolve(import.meta.dirname, "..");
 const now = new Date().toISOString();
 const output = resolve(
-  values["output-dir"] ?? join(".artifacts", "self-reproduction", now.replace(/[.:]/gu, "-")),
+  values["output-dir"] ?? join(".artifacts", "self-reproduction", now.replaceAll(/[.:]/gu, "-")),
 );
 const briefFile = resolve(values["brief-file"] ?? join("evals", "self-reproduction", "brief.md"));
 
@@ -72,7 +72,7 @@ function requirementRow(requirement: Requirement) {
 }
 
 function escape(value: string) {
-  return value.replace(
+  return value.replaceAll(
     /[&<>"']/gu,
     (character) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
@@ -83,8 +83,8 @@ function reportHtml(report: {
   createdAt: string;
   generation: Record<string, unknown>;
   requirements: Requirement[];
-  gaps: Array<Record<string, unknown>>;
-  captures: Array<{ label: string; files: string[]; status: string }>;
+  gaps: Record<string, unknown>[];
+  captures: { label: string; files: string[]; status: string }[];
 }) {
   const rows = report.requirements.map(requirementRow).join("");
   const gaps = report.gaps.length
@@ -112,7 +112,9 @@ async function runGenerator(candidateRoot: string, transcript: string) {
   const args = values.generator
     ? (values["generator-arg"] ?? [])
     : ["--import", "tsx", "scripts/self-reproduction-live.mts"];
-  const result = await new Promise<{ exitCode: number | null; output: string }>((done) => {
+  const resolvedArrustedRoot = arrustedRoot ? resolve(arrustedRoot) : undefined;
+  const answersPath = resolve("evals/self-reproduction/answers.json");
+  const result = await new Promise<{ exitCode: number | null; output: string }>((resolve) => {
     const child = spawn(command, args, {
       cwd: root,
       stdio: "pipe",
@@ -122,20 +124,20 @@ async function runGenerator(candidateRoot: string, transcript: string) {
         TMPDIR: process.env.TMPDIR ?? "/tmp",
         NODE_ENV: process.env.NODE_ENV ?? "development",
         SELF_REPRODUCTION_BRIEF_PATH: briefFile,
-        SELF_REPRODUCTION_ANSWERS_PATH: resolve("evals/self-reproduction/answers.json"),
+        SELF_REPRODUCTION_ANSWERS_PATH: answersPath,
         SELF_REPRODUCTION_CANDIDATE_ROOT: candidateRoot,
         SELF_REPRODUCTION_TRANSCRIPT_PATH: transcript,
         SELF_REPRODUCTION_GENERATION_TIMEOUT_MS: values["generation-timeout-ms"] ?? "600000",
         SELF_REPRODUCTION_PROVIDER_REQUEST_TIMEOUT_MS:
           values["provider-request-timeout-ms"] ?? "30000",
-        ...(arrustedRoot ? { SELF_REPRODUCTION_ARRUSTED_ROOT: resolve(arrustedRoot) } : {}),
+        ...(resolvedArrustedRoot ? { SELF_REPRODUCTION_ARRUSTED_ROOT: resolvedArrustedRoot } : {}),
       },
     });
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => (output += String(chunk)));
     child.stderr.on("data", (chunk: Buffer) => (output += String(chunk)));
-    child.on("error", () => done({ exitCode: null, output }));
-    child.on("close", (exitCode: number | null) => done({ exitCode, output }));
+    child.on("error", () => resolve({ exitCode: null, output }));
+    child.on("close", (exitCode: number | null) => resolve({ exitCode, output }));
   });
   await writeFile(join(resolve(transcript, ".."), "generator.log"), result.output, { mode: 0o600 });
   return {
@@ -264,9 +266,11 @@ async function main() {
   console.log(`Self-reproduction report: ${join(output, "index.html")}`);
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(
     `Self-reproduction evaluation could not complete (${error instanceof Error ? error.name : "error"}).`,
   );
   process.exitCode = 1;
-});
+}

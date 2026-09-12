@@ -13,7 +13,7 @@ const repositoryRoot = resolve(import.meta.dirname, "..");
 const eveEntry = resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
 const liveModelIndex = args.indexOf("--live-model");
-const liveModel = liveModelIndex >= 0;
+const liveModel = liveModelIndex !== -1;
 if (liveModel) args.splice(liveModelIndex, 1);
 const option = (name: string, required = false): string | undefined => {
   const index = args.indexOf(name);

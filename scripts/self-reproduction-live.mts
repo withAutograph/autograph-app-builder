@@ -32,14 +32,17 @@ async function availableLoopbackPort(configured: string | undefined): Promise<nu
     throw new Error("Configured self-reproduction ports must be valid TCP ports.");
   }
   const server = createServer();
-  await new Promise<void>((resolvePort, reject) => {
+  await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolvePort());
+    server.listen(0, "127.0.0.1", () => resolve());
   });
   const address = server.address();
-  await new Promise<void>((resolveClose, reject) =>
-    server.close((error) => (error ? reject(error) : resolveClose())),
-  );
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
   if (address === null || typeof address === "string")
     throw new Error("A loopback port was unavailable.");
   return address.port;
@@ -51,7 +54,7 @@ function run(
   options: { input?: string; timeoutMs?: number } = {},
 ) {
   return new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(
-    (done) => {
+    (resolve) => {
       const child = spawn(command, args, { cwd: root, stdio: "pipe", env: process.env });
       let stdout = "";
       let stderr = "";
@@ -60,7 +63,7 @@ function run(
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill("SIGTERM");
-        forceStop = setTimeout(() => child.kill("SIGKILL"), 5_000);
+        forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
       }, options.timeoutMs ?? 0);
       timer.unref();
       child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
@@ -70,12 +73,12 @@ function run(
       child.on("close", (code) => {
         clearTimeout(timer);
         if (forceStop !== undefined) clearTimeout(forceStop);
-        done({ code, stdout, stderr, timedOut });
+        resolve({ code, stdout, stderr, timedOut });
       });
       child.on("error", (error) => {
         clearTimeout(timer);
         if (forceStop !== undefined) clearTimeout(forceStop);
-        done({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut });
+        resolve({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut });
       });
     },
   );
@@ -90,7 +93,9 @@ async function waitForEve(url: string, signal: AbortSignal) {
     } catch {
       // The development process is expected to take time while it prepares its isolated runtime.
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
   }
   throw new Error("The local Eve agent did not become ready within two minutes.");
 }
@@ -141,12 +146,16 @@ async function main() {
       },
     },
   );
-  const developmentExited = new Promise<void>((resolve) =>
-    development.once("close", () => resolve()),
-  );
+  const developmentExited = new Promise<void>((resolve) => {
+    development.once("close", () => resolve());
+  });
   development.once("close", () => controller.abort());
-  development.stdout.on("data", (chunk: Buffer) => void appendFile(transcriptPath, String(chunk)));
-  development.stderr.on("data", (chunk: Buffer) => void appendFile(transcriptPath, String(chunk)));
+  development.stdout.on("data", async (chunk: Buffer) => {
+    await appendFile(transcriptPath, String(chunk));
+  });
+  development.stderr.on("data", async (chunk: Buffer) => {
+    await appendFile(transcriptPath, String(chunk));
+  });
   const stop = () => {
     controller.abort();
     if (development.pid !== undefined) {
@@ -220,9 +229,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   process.stderr.write(
     `Self-reproduction live generation failed: ${error instanceof Error ? error.message : "unknown error"}\n`,
   );
   process.exitCode = 1;
-});
+}

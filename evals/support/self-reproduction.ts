@@ -46,7 +46,7 @@ export function auditFramework(files: SourceFile[]) {
     (file) =>
       !/\.generated\.[cm]?tsx?$/u.test(file.path) && !/^(?:evals|scripts)\//u.test(file.path),
   );
-  const nextConfig = codeFiles.find((file) => /^next\.config\./u.test(file.path))?.content ?? "";
+  const nextConfig = codeFiles.find((file) => file.path.startsWith("next.config."))?.content ?? "";
   const appRouter = codeFiles.some((file) => /^(?:src\/)?app\//u.test(file.path));
   const clientRoots = codeFiles.filter((file) =>
     /^\s*["']use client["']/mu.test(file.content),
@@ -82,9 +82,9 @@ export function buildRequirements(
   const text = candidate?.map((file) => file.content).join("\n") ?? "";
   const has = (expression: RegExp) => expression.test(text);
   const sourceStatus = (id: string, expression: RegExp): RequirementStatus =>
-    !candidateAvailable
-      ? "blocked"
-      : (workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed"));
+    candidateAvailable
+      ? (workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed"))
+      : "blocked";
   const workflow = (id: string, title: string, expression: RegExp, expected: string) => ({
     id,
     title,
