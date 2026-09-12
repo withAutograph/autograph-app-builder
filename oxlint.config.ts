@@ -10,7 +10,6 @@ export default defineConfig({
     "eslint/no-bitwise": "off",
     "eslint/no-nested-ternary": "off",
     "eslint/func-style": "off",
-    "eslint/require-await": "off",
     "eslint/complexity": "off",
     "eslint/sort-keys": "off",
     "promise/avoid-new": "off",
