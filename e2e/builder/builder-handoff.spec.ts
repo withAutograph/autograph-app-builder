@@ -553,15 +553,9 @@ test("expired handoff renews in place without changing intent or provisioning re
       exact: true,
     });
     await expect(launch).toBeDisabled();
-    const renewalResponse = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        new URL(response.url()).pathname === `${statusPath}/renew`,
-    );
     await page.getByRole("button", { name: "Renew handoff", exact: true }).click();
-    const renewedResponse = await renewalResponse;
-    expect(renewedResponse.ok()).toBe(true);
-    expect((await renewedResponse.json()).handoffId).toBe(handoffId);
+    // Renewal is a Server Action. Its reconciled UI is the completion barrier;
+    // the authenticated projection and SQL below prove the persisted outcome.
     await expect(launch).toBeEnabled();
     await expect(page).toHaveURL(handoffUrl);
     await expect(page.getByText("This handoff has expired.", { exact: false })).toHaveCount(0);
