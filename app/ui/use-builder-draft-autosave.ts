@@ -155,11 +155,11 @@ export function useBuilderDraftAutosave<T>(
               : options.outbox.clearIfMutationId(current.mutationId));
             onAcknowledged.current?.(acknowledgement);
             if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
-          } catch (error) {
+          } catch (saveError) {
             if (!queued.current) queued.current = current;
             updateStatus(
               online() ? "error" : "offline",
-              error instanceof Error ? error : new Error("builder-draft-save-failed"),
+              saveError instanceof Error ? saveError : new Error("builder-draft-save-failed"),
             );
             return false;
           }
