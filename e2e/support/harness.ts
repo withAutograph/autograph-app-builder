@@ -279,6 +279,9 @@ export async function installBrowserBoundaries(
           // The emulated window has no resources to close.
         },
         location: {
+          get href() {
+            return state.opened.at(-1) ?? "";
+          },
           set href(next: string) {
             state.opened.push(next);
           },

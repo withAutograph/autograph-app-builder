@@ -3,7 +3,6 @@ import core from "ultracite/oxlint/core";
 
 const deferredRules = Object.fromEntries(
   [
-    "eslint/accessor-pairs",
     "eslint/arrow-body-style",
     "eslint/class-methods-use-this",
     "eslint/default-case",
