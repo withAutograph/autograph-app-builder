@@ -570,11 +570,22 @@ test("verification transport loss stays on Sign In after an assertion", async ({
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
+    // Prove that the hydrated foreground handler reached verification before
+    // asserting transport recovery; URL/session readiness alone is not enough.
+    await expect.poll(() => authenticationVerificationRequests).toBe(1);
     await expectPasskeyFailure(page);
     await expect(page).toHaveURL(/\/auth\/sign-in/u);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
     expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
+    await page.unroute("**/api/auth/passkey/verify-authentication");
+    await page.getByRole("button", { name: "Passkey failed (try again)" }).click();
+    await expect
+      .poll(() => currentSession(page))
+      .toMatchObject({
+        user: { emailVerified: false },
+      });
+    await expect(page).toHaveURL(`${appOrigin}/`);
   } finally {
     await authenticator.dispose();
   }
