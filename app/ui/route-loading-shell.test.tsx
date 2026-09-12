@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import ConsentLoading from "../(product)/auth/consent/loading";
+import SignOutLoading from "../(product)/auth/sign-out/loading";
+import AccountLoading from "../(product)/settings/account/loading";
+
 import {
   AuthLoadingShell,
   HandoffLoadingShell,
@@ -8,6 +12,18 @@ import {
 } from "./route-loading-shell";
 
 describe("route loading shells", () => {
+  it.each([
+    [ConsentLoading, "Authorize access", "Loading the requested permissions"],
+    [SignOutLoading, "Signing out of Autograph", "Preparing secure sign-out"],
+    [AccountLoading, "Account settings", "Loading your profile and security settings"],
+  ] as const)("renders a request-free destination shell for %s", (Loading, title, status) => {
+    const html = renderToStaticMarkup(<Loading />);
+    expect(html).toContain(title);
+    expect(html).toContain(status);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).not.toContain("Preparing secure sign-in");
+  });
+
   it("keeps authentication routes identifiable before request data streams", () => {
     const html = renderToStaticMarkup(<AuthLoadingShell title="Sign in to Autograph" />);
 

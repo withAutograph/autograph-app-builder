@@ -1,5 +1,7 @@
 interface AuthLoadingShellProps {
   title: string;
+  description?: string;
+  label?: string;
 }
 
 /**
@@ -7,17 +9,21 @@ interface AuthLoadingShellProps {
  * are partially prefetched by Next before the authenticated route content is
  * available, so a transition always has useful UI to show.
  */
-export function AuthLoadingShell({ title }: AuthLoadingShellProps) {
+export function AuthLoadingShell({
+  title,
+  description = "Preparing secure sign-in…",
+  label = "Authentication form loading",
+}: AuthLoadingShellProps) {
   return (
     <main aria-busy="true" className="flex min-h-svh items-center justify-center p-6">
       <section
-        aria-label="Authentication form loading"
+        aria-label={label}
         className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm"
       >
         <p className="text-sm font-medium text-muted-foreground">Autograph</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground" role="status">
-          Preparing secure sign-in…
+          {description}
         </p>
         <div className="mt-6 space-y-4" aria-hidden="true">
           <div className="h-10 animate-pulse rounded-md bg-muted" />

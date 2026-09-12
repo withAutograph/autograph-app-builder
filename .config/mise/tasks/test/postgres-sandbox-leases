@@ -17,13 +17,16 @@ trap cleanup EXIT HUP INT TERM
   "$image" >/dev/null
 
 attempt=0
-until "$docker" exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
+# The image starts a temporary socket-only server during initialization. Wait
+# for the final TCP listener, with enough time for a cold local disk sync.
+until "$docker" exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 50 ]; then
+  if [ "$attempt" -ge 60 ]; then
     echo "ephemeral PostgreSQL did not become ready" >&2
+    "$docker" logs "$container" >&2 || true
     exit 1
   fi
-  sleep 0.1
+  sleep 1
 done
 
 mapping=$("$docker" port "$container" 5432/tcp)
