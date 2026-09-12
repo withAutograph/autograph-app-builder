@@ -97,11 +97,11 @@ function authorizationCallbackUrl(state: string) {
   return url.toString();
 }
 
+const DEFAULT_RETURN_STATE = { returnTo: "/" as const };
+
 async function prepareAuthorization(
   authorization: ReturnType<typeof createGitHubAppInstallationAuthorization>,
-  returnState: { returnTo: "/" | `/handoff/${string}`; resumeKey?: string } = {
-    returnTo: "/",
-  },
+  returnState: { returnTo: "/" | `/handoff/${string}`; resumeKey?: string } = DEFAULT_RETURN_STATE,
 ) {
   const begun = await authorization.begin(authority, returnState);
   const installState = new URL(begun.redirectUrl).searchParams.get("state")!;

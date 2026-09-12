@@ -178,11 +178,12 @@ export function createVercelInstallationAuthorization(input: {
   const request = input.fetch ?? fetch;
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
+  const defaultReturnState: ProviderConnectionReturn = { returnTo: "/" };
 
   return {
     async begin(
       authorityInput: Authority,
-      returnState: ProviderConnectionReturn = { returnTo: "/" },
+      returnState: ProviderConnectionReturn = defaultReturnState,
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority)))

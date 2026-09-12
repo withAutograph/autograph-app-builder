@@ -677,6 +677,7 @@ export function createGitHubAppInstallationAuthorization(input: {
     : request;
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
+  const defaultReturnState: ProviderConnectionReturn = { returnTo: "/" };
   const callbackUrl = new URL("/github/installations/callback", config.issuer).toString();
 
   async function persistInstallationBinding(
@@ -703,7 +704,7 @@ export function createGitHubAppInstallationAuthorization(input: {
   return {
     async begin(
       authorityInput: HostedTenantAuthority,
-      returnState: ProviderConnectionReturn = { returnTo: "/" },
+      returnState: ProviderConnectionReturn = defaultReturnState,
     ) {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);

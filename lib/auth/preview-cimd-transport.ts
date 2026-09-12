@@ -102,11 +102,13 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
   });
 }
 
+const DEFAULT_PREVIEW_CIMD_DEPENDENCIES: PreviewCimdTransportDependencies = {
+  resolveHostname,
+  requestHttps,
+};
+
 export function createPreviewCimdTransport(
-  dependencies: PreviewCimdTransportDependencies = {
-    resolveHostname,
-    requestHttps,
-  },
+  dependencies: PreviewCimdTransportDependencies = DEFAULT_PREVIEW_CIMD_DEPENDENCIES,
 ): ClientMetadataResourceFetch {
   return async (input, init) => {
     const webRequest = new Request(input, init);

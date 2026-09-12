@@ -40,13 +40,20 @@ export const codexClientMetadata = {
   logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
 };
 
+const DEFAULT_OAUTH_CLIENT = { id: clientId, redirectUri };
+const DEFAULT_CLIENT_METADATA = {
+  client_name: "Portable client",
+  redirect_uris: [redirectUri],
+  token_endpoint_auth_method: "none",
+  grant_types: ["authorization_code", "refresh_token"],
+  response_types: ["code"],
+};
+const DEFAULT_RATE_LIMIT: BetterAuthOptions["rateLimit"] = { enabled: false };
+
 export function authorizationUrl(
   challenge: string,
   state: string,
-  client: { id: string; redirectUri: string } = {
-    id: clientId,
-    redirectUri,
-  },
+  client: { id: string; redirectUri: string } = DEFAULT_OAUTH_CLIENT,
 ) {
   const url = new URL(`${issuer}/oauth2/authorize`);
   for (const [key, value] of Object.entries({
@@ -66,14 +73,8 @@ export function authorizationUrl(
 
 export async function createRealOAuthHarness(
   activeWorkspaces: string[] = ["workspace_1"],
-  clientMetadata: Record<string, unknown> = {
-    client_name: "Portable client",
-    redirect_uris: [redirectUri],
-    token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-  },
-  rateLimit: BetterAuthOptions["rateLimit"] = { enabled: false },
+  clientMetadata: Record<string, unknown> = DEFAULT_CLIENT_METADATA,
+  rateLimit: BetterAuthOptions["rateLimit"] = DEFAULT_RATE_LIMIT,
 ) {
   const membershipState = { activeWorkspaces };
   const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>

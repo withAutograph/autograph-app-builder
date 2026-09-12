@@ -154,11 +154,11 @@ export function parseLinkedVercelProject(source: string): LinkedVercelProject {
   };
 }
 
+const DEFAULT_OWNER_BOUND_FILE_INPUT = { confidential: false };
+
 export function readOwnerBoundLocalFile(
   path: string,
-  input: { confidential: boolean; ownerId?: number } = {
-    confidential: false,
-  },
+  input: { confidential: boolean; ownerId?: number } = DEFAULT_OWNER_BOUND_FILE_INPUT,
 ): string {
   const stat = lstatSync(path);
   const ownerId = input.ownerId ?? process.getuid?.();

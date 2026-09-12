@@ -649,11 +649,13 @@ function commandPayload(output: string) {
     .replaceAll("\r", "");
 }
 
+const DEFAULT_FIXTURE_TARGET: ExactSourceBinding = {
+  sourceSha: ARRUSTED_TARGET_SHA,
+  sourceTree: ARRUSTED_TARGET_TREE,
+};
+
 function fixtureManifest(
-  target: ExactSourceBinding = {
-    sourceSha: ARRUSTED_TARGET_SHA,
-    sourceTree: ARRUSTED_TARGET_TREE,
-  },
+  target: ExactSourceBinding = DEFAULT_FIXTURE_TARGET,
 ): z.infer<typeof dependencyCacheManifestShapeSchema> {
   return {
     version: 1,
