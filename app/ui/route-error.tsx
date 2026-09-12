@@ -2,10 +2,10 @@
 
 import { useSyncExternalStore } from "react";
 
-export type RouteErrorProps = {
+export interface RouteErrorProps {
   error: Error & { digest?: string };
   retry: () => void;
-};
+}
 
 const subscribe = () => () => undefined;
 const clientReady = () => true;
