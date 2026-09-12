@@ -102,6 +102,7 @@ async function ownerBoundFile(path: string, label: string) {
     !info.isFile() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
     throw new Error(`${label} must be a current-user-owned regular file.`);

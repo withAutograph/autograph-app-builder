@@ -290,13 +290,16 @@ async function fileState(path: string, includeBytes = true): Promise<FileState> 
   try {
     const stat = await lstat(path);
     if (stat.isSymbolicLink()) return { kind: "symlink" };
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (stat.isDirectory()) return { kind: "directory", mode: (stat.mode & 0o777).toString(8) };
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (!stat.isFile()) return { kind: "special", mode: (stat.mode & 0o777).toString(8) };
     if (stat.size > LOCAL_PUBLICATION_MAX_FILE_BYTES)
       throw new Error(`File exceeds the local-publication size limit: ${path}`);
     const bytes = includeBytes ? await readFile(path) : undefined;
     return {
       kind: "regular",
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (stat.mode & 0o777).toString(8),
       ...(bytes === undefined ? {} : { bytes, digest: contentDigest(bytes) }),
     };

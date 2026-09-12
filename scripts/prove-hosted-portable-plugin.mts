@@ -24,6 +24,7 @@ async function secretFile(pathValue: string) {
   const info = await lstat(requested);
   if (!info.isFile() || info.isSymbolicLink())
     throw new Error("OAuth token input must be a regular, non-symbolic file.");
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if ((info.mode & 0o077) !== 0 || info.uid !== process.getuid?.())
     throw new Error("OAuth token input must be owner-bound with mode 0600.");
   const canonical = await realpath(requested);

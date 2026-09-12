@@ -467,6 +467,7 @@ describe("Vercel-faithful App Builder flow", () => {
       (legend) => legend.textContent === "Model",
     )!;
     expect(
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       buildWith.parentElement!.compareDocumentPosition(model.parentElement!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

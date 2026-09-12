@@ -145,6 +145,7 @@ async function canonicalOwnedDirectory(path: string, label: string) {
     info.isSymbolicLink() ||
     !info.isDirectory() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
     throw new Error(
@@ -236,6 +237,7 @@ async function sourceEntry(sourceRoot: string, path: string) {
     await assertSafeSourceAncestors(sourceRoot, absolute);
     const info = await lstat(absolute);
     if (info.isFile()) {
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       const descriptor = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const opened = await descriptor.stat();
@@ -249,6 +251,7 @@ async function sourceEntry(sourceRoot: string, path: string) {
         return {
           path,
           kind: "file" as const,
+          // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           mode: opened.mode & 0o111 ? "100755" : "100644",
           content,
         };

@@ -7,7 +7,6 @@ export default defineConfig({
   rules: {
     "unicorn/import-style": "off",
     "eslint/curly": "off",
-    "eslint/no-bitwise": "off",
     "eslint/no-shadow": "off",
     "eslint/no-nested-ternary": "off",
     "eslint/no-use-before-define": "off",

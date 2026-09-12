@@ -134,7 +134,9 @@ describe("development source snapshots", () => {
 
     expect(await readFile(join(snapshot.root, "README.md"), "utf-8")).toBe("dirty\n");
     expect(await readFile(join(snapshot.root, "new-file.ts"), "utf-8")).toContain("fresh");
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission-mode bitmask.
     expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission-mode bitmask.
     expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(0o600);
     expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(source));
     expect(snapshot.commit).toMatch(/^[0-9a-f]{40}$/u);

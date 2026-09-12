@@ -24,6 +24,7 @@ interface VercelOidcClaims {
 function assertOwnerNonWritable(path: string): void {
   const stat = statSync(path);
   const ownerId = process.getuid?.();
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ownerId === undefined || stat.uid !== ownerId || (stat.mode & 0o022) !== 0) {
     throw new Error("Installed Eve input was not owner-bound.");
   }
@@ -99,6 +100,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   if (
     lstatSync(cli).isSymbolicLink() ||
     !lstatSync(cli).isFile() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (statSync(cli).mode & 0o111) === 0
   ) {
     throw new Error("Installed Eve CLI was not an exact executable file.");
@@ -168,6 +170,7 @@ export function readOwnerBoundLocalFile(
     stat.nlink !== 1 ||
     ownerId === undefined ||
     stat.uid !== ownerId ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & (input.confidential ? 0o077 : 0o022)) !== 0
   ) {
     throw new Error("Local credential input was not an owner-bound file.");

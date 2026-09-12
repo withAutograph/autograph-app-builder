@@ -184,6 +184,7 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
   const entries: ts.Node[] = [];
   for (const statement of source.statements) {
     const exported = Boolean(
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       ts.getCombinedModifierFlags(statement as unknown as ts.Declaration) & ts.ModifierFlags.Export,
     );
     if (

@@ -36,6 +36,7 @@ async function identity(path: string): Promise<PathIdentity> {
     device: String(value.dev),
     inode: String(value.ino),
     uid: String(value.uid),
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
   };

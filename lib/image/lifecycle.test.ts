@@ -1316,6 +1316,7 @@ wait
     expect(readFileSync(join(destination, "nested", "run.sh"), "utf-8")).toBe(
       "#!/bin/sh\nexit 0\n",
     );
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission-mode bitmask.
     expect(lstatSync(join(destination, "nested", "run.sh")).mode & 0o777).toBe(0o755);
     expect(() => readFileSync(join(destination, ".git", "config"))).toThrow();
     const manifestBytes = readFileSync(

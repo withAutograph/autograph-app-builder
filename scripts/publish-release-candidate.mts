@@ -8,6 +8,7 @@ if (!candidateInput || !isAbsolute(candidateInput))
   throw new Error("Usage: --candidate-root /absolute/proven/candidate");
 const candidate = await realpath(resolve(candidateInput));
 const info = await lstat(candidate);
+// oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
 if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0)
   throw new Error("Release candidate root was unsafe.");
 const promotion = JSON.parse(

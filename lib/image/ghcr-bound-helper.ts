@@ -200,6 +200,7 @@ export function githubConfigDigest(configRoot: string): string {
     rootStat.isSymbolicLink() ||
     uid === undefined ||
     rootStat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o022) !== 0
   )
     throw new Error("GitHub configuration root is unsafe.");
@@ -208,6 +209,7 @@ export function githubConfigDigest(configRoot: string): string {
     const path = join(configRoot, name);
     if (realpathSync(path) !== path) throw new Error("GitHub configuration file is unsafe.");
     const stat = lstatSync(path);
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== uid || (stat.mode & 0o077) !== 0)
       throw new Error("GitHub configuration file is unsafe.");
     const bytes = readFileSync(path);
@@ -232,6 +234,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     rootStat.isSymbolicLink() ||
     uid === undefined ||
     rootStat.uid !== uid ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o777) !== 0o700
   )
     throw new Error("GitHub state root is unsafe.");
@@ -249,6 +252,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
   if (realpathSync(ghRoot) !== ghRoot)
     throw new Error("GitHub state root contains a symbolic link.");
   const ghStat = lstatSync(ghRoot);
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ghStat.uid !== uid || (ghStat.mode & 0o022) !== 0)
     throw new Error("GitHub state root is unsafe.");
 
@@ -268,6 +272,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
   if (
     deviceStat.uid !== uid ||
     deviceStat.nlink !== 1 ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (deviceStat.mode & 0o022) !== 0 ||
     deviceStat.size === 0 ||
     deviceStat.size > 256

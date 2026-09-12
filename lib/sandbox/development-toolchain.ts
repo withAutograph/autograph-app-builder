@@ -96,6 +96,7 @@ function exactSourceRoot(path: string) {
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
     throw new Error("Development Vercel source root was not owner-bound.");

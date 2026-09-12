@@ -52,6 +52,7 @@ function observeRoot(path, repositoryRoot) {
       !state.isDirectory() ||
       state.isSymbolicLink() ||
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o777n) !== 0o700n ||
       within(repositoryRoot, canonical) ||
       within(canonical, repositoryRoot)
@@ -62,6 +63,7 @@ function observeRoot(path, repositoryRoot) {
       device: String(state.dev),
       inode: String(state.ino),
       uid: String(state.uid),
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
     });
@@ -82,6 +84,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
       !state.isDirectory() ||
       state.isSymbolicLink() ||
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o022n) !== 0n ||
       within(repositoryRoot, canonical) ||
       within(canonical, repositoryRoot)
@@ -92,6 +95,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
       device: String(state.dev),
       inode: String(state.ino),
       uid: String(state.uid),
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
     });

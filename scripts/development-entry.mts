@@ -15,6 +15,7 @@ async function privateRoot(path: string) {
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
   )
     throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);

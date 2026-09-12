@@ -176,6 +176,7 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
     throw new Error(
@@ -303,6 +304,7 @@ export async function immutableTreeDigest(rootInput: string) {
     const bytes = await readFile(join(root, path));
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(join(root, path));
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const mode = (info.mode & 0o777).toString(8).padStart(3, "0");
     digest.update(`${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`);
     digest.update(bytes);
@@ -349,6 +351,7 @@ export async function verifyPromotionCandidate(input: {
     !rootInfo.isDirectory() ||
     rootInfo.isSymbolicLink() ||
     rootInfo.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootInfo.mode & 0o022) !== 0
   )
     throw new Error(
