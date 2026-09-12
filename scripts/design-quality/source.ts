@@ -1,4 +1,4 @@
-import postcss from "postcss";
+import { parse } from "postcss";
 import { posix } from "node:path";
 import ts from "typescript";
 
@@ -49,7 +49,7 @@ function normalise(value: string): string {
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */
 export function parseTokens(css: string): Record<string, string> {
   const declared: Record<string, string> = {};
-  postcss.parse(css).walkDecls(/^--/, (declaration) => {
+  parse(css).walkDecls(/^--/, (declaration) => {
     declared[declaration.prop] = declaration.value.trim();
   });
 
@@ -119,7 +119,7 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
 }
 
 function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
-  postcss.parse(content).walkDecls((declaration) => {
+  parse(content).walkDecls((declaration) => {
     collectVarReferences(declaration.value, tokenRefs);
     collectCssLiterals(declaration.value, literals);
   });
@@ -307,7 +307,7 @@ export function analyzeSource({
         continue;
       }
       collectCssFile(file.content, tokenRefs, literals);
-      const css = postcss.parse(file.content, { from: file.path });
+      const css = parse(file.content, { from: file.path });
       css.walkDecls((declaration) => {
         const selector =
           declaration.parent?.type === "rule" ? declaration.parent.selector : undefined;

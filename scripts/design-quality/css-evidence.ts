@@ -1,4 +1,4 @@
-import postcss from "postcss";
+import { parse, type Declaration } from "postcss";
 
 export type CssSourceFile = { path: string; content: string };
 export type CssRuleEvidence = {
@@ -76,13 +76,13 @@ function ruleSignature(
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
-    const css = postcss.parse(file.content, { from: file.path });
+    const css = parse(file.content, { from: file.path });
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP
       // backend, so it deliberately stays unassessed.
       if (rule.parent?.type !== "root") return;
       const declarations =
-        rule.nodes?.filter((node): node is postcss.Declaration => node.type === "decl") ?? [];
+        rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
       if (!signature) return;
       for (const declaration of declarations) {
