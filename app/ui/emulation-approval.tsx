@@ -102,4 +102,4 @@ export function EmulationApproval({
   );
 }
 
-export { styles as emulationApprovalStyles };
+export { default as emulationApprovalStyles } from "./emulation-approval.module.css";

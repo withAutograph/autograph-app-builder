@@ -133,7 +133,7 @@ export const promotionReceiptSchema = promotionReceiptUnsignedSchema
 export type PromotionReceipt = z.infer<typeof promotionReceiptSchema>;
 export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSchema>;
 
-export { sha256 };
+export { sha256 } from "../../scripts/portable-release";
 
 async function sha256File(path: string) {
   const digest = createHash("sha256");

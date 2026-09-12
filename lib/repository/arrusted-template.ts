@@ -43,7 +43,7 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 
-export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
+export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY } from "./source-receipt";
 
 type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
 
