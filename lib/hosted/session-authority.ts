@@ -102,7 +102,7 @@ export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
     const current = (sessionAuth as { current?: { authenticator?: string } } | null)?.current;
     if (current?.authenticator === "mcp-oauth-jwks")
       throw new HostedSessionAuthorityError("invalid");
-    return undefined;
+    return;
   }
   exactForwardedSessionAuthority(sessionAuth);
   const current = parsed.data.current.attributes["autograph:source-handoff-id"];
