@@ -927,6 +927,13 @@ export function Builder({
     [builderForm],
   );
   const appNameEditedByUser = useRef(initialDraft?.appNameEditedByUser ?? false);
+  // Keep the provenance of an inferred name separate from the persisted
+  // marker. A streamed action acknowledgement can briefly replay an older
+  // marker while RHF already holds a user-entered name; that acknowledgement
+  // must not turn the next brief edit into an instruction to replace it.
+  const generatedAppName = useRef<string | undefined>(
+    initialDraft?.appNameEditedByUser ? undefined : initialForm.appName,
+  );
   const repositoryEditedByUser = useRef(initialDraft?.repositoryEditedByUser ?? false);
   const [initialActiveDraftId] = useState(() => resumeKey ?? durableDraftId ?? crypto.randomUUID());
   const activeDraftId = useRef(initialActiveDraftId);
@@ -1225,6 +1232,7 @@ export function Builder({
       setDeploymentProvider(snapshot.deploymentProvider ?? null);
       focusOrigin.current = snapshot.focusOrigin;
       appNameEditedByUser.current = snapshot.appNameEditedByUser;
+      generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
       repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
       autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
       setDraftSyncNotice("Updated from another device");
@@ -1271,8 +1279,17 @@ export function Builder({
           : undefined;
   const updateBrief = (brief: string) => {
     setForm((current) => {
-      if (appNameEditedByUser.current) return { ...current, brief };
+      // Preserve a name that RHF knows was entered directly, even if an older
+      // Server Action/RSC acknowledgement has not yet caught up with the
+      // persisted ownership marker. A newer authoritative remote revision
+      // updates generatedAppName above and is still allowed to replace it.
+      if (
+        appNameEditedByUser.current ||
+        (generatedAppName.current !== undefined && generatedAppName.current !== current.appName)
+      )
+        return { ...current, brief };
       const appName = appNameFromBrief(brief) || randomAppName(generatedNameSeed);
+      generatedAppName.current = appName;
       return {
         ...current,
         brief,
@@ -1356,6 +1373,7 @@ export function Builder({
         setDeploymentProvider(snapshot.deploymentProvider ?? null);
         focusOrigin.current = snapshot.focusOrigin;
         appNameEditedByUser.current = snapshot.appNameEditedByUser;
+        generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
         repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
         autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
         if (!disposed) void resumePending();
@@ -1560,6 +1578,7 @@ export function Builder({
             brief={form.brief}
             onAppNameChange={(appName) => {
               appNameEditedByUser.current = true;
+              generatedAppName.current = undefined;
               setForm((current) => ({
                 ...current,
                 appName,
