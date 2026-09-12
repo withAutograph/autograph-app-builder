@@ -107,15 +107,17 @@ describe("self-reproduction evidence persistence", () => {
           event: {
             type: "action.result",
             data: {
-              toolName: "change_set_status",
               result: {
-                exportFiles: [
-                  { path: "apps/replica/package.json", content: "{}\n" },
-                  {
-                    path: "apps/replica/app/page.tsx",
-                    content: "export default function Page() {}\n",
-                  },
-                ],
+                toolName: "change_set_status",
+                output: {
+                  exportFiles: [
+                    { path: "apps/replica/package.json", content: "{}\n" },
+                    {
+                      path: "apps/replica/app/page.tsx",
+                      content: "export default function Page() {}\n",
+                    },
+                  ],
+                },
               },
             },
           },
@@ -132,8 +134,10 @@ describe("self-reproduction evidence persistence", () => {
           event: {
             type: "action.result",
             data: {
-              toolName: "change_set_status",
-              result: { exportFiles: [{ path: "../reference", content: "leak" }] },
+              result: {
+                toolName: "change_set_status",
+                output: { exportFiles: [{ path: "../reference", content: "leak" }] },
+              },
             },
           },
         },
@@ -148,16 +152,45 @@ describe("self-reproduction evidence persistence", () => {
           event: {
             type: "action.result",
             data: {
-              toolName: "change_set_status",
               result: {
-                status: "validation_failed",
-                exportFiles: [{ path: "apps/replica/app/page.tsx", content: "failed" }],
+                toolName: "change_set_status",
+                output: {
+                  status: "validation_failed",
+                  exportFiles: [{ path: "apps/replica/app/page.tsx", content: "failed" }],
+                },
               },
             },
           },
         },
       ]),
     ).toBe("native unreviewed validation-failed export");
+  });
+
+  it("extracts the generated application root without target build artifacts", () => {
+    expect(
+      candidateExportFromEvidence([
+        {
+          event: {
+            type: "action.result",
+            data: {
+              result: {
+                toolName: "change_set_status",
+                output: {
+                  exportFiles: [
+                    { path: "prototype/replica/app-spec.md", content: "# Replica" },
+                    { path: "apps/replica/next.config.ts", content: "export default {}" },
+                    { path: "apps/replica/app/page.tsx", content: "export default null" },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ]),
+    ).toEqual([
+      { path: "app/page.tsx", content: "export default null" },
+      { path: "next.config.ts", content: "export default {}" },
+    ]);
   });
 
   it("flushes partial runs and preserves successful and failed tool outcomes in order", () => {

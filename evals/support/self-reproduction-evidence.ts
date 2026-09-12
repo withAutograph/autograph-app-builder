@@ -98,22 +98,35 @@ export function evidenceSink(
 
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
+function changeSetStatusOutput(
+  record: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const event = record.event as
+    | {
+        type?: unknown;
+        data?: {
+          toolName?: unknown;
+          result?: { toolName?: unknown; output?: unknown } | Record<string, unknown>;
+        };
+      }
+    | undefined;
+  if (event?.type !== "action.result" || !event.data?.result) return undefined;
+  if (event.data.result.toolName === "change_set_status") {
+    const { output } = event.data.result;
+    return output && typeof output === "object" && !Array.isArray(output)
+      ? (output as Record<string, unknown>)
+      : undefined;
+  }
+  return event.data.toolName === "change_set_status" ? event.data.result : undefined;
+}
+
 export function candidateExportProvenanceFromEvidence(
   records: readonly Record<string, unknown>[],
 ): "native reviewed change_set_status export" | "native unreviewed validation-failed export" {
   for (const record of records.toReversed()) {
-    const event = record.event as
-      | {
-          type?: unknown;
-          data?: { toolName?: unknown; result?: { status?: unknown; exportFiles?: unknown } };
-        }
-      | undefined;
-    if (
-      event?.type === "action.result" &&
-      event.data?.toolName === "change_set_status" &&
-      Array.isArray(event.data.result?.exportFiles)
-    )
-      return event.data.result?.status === "validation_failed"
+    const output = changeSetStatusOutput(record);
+    if (Array.isArray(output?.exportFiles))
+      return output?.status === "validation_failed"
         ? "native unreviewed validation-failed export"
         : "native reviewed change_set_status export";
   }
@@ -124,19 +137,7 @@ export function candidateExportFromEvidence(
   records: readonly Record<string, unknown>[],
 ): CandidateExportFile[] | undefined {
   for (const record of records.toReversed()) {
-    const { event } = record;
-    if (!event || typeof event !== "object" || Array.isArray(event)) continue;
-    const typedEvent = event as { type?: unknown; data?: unknown };
-    if (
-      typedEvent.type !== "action.result" ||
-      !typedEvent.data ||
-      typeof typedEvent.data !== "object"
-    )
-      continue;
-    const data = typedEvent.data as { toolName?: unknown; result?: unknown };
-    if (data.toolName !== "change_set_status" || !data.result || typeof data.result !== "object")
-      continue;
-    const files = (data.result as { exportFiles?: unknown }).exportFiles;
+    const files = changeSetStatusOutput(record)?.exportFiles;
     if (!Array.isArray(files) || files.length === 0) continue;
     const validated: CandidateExportFile[] = [];
     const paths = new Set<string>();
@@ -154,6 +155,20 @@ export function candidateExportFromEvidence(
         return undefined;
       paths.add(path);
       validated.push({ path, content });
+    }
+    const appRoots = new Set(
+      validated.flatMap((file) => {
+        const match = /^(apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
+        return match ? [match[1]] : [];
+      }),
+    );
+    if (appRoots.size === 1) {
+      const [appRoot] = appRoots;
+      const prefix = `${appRoot}/`;
+      return validated
+        .filter((file) => file.path.startsWith(prefix))
+        .map((file) => ({ ...file, path: file.path.slice(prefix.length) }))
+        .toSorted((left, right) => left.path.localeCompare(right.path));
     }
     return validated.toSorted((left, right) => left.path.localeCompare(right.path));
   }
