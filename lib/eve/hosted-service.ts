@@ -265,7 +265,7 @@ function checkpointForSnapshot(
   snapshot: HostedEngineSnapshot,
   capturedAtEpochMs: number,
 ): HostedSessionCheckpoint {
-  const ring = new Array<z.infer<typeof publicEveEventSchema>>(512);
+  const ring = Array.from<z.infer<typeof publicEveEventSchema>>({ length: 512 });
   let publicEventCount = 0;
   for (const candidate of snapshot.events) {
     if (candidate === null || typeof candidate !== "object") continue;
