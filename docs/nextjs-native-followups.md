@@ -40,11 +40,21 @@ production-prefetch or production-cache acceptance evidence.
 
 ## Acceptance
 
-Slices 1 and 2 are integrated locally as `5d4686d7` and `233a4e8b` on
-`feat/next-native-boundaries-and-data`. Their combined focused suite passed
-23 tests and the integrated `mise run typecheck` passed. Agent-scoped lint and
-format checks passed. No new feature-branch publication, full acceptance, or
-production-mode browser proof is claimed by these results.
+Slices 1 and 2 were rebased onto green main `a83bcbce` as `2b06e52c` and
+`2e973355` on `feat/next-native-boundaries-and-data`. Their combined focused
+suite passed 23 tests. Local repository acceptance passed formatting, lint,
+typecheck, 1,504 unit tests (12 skipped), and Storybook checks. Its temporary
+PostgreSQL startup gate failed twice; diagnostics demonstrated cold initialization
+outlasting its five-second budget. The gate now waits for the final TCP listener,
+not the initialization-only Unix socket, and reports container logs on failure.
+The corrected PostgreSQL gate passed its concurrency and recovery checks.
+Package validation and the final formatting check passed independently.
+
+The affected auth/provider/handoff browser run passed 59 of 63 tests, including
+all 10 instant-navigation assertions. Four streamed-route readiness assertions
+timed out at five seconds; all four passed unchanged in an isolated retry.
+These results do not claim a clean single-pass browser run or production-mode
+prefetch/cache proof. Exact-head CI remains the publication gate.
 
 - Run focused component/data tests, lint, formatting, and typecheck after
   integration. Preserve action-state, autosave, provider-return and handoff tests.
