@@ -456,14 +456,14 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
   holder.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill();
-      rejectReady(new Error("The OS publication lock did not become ready."));
+      reject(new Error("The OS publication lock did not become ready."));
     }, 5_000);
     void terminalPromise.then((outcome) => {
       clearTimeout(timeout);
-      rejectReady(
+      reject(
         outcome.kind === "error"
           ? outcome.error
           : new Error(
@@ -476,10 +476,10 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
       clearTimeout(timeout);
       if (chunk !== "READY\n") {
         holder.kill();
-        rejectReady(new Error("The OS publication lock handshake failed."));
+        reject(new Error("The OS publication lock handshake failed."));
         return;
       }
-      resolveReady();
+      resolve();
     });
   });
   const lockLostError = () => {

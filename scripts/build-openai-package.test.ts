@@ -1,26 +1,31 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve as resolvePath } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const runGenerator = (cwd: string, endpoint: string) =>
-  new Promise<void>((resolveRun, rejectRun) => {
+  new Promise<void>((resolve, reject) => {
     let stderr = "";
     const child = spawn(
       process.execPath,
-      [...process.execArgv, resolve("scripts/build-openai-package.mts"), "--endpoint", endpoint],
+      [
+        ...process.execArgv,
+        resolvePath("scripts/build-openai-package.mts"),
+        "--endpoint",
+        endpoint,
+      ],
       { cwd, stdio: ["ignore", "ignore", "pipe"] },
     );
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.once("error", rejectRun);
+    child.once("error", reject);
     child.once("exit", (code) =>
       code === 0
-        ? resolveRun()
-        : rejectRun(new Error(`OpenAI package generator exited ${code}: ${stderr.trim()}`)),
+        ? resolve()
+        : reject(new Error(`OpenAI package generator exited ${code}: ${stderr.trim()}`)),
     );
   });
 

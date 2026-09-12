@@ -7,15 +7,15 @@ import { archiveFiles, verifyPortableProofArtifact } from "./portable-proof-arti
 import { deterministicGzip, deterministicTar, sha256 } from "./portable-release";
 
 const run = (script: string, args: string[], expected = 0) =>
-  new Promise<void>((resolveRun, rejectRun) => {
+  new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, [...process.execArgv, `scripts/${script}`, ...args], {
       stdio: expected === 0 ? "inherit" : "ignore",
     });
-    child.once("error", rejectRun);
+    child.once("error", reject);
     child.once("exit", (code) =>
       code === expected
-        ? resolveRun()
-        : rejectRun(new Error(`${script} exited ${code}; expected ${expected}.`)),
+        ? resolve()
+        : reject(new Error(`${script} exited ${code}; expected ${expected}.`)),
     );
   });
 

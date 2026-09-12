@@ -15,7 +15,7 @@ export async function relayBoundedFrames(options: {
   )
     throw new Error("Protocol relay configuration was invalid.");
 
-  await new Promise<void>((resolveRelay, rejectRelay) => {
+  await new Promise<void>((resolve, reject) => {
     let buffered = Buffer.alloc(0);
     let frames = 0;
     let settled = false;
@@ -26,7 +26,7 @@ export async function relayBoundedFrames(options: {
       settled = true;
       options.source.destroy();
       options.target.destroy();
-      rejectRelay(error);
+      reject(error);
     };
     const finishIfComplete = () => {
       if (!sourceEnded || waitingForDrain || settled) return;
@@ -76,7 +76,7 @@ export async function relayBoundedFrames(options: {
     options.target.once("finish", () => {
       if (settled) return;
       settled = true;
-      resolveRelay();
+      resolve();
     });
     options.source.once("error", (error) => fail(error));
     options.target.once("error", (error) => fail(error));

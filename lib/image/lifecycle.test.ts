@@ -883,20 +883,20 @@ wait
     child.stdin.end("ghcr.io\n");
     try {
       for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1)
-        await new Promise((resolveWait) => {
-          setTimeout(resolveWait, 10);
+        await new Promise((resolve) => {
+          setTimeout(resolve, 10);
         });
       expect(existsSync(descendant)).toBe(true);
       process.kill(-child.pid!, "SIGKILL");
-      await new Promise<void>((resolveClose) => {
-        child.once("close", () => resolveClose());
+      await new Promise<void>((resolve) => {
+        child.once("close", () => resolve());
       });
       const descendantPid = Number(readFileSync(descendant, "utf8").trim());
       for (let attempts = 0; attempts < 100; attempts += 1) {
         try {
           process.kill(descendantPid, 0);
-          await new Promise((resolveWait) => {
-            setTimeout(resolveWait, 10);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 10);
           });
         } catch {
           break;
@@ -1326,12 +1326,12 @@ wait
   it("serializes concurrent lifecycle operations for one state root", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-lifecycle-lock-")));
     let enter!: () => void;
-    const entered = new Promise<void>((resolveEntered) => {
-      enter = resolveEntered;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
     });
     let release!: () => void;
-    const held = new Promise<void>((resolveRelease) => {
-      release = resolveRelease;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
     });
     let dispatches = 0;
     const first = withLifecycleLock(root, async () => {
@@ -1404,7 +1404,7 @@ wait
       ["--experimental-strip-types", "--input-type=module", "--eval", code],
       { stdio: ["ignore", "pipe", "inherit"] },
     );
-    const interruptedPath = await new Promise<string>((resolvePath, reject) => {
+    const interruptedPath = await new Promise<string>((resolve, reject) => {
       let output = "";
       const timeout = setTimeout(
         () => reject(new Error("Timed out waiting for lifecycle crash fixture.")),
@@ -1416,13 +1416,13 @@ wait
         const [line] = output.split("\n");
         if (line !== "") {
           clearTimeout(timeout);
-          resolvePath(line);
+          resolve(line);
         }
       });
     });
     child.kill("SIGKILL");
-    await new Promise((resolveExit) => {
-      child.once("exit", resolveExit);
+    await new Promise((resolve) => {
+      child.once("exit", resolve);
     });
     expect(readFileSync(interruptedPath)).toHaveLength(0);
     await withLifecycleLock(root, () => reconcileLifecycleTemps(root));

@@ -677,7 +677,7 @@ describe("local Eve acceptance", () => {
 
     const first = await Promise.race([
       service.start({ prompt: "Build", clientRequestId: "prompt-return-1" }),
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         setTimeout(() => {
           reject(new Error("start blocked"));
         }, 100);

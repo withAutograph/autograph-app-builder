@@ -204,12 +204,12 @@ async function tarEntry(path: string, requested: string) {
       if (result !== undefined) throw new Error(`OCI archive repeated ${requested}.`);
       const chunks: Buffer[] = [];
       pending.push(
-        new Promise<void>((resolveEntry, rejectEntry) => {
+        new Promise<void>((resolve, reject) => {
           entry.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-          entry.on("error", rejectEntry);
+          entry.on("error", reject);
           entry.on("end", () => {
             result = Buffer.concat(chunks);
-            resolveEntry();
+            resolve();
           });
         }),
       );

@@ -681,20 +681,20 @@ async function acquireLease(
       );
     resolveExit();
   });
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
-      rejectReady(new Error("Lease timeout."));
+      reject(new Error("Lease timeout."));
     }, 5_000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
-      if (chunk === "READY\n") resolveReady();
-      else rejectReady(new Error("Lease handshake failed."));
+      if (chunk === "READY\n") resolve();
+      else reject(new Error("Lease handshake failed."));
     });
     void exited.then(() => {
       clearTimeout(timeout);
-      rejectReady(terminal ?? new Error("Fresh bootstrap is already leased."));
+      reject(terminal ?? new Error("Fresh bootstrap is already leased."));
     });
   });
   let released = false;
@@ -776,20 +776,20 @@ async function quiesceAbandonedLease(
     resolveExit = resolve;
   });
   holder.once("exit", resolveExit);
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
-      rejectReady(new Error("Lease quiescence timeout."));
+      reject(new Error("Lease quiescence timeout."));
     }, 5_000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
-      if (chunk === "READY\n") resolveReady();
-      else rejectReady(new Error("Lease quiescence handshake failed."));
+      if (chunk === "READY\n") resolve();
+      else reject(new Error("Lease quiescence handshake failed."));
     });
     void exited.then(() => {
       clearTimeout(timeout);
-      rejectReady(
+      reject(
         new Error(`Lease quiescence failed${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`),
       );
     });

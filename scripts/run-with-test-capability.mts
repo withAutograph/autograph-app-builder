@@ -257,12 +257,12 @@ export async function runWithTestCapability(options: {
       child.kill("SIGKILL");
     }
   });
-  return new Promise<number>((resolveExit, reject) => {
+  return new Promise<number>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       clearTimeout(timeout);
       authorization.destroy();
-      resolveExit(code ?? (signal === null ? 1 : 128));
+      resolve(code ?? (signal === null ? 1 : 128));
     });
   });
 }

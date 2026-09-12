@@ -258,10 +258,10 @@ export async function withLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await new Promise<void>((resolveClose, rejectClose) => {
+    await new Promise<void>((resolve, reject) => {
       server.close((error) => {
-        if (error === undefined) resolveClose();
-        else rejectClose(error);
+        if (error === undefined) resolve();
+        else reject(error);
       });
     });
   }
@@ -1051,9 +1051,9 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
     terminate();
   }, 50_000);
   try {
-    const status = await new Promise<number>((resolveStatus) => {
-      child.once("error", () => resolveStatus(-1));
-      child.once("close", (code) => resolveStatus(code ?? -1));
+    const status = await new Promise<number>((resolve) => {
+      child.once("error", () => resolve(-1));
+      child.once("close", (code) => resolve(code ?? -1));
     });
     if (failed || timedOut || status !== 0)
       throw new Error("GitHub keyring verification failed without recording credential output.");

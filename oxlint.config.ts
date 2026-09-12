@@ -11,7 +11,7 @@ export default defineConfig({
   rules: {
     ...deferredRules,
     "import/consistent-type-specifier-style": "off",
-    "promise/param-names": "off",
+
     "typescript/array-type": "off",
     "typescript/consistent-type-definitions": "off",
     "typescript/consistent-type-imports": "off",

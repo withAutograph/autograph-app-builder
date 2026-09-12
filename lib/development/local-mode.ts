@@ -313,7 +313,7 @@ export function waitForDevelopmentSourceChange(input: {
   debounceMs?: number;
   auditMs?: number;
 }) {
-  return new Promise<boolean>((resolveChanged) => {
+  return new Promise<boolean>((resolve) => {
     let checking = false;
     let pending = false;
     let settled = false;
@@ -327,7 +327,7 @@ export function waitForDevelopmentSourceChange(input: {
       if (timers.audit !== undefined) clearInterval(timers.audit);
       watcher?.close();
       input.signal?.removeEventListener("abort", aborted);
-      resolveChanged(changed);
+      resolve(changed);
     };
     const aborted = () => finish(false);
     const check = async () => {

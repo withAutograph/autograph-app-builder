@@ -139,7 +139,7 @@ async function settleLocalCancellation(operation: Promise<unknown>) {
   try {
     await Promise.race([
       operation,
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(
           () => reject(new HostedCancellationUnsettledError()),
           localCancellationTimeoutMs,
