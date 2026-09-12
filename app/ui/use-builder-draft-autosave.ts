@@ -56,7 +56,7 @@ export type BuilderDraftAutosave<T> = {
    * its form to newer server state. A mutation already in flight is allowed to
    * settle; the next poll remains authoritative.
    */
-  discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
+  discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -145,12 +145,12 @@ export function useBuilderDraftAutosave<T>(
               acknowledgedRevision.current,
               acknowledgement.revision,
             );
-            if (options.outbox.clearIfAcknowledged)
-              await options.outbox.clearIfAcknowledged({
-                mutationId: current.mutationId,
-                revision: acknowledgement.revision,
-              });
-            else await options.outbox.clearIfMutationId(current.mutationId);
+            await (options.outbox.clearIfAcknowledged
+              ? options.outbox.clearIfAcknowledged({
+                  mutationId: current.mutationId,
+                  revision: acknowledgement.revision,
+                })
+              : options.outbox.clearIfMutationId(current.mutationId));
             onAcknowledged.current?.(acknowledgement);
             if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
           } catch (error) {

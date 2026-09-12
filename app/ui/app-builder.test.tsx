@@ -8,6 +8,7 @@ import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
+import * as draftOutbox from "./builder-draft-outbox";
 import styles from "./app-builder.module.css";
 
 const navigation = vi.hoisted(() => ({
@@ -114,12 +115,6 @@ vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
 
-import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
-import { AnonymousBuilder } from "./anonymous-builder";
-import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
-import { Header } from "./builder-shell";
-import * as draftOutbox from "./builder-draft-outbox";
-import styles from "./app-builder.module.css";
 const integrationState = {
   vercel: {
     status: "connected" as const,

@@ -59,8 +59,7 @@ async function runInstall(script: string, failure: "none" | "checksum" | "releas
     },
   });
   try {
-    if (failure === "none") await execution;
-    else await expect(execution).rejects.toThrow();
+    await (failure === "none" ? execution : expect(execution).rejects.toThrow());
     return await readAuditLog(auditLog);
   } finally {
     await rm(root, { recursive: true, force: true });

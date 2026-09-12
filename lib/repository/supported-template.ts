@@ -925,8 +925,9 @@ export async function inspectPreparedSandboxWorkspace(
 ): Promise<PreparedSandboxWorkspaceStatus> {
   const record = await readPreparedSandboxWorkspaceRecord(sandbox);
   if (record === undefined) return { state: "absent" };
-  if (mode === "development-live") await verifyDevelopmentSandboxWorkspace(sandbox, record);
-  else await verifyPreparedSandboxWorkspace(sandbox, record);
+  await (mode === "development-live"
+    ? verifyDevelopmentSandboxWorkspace(sandbox, record)
+    : verifyPreparedSandboxWorkspace(sandbox, record));
   return { state: "prepared", workspace: record };
 }
 
