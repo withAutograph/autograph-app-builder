@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
 const server = vi.hoisted(() => ({
   load: vi.fn(),
   redirect: vi.fn((url: string) => {
@@ -19,8 +20,6 @@ vi.mock("./handoff-controls", () => ({
 vi.mock("./builder-shell", () => ({
   Header: () => <header>Autograph</header>,
 }));
-
-import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const params = Promise.resolve({ id });

@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
+import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
 const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
 const actions = vi.hoisted(() => ({
@@ -15,8 +16,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/app/actions/builder", () => ({
   continueHandoffProvisioning: actions.continue,
 }));
-
-import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
