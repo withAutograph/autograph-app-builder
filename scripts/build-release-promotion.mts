@@ -15,7 +15,7 @@ const option = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`Missing ${name}.`);
-  if (process.argv.indexOf(name, index + 1) >= 0) throw new Error(`Duplicate ${name}.`);
+  if (process.argv.includes(name, index + 1)) throw new Error(`Duplicate ${name}.`);
   return value;
 };
 
