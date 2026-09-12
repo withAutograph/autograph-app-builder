@@ -179,7 +179,7 @@ export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
   .update(materializeAdapter)
   .digest("hex");
 
-const minimalEnvironment = (identity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
+const minimalEnvironment = (authorIdentity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
   NODE_ENV: "production",
   PATH: "/usr/bin:/bin",
   TMPDIR: "/tmp",
@@ -195,15 +195,15 @@ const minimalEnvironment = (identity?: FreshBootstrapIdentity): NodeJS.ProcessEn
   GIT_TERMINAL_PROMPT: "0",
   GIT_ASKPASS: "/usr/bin/false",
   SSH_ASKPASS: "/usr/bin/false",
-  ...(identity === undefined
+  ...(authorIdentity === undefined
     ? {}
     : {
-        GIT_AUTHOR_NAME: identity.authorName,
-        GIT_AUTHOR_EMAIL: identity.authorEmail,
-        GIT_AUTHOR_DATE: identity.commitTimestamp,
-        GIT_COMMITTER_NAME: identity.authorName,
-        GIT_COMMITTER_EMAIL: identity.authorEmail,
-        GIT_COMMITTER_DATE: identity.commitTimestamp,
+        GIT_AUTHOR_NAME: authorIdentity.authorName,
+        GIT_AUTHOR_EMAIL: authorIdentity.authorEmail,
+        GIT_AUTHOR_DATE: authorIdentity.commitTimestamp,
+        GIT_COMMITTER_NAME: authorIdentity.authorName,
+        GIT_COMMITTER_EMAIL: authorIdentity.authorEmail,
+        GIT_COMMITTER_DATE: authorIdentity.commitTimestamp,
       }),
 });
 
@@ -231,12 +231,12 @@ function git(
   capability: FreshBootstrapCapability,
   root: string,
   args: readonly string[],
-  identity?: FreshBootstrapIdentity,
+  commitIdentity?: FreshBootstrapIdentity,
   input?: Uint8Array,
 ): string {
   return execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     encoding: "utf-8",
-    env: minimalEnvironment(identity),
+    env: minimalEnvironment(commitIdentity),
     input,
     maxBuffer: 16 * 1024 * 1024,
     timeout: 30_000,
