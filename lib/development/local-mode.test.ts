@@ -27,7 +27,7 @@ import {
 const roots: string[] = [];
 
 afterEach(async () => {
-  const { rm } = await import("node:fs/promises");
+  const { rm: removePath } = await import("node:fs/promises");
   // Keep filesystem fixtures scoped to this local-mode test.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
@@ -41,7 +41,9 @@ afterEach(async () => {
     }
   };
   await Promise.all(roots.map(makeWritable));
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map((root) => removePath(root, { recursive: true, force: true })),
+  );
 });
 
 async function fixture() {
