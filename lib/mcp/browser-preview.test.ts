@@ -131,12 +131,14 @@ describe("Browser prototype preview", () => {
           return candidate.prototype;
         },
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await handler(
         new Request(`https://builder.example.test/preview/session-one/${digest}`),
         candidate.route,
       );
       projections.push({
         status: response.status,
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         body: await response.text(),
         cache: response.headers.get("cache-control"),
         contentSecurityPolicy: response.headers.get("content-security-policy"),

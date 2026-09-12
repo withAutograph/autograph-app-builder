@@ -45,11 +45,13 @@ async function completeHandoff(page: Page) {
 async function getWithTransientRetry(page: Page, path: string) {
   for (let attempt = 0; ; attempt += 1) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       return await page.request.get(path);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
       if (!retryable || attempt >= 2) throw error;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await new Promise((resolve) => {
         setTimeout(resolve, 250 * 2 ** attempt);
       });
@@ -144,21 +146,32 @@ test("multiple handoffs reload independently without replacing saved app context
         "Cursor",
       ],
     ] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await activePage.bringToFront();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await activePage.reload();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(activePage).toHaveURL(handoff.url);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await waitForHandoffContent(activePage, name);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await activePage.getByText("Prepared brief", { exact: true }).click();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(activePage.getByText(brief, { exact: true })).toBeVisible();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(activePage.getByRole("radio", { name: destination, exact: true })).toBeChecked();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await getWithTransientRetry(activePage, handoff.statusPath);
       expect(response.ok()).toBe(true);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const status = await response.json();
       expect(status.handoffId).toBe(handoff.id);
       expect(status.intent.appName).toBe(name);
       expect(status.intent.brief).toBe(brief);
       expect(status.status).toBe("prepared");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await activePage.getByRole("button", { name: "Copy prompt", exact: true }).click();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const boundary = await browserBoundaryState(activePage);
       expect(boundary.clipboard.at(-1)).toContain(handoff.id);
       expect(boundary.clipboard.at(-1)).not.toContain(otherHandoff.id);

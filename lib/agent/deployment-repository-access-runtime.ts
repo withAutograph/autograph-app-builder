@@ -314,6 +314,7 @@ export function createRepositoryAccessRuntime(input: {
       });
       let resumed = 0;
       for (const candidate of candidates) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const access = await classify({
           repository: candidate.record.repository.fullName,
           ...(candidate.record.selectedInstallationId
@@ -326,6 +327,7 @@ export function createRepositoryAccessRuntime(input: {
         const callback = new URL(candidate.callbackUrl);
         callback.searchParams.set("provider", "github");
         callback.searchParams.set("status", "connected");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const response = await (value.fetchImplementation ?? fetch)(callback, {
           method: "GET",
           redirect: "manual",

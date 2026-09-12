@@ -784,6 +784,7 @@ export async function readExactGitHubPublicationContent(input: {
       throw new Error("The reviewed publication postimage is missing.");
     let observed: Awaited<ReturnType<typeof input.source.readFile>>;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       observed = await input.source.readFile(change.path);
     } catch {
       throw new Error("The approved publication content source failed.");

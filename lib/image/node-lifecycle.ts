@@ -234,6 +234,7 @@ export async function withLifecycleLock<T>(
   const server = createServer((socket) => socket.end(identity));
   for (let attempt = 0; ; attempt += 1) {
     const port = lifecycleLockPort(stateRoot, attempt);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const acquired = await new Promise<boolean>((resolve, reject) => {
       const onError = (error: NodeJS.ErrnoException) => {
         server.removeListener("listening", onListening);
@@ -249,6 +250,7 @@ export async function withLifecycleLock<T>(
       server.listen({ host: "127.0.0.1", port, exclusive: true });
     });
     if (acquired) break;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (await portIsOurLock(port, identity))
       throw new Error(
         "Another image lifecycle operation holds the exclusive external-operation lock.",

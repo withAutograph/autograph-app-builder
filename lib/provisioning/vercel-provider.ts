@@ -110,15 +110,19 @@ export async function provisionVercelProject(input: {
               maximumLength: 100,
             });
       if (candidates.includes(candidate)) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
     for (const candidate of candidates.slice(0, 5)) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await inspect(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
       if (before.status === 200 && !wasAbsent) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
       if (before.status === 404) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const created = await vercel({
           method: "POST",
           path: "/v11/projects",
@@ -145,10 +149,12 @@ export async function provisionVercelProject(input: {
           };
         }
         if (created.status === 409) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const recovered = await inspect(candidate);
           if (recovered.status !== 200) continue;
         }
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const observed = await inspect(candidate);
       if (observed.status !== 200)
         return {

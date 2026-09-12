@@ -309,6 +309,7 @@ export function createPostgresSandboxExecutionLeaseStore(
             state: "orphaned",
             epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
           });
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const updated = await transaction
             .update(sandboxExecutionLeases)
             .set(leaseValues(lease))

@@ -485,6 +485,7 @@ describe("closed GitHub publication contract", () => {
       }),
     ).rejects.toThrow(/installation is not selected/u);
     for (const ref of ["main", "refs/tags/v1", "refs/heads/../main", "refs/heads/x.lock"])
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         resolveImmutableExistingSource({
           adapter,
@@ -664,6 +665,7 @@ describe("closed GitHub publication contract", () => {
     expect(content.files[0]?.bytes).toEqual(templateBytes);
 
     for (const drift of ["mode", "object", "bytes", "tree"] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         readExactGitHubFreshRepositoryContent({
           proposal,
@@ -755,6 +757,7 @@ describe("closed GitHub publication contract", () => {
       const proposal = freshProposal(adapter);
       if (failure === "read-back") adapter.throwFreshReadBack = true;
       else store.rejectTerminal = true;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         createApprovedFreshRepository({
           adapter,
@@ -765,6 +768,7 @@ describe("closed GitHub publication contract", () => {
           approvedByCallId: "approve",
         }),
       ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       expect((await store.read(proposal.digest))?.status).toBe("pending");
     }
   });
@@ -900,6 +904,7 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const store = new Store();
       const proposal = draftProposal(adapter);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const failure = await publishApprovedDraftPullRequest({
         adapter,
         store,
@@ -912,8 +917,10 @@ describe("closed GitHub publication contract", () => {
       expect((failure as Error).message).toMatch(fixture.message);
       expect(JSON.stringify(failure)).not.toContain("raw-content-source-secret");
       expect(adapter.draftCalls).toBe(0);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       expect((await store.read(proposal.digest))?.status).toBe("pending");
 
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const recovered = await publishApprovedDraftPullRequest({
         adapter,
         store,
@@ -953,6 +960,7 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const proposal = draftProposal(adapter);
       mutate(adapter, proposal);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         publishApprovedDraftPullRequest({
           adapter,
@@ -1130,6 +1138,7 @@ describe("closed GitHub publication contract", () => {
       { ...proposal, idempotencyKey: "9".repeat(64) },
       { ...proposal, approvedPaths: ["../unsafe"] },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         publishApprovedDraftPullRequest({
           adapter,

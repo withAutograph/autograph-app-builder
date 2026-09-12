@@ -74,6 +74,7 @@ describe("public plugin installation documentation", () => {
     expect(script).toContain("set -eu");
 
     for (const failure of ["checksum", "release-verifier"] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const auditLog = await runInstall(script, failure);
       expect(auditLog).toBe("");
       expect(auditLog).not.toContain("tar ");

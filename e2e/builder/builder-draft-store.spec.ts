@@ -86,6 +86,7 @@ test("PostgreSQL serializes draft save/archive races without resurrecting a hand
     // A page-hide retry may still carry revision zero from an interrupted
     // first response. Even that request cannot overwrite the new active draft.
     for (const revision of [0, 1]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         store.saveActive(saveInput(draftId, "Delayed old tab", revision)),
       ).rejects.toThrow("builder-draft-archived");

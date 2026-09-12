@@ -52,6 +52,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
       if (field.validate) {
         try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await field.validate(value);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));

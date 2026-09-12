@@ -120,6 +120,7 @@ export async function waitForDevelopmentPortRelease(
   const pollMs = options.pollMs ?? 50;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const occupied = await new Promise<boolean>((resolve) => {
       const socket = createConnection({ host: "127.0.0.1", port });
       const finish = (value: boolean) => {
@@ -130,6 +131,7 @@ export async function waitForDevelopmentPortRelease(
       socket.once("error", () => finish(false));
     });
     if (!occupied) return;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await new Promise((resolve) => {
       setTimeout(resolve, pollMs);
     });

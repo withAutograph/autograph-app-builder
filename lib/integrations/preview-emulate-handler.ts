@@ -78,7 +78,9 @@ export function createPreviewEmulateHandler(input: {
       let stableTurns = 0;
       while (stableTurns < 3) {
         const revision = persistenceRevision;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await pendingPersistence;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await new Promise<void>((resolve) => {
           setImmediate(resolve);
         });

@@ -90,8 +90,10 @@ describe("hosted route composition", () => {
         now: () => nowEpochMs,
       });
 
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await handler(request());
       expect(response.status).toBe(503);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(response.json()).resolves.toEqual({
         error: "service_unavailable",
       });

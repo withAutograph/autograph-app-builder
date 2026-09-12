@@ -39,10 +39,12 @@ async function readBoundedJson(request: Request) {
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   while (true) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const next = await reader.read();
     if (next.done) break;
     bytes += next.value.byteLength;
     if (bytes > maximumRequestBytes) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await reader.cancel();
       throw new BuilderHandoffRequestError();
     }

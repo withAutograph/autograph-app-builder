@@ -37,6 +37,7 @@ describe("non-authorizing structural test protocol relay", () => {
       const target = new PassThrough();
       const relay = relayBoundedFrames({ source, target, expectedFrames: 1 });
       source.end(sourceText);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(relay).rejects.toThrow(/Protocol/u);
     }
   });

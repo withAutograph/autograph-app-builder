@@ -83,12 +83,15 @@ export function createProviderFetch(
         ? original.signal
         : AbortSignal.any([original.signal, timeout.signal]);
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const response = await fetchImpl(original.clone(), { signal });
         if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await response.body?.cancel();
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
           );
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await new Promise((resolve) => {
             setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
           });
@@ -106,6 +109,7 @@ export function createProviderFetch(
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await new Promise((resolve) => {
             setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
           });

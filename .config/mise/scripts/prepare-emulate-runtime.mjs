@@ -39,8 +39,10 @@ for (const packageName of packages) {
 }
 
 for (const entrypoint of entrypoints) {
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const source = await readFile(entrypoint, "utf-8");
   if (!source.includes(eagerAssets)) continue;
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await writeFile(entrypoint, source.replace(eagerAssets, ""));
 }
 

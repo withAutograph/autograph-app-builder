@@ -569,6 +569,7 @@ async function accessibleInstallation(input: {
 }) {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
   for (let page = 1; page <= 10; page += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { data: body } = await input.octokit.request("GET /user/installations", {
       per_page: 100,
       page,

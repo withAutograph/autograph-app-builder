@@ -887,6 +887,7 @@ wait
     child.stdin.end("ghcr.io\n");
     try {
       for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1)
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await new Promise((resolve) => {
           setTimeout(resolve, 10);
         });
@@ -899,6 +900,7 @@ wait
       for (let attempts = 0; attempts < 100; attempts += 1) {
         try {
           process.kill(descendantPid, 0);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await new Promise((resolve) => {
             setTimeout(resolve, 10);
           });

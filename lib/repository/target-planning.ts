@@ -439,13 +439,15 @@ export async function executeTargetIdentityAndPlanning(input: {
       )
         throw new Error("An existing-app change path is not allowed.");
       seen.add(requested.path);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
       });
       const observedMode =
         before === null
           ? undefined
-          : await input.sandbox.run({
+          : // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+            await input.sandbox.run({
               command: `stat -c %a /workspace/repository/${requested.path}`,
             });
       const mode =

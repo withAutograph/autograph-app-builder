@@ -285,6 +285,7 @@ async function treeEntries(root: string, current = root): Promise<string[]> {
     left.name.localeCompare(right.name),
   )) {
     const path = join(current, entry.name);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (entry.isDirectory()) paths.push(...(await treeEntries(root, path)));
     else if (entry.isFile() && !entry.isSymbolicLink()) paths.push(relative(root, path));
     else throw new Error("Release deployment output contains a non-file entry.");
@@ -298,7 +299,9 @@ export async function immutableTreeDigest(rootInput: string) {
   const paths = await treeEntries(root);
   if (paths.length === 0) throw new Error("Release output tree was empty.");
   for (const path of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await readFile(join(root, path));
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(join(root, path));
     const mode = (info.mode & 0o777).toString(8).padStart(3, "0");
     digest.update(`${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`);
@@ -318,6 +321,7 @@ async function exactFile(root: string, path: string, expected: string) {
     throw new Error("Release receipt path escaped its candidate root.");
   let cursor = absolute;
   for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const component = await lstat(cursor);
     if (component.isSymbolicLink())
       throw new Error(`Release candidate path contained a link: ${path}`);

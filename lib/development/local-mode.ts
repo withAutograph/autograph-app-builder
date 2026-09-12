@@ -190,12 +190,16 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
     if (staged?.[1] === "160000") {
       const absolute = join(sourceRoot, path);
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await assertSafeSourceAncestors(sourceRoot, absolute);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const info = await lstat(absolute);
         if (info.isDirectory() && !info.isSymbolicLink()) {
           // An uninitialized gitlink has no checkout bytes to snapshot. An
           // initialized submodule contributes its live, nonignored files.
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await lstat(join(absolute, ".git"));
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           paths.push(...(await sourcePaths(absolute)).map((child) => `${path}/${child}`));
           continue;
         }
@@ -214,6 +218,7 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
 async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
   let ancestor = dirname(absolute);
   for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(ancestor);
     if (!info.isDirectory() || info.isSymbolicLink())
       throw new Error(`Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`);
@@ -278,6 +283,7 @@ async function developmentEntries(sourceRoot: string) {
   const entries: Awaited<ReturnType<typeof sourceEntry>>[] = [];
   for (let offset = 0; offset < paths.length; offset += 32)
     entries.push(
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       ...(await Promise.all(
         paths.slice(offset, offset + 32).map((path) => sourceEntry(sourceRoot, path)),
       )),
@@ -390,14 +396,18 @@ export async function createDevelopmentSnapshot(input: {
     const entries = await developmentEntries(sourceRoot);
     const fingerprint = fingerprintEntries(entries);
     for (const entry of entries) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(dirname(join(root, entry.path)), {
         recursive: true,
         mode: 0o700,
       });
       if (entry.kind === "link")
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await symlink(entry.content.toString("utf-8"), join(root, entry.path));
       else {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await writeFile(join(root, entry.path), entry.content, { mode: 0o600 });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
       }
     }
@@ -476,6 +486,7 @@ export async function removeDevelopmentSnapshot(root: string) {
     if (info.isSymbolicLink()) return;
     if (info.isDirectory()) {
       await chmod(path, 0o700);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       for (const entry of await readdir(path)) await makeWritable(join(path, entry));
     } else await chmod(path, 0o600);
   }

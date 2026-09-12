@@ -52,6 +52,7 @@ export function withImplementationFiles(
 
     const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
     for (const file of files)
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.sandbox.writeTextFile({
         path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,

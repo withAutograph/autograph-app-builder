@@ -153,6 +153,7 @@ export async function verifyPortableProofArtifact(input: {
   for (const [path, bytes] of archived) {
     if (receipt.coreFiles[path] !== sha256(bytes))
       throw new Error(`Archive core digest drifted at ${path}.`);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const loose = await regularFile(join(releaseRoot, path));
     if (sha256(loose) !== receipt.coreFiles[path])
       throw new Error(`Loose core file drifted at ${path}.`);
@@ -246,6 +247,7 @@ export async function verifyPortableProofArtifact(input: {
   ];
   exactKeys(receipt.auxiliaryFiles, auxiliaryPaths);
   for (const path of auxiliaryPaths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await regularFile(join(releaseRoot, path));
     if (receipt.auxiliaryFiles[path] !== sha256(bytes))
       throw new Error(`Auxiliary file drifted at ${path}.`);
@@ -260,6 +262,7 @@ export async function verifyPortableProofArtifact(input: {
   for (const client of ["codex", "cursor", "vscode"] as const) {
     const clientRoot = join(installRoot, client);
     const installedRoot = join(clientRoot, receipt.name);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await validateAgentPluginPackage({
       pluginRoot: installedRoot,
       repositoryRoot,
@@ -270,6 +273,7 @@ export async function verifyPortableProofArtifact(input: {
       const relativePath = relative(receipt.name, path);
       if (relativePath.startsWith(`..${sep}`) || relativePath === "..")
         throw new Error("Core receipt path escaped the plugin root.");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (sha256(await regularFile(join(installedRoot, relativePath))) !== expectedDigest)
         throw new Error(`${client} installed core drifted at ${relativePath}.`);
     }
@@ -293,6 +297,7 @@ export async function verifyPortableProofArtifact(input: {
       })
       .strict()
       .parse(
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         JSON.parse((await regularFile(join(clientRoot, "client-harness.json"))).toString("utf-8")),
       );
     if (harness.client !== client) throw new Error("Client adapter drifted.");
@@ -311,6 +316,7 @@ export async function verifyPortableProofArtifact(input: {
       .strict()
       .parse(
         JSON.parse(
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           (await regularFile(join(clientRoot, "installation-receipt.json"))).toString("utf-8"),
         ),
       );

@@ -441,6 +441,7 @@ export function createLocalEveSessionService(
             streamIndex: events.length,
           });
           localSessionHandles.set(sessionId, session);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           for await (const event of session.stream()) {
             events.push(event);
             observeEvent(event);
@@ -451,6 +452,7 @@ export function createLocalEveSessionService(
           // remain readable while the durable tail is retried.
         }
         if (deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) !== "working") return;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await new Promise<void>((resolve) => {
           setTimeout(resolve, 250);
         });

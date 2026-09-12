@@ -99,10 +99,12 @@ async function boundedJson(response: Response): Promise<unknown> {
   const chunks: Uint8Array[] = [];
   let length = 0;
   for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
     if (done) break;
     length += value.byteLength;
     if (length > 2 * 1024 * 1024) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await reader.cancel();
       throw new Error("invalid-response");
     }

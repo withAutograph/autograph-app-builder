@@ -82,6 +82,7 @@ describe("Preview OAuth activation contract", () => {
       "rotate",
       "configure-client-credentials-scopes",
     ] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         options.clientPrivileges?.({
           headers: new Headers(),
@@ -98,6 +99,7 @@ describe("Preview OAuth activation contract", () => {
       "link",
       "unlink",
     ] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         options.resourcePrivileges?.({
           headers: new Headers(),
@@ -273,6 +275,7 @@ describe("Preview OAuth activation contract", () => {
           }),
         ),
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         options.fetchClientMetadataResource("https://client.example/metadata.json"),
       ).rejects.toThrow("token_endpoint_auth_method none");

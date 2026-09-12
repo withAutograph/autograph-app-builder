@@ -16,6 +16,7 @@ export async function ensureSandboxDirectories(
   const directories = [...new Set(paths)].toSorted();
   for (let index = 0; index < directories.length; index += DIRECTORY_BATCH_SIZE) {
     const batch = directories.slice(index, index + DIRECTORY_BATCH_SIZE);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const result = await sandbox.run({
       command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
       workingDirectory: "/workspace",

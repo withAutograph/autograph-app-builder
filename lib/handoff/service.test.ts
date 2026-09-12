@@ -134,9 +134,11 @@ describe("opaque App Builder handoffs", () => {
       { ...authority, ownerUserId: "user-two" },
       { ...authority, workspaceId: "workspace-two" },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(service.read({ ...lookup, authority: foreign })).rejects.toBeInstanceOf(
         BuilderHandoffUnavailableError,
       );
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         service.renew({
           ...lookup,
@@ -346,6 +348,7 @@ describe("opaque App Builder handoffs", () => {
             };
       vi.spyOn(store, "read").mockResolvedValue(forged);
       for (const read of [service.read, service.status, service.resolve])
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),

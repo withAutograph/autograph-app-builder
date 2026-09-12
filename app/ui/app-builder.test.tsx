@@ -817,6 +817,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const examples: string[] = [];
 
     for (let index = 0; index < 4; index += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await click(anotherExample);
       examples.push(brief.value);
     }

@@ -44,10 +44,12 @@ async function boundedResponse(response: Response): Promise<Response> {
   const chunks: Uint8Array[] = [];
   let length = 0;
   for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
     if (done) break;
     length += value.byteLength;
     if (length > MAX_RESPONSE_BYTES) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await reader.cancel();
       throw new Error("github-response-too-large");
     }

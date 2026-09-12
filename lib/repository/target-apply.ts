@@ -525,6 +525,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     if ("operation" in proposal) {
       const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
       for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const current = await sandbox.readBinaryFile({
           path: `${relativeRoot}/${change.path}`,
         });
@@ -541,6 +542,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           };
       }
       for (const change of proposal.iteration.changes)
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
@@ -625,6 +627,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
       for (const change of proposal.iteration.changes)
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
@@ -720,11 +723,13 @@ export async function executeProposalBoundApply(input: {
     try {
       for (const root of input.dependencyLayout.roots) {
         const target = `repository/${root.path}`;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await input.sandbox.removePath({
           path: target,
           recursive: true,
           force: true,
         });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const linked = await input.sandbox.run({
           command: `ln -s ${root.cachePath} ${root.path}`,
           workingDirectory: "/workspace/repository",

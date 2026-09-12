@@ -78,14 +78,17 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
       // A compare-and-set loop makes the database completion order authoritative:
       // stale clients still save, but their response identifies the contention.
       for (let attempt = 0; attempt < 8; attempt += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const target = await read({ authority, draftId: input.draftId });
         if (target?.status === "archived") throw new Error("builder-draft-archived");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const current = await readActive({ authority });
         if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
           throw new Error("builder-draft-stale");
         if (current) {
           if (current.lastClientMutationId === input.clientMutationId)
             return { row: current, idempotent: true, concurrent: false };
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const rows = await database
             .update(schema.builderDrafts)
             .set({
@@ -113,6 +116,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
         }
 
         try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const rows = await database
             .insert(schema.builderDrafts)
             .values({

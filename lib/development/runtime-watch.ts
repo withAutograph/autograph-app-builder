@@ -59,6 +59,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
   for (const path of await runtimePaths(repositoryRoot)) {
     let content: Buffer;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       content = await readFile(join(repositoryRoot, path));
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live

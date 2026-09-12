@@ -26,6 +26,7 @@ describe("database migration secret boundary", () => {
       ".config/mise/tasks/hosted/tenant-delete",
     ];
     for (const path of paths) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const task = await readFile(path, "utf-8");
       expect(task).toContain("unset DATABASE_URL");
       expect(task).toContain("--database-url-fd 0");

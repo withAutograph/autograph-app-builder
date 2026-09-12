@@ -117,10 +117,12 @@ describe("test capability preload", () => {
     for (const hostileEveDev of [undefined, "0", "hostile"]) {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const hostileResult = await new Promise<{ eveDev: string | null }>((resolve, reject) => {
         hostileWorker.once("message", resolve);
         hostileWorker.once("error", reject);
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
     }
@@ -228,10 +230,12 @@ describe("test capability preload", () => {
       let stderr = "";
       child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
       child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const status = await new Promise<number | null>((resolve, reject) => {
         child.once("error", reject);
         child.once("exit", resolve);
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await authorizationClosed;
       expect(status, stderr).toBe(0);
       expect(stdout).toBe("false");

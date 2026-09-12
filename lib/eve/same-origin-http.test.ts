@@ -747,6 +747,7 @@ describe("same-origin canonical Eve transport", () => {
       for (const [name, value] of Object.entries(headers)) {
         response.headers.set(name, value);
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         createSameOriginEveTransport({
           config,

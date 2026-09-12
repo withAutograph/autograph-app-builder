@@ -86,14 +86,17 @@ export async function GET(request: Request) {
             controller.enqueue(heartbeat());
             lastWrite = Date.now();
           }
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await delay(pollIntervalMs);
           if (cancelled) return;
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const response = await read();
           if (!response.ok) {
             controller.enqueue(event({ error: "provisioning_unavailable" }, "error", "error"));
             controller.close();
             return;
           }
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           current = builderProvisionProjectionSchema.parse(await response.json());
         }
       } catch {

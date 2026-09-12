@@ -67,6 +67,7 @@ const assertTreeContainsNoLinks = async (root: string, path: string) => {
   if (!stat.isDirectory())
     throw new Error(`${relative(root, path)} must be a regular file or directory.`);
   for (const entry of await readdir(path))
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await assertTreeContainsNoLinks(root, resolve(path, entry));
 };
 
@@ -75,13 +76,16 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
   for (const part of relative(root, output).split(sep).slice(0, -1)) {
     current = resolve(current, part);
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const stat = await lstat(current);
       if (!stat.isDirectory() || stat.isSymbolicLink())
         throw new Error(`${relative(root, current)} must be a real directory.`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(current);
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!isWithin(root, await realpath(current)))
       throw new Error(`${relative(root, current)} escapes the repository root.`);
   }
@@ -297,6 +301,7 @@ export const validateAgentPluginPackage = async ({
   const schemaRoot = resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
   const schemaDocuments: Record<string, JsonObject> = {};
   for (const [name, digest] of Object.entries(SCHEMA_DIGESTS)) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await readFile(resolve(schemaRoot, name));
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== digest)
@@ -336,9 +341,11 @@ export const validateAgentPluginPackage = async ({
   await assertDirectory(resolvedPluginRoot, skillsRoot);
   for (const entry of await readdir(skillsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await validateSkill(resolvedPluginRoot, resolve(skillsRoot, entry.name));
   }
   for (const entry of PORTABLE_ENTRIES)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await assertTreeContainsNoLinks(resolvedPluginRoot, resolve(resolvedPluginRoot, entry));
   return {
     name: plugin.name as string,
@@ -370,11 +377,13 @@ export const buildAgentPluginPackage = async ({
       "Agent Plugin output must be a named directory under .artifacts/agent-plugin/.",
     );
   for (const entry of PORTABLE_ENTRIES)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await assertTreeContainsNoLinks(source, resolve(source, entry));
   await prepareSafeOutputParent(source, output);
   await rm(output, { force: true, recursive: true });
   await mkdir(output, { recursive: true });
   for (const entry of PORTABLE_ENTRIES)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await cp(resolve(source, entry), resolve(output, entry), {
       recursive: true,
       force: false,

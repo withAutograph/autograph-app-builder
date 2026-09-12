@@ -80,6 +80,7 @@ describe("prepared provider continuity", () => {
       Response.json({ id: "prj_1", name: "stock", accountId: "team_other" }),
     ])
       expect(
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await readPreparedVercelAccess({
           authority,
           intent,
@@ -224,6 +225,7 @@ describe("prepared provider continuity", () => {
     "retries provider outage %s without reconnection",
     async (status) => {
       expect(
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await readPreparedVercelAccess({
           authority,
           intent,
@@ -277,6 +279,7 @@ describe("prepared provider continuity", () => {
       async () => Response.json({ id: "another-project", name: "wrong" }),
     ]) {
       expect(
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await readPreparedVercelAccess({
           authority,
           intent,

@@ -168,6 +168,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         store: candidate.store,
         isMember: async () => candidate.member,
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const rejection = await acquireHostedSandboxExecutionLease({
         sessionId: "session_1",
         sessionAuth: candidate.auth,

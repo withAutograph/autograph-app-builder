@@ -10,6 +10,7 @@ const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
 const copyPortablePackage = async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-package-"));
   for (const entry of portableEntries)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await cp(resolve(repositoryRoot, entry), resolve(root, entry), {
       recursive: true,
     });
@@ -265,6 +266,7 @@ allowed-tools: "autograph_start autograph_get"
     const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-output-"));
     const outside = await mkdtemp(resolve(tmpdir(), "agent-plugin-outside-"));
     for (const entry of portableEntries)
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await cp(resolve(repositoryRoot, entry), resolve(root, entry), {
         recursive: true,
       });

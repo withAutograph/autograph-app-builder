@@ -63,14 +63,17 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink())
         throw new Error("App-creation skill exports do not accept symbolic links.");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile()) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const mode = (await lstat(path)).mode & 0o777;
         if (mode !== 0o644 && mode !== 0o755)
           throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
         files.push({
           path: relative(sourceRoot, path).split("\\").join("/"),
           mode: mode === 0o755 ? "100755" : "100644",
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           sha256: sha256(await readFile(path)),
         });
       } else throw new Error("App-creation skill exports accept only files and directories.");
@@ -78,8 +81,10 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   }
   for (const root of APP_CREATION_SKILL_ROOTS) {
     const directory = join(sourceRoot, root);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!(await lstat(directory)).isDirectory())
       throw new Error(`App-creation skill root is not a directory: ${root}`);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await visit(directory);
   }
   return files.toSorted((left, right) => left.path.localeCompare(right.path));
@@ -101,10 +106,13 @@ export async function exportAppCreationSkills(options: {
   for (const file of files) {
     const source = join(sourceRoot, file.path);
     const destination = join(canonicalOutput, file.path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o755 });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await writeFile(destination, await readFile(source), {
       mode: file.mode === "100755" ? 0o755 : 0o644,
     });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await chmod(destination, file.mode === "100755" ? 0o755 : 0o644);
   }
   const unsigned = {

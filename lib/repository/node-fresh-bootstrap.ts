@@ -466,6 +466,7 @@ async function assertContainedStatePath(
     cursor = resolve(cursor, segments[index]);
     let value;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       value = await lstat(cursor);
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT" && leaf !== "directory") return;
@@ -482,6 +483,7 @@ async function assertContainedStatePath(
       (isLeaf &&
         leaf === "absent-or-file" &&
         (!value.isFile() || (value.mode & 0o777) !== 0o600 || value.nlink !== 1)) ||
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       (await realpath(cursor)) !== cursor
     )
       throw new Error("The bootstrap state path is unsafe.");
@@ -873,6 +875,7 @@ async function exactPreparedSourceTree(
     )
       throw new Error("The prepared fresh-template manifest is invalid.");
     paths.add(file.path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await sourceWorkspace.readSourceFile(file.path);
     if (bytes === null || contentDigest(bytes) !== file.sha256 || blobId(bytes) !== file.objectId)
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
@@ -938,6 +941,7 @@ async function exactResultTree(input: {
       files.delete(change.path);
       continue;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await input.readOverlayFile(change.path);
     if (bytes === null || contentDigest(bytes) !== change.after.digest)
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
@@ -961,6 +965,7 @@ async function assertNoLinkRoute(root: PathIdentity, destination: string): Promi
   for (const part of relative(root.path, dirname(destination)).split(sep)) {
     if (part === "") continue;
     cursor = resolve(cursor, part);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const value = await lstat(cursor);
     if (
       value.isSymbolicLink() ||
@@ -968,6 +973,7 @@ async function assertNoLinkRoute(root: PathIdentity, destination: string): Promi
       value.uid !== process.geteuid?.() ||
       value.dev.toString() !== root.device ||
       (value.mode & 0o022) !== 0 ||
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       (await realpath(cursor)) !== cursor
     )
       throw new Error("The bootstrap destination traverses an unsafe path.");
@@ -1451,6 +1457,7 @@ async function assertRawGitAuthority(
     resolve(gitDirectory, "shallow"),
   ]) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await lstat(forbidden);
       throw new Error("The fresh repository contains forbidden Git authority.");
     } catch (error: unknown) {
@@ -1477,6 +1484,7 @@ async function rawWorktreeManifest(
       if (!safeSourcePath(path))
         throw new Error("The fresh repository contains an unsafe raw path.");
       const absolute = resolve(root, path);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const state = await lstat(absolute);
       if (
         state.isSymbolicLink() ||
@@ -1489,11 +1497,13 @@ async function rawWorktreeManifest(
         if ((state.mode & 0o777) !== 0o755)
           throw new Error("The fresh repository contains a directory with an unexpected mode.");
         directories.add(path);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await walk(path);
         continue;
       }
       if (!state.isFile() || state.nlink !== 1)
         throw new Error("The fresh repository contains a special raw entry.");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const bytes = await readFile(absolute);
       const exactMode = (state.mode & 0o777).toString(8);
       if (exactMode !== "644" && exactMode !== "755")
@@ -1571,6 +1581,7 @@ async function assertExactRepository(
     if (entry.name === "info" || entry.name === "pack") {
       if (
         !entry.isDirectory() ||
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         (await readdir(resolve(objectDirectory, entry.name))).length !== 0
       )
         throw new Error("The fresh repository contains unexpected packed or object authority.");
@@ -1578,6 +1589,7 @@ async function assertExactRepository(
     }
     if (!entry.isDirectory() || !/^[0-9a-f]{2}$/u.test(entry.name))
       throw new Error("The fresh repository contains malformed object storage.");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     for (const object of await readdir(resolve(objectDirectory, entry.name))) {
       if (!/^[0-9a-f]{38}$/u.test(object))
         throw new Error("The fresh repository contains malformed loose objects.");
@@ -1610,6 +1622,7 @@ async function assertExactRepository(
     resolve(gitDirectory, "refs", "replace"),
   ]) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await lstat(forbidden);
       throw new Error("The final repository contains forbidden Git authority.");
     } catch (error: unknown) {
@@ -2071,6 +2084,7 @@ async function executeBootstrap(input: {
     lease.assertHeld();
     const durableStageIdentity = await identity(input.proposal.stagingPath);
     for (const [index, file] of files.entries()) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializeFile(
         capability,
         input.proposal,
@@ -2079,6 +2093,7 @@ async function executeBootstrap(input: {
         durableStageIdentity,
       );
       lease.assertHeld();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.hooks?.afterMaterializeFile?.(file.path, index);
     }
     await initializeGit({

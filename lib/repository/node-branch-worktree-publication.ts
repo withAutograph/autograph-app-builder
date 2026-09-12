@@ -291,6 +291,7 @@ async function assertContainedNoLinkPath(
     cursor = resolve(cursor, segments[index]);
     let state;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       state = await lstat(cursor);
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -333,6 +334,7 @@ async function assertContainedNoLinkPath(
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
     )
       throw new Error("The builder-owned publication file is not an exclusive owner-only inode.");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if ((await realpath(cursor)) !== cursor)
       throw new Error("The builder-owned publication path is not canonical.");
   }
@@ -340,6 +342,7 @@ async function assertContainedNoLinkPath(
 
 async function assertPublicationLayoutSafe(): Promise<void> {
   for (const family of ["journals", "staging", "worktrees"] as const)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await assertContainedNoLinkPath(resolve(publicationRoot(), family), {
       leaf: "absent-or-directory",
     });
@@ -536,14 +539,19 @@ async function durableDirectory(path: string): Promise<void> {
     cursor = resolve(cursor, segment);
     let created = false;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(cursor, { mode: 0o700 });
       created = true;
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (created) await chmod(cursor, 0o700);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await assertContainedNoLinkPath(cursor, { leaf: "directory" });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await syncDirectory(cursor, true);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await syncDirectory(parent, true);
   }
 }
@@ -727,6 +735,7 @@ async function assertOwnedPartialWorktree(
     if (!entry.isDirectory()) continue;
     const adminPath = resolve(worktreeAdminRoot, entry.name);
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const linkedPath = (await readFile(resolve(adminPath, "gitdir"), "utf-8")).trim();
       if (resolve(linkedPath) === resolve(proposal.worktreePath, ".git"))
         exactAdminPaths.push(adminPath);
@@ -742,9 +751,11 @@ async function assertOwnedPartialWorktree(
       const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
       const target = resolve(directory, entry.name);
       if (prefix === "" && path === ".git") {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const state = await lstat(target);
         if (!state.isFile() || state.isSymbolicLink())
           throw new Error("The partial worktree Git link is unsafe.");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf-8"));
         if (match === null || !isAbsolute(match[1]) || resolve(match[1]) !== exactAdminPaths[0])
           throw new Error("The partial worktree Git link conflicts with intent.");
@@ -755,9 +766,11 @@ async function assertOwnedPartialWorktree(
       if (entry.isDirectory()) {
         if (![...allowedPaths].some((allowed) => allowed.startsWith(`${path}/`)))
           throw new Error(`The partial worktree contains unapproved directory ${path}.`);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await visit(target, path);
         continue;
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const state = await fileState(target);
       const baseState = base.get(path);
       const after = changes.get(path)?.after;
@@ -900,13 +913,16 @@ async function ensureExactBaseMaterialization(
   for (const entry of entries) {
     lock.assertHeld();
     const change = proposal.changes.find(({ path }) => path === entry.path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(proposal.worktreePath, entry.path, true);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await fileState(target);
     if (exactStateMatches(current, entry.state)) continue;
     if (preserveReviewedPostimages && change !== undefined && matches(current, change.after))
       continue;
     if (current.kind !== "absent")
       throw new Error(`The publication worktree conflicts with the exact base at ${entry.path}.`);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await materializeAtomically(proposal, target, entry.bytes, entry.mode);
     lock.assertHeld();
   }
@@ -958,7 +974,9 @@ async function inspectBranchPublicationSource(input: {
     paths.map(async (path) => ({ path, state: await fileState(resolve(canonicalPath, path)) })),
   );
   for (const change of input.review.changes) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(canonicalPath, change.path, false);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!matches(await fileState(target), change.before))
       throw new Error(`The source has dirty overlap with approved path ${change.path}.`);
   }
@@ -1116,10 +1134,14 @@ async function safeTarget(root: string, path: string, createParents: boolean): P
   let cursor = root;
   for (const segment of path.split("/").slice(0, -1)) {
     cursor = resolve(cursor, segment);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor);
     if (state.kind === "absent" && createParents) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(cursor, { mode: 0o755 });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(dirname(cursor));
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(cursor);
     } else if (state.kind !== "directory" && state.kind !== "absent")
       throw new Error("The approved path traverses a non-directory entry.");
@@ -1185,6 +1207,7 @@ async function worktreeFileStates(
       if (prefix === "" && path === ".git") continue;
       if (!safeSourcePath(path))
         throw new Error("The publication worktree contains an unsafe path.");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (entry.isDirectory()) await visit(resolve(directory, entry.name), path);
       else present.push(path);
     }
@@ -1266,7 +1289,9 @@ async function applyRemainingPostimages(input: {
   for (let index = 0; index < input.proposal.changes.length; index += 1) {
     input.lock.assertHeld();
     const change = input.proposal.changes[index];
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(input.proposal.worktreePath, change.path, false);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await fileState(target);
     if (matches(current, change.after)) {
       applied.push(change.path);
@@ -1275,15 +1300,20 @@ async function applyRemainingPostimages(input: {
     if (!matches(current, change.before))
       throw new Error(`The publication worktree has conflicting bytes or mode for ${change.path}.`);
     if (change.after === undefined) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await unlink(target);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(dirname(target));
     } else {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const bytes = await input.readOverlayFile(change.path);
       if (bytes === null || contentDigest(bytes) !== change.after.digest)
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await writePostimage(input.proposal, change.path, bytes, change.after.mode);
     }
     applied.push(change.path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await input.hooks?.afterPathMutation?.(change.path, index);
     input.lock.assertHeld();
   }

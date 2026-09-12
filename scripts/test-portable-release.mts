@@ -50,6 +50,7 @@ try {
     "https://MCP.autograph.dev",
     "https://mcp.autograph.dev:443",
   ])
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await run(
       "build-portable-release.mts",
       ["--endpoint", endpoint, "--output", join(temp, `rejected-${Date.now()}`)],
@@ -59,6 +60,7 @@ try {
   const second = join(temp, "release-b");
   const endpoint = "https://mcp.autograph.dev";
   for (const output of [first, second])
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await run("build-portable-release.mts", ["--endpoint", endpoint, "--output", output]);
   const portableManifest = JSON.parse(await readFile("plugin.json", "utf-8"));
   const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
@@ -121,11 +123,13 @@ try {
   for (const reference of [codexManifest.interface?.composerIcon, codexManifest.interface?.logo]) {
     if (typeof reference !== "string" || !reference.startsWith("./"))
       throw new Error("Codex marketplace asset reference was invalid.");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!(await stat(join(codexPluginRoot, reference))).isFile())
       throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
   }
   const installs = join(temp, "installs");
   for (const client of ["vscode", "cursor", "codex"])
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await run("install-portable-plugin.mts", [
       "--client",
       client,

@@ -147,6 +147,7 @@ describe("hosted storage read-only readiness", () => {
         ),
       },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         verifyHostedStorageReadBack({
           repositoryRoot: process.cwd(),
