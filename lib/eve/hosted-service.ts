@@ -313,8 +313,8 @@ function checkpointForSnapshot(
     let upper = boundedEvents.length;
     let best: HostedSessionCheckpoint | undefined;
     while (lower <= upper) {
-      const retainedCount = Math.floor((lower + upper) / 2);
-      const retainedEvents = retainedCount === 0 ? [] : boundedEvents.slice(-retainedCount);
+      const candidateCount = Math.floor((lower + upper) / 2);
+      const retainedEvents = candidateCount === 0 ? [] : boundedEvents.slice(-candidateCount);
       const candidate = hostedSessionCheckpointSchema.safeParse({
         version: 1,
         status: snapshot.status,
@@ -337,9 +337,9 @@ function checkpointForSnapshot(
       });
       if (candidate.success) {
         best = candidate.data;
-        lower = retainedCount + 1;
+        lower = candidateCount + 1;
       } else {
-        upper = retainedCount - 1;
+        upper = candidateCount - 1;
       }
     }
     return best;
