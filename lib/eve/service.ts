@@ -303,21 +303,24 @@ function consumeResponse(
   };
   const observeEvent = (event: MessageStreamEvent) => {
     switch (event.type) {
-      case "step.started":
+      case "step.started": {
         modelTurnActive = true;
         modelTurnId = event.data.turnId;
         armModelTurnTimer();
         return;
+      }
       case "actions.requested":
       case "input.requested":
       case "session.waiting":
       case "session.completed":
       case "session.failed":
-      case "turn.cancelled":
+      case "turn.cancelled": {
         settleResponseBoundary();
         return;
-      default:
+      }
+      default: {
         if (modelTurnActive) armModelTurnTimer();
+      }
     }
   };
   void (async () => {

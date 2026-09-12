@@ -437,7 +437,7 @@ function exactDigest(value: { digest: string }, label: string): void {
 
 export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissions {
   switch (operation) {
-    case "resolve-existing-source":
+    case "resolve-existing-source": {
       return {
         metadata: "read",
         contents: "read",
@@ -446,7 +446,8 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "none",
         variables: "read",
       };
-    case "create-fresh-repository":
+    }
+    case "create-fresh-repository": {
       return {
         metadata: "read",
         contents: "write",
@@ -455,7 +456,8 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "write",
         variables: "read",
       };
-    case "publish-draft-pull-request":
+    }
+    case "publish-draft-pull-request": {
       return {
         metadata: "read",
         contents: "write",
@@ -464,8 +466,10 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "none",
         variables: "read",
       };
-    default:
+    }
+    default: {
       throw new Error(`Unsupported GitHub operation: ${operation}`);
+    }
   }
 }
 

@@ -520,10 +520,12 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     }
     switch (reservation.disposition) {
-      case "conflict":
+      case "conflict": {
         throw new HostedIdempotencyConflictError();
-      case "rejected":
+      }
+      case "rejected": {
         throw new HostedSessionBusyError();
+      }
       case "reserved": {
         const operation = requireOwnedOperation(reservation.operation, {
           operationId,
@@ -556,16 +558,20 @@ export function createHostedEveSessionService(input: {
             return result;
           }
           case "submission_unknown":
-          case "reserved":
+          case "reserved": {
             throw new HostedSubmissionUnknownError();
-          case "rejected":
+          }
+          case "rejected": {
             throw new HostedRejectedOperationError(operation.safeErrorCode);
-          default:
+          }
+          default: {
             return assertNever(operation);
+          }
         }
       }
-      default:
+      default: {
         return assertNever(reservation);
+      }
     }
 
     let dispatched: {

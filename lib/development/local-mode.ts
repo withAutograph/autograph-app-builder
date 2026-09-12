@@ -83,23 +83,29 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
       throw new Error("Development arguments must use named options.");
     const value = argumentValue(args, index, name);
     switch (name) {
-      case "--arrusted-root":
+      case "--arrusted-root": {
         parsed.arrustedRoot = value;
         break;
-      case "--state-root":
+      }
+      case "--state-root": {
         parsed.stateRoot = value;
         break;
-      case "--destination-root":
+      }
+      case "--destination-root": {
         parsed.destinationRoot = value;
         break;
-      case "--next-port":
+      }
+      case "--next-port": {
         parsed.nextPort = port(value, name);
         break;
-      case "--eve-port":
+      }
+      case "--eve-port": {
         parsed.evePort = port(value, name);
         break;
-      default:
+      }
+      default: {
         throw new Error(`Development option ${name} is unsupported.`);
+      }
     }
   }
   if (parsed.arrustedRoot === undefined)

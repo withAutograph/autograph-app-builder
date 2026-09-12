@@ -263,26 +263,32 @@ async function invokeHostedOperation(
   operation: keyof typeof hostedEveOperationScopes,
 ) {
   switch (operation) {
-    case "start":
+    case "start": {
       return service.start({ prompt: "Build", clientRequestId: "scope_start" });
-    case "get":
+    }
+    case "get": {
       return service.get({ sessionId: "session_1", cursor: 0, limit: 1 });
-    case "send":
+    }
+    case "send": {
       return service.send({
         sessionId: "session_1",
         message: "Continue",
         clientRequestId: "scope_send",
       });
-    case "respond":
+    }
+    case "respond": {
       return service.respond({
         sessionId: "session_1",
         responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         clientRequestId: "scope_respond",
       });
-    case "cancel":
+    }
+    case "cancel": {
       return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
-    default:
+    }
+    default: {
       throw new Error(`Unsupported hosted operation: ${operation}`);
+    }
   }
 }
 

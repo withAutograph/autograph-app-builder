@@ -418,7 +418,7 @@ export function projectInstalledEveEvent(
   index: number,
 ): InternalEveEvent[] {
   switch (event.type) {
-    case "message.completed":
+    case "message.completed": {
       return event.data.message === null
         ? []
         : [
@@ -429,9 +429,10 @@ export function projectInstalledEveEvent(
               text: event.data.message,
             },
           ];
+    }
     case "step.started":
     case "step.completed":
-    case "step.failed":
+    case "step.failed": {
       return [
         {
           type: "progress",
@@ -446,6 +447,7 @@ export function projectInstalledEveEvent(
                 : "failed",
         },
       ];
+    }
     case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);
       return projectedRequests.some((request) => request === undefined)
@@ -464,7 +466,7 @@ export function projectInstalledEveEvent(
             request,
           }));
     }
-    case "input.resolved":
+    case "input.resolved": {
       return [
         {
           type: "input.resolved",
@@ -472,7 +474,8 @@ export function projectInstalledEveEvent(
           requestIds: event.data.resolutions.map(({ requestId }) => requestId),
         },
       ];
-    case "approval.settled":
+    }
+    case "approval.settled": {
       return [
         {
           type: "input.resolved",
@@ -480,6 +483,7 @@ export function projectInstalledEveEvent(
           requestIds: [event.data.requestId],
         },
       ];
+    }
     case "authorization.required": {
       const { authorization } = event.data;
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
@@ -535,13 +539,16 @@ export function projectInstalledEveEvent(
         },
       ];
     }
-    case "turn.cancelled":
+    case "turn.cancelled": {
       return [{ type: "status", index, status: "cancelled" }];
-    case "session.waiting":
+    }
+    case "session.waiting": {
       return [{ type: "status", index, status: "waiting" }];
-    case "session.completed":
+    }
+    case "session.completed": {
       return [{ type: "status", index, status: "completed" }];
-    case "session.failed":
+    }
+    case "session.failed": {
       return [
         {
           type: "error.public",
@@ -551,8 +558,10 @@ export function projectInstalledEveEvent(
         },
         { type: "status", index, status: "failed" },
       ];
-    default:
+    }
+    default: {
       return [];
+    }
   }
 }
 
@@ -627,7 +636,7 @@ export function projectInstalledEveEvents(events: readonly MessageStreamEvent[])
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */
 export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
   switch (event.type) {
-    case "assistant.message":
+    case "assistant.message": {
       return event.turnId && event.text !== undefined
         ? {
             type: "assistant_message",
@@ -636,7 +645,8 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
             text: event.text,
           }
         : null;
-    case "progress":
+    }
+    case "progress": {
       return event.label && event.state && progressStates.has(event.state)
         ? {
             type: "progress",
@@ -646,13 +656,16 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
             state: event.state as "started" | "completed" | "failed",
           }
         : null;
-    case "input.requested":
+    }
+    case "input.requested": {
       return event.request
         ? { type: "input_required", index: event.index, request: event.request }
         : null;
-    case "status":
+    }
+    case "status": {
       return event.status ? { type: "status", index: event.index, status: event.status } : null;
-    case "error.public":
+    }
+    case "error.public": {
       return event.code && event.message
         ? {
             type: "error",
@@ -661,7 +674,9 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
             message: event.message,
           }
         : null;
-    default:
+    }
+    default: {
       return null;
+    }
   }
 }
