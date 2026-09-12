@@ -93,9 +93,9 @@ async function sameOriginHeaders(contentType?: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as
-      | { error?: string }
-      | undefined;
+    const payload = (await response.json().catch(() => {
+      // Invalid JSON has no error payload.
+    })) as { error?: string } | undefined;
     throw new Error(payload?.error ?? fallback);
   }
   return (await response.json()) as T;

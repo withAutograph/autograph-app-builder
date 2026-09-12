@@ -34,7 +34,9 @@ export function Appearance({ className }: AppearanceProps) {
   const { theme, setTheme, themes = [] } = useTheme();
 
   const isMounted = useSyncExternalStore(
-    () => () => undefined,
+    () => () => {
+      // No subscription is needed for the server snapshot.
+    },
     () => true,
     () => false,
   );
