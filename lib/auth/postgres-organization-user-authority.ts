@@ -282,7 +282,8 @@ export function createPostgresPreviewOrganizationAuthority(
       if (issuer !== authority.issuer || audience !== authority.audience) {
         return;
       }
-      return (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId;
+      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      return activeOrganization?.workspaceId;
     },
 
     async isActiveMember({ issuer, audience, workspaceId, ownerUserId }) {
