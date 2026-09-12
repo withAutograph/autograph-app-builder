@@ -65,7 +65,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
   ) {
     throw new Error("Installed Eve did not use the expected pnpm layout.");
   }
-  const rawTarget = readlinkSync(packageLink, "utf8");
+  const rawTarget = readlinkSync(packageLink, "utf-8");
   if (
     isAbsolute(rawTarget) ||
     rawTarget.split("/").includes("..") ||
@@ -104,7 +104,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Installed Eve CLI was not an exact executable file.");
   }
   const metadata = closedObject(
-    JSON.parse(readFileSync(metadataPath, "utf8")) as unknown,
+    JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown,
     "Installed Eve package",
   );
   const bin = closedObject(metadata.bin, "Installed Eve bin");
@@ -112,7 +112,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Installed Eve package identity was invalid.");
   }
   const rootMetadata = closedObject(
-    JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as unknown,
+    JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf-8")) as unknown,
     "Repository package",
   );
   const dependencies = closedObject(rootMetadata.dependencies, "Repository dependencies");
@@ -172,7 +172,7 @@ export function readOwnerBoundLocalFile(
   ) {
     throw new Error("Local credential input was not an owner-bound file.");
   }
-  return readFileSync(path, "utf8");
+  return readFileSync(path, "utf-8");
 }
 
 export function parseLocalVercelOidcToken(source: string): string {
@@ -197,7 +197,7 @@ function decodeClaims(token: string): VercelOidcClaims {
   if (payload === undefined) throw new Error("OIDC payload was unavailable.");
   let decoded: unknown;
   try {
-    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     throw new Error("OIDC payload was malformed.");
   }

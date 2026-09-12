@@ -84,9 +84,9 @@ describe("Better Auth membership migration readiness", () => {
 
   it("keeps migration and readback task fail-closed and secret-blind", async () => {
     const [migration, task, cli] = await Promise.all([
-      readFile("drizzle/0010_better_auth_organizations.sql", "utf8"),
-      readFile(".config/mise/tasks/hosted/membership-migration-verify", "utf8"),
-      readFile("lib/db/better-auth-membership-readiness-cli.mts", "utf8"),
+      readFile("drizzle/0010_better_auth_organizations.sql", "utf-8"),
+      readFile(".config/mise/tasks/hosted/membership-migration-verify", "utf-8"),
+      readFile("lib/db/better-auth-membership-readiness-cli.mts", "utf-8"),
     ]);
 
     expect(migration).toContain('CREATE TABLE "organization"');

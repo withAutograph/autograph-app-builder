@@ -11,7 +11,7 @@ describe("tenant GitHub installation binding schema", () => {
   it("scopes a repeated installation to its tenant while retaining same-tenant idempotency", async () => {
     const migration = await readFile(
       "drizzle/0014_tenant_github_installation_uniqueness.sql",
-      "utf8",
+      "utf-8",
     );
 
     expect(migration).toContain(

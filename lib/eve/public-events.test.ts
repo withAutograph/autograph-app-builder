@@ -15,7 +15,7 @@ import {
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 function digest(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+  return createHash("sha256").update(value, "utf-8").digest("hex");
 }
 
 function recordedPrototypeEvents(input?: {

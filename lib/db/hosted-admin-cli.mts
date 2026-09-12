@@ -40,7 +40,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   ) {
     throw new Error("Hosted admin request must be an owner-only nonempty regular file.");
   }
-  return JSON.parse(await readFile(path, "utf8"));
+  return JSON.parse(await readFile(path, "utf-8"));
 }
 
 const argv = process.argv.slice(2);

@@ -450,7 +450,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("contains no ambient installation-id authority", async () => {
-    const source = await readFile("lib/agent/hosted-github-publication-runtime.ts", "utf8");
+    const source = await readFile("lib/agent/hosted-github-publication-runtime.ts", "utf-8");
     expect(source).not.toContain("GITHUB_APP_INSTALLATION_ID");
     expect(source).not.toContain("process.env");
   });

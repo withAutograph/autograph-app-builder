@@ -37,7 +37,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   ) {
     throw new Error("Activation request must be an owner-only nonempty regular file.");
   }
-  return JSON.parse(await readFile(path, "utf8"));
+  return JSON.parse(await readFile(path, "utf-8"));
 }
 
 function stableId(prefix: string, value: string) {

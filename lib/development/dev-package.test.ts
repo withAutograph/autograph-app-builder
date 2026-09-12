@@ -21,13 +21,13 @@ describe("development Codex package", () => {
         port: 3210,
       });
       const marketplace = JSON.parse(
-        await readFile(join(result.marketplaceRoot, ".agents/plugins/marketplace.json"), "utf8"),
+        await readFile(join(result.marketplaceRoot, ".agents/plugins/marketplace.json"), "utf-8"),
       );
       const manifest = JSON.parse(
-        await readFile(join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf8"),
+        await readFile(join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
       );
-      const mcp = JSON.parse(await readFile(join(result.pluginRoot, ".mcp.json"), "utf8"));
-      const tools = JSON.parse(await readFile(join(result.pluginRoot, "tools-list.json"), "utf8"));
+      const mcp = JSON.parse(await readFile(join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      const tools = JSON.parse(await readFile(join(result.pluginRoot, "tools-list.json"), "utf-8"));
       expect(result.marketplaceRoot).toBe(join(root, "marketplace"));
       expect(marketplace).toMatchObject({
         name: "autograph-dev",
@@ -91,7 +91,7 @@ describe("development Codex package", () => {
             );
           }
           if (args.includes("list")) {
-            expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe(
+            expect(await readFile(join(codexHome, "config.toml"), "utf-8")).toBe(
               'model = "gpt-6-astra"\n[plugins."app-builder@autograph-dev"]\nenabled = false\n[plugins."app-builder@autograph"]\nenabled = true\n',
             );
           }

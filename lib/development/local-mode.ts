@@ -183,7 +183,7 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
     { encoding: "buffer", env: gitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
   );
   const paths: string[] = [];
-  for (const entry of stdout.toString("utf8").split("\0").filter(Boolean)) {
+  for (const entry of stdout.toString("utf-8").split("\0").filter(Boolean)) {
     const staged = /^(\d{6}) [0-9a-f]+ [0-3]\t([\s\S]*)$/u.exec(entry);
     const path = staged?.[2] ?? entry;
     if (!safeRelativePath(path)) continue;
@@ -395,7 +395,7 @@ export async function createDevelopmentSnapshot(input: {
         mode: 0o700,
       });
       if (entry.kind === "link")
-        await symlink(entry.content.toString("utf8"), join(root, entry.path));
+        await symlink(entry.content.toString("utf-8"), join(root, entry.path));
       else {
         await writeFile(join(root, entry.path), entry.content, { mode: 0o600 });
         await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
@@ -435,12 +435,12 @@ export async function createDevelopmentSnapshot(input: {
     );
     const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
       cwd: root,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: gitEnvironment(),
     }).trim();
     const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
       cwd: root,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: gitEnvironment(),
     }).trim();
     // The recorded commit/tree/fingerprint identify this one per-cycle copy.

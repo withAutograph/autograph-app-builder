@@ -44,7 +44,7 @@ await mkdir(output, { mode: 0o700 });
 
 const git = (...args: string[]) =>
   execFileSync("/usr/bin/git", ["-C", repositoryRoot, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     env: {
       PATH: "/usr/bin:/bin",
       LC_ALL: "C",

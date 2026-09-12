@@ -112,7 +112,7 @@ export function encryptVercelToken(input: { token: string; key: Buffer; associat
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
-  const encrypted = Buffer.concat([cipher.update(input.token, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(input.token, "utf-8"), cipher.final()]);
   return {
     encryptedToken: encrypted.toString("base64"),
     tokenIv: iv.toString("base64"),
@@ -133,7 +133,7 @@ export function decryptVercelToken(input: {
   return Buffer.concat([
     decipher.update(Buffer.from(input.encryptedToken, "base64")),
     decipher.final(),
-  ]).toString("utf8");
+  ]).toString("utf-8");
 }
 
 const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();

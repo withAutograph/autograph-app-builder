@@ -123,7 +123,7 @@ function restrictedGit(
       ...args,
     ],
     {
-      encoding: "utf8",
+      encoding: "utf-8",
       env: {
         NODE_ENV: process.env.NODE_ENV ?? "production",
         PATH: "/usr/bin:/bin",
@@ -188,8 +188,8 @@ function tarFiles(archive: Uint8Array) {
   while (offset + 512 <= tar.byteLength) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
-    const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "");
-    const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/u, "");
+    const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
+    const prefix = header.subarray(345, 500).toString("utf-8").replace(/\0.*$/u, "");
     const path = prefix ? `${prefix}/${name}` : name;
     const size = Number.parseInt(
       header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim(),
@@ -243,7 +243,7 @@ export async function loadStarterSource(input: {
   let manifest: StarterSourceManifest;
   try {
     manifest = starterSourceManifestSchema.parse(
-      JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(manifestBytes)),
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes)),
     );
   } catch {
     throw new Error("starter-manifest-invalid");

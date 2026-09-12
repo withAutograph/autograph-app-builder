@@ -39,7 +39,7 @@ for (const packageName of packages) {
 }
 
 for (const entrypoint of entrypoints) {
-  const source = await readFile(entrypoint, "utf8");
+  const source = await readFile(entrypoint, "utf-8");
   if (!source.includes(eagerAssets)) continue;
   await writeFile(entrypoint, source.replace(eagerAssets, ""));
 }

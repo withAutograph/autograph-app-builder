@@ -46,7 +46,7 @@ try {
   const descriptor = openSync(temporaryPath, "wx", 0o600);
   temporaryExists = true;
   try {
-    writeFileSync(descriptor, environment, "utf8");
+    writeFileSync(descriptor, environment, "utf-8");
     fsyncSync(descriptor);
   } finally {
     closeSync(descriptor);

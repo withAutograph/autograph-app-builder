@@ -92,7 +92,7 @@ describe("preview stylesheet provenance", () => {
       /sourceMappingURL=data:application\/json[^,]*,([^*]+?)\s*\*\//u,
     )?.[1];
     expect(sourceMap).toBeDefined();
-    const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf8")) as {
+    const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf-8")) as {
       sourcesContent?: (string | null)[];
     };
     expect(map.sourcesContent).toContain(themeCss);

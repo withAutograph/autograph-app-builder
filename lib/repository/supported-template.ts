@@ -181,7 +181,7 @@ function git(path: string, args: string[]): string {
       ...args,
     ],
     {
-      encoding: "utf8",
+      encoding: "utf-8",
       env: {
         NODE_ENV: process.env.NODE_ENV ?? "production",
         PATH: "/usr/bin:/bin",
@@ -359,7 +359,7 @@ function releasePolicyObservation(input: {
     gate: "REPOSITORY_RELEASE_ENABLED" as const,
     eligible:
       input.workflow.status === "present" &&
-      supportsReleaseGate(Buffer.from(input.workflow.bytes).toString("utf8")),
+      supportsReleaseGate(Buffer.from(input.workflow.bytes).toString("utf-8")),
     sourceSha: input.sourceSha,
     sourceTree: input.sourceTree,
     workflow,
@@ -547,7 +547,7 @@ async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<Eli
       "-z",
       "--untracked-files=all",
     ])
-      .toString("utf8")
+      .toString("utf-8")
       .split("\0");
     for (let index = 0; index < statusRecords.length; index += 1) {
       const record = statusRecords[index];
@@ -575,7 +575,7 @@ async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<Eli
       return [
         path,
         match !== null && match[3] === path
-          ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString("utf8")
+          ? gitBytes(sourcePath, ["show", `${sourceSha}:${path}`]).toString("utf-8")
           : undefined,
       ];
     }),
@@ -1107,7 +1107,7 @@ export async function prepareSupportedSandboxWorkspace(
   const treeEntries = execFileSync(
     "git",
     ["-C", eligibility.sourcePath, "ls-tree", "-rz", "--full-tree", expectedSha],
-    { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+    { encoding: "utf-8", maxBuffer: 32 * 1024 * 1024 },
   )
     .split("\0")
     .filter(Boolean)
@@ -1247,7 +1247,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     "--others",
     "--exclude-standard",
   ])
-    .toString("utf8")
+    .toString("utf-8")
     .split("\0")
     .filter(Boolean)
     .toSorted()
@@ -1392,7 +1392,7 @@ export async function prepareDevelopmentSandboxWorkspace(
     });
     const chmod = await sandbox.run({
       command: `node -e ${JSON.stringify(
-        `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${modeListPath}","utf8"));if(!Array.isArray(entries))throw new Error("invalid mode list");for(const entry of entries){if(!entry||typeof entry.path!=="string"||!entry.path.startsWith("repository/")||entry.path.includes("\\0")||(entry.mode!=="100644"&&entry.mode!=="100755"))throw new Error("invalid source mode");const target=path.resolve("/workspace",entry.path);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("source path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("source path is not a regular file");fs.chmodSync(target,entry.mode==="100755"?0o755:0o644);}`,
+        `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${modeListPath}","utf-8"));if(!Array.isArray(entries))throw new Error("invalid mode list");for(const entry of entries){if(!entry||typeof entry.path!=="string"||!entry.path.startsWith("repository/")||entry.path.includes("\\0")||(entry.mode!=="100644"&&entry.mode!=="100755"))throw new Error("invalid source mode");const target=path.resolve("/workspace",entry.path);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("source path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("source path is not a regular file");fs.chmodSync(target,entry.mode==="100755"?0o755:0o644);}`,
       )}`,
       workingDirectory: "/workspace",
       abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),

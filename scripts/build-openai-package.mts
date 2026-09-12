@@ -8,7 +8,7 @@ import {
   AUTOGRAPH_PACKAGE_VERSION,
 } from "../lib/plugin/agent-plugin-package.ts";
 
-const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf8"));
+const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf-8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
 const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
 const endpointIndex = process.argv.indexOf("--endpoint");
@@ -33,7 +33,7 @@ if (portable.version !== AUTOGRAPH_PACKAGE_VERSION)
 if (suppliedEndpoint) assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
 
 const portableMcpPath = resolve("mcp.json");
-const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf8"));
+const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
 if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME)
   throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);

@@ -41,7 +41,7 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
       .filter((entry) => entry.isDirectory() && caseId.safeParse(entry.name).success)
       .map(async (entry) => {
         const metadata = designCaseSchema.parse(
-          JSON.parse(await readFile(join(base, entry.name, "case.json"), "utf8")),
+          JSON.parse(await readFile(join(base, entry.name, "case.json"), "utf-8")),
         );
         if (metadata.id !== entry.name)
           throw new Error(`Case directory and metadata id differ: ${entry.name}`);
@@ -58,13 +58,13 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
 export async function readDesignCase(id: string, root?: string) {
   const directory = caseDirectory(id, root);
   const metadata = designCaseSchema.parse(
-    JSON.parse(await readFile(join(directory, "case.json"), "utf8")),
+    JSON.parse(await readFile(join(directory, "case.json"), "utf-8")),
   );
   if (metadata.id !== id) throw new Error(`Case directory and metadata id differ: ${id}`);
   return {
     ...metadata,
     directory,
-    brief: await readFile(join(directory, "brief.md"), "utf8"),
+    brief: await readFile(join(directory, "brief.md"), "utf-8"),
     scenariosPath: join(directory, "scenarios.json"),
   };
 }

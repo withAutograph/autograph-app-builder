@@ -80,8 +80,8 @@ function parseArguments(args: readonly string[]) {
   return { arrustedRoot: realpathSync(arrustedRoot), output: resolve(output) };
 }
 
-function git(root: string, args: readonly string[], encoding: "utf8"): string;
-function git(root: string, args: readonly string[], encoding: "utf8"): string {
+function git(root: string, args: readonly string[], encoding: "utf-8"): string;
+function git(root: string, args: readonly string[], encoding: "utf-8"): string {
   return execFileSync(
     "/usr/bin/git",
     [
@@ -125,7 +125,7 @@ function packageResolutionRoot(packagePath: string): string {
 }
 
 function packageVersion(packagePath: string): string {
-  const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf8")) as {
+  const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf-8")) as {
     version?: string;
   };
   if (typeof manifest.version !== "string")
@@ -151,7 +151,7 @@ function dependencyClosure(root: string): Map<string, string> {
     const { name, resolutionRoot, destination } = pending.shift()!;
     const packagePath = packageRoot(installedRoot, resolutionRoot, name);
     if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
-    const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf8")) as {
+    const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf-8")) as {
       version?: string;
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
@@ -237,9 +237,9 @@ if (process.platform !== "linux" || process.arch !== "x64")
   throw new Error("Hosted execution artifacts must be built on Linux x86_64.");
 const scratch = mkdtempSync(join(tmpdir(), "app-builder-hosted-artifact."));
 try {
-  const commit = git(arrustedRoot, ["rev-parse", "HEAD^{commit}"], "utf8").trim();
-  const tree = git(arrustedRoot, ["rev-parse", "HEAD^{tree}"], "utf8").trim();
-  const status = git(arrustedRoot, ["status", "--porcelain=v1"], "utf8").trim();
+  const commit = git(arrustedRoot, ["rev-parse", "HEAD^{commit}"], "utf-8").trim();
+  const tree = git(arrustedRoot, ["rev-parse", "HEAD^{tree}"], "utf-8").trim();
+  const status = git(arrustedRoot, ["status", "--porcelain=v1"], "utf-8").trim();
   if (commit !== TARGET_SHA || tree !== TARGET_TREE || status !== "")
     throw new Error("Arrusted source is not the exact clean supported target.");
 
@@ -272,12 +272,12 @@ try {
   for (const binary of ["next", "turbo", "vp"] as const)
     execFileSync(process.execPath, [join(binaryDirectory, binary), "--version"], {
       cwd: dependencyStage,
-      encoding: "utf8",
+      encoding: "utf-8",
     });
   execFileSync(
     process.execPath,
     ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
-    { cwd: dependencyStage, encoding: "utf8" },
+    { cwd: dependencyStage, encoding: "utf-8" },
   );
   normalizeTree(join(scratch, "dependency-stage"));
   const dependencyArchive = join(dependencyRoot, "node-modules.tar.gz");

@@ -225,7 +225,7 @@ bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '
 rustc --version | grep -E '^rustc 1[.]97[.]1 '
-node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)'`;
+node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf-8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)'`;
 }
 
 export function hostedArtifactWorkspaceInstallCommand(): string {

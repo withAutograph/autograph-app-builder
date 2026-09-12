@@ -86,7 +86,7 @@ const { isAbsolute, resolve } = require("node:path");
 
 const root = "/workspace/repository";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const git = (args, encoding = "utf8") => execFileSync(
+const git = (args, encoding = "utf-8") => execFileSync(
   "git",
   [
     "-c", "protocol.allow=never",
@@ -110,7 +110,7 @@ const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
 const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const files = output
-  .toString("utf8")
+  .toString("utf-8")
   .split("\0")
   .filter(Boolean)
   .map((entry) => {
@@ -144,7 +144,7 @@ const contents = {};
 for (const path of [...inputPaths, ".config/repository-template.json"]) {
   const file = resolve(root, path);
   try {
-    contents[path] = readFileSync(file, "utf8");
+    contents[path] = readFileSync(file, "utf-8");
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
   }
@@ -196,7 +196,7 @@ const gitArgs = [
   "-c", "core.fsmonitor=false",
   "-C", root,
 ];
-const git = (args, encoding = "utf8") => execFileSync(
+const git = (args, encoding = "utf-8") => execFileSync(
   "git",
   [...gitArgs, ...args],
   { encoding, maxBuffer: 32 * 1024 * 1024 },
@@ -214,7 +214,7 @@ const resolvedRef = git(["rev-parse", expected.ref]).trim();
 const symbolicRef = spawnSync(
   "git",
   [...gitArgs, "symbolic-ref", "-q", "HEAD"],
-  { encoding: "utf8", maxBuffer: 1024 * 1024 },
+  { encoding: "utf-8", maxBuffer: 1024 * 1024 },
 );
 if (symbolicRef.error || ![0, 1].includes(symbolicRef.status))
   throw new Error("invalid checkout state");
@@ -222,7 +222,7 @@ const detached = symbolicRef.status === 1 && symbolicRef.stdout.trim() === "";
 const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
 const gitlinks = [];
 const files = output
-  .toString("utf8")
+  .toString("utf-8")
   .split("\0")
   .filter(Boolean)
   .flatMap((entry) => {
@@ -254,16 +254,16 @@ const files = output
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
 const appBuilder = "/workspace/.app-builder";
-const manifestMatches = readFileSync(appBuilder + "/source-files.json", "utf8") ===
+const manifestMatches = readFileSync(appBuilder + "/source-files.json", "utf-8") ===
   JSON.stringify(files, null, 2) + "\n";
-const checksumsMatch = readFileSync(appBuilder + "/source-checksums.sha256", "utf8") ===
+const checksumsMatch = readFileSync(appBuilder + "/source-checksums.sha256", "utf-8") ===
   files.map((file) => file.sha256 + "  repository/" + file.path).join("\n") + "\n";
 const inputPaths = ${JSON.stringify(SUPPORTED_TEMPLATE_INPUT_PATHS)};
 const contents = {};
 for (const path of [...inputPaths, ".config/repository-template.json"]) {
   const file = resolve(root, path);
   try {
-    contents[path] = readFileSync(file, "utf8");
+    contents[path] = readFileSync(file, "utf-8");
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
   }

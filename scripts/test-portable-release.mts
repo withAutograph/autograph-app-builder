@@ -60,7 +60,7 @@ try {
   const endpoint = "https://mcp.autograph.dev";
   for (const output of [first, second])
     await run("build-portable-release.mts", ["--endpoint", endpoint, "--output", output]);
-  const portableManifest = JSON.parse(await readFile("plugin.json", "utf8"));
+  const portableManifest = JSON.parse(await readFile("plugin.json", "utf-8"));
   const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
   const marketplaceArchiveName = `app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
   const firstArchive = await readFile(join(first, archiveName));
@@ -70,8 +70,8 @@ try {
   const secondMarketplaceArchive = await readFile(join(second, marketplaceArchiveName));
   if (!firstMarketplaceArchive.equals(secondMarketplaceArchive))
     throw new Error("Codex marketplace archive is not reproducible.");
-  const firstReceipt = JSON.parse(await readFile(join(first, "release-receipt.json"), "utf8"));
-  const secondReceipt = JSON.parse(await readFile(join(second, "release-receipt.json"), "utf8"));
+  const firstReceipt = JSON.parse(await readFile(join(first, "release-receipt.json"), "utf-8"));
+  const secondReceipt = JSON.parse(await readFile(join(second, "release-receipt.json"), "utf-8"));
   if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt))
     throw new Error("Portable release receipt is not reproducible.");
   if (
@@ -99,7 +99,7 @@ try {
     env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
   });
   const marketplaceManifest = JSON.parse(
-    await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf8"),
+    await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf-8"),
   );
   if (
     marketplaceManifest.name !== "autograph" ||
@@ -110,13 +110,13 @@ try {
   const codexPluginRoot = join(marketplace, marketplaceManifest.plugins[0].source.path);
   if (!(await stat(codexPluginRoot)).isDirectory())
     throw new Error("Codex marketplace source path did not resolve to the packaged plugin.");
-  const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf8"));
+  const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8"));
   if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`)
     throw new Error("Codex marketplace did not bind the release endpoint.");
   if (codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !== `${endpoint}/mcp`)
     throw new Error("Codex marketplace did not bind the OAuth resource.");
   const codexManifest = JSON.parse(
-    await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf8"),
+    await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
   );
   for (const reference of [codexManifest.interface?.composerIcon, codexManifest.interface?.logo]) {
     if (typeof reference !== "string" || !reference.startsWith("./"))
@@ -148,7 +148,7 @@ try {
     const root = join(temp, `tampered-${name}`);
     await cp(first, root, { recursive: true });
     const path = join(root, "release-receipt.json");
-    const receipt = JSON.parse(await readFile(path, "utf8"));
+    const receipt = JSON.parse(await readFile(path, "utf-8"));
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
     await expectRejected(
@@ -207,7 +207,7 @@ try {
   const missingAssetArchive = deterministicGzip(deterministicTar(missingAssetFiles));
   await writeFile(missingAssetArchivePath, missingAssetArchive);
   const missingAssetReceiptPath = join(missingMarketplaceAsset, "release-receipt.json");
-  const missingAssetReceipt = JSON.parse(await readFile(missingAssetReceiptPath, "utf8"));
+  const missingAssetReceipt = JSON.parse(await readFile(missingAssetReceiptPath, "utf-8"));
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
   await expectRejected(
@@ -228,7 +228,7 @@ try {
   const tamperedAssetArchive = deterministicGzip(deterministicTar(tamperedAssetFiles));
   await writeFile(tamperedAssetArchivePath, tamperedAssetArchive);
   const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, "release-receipt.json");
-  const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf8"));
+  const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8"));
   tamperedAssetReceipt.codexMarketplaceArchive.sha256 = sha256(tamperedAssetArchive);
   tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(
     tamperedAssetFiles.get(missingAssetPath)!,
@@ -277,7 +277,7 @@ try {
   const treeDriftArchive = deterministicGzip(deterministicTar(treeDriftFiles));
   await writeFile(treeDriftArchivePath, treeDriftArchive);
   const treeDriftReceiptPath = join(fullyReboundTreeDrift, "release-receipt.json");
-  const treeDriftReceipt = JSON.parse(await readFile(treeDriftReceiptPath, "utf8"));
+  const treeDriftReceipt = JSON.parse(await readFile(treeDriftReceiptPath, "utf-8"));
   treeDriftReceipt.codexMarketplaceArchive.sha256 = sha256(treeDriftArchive);
   treeDriftReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(treeDriftBytes);
   await writeFile(treeDriftReceiptPath, `${JSON.stringify(treeDriftReceipt, null, 2)}\n`);
@@ -309,7 +309,7 @@ try {
   const installedTamper = join(temp, "tampered-installs");
   await cp(installs, installedTamper, { recursive: true });
   const codexHarness = join(installedTamper, "codex", "client-harness.json");
-  const harness = JSON.parse(await readFile(codexHarness, "utf8"));
+  const harness = JSON.parse(await readFile(codexHarness, "utf-8"));
   harness.transport.url = "https://wrong.autograph.dev/mcp";
   await writeFile(codexHarness, `${JSON.stringify(harness, null, 2)}\n`);
   await expectRejected(

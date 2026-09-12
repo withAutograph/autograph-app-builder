@@ -85,7 +85,7 @@ function exactParentArguments(): readonly string[] {
       throw new Error("The structural test launcher cwd was invalid.");
     const source = readFileSync(`/proc/${pid}/cmdline`);
     return source
-      .toString("utf8")
+      .toString("utf-8")
       .split("\0")
       .filter((entry) => entry.length > 0);
   }
@@ -107,14 +107,14 @@ function exactParentArguments(): readonly string[] {
     ].join(";");
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
-        encoding: "utf8",
+        encoding: "utf-8",
         env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
       }),
     ) as unknown;
     if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string"))
       throw new Error("The structural test launcher argv was invalid.");
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
-      encoding: "utf8",
+      encoding: "utf-8",
       env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
       stdio: ["ignore", "pipe", "ignore"],
     })
@@ -209,7 +209,7 @@ export async function runWithTestCapability(options: {
   authorization.write(`${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`);
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
-  authorization.setEncoding("utf8");
+  authorization.setEncoding("utf-8");
   authorization.on("data", (chunk: string) => {
     if (answered) return;
     buffered += chunk;

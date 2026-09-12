@@ -124,7 +124,7 @@ const planResultSchema = z
   .strict();
 
 function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+  return createHash("sha256").update(value, "utf-8").digest("hex");
 }
 
 function verifiedImplementationPlan(
@@ -304,7 +304,7 @@ export function latestInstalledPrototype(
         digest,
       }),
     );
-    const size = Buffer.byteLength(input.content, "utf8");
+    const size = Buffer.byteLength(input.content, "utf-8");
     if (
       size > maximumPrototypeBytes ||
       output.data.appId !== appId ||

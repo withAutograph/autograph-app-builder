@@ -317,7 +317,7 @@ describe("release promotion contract", () => {
 
     const receiptMutation = await candidate();
     const receiptPath = join(receiptMutation, "promotion-receipt.json");
-    const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as {
+    const receipt = JSON.parse(await readFile(receiptPath, "utf-8")) as {
       digest: string;
     };
     receipt.digest = "0".repeat(64);

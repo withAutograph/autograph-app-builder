@@ -44,9 +44,9 @@ jobs:
           const root = ".artifacts/promoted-release";
           const digestBytes = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
           const digest = (path) => digestBytes(readFileSync(path));
-          const promotion = JSON.parse(readFileSync(join(root, "promotion-receipt.json"), "utf8"));
-          const packageReceipt = JSON.parse(readFileSync(join(root, "release-receipt.json"), "utf8"));
-          const tagCommit = execFileSync("git", ["rev-parse", "HEAD^{commit}"], { encoding: "utf8" }).trim();
+          const promotion = JSON.parse(readFileSync(join(root, "promotion-receipt.json"), "utf-8"));
+          const packageReceipt = JSON.parse(readFileSync(join(root, "release-receipt.json"), "utf-8"));
+          const tagCommit = execFileSync("git", ["rev-parse", "HEAD^{commit}"], { encoding: "utf-8" }).trim();
 
           if (promotion.format !== "autograph-release-promotion-v2") throw new Error("unexpected promotion receipt format");
           if (promotion.source.sha !== tagCommit) throw new Error("promotion is not bound to the release commit");

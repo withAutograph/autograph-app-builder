@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 describe("database migration secret boundary", () => {
   it("uses a task-scoped fd and never adds DATABASE_URL to the shared launcher", async () => {
     const [task, migration, launcher] = await Promise.all([
-      readFile(".config/mise/tasks/database/migrate", "utf8"),
-      readFile("lib/db/private-database-url.ts", "utf8"),
-      readFile(".config/mise/scripts/trusted-node-launcher", "utf8"),
+      readFile(".config/mise/tasks/database/migrate", "utf-8"),
+      readFile("lib/db/private-database-url.ts", "utf-8"),
+      readFile(".config/mise/scripts/trusted-node-launcher", "utf-8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("printf '%s' \"$database_url\" | (");
@@ -26,21 +26,21 @@ describe("database migration secret boundary", () => {
       ".config/mise/tasks/hosted/tenant-delete",
     ];
     for (const path of paths) {
-      const task = await readFile(path, "utf8");
+      const task = await readFile(path, "utf-8");
       expect(task).toContain("unset DATABASE_URL");
       expect(task).toContain("--database-url-fd 0");
       expect(task).toContain("--request-file");
       expect(task).not.toContain("echo $DATABASE_URL");
     }
-    const cli = await readFile("lib/db/hosted-admin-cli.mts", "utf8");
+    const cli = await readFile("lib/db/hosted-admin-cli.mts", "utf-8");
     expect(cli).toContain("owner-only nonempty regular file");
     expect(cli).not.toContain("process.env.DATABASE_URL");
   });
 
   it("keeps hosted storage verification read-only and secret-blind", async () => {
     const [task, verification] = await Promise.all([
-      readFile(".config/mise/tasks/hosted/storage-verify", "utf8"),
-      readFile("lib/db/hosted-storage-readiness-cli.mts", "utf8"),
+      readFile(".config/mise/tasks/hosted/storage-verify", "utf-8"),
+      readFile("lib/db/hosted-storage-readiness-cli.mts", "utf-8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");
@@ -50,8 +50,8 @@ describe("database migration secret boundary", () => {
 
   it("keeps the branch emulator reset task-scoped and secret-blind", async () => {
     const [task, reset] = await Promise.all([
-      readFile(".config/mise/tasks/app/reset-preview-emulated", "utf8"),
-      readFile("scripts/reset-preview-emulate-state.mts", "utf8"),
+      readFile(".config/mise/tasks/app/reset-preview-emulated", "utf-8"),
+      readFile("scripts/reset-preview-emulate-state.mts", "utf-8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");
@@ -60,27 +60,27 @@ describe("database migration secret boundary", () => {
   });
 
   it("adds exact tenant retention indexes without weakening durable keys", async () => {
-    const migration = await readFile("drizzle/0003_hosted_retention_indexes.sql", "utf8");
+    const migration = await readFile("drizzle/0003_hosted_retention_indexes.sql", "utf-8");
     expect(migration).toContain('"agent_session_retention_idx"');
     expect(migration).toContain('"agent_operation_retention_idx"');
     expect(migration).toContain(
       '"issuer", "audience", "workspace_id", "owner_user_id", "updated_at"',
     );
-    const adapter = await readFile("lib/db/postgres-hosted-admin.ts", "utf8");
+    const adapter = await readFile("lib/db/postgres-hosted-admin.ts", "utf-8");
     expect(adapter).toContain('ne(agentOperations.state, "reserved")');
     expect(adapter).toContain("notExists(");
     expect(adapter).toContain("drained inactive membership");
   });
 
   it("migrates an exact fail-closed hosted workspace membership authority", async () => {
-    const migration = await readFile("drizzle/0002_hosted_workspace_membership.sql", "utf8");
+    const migration = await readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8");
     expect(migration).toContain('CREATE TABLE "hosted_workspace_membership"');
     expect(migration).toContain('"active" boolean DEFAULT false NOT NULL');
     expect(migration).toContain('"issuer", "audience", "workspace_id", "owner_user_id"');
   });
 
   it("persists only a digest-bound one-time GitHub installation state", async () => {
-    const migration = await readFile("drizzle/0007_github_installation_authorization.sql", "utf8");
+    const migration = await readFile("drizzle/0007_github_installation_authorization.sql", "utf-8");
     expect(migration).toContain('CREATE TABLE "github_installation_authorization_state"');
     expect(migration).toContain('"state_digest" text PRIMARY KEY NOT NULL');
     expect(migration).toContain(
@@ -94,7 +94,7 @@ describe("database migration secret boundary", () => {
   });
 
   it("isolates bounded Preview emulator documents by branch namespace", async () => {
-    const migration = await readFile("drizzle/0016_emulate_preview_state.sql", "utf8");
+    const migration = await readFile("drizzle/0016_emulate_preview_state.sql", "utf-8");
     expect(migration).toContain('CREATE TABLE "emulate_preview_state"');
     expect(migration).toContain('"namespace" text PRIMARY KEY NOT NULL');
     expect(migration).toContain('octet_length("state") BETWEEN 2 AND 8388608');

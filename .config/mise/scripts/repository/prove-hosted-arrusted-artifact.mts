@@ -79,7 +79,7 @@ if (
 
 const git = (args: readonly string[]) =>
   execFileSync("/usr/bin/git", ["-C", input.arrustedRoot, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
   }).trim();
 if (
   git(["rev-parse", "HEAD^{commit}"]) !== TARGET_SHA ||
@@ -146,7 +146,7 @@ try {
         ],
         {
           cwd: repository,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: {
             ...process.env,
             PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,

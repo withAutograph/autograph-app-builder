@@ -14,12 +14,12 @@ export type SourceKind = "existing-repository" | "fresh-template";
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-function fixedGit(path: string, args: readonly string[], encoding: "utf8"): string;
+function fixedGit(path: string, args: readonly string[], encoding: "utf-8"): string;
 function fixedGit(path: string, args: readonly string[], encoding: "buffer"): Buffer;
 function fixedGit(
   path: string,
   args: readonly string[],
-  encoding: "utf8" | "buffer",
+  encoding: "utf-8" | "buffer",
 ): string | Buffer {
   const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
   return execFileSync(
@@ -70,7 +70,7 @@ export function inspectSourceContractDigest(
   contractPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
 ): string {
   const contract = contractPaths.map((contractPath) => {
-    const entry = fixedGit(sourcePath, ["ls-tree", sourceSha, "--", contractPath], "utf8").trim();
+    const entry = fixedGit(sourcePath, ["ls-tree", sourceSha, "--", contractPath], "utf-8").trim();
     const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
     if (match === null || match[3] !== contractPath)
       throw new Error(
@@ -347,8 +347,8 @@ export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,
 ): Promise<SourceReceipt> {
-  const sourceSha = fixedGit(path, ["rev-parse", "HEAD"], "utf8").trim();
-  const sourceTree = fixedGit(path, ["rev-parse", `${sourceSha}^{tree}`], "utf8").trim();
+  const sourceSha = fixedGit(path, ["rev-parse", "HEAD"], "utf-8").trim();
+  const sourceTree = fixedGit(path, ["rev-parse", `${sourceSha}^{tree}`], "utf-8").trim();
   const observedDigest = sourceIdentityDigest(sourceSha, sourceTree);
   const evidence = {
     version: LEGACY_SOURCE_RECEIPT_VERSION,
@@ -382,7 +382,7 @@ export async function inspectClonedTemplateSourceReceipt(input: {
     sourceTree: fixedGit(
       eligibility.sourcePath,
       ["rev-parse", `${eligibility.sourceSha}^{tree}`],
-      "utf8",
+      "utf-8",
     ).trim(),
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
     eligibilityDigest: eligibility.digest,

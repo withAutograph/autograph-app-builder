@@ -50,7 +50,7 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
     const path = join(relative, entry.name);
     if (entry.isDirectory()) files.push(...(await sources(root, path)));
     else if (entry.isFile() && /\.(tsx?|css)$/u.test(path))
-      files.push({ path, content: await readFile(join(root, path), "utf8") });
+      files.push({ path, content: await readFile(join(root, path), "utf-8") });
   }
   return files;
 }
@@ -79,12 +79,12 @@ async function main() {
   const selectedCase = values.case ? await readDesignCase(values.case) : undefined;
   const brief = selectedCase
     ? appendReviewQuestions(selectedCase.brief, selectedCase.reviewQuestions)
-    : await readFile(values["brief-file"]!, "utf8");
+    : await readFile(values["brief-file"]!, "utf-8");
   const limitations: string[] = [];
   const referenceRoot = resolve(values["arrusted-root"]);
   const tokenCss = await readFile(
     join(resolve(values["arrusted-root"]), "packages/design-systems/core/tokens/theme.css"),
-    "utf8",
+    "utf-8",
   ).catch(() => {
     limitations.push("Reference theme could not be read; token evidence is incomplete.");
     return "";
@@ -125,7 +125,7 @@ async function main() {
   const scenarios = scenarioPath
     ? scenariosSchema.parse(
         JSON.parse(
-          await readFile(scenarioPath, "utf8").catch((error) => {
+          await readFile(scenarioPath, "utf-8").catch((error) => {
             if (!values.scenario && (error as NodeJS.ErrnoException).code === "ENOENT") return "[]";
             throw error;
           }),
@@ -165,7 +165,7 @@ async function main() {
   let referenceCommit: string | null = null;
   try {
     referenceCommit = execFileSync("git", ["-C", referenceRoot, "rev-parse", "HEAD"], {
-      encoding: "utf8",
+      encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
@@ -173,7 +173,7 @@ async function main() {
   }
   const catalog = await readFile(
     join(referenceRoot, "docs/app-builder-ui-catalog.json"),
-    "utf8",
+    "utf-8",
   ).catch(() => "");
   const measured = {
     createdAt: new Date().toISOString(),

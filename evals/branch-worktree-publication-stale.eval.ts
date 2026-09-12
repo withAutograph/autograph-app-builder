@@ -14,7 +14,7 @@ export default defineEval({
     await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
     const head = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repository,
-      encoding: "utf8",
+      encoding: "utf-8",
     });
     await t.send("Publish reviewed change set with stale branch preconditions.");
     t.requireInputRequest({
@@ -26,14 +26,14 @@ export default defineEval({
     if (
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,
-        encoding: "utf8",
+        encoding: "utf-8",
       }) !== head
     )
       throw new Error("A stale approval changed the source HEAD.");
     if (
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
-        encoding: "utf8",
+        encoding: "utf-8",
       }) !== ""
     )
       throw new Error("A stale approval created a branch.");

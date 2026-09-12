@@ -8,7 +8,7 @@ const flagsStorageState = "test-results/passkey-flags-storage-state.json";
 
 export default async function globalSetup(config: FullConfig) {
   const projectRoot = config.configFile ? dirname(config.configFile) : process.cwd();
-  const secret = (await readFile(resolve(projectRoot, ".emulate/flags-secret"), "utf8")).trim();
+  const secret = (await readFile(resolve(projectRoot, ".emulate/flags-secret"), "utf-8")).trim();
   const override = await encryptOverrides({ passkeys: true }, secret, "1h");
   const storageStatePath = resolve(projectRoot, flagsStorageState);
 

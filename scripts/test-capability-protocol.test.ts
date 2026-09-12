@@ -16,7 +16,7 @@ describe("non-authorizing structural test protocol relay", () => {
       write(chunk, _encoding, callback) {
         writes += 1;
         setTimeout(() => {
-          output += chunk.toString("utf8");
+          output += chunk.toString("utf-8");
           callback();
         }, 2);
       },

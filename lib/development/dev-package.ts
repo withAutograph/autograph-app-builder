@@ -90,7 +90,7 @@ export async function createDevelopmentPackage(input: {
       join(pluginRoot, "assets/autograph-icon.png"),
     );
     const sourceManifest = JSON.parse(
-      await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf8"),
+      await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf-8"),
     ) as Record<string, unknown>;
     const sourceInterface =
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
@@ -118,7 +118,7 @@ export async function createDevelopmentPackage(input: {
         },
       },
     };
-    const handler = await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"), "utf8");
+    const handler = await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"), "utf-8");
     const tools = [...registeredAutographToolNames(handler)];
     const marketplaceManifestPath = join(
       temporaryMarketplaceRoot,
@@ -277,7 +277,7 @@ export async function registerDevelopmentPackage(input: {
 // installed package available, but let the repository config enable it.
 async function disableGlobalDevelopmentPackage(codexHome: string) {
   const configPath = join(codexHome, "config.toml");
-  const config = await readFile(configPath, "utf8");
+  const config = await readFile(configPath, "utf-8");
   let inPlugin = false;
   let updated = false;
   const scoped = config

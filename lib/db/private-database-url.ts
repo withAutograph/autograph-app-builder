@@ -23,7 +23,7 @@ export function readPrivateDatabaseUrl(fd: number): string {
     frame.fill(0);
     throw new Error("The database URL secret frame was empty or oversized.");
   }
-  const databaseUrl = frame.subarray(0, length).toString("utf8");
+  const databaseUrl = frame.subarray(0, length).toString("utf-8");
   frame.fill(0);
   if (/[\0\r\n]/u.test(databaseUrl)) {
     throw new Error("The database URL secret frame was malformed.");

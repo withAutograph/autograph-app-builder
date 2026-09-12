@@ -21,7 +21,7 @@ import {
 
 async function fixture<T>(id: string): Promise<T> {
   return JSON.parse(
-    await readFile(resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf8"),
+    await readFile(resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf-8"),
   ) as T;
 }
 

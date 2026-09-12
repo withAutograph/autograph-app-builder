@@ -17,7 +17,7 @@ const copyPortablePackage = async () => {
 };
 
 const writeMcpHeaders = async (root: string, headers: Record<string, string>) => {
-  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"));
+  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf-8"));
   mcp.mcpServers["app-builder"].headers = headers;
   await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
@@ -28,13 +28,13 @@ const writeMcp = async (
     mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
   }) => void,
 ) => {
-  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf8"));
+  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf-8"));
   mutation(mcp);
   await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
 const writePluginVersion = async (root: string, version: string) => {
-  const plugin = JSON.parse(await readFile(resolve(repositoryRoot, "plugin.json"), "utf8"));
+  const plugin = JSON.parse(await readFile(resolve(repositoryRoot, "plugin.json"), "utf-8"));
   plugin.version = version;
   await writeFile(resolve(root, "plugin.json"), JSON.stringify(plugin));
 };
@@ -55,8 +55,8 @@ describe("Agent Plugins package", () => {
       specification: "1.0.0",
       packageKind: "generated-artifact",
     });
-    await expect(readFile(resolve(output, "plugin.json"), "utf8")).resolves.toBe(
-      await readFile(resolve(repositoryRoot, "plugin.json"), "utf8"),
+    await expect(readFile(resolve(output, "plugin.json"), "utf-8")).resolves.toBe(
+      await readFile(resolve(repositoryRoot, "plugin.json"), "utf-8"),
     );
     await expect(readFile(resolve(output, ".codex-plugin/plugin.json"))).rejects.toThrow();
     await expect(readFile(resolve(output, ".app.json"))).rejects.toThrow();

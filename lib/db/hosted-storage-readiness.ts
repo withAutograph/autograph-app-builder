@@ -718,10 +718,10 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     Promise.all(
       hostedStorageMigrationTags.map(async (tag) => ({
         tag,
-        content: await readFile(resolve(repositoryRoot, "drizzle", `${tag}.sql`), "utf8"),
+        content: await readFile(resolve(repositoryRoot, "drizzle", `${tag}.sql`), "utf-8"),
       })),
     ),
-    readFile(resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf8"),
+    readFile(resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf-8"),
   ]);
   const journal = z
     .object({
@@ -778,7 +778,7 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
   const sourceFiles = await Promise.all(
     contractSourcePaths.map(async (path) => ({
       path,
-      digest: sha256(await readFile(resolve(repositoryRoot, path), "utf8")),
+      digest: sha256(await readFile(resolve(repositoryRoot, path), "utf-8")),
     })),
   );
   const migrations = migrationFiles.map(({ tag, content }, index) => ({

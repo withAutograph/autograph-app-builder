@@ -9,7 +9,7 @@ if (origin.protocol !== "https:" || origin.pathname !== "/")
   throw new Error("Origin must be a literal HTTPS origin without a path.");
 
 const path = resolve("mcp.json");
-const manifest = JSON.parse(await readFile(path, "utf8"));
+const manifest = JSON.parse(await readFile(path, "utf-8"));
 manifest.mcpServers["app-builder"].url = `${origin.origin}/mcp`;
 await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Configured MCP endpoint: ${origin.origin}/mcp`);

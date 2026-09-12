@@ -24,6 +24,5 @@ export default defineConfig({
     "unicorn/filename-case": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-useless-undefined": "off",
-    "unicorn/text-encoding-identifier-case": "off",
   },
 });

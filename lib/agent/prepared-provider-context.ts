@@ -114,7 +114,7 @@ async function boundedJson(response: Response): Promise<unknown> {
     bytes.set(chunk, offset);
     offset += chunk.length;
   }
-  return JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
 /** Server-only credential read followed by a fresh, read-only provider request. */

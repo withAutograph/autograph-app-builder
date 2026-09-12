@@ -104,7 +104,7 @@ async function expire(lease: SandboxExecutionLease) {
 
 try {
   await waitForDatabase();
-  await client.unsafe(await readFile("drizzle/0008_sandbox_execution_lease.sql", "utf8"));
+  await client.unsafe(await readFile("drizzle/0008_sandbox_execution_lease.sql", "utf-8"));
 
   const sameSubject = await Promise.all([
     acquire("user_1", "session_1"),

@@ -17,7 +17,7 @@ const runGenerator = (cwd: string, endpoint: string) =>
       ],
       { cwd, stdio: ["ignore", "ignore", "pipe"] },
     );
-    child.stderr.setEncoding("utf8");
+    child.stderr.setEncoding("utf-8");
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
@@ -77,9 +77,9 @@ describe("OpenAI package generator", () => {
       const endpoint = "https://preview.autograph.dev/mcp";
       await runGenerator(root, endpoint);
 
-      const portable = JSON.parse(await readFile(join(root, "mcp.json"), "utf8"));
-      const codex = JSON.parse(await readFile(join(root, ".mcp.json"), "utf8"));
-      const manifest = JSON.parse(await readFile(join(root, ".codex-plugin/plugin.json"), "utf8"));
+      const portable = JSON.parse(await readFile(join(root, "mcp.json"), "utf-8"));
+      const codex = JSON.parse(await readFile(join(root, ".mcp.json"), "utf-8"));
+      const manifest = JSON.parse(await readFile(join(root, ".codex-plugin/plugin.json"), "utf-8"));
       expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
       expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);

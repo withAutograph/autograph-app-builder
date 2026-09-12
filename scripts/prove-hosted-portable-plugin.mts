@@ -28,7 +28,7 @@ async function secretFile(pathValue: string) {
     throw new Error("OAuth token input must be owner-bound with mode 0600.");
   const canonical = await realpath(requested);
   if (canonical !== requested) throw new Error("OAuth token input path must be canonical.");
-  const token = (await readFile(canonical, "utf8")).trim();
+  const token = (await readFile(canonical, "utf-8")).trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
     throw new Error("OAuth token input was malformed.");
   return token;
@@ -50,7 +50,7 @@ const release = verifiedArtifact.receipt;
 const receiptPath = join(releaseRoot, "release-receipt.json");
 
 const scenarioBytes = await readFile(scenarioPath);
-const scenario = hostedProofScenarioSchema.parse(JSON.parse(scenarioBytes.toString("utf8")));
+const scenario = hostedProofScenarioSchema.parse(JSON.parse(scenarioBytes.toString("utf-8")));
 const token = await secretFile(required("--token-file"));
 const crossTenantToken = await secretFile(required("--cross-tenant-token-file"));
 if (token === crossTenantToken)

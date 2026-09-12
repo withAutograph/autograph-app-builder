@@ -172,7 +172,7 @@ describe("Preview activation prerequisite contract", () => {
   });
 
   it("has PostgreSQL quote the validated role credential without exposing failed SQL", async () => {
-    const cli = await readFile("lib/db/preview-activation-cli.mts", "utf8");
+    const cli = await readFile("lib/db/preview-activation-cli.mts", "utf-8");
     expect(cli).toContain(
       `select format(\${template}::text, \${roleName}::text, \${password}::text)`,
     );
@@ -183,8 +183,8 @@ describe("Preview activation prerequisite contract", () => {
 
   it("provisions the exact migrated membership shape in one transaction", async () => {
     const [cli, migration] = await Promise.all([
-      readFile("lib/db/preview-activation-cli.mts", "utf8"),
-      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf8"),
+      readFile("lib/db/preview-activation-cli.mts", "utf-8"),
+      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8"),
     ]);
     const provisionStart = cli.indexOf("async provisionInvitedUser(input)");
     const provisionEnd = cli.indexOf("async configureRuntimeRole(input)");

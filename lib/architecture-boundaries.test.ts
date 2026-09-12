@@ -22,7 +22,7 @@ describe("library architecture boundaries", () => {
       await Promise.all(
         files.map(async (file) => ({
           file,
-          source: await readFile(file, "utf8"),
+          source: await readFile(file, "utf-8"),
         })),
       )
     )

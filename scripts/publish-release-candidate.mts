@@ -10,7 +10,9 @@ const candidate = await realpath(resolve(candidateInput));
 const info = await lstat(candidate);
 if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0)
   throw new Error("Release candidate root was unsafe.");
-const promotion = JSON.parse(await readFile(join(candidate, "promotion-receipt.json"), "utf8")) as {
+const promotion = JSON.parse(
+  await readFile(join(candidate, "promotion-receipt.json"), "utf-8"),
+) as {
   format: string;
   digest: string;
   source: { sha: string };

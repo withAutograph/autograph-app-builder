@@ -81,7 +81,7 @@ describe("PostgreSQL sandbox execution lease authority", () => {
   it("keeps the lease migration additive, tenant-bound, and recovery indexed", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0008_sandbox_execution_lease.sql", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     for (const required of [
       '"sandbox_execution_lease_tenant_pk"',

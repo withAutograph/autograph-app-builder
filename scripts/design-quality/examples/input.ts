@@ -16,7 +16,7 @@ type ExampleConfig = {
 };
 
 async function text(root: string, path: string) {
-  return readFile(resolve(root, path), "utf8");
+  return readFile(resolve(root, path), "utf-8");
 }
 
 const exampleManifests: Record<

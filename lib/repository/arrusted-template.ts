@@ -128,7 +128,7 @@ const { isAbsolute, resolve } = require("node:path");
 
 const root = "/workspace/repository";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const git = (args, encoding = "utf8") => execFileSync(
+const git = (args, encoding = "utf-8") => execFileSync(
   "git",
   [
     "-c", "protocol.allow=never",
@@ -152,7 +152,7 @@ const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
 const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
 const files = output
-  .toString("utf8")
+  .toString("utf-8")
   .split("\0")
   .filter(Boolean)
   .map((entry) => {
@@ -186,7 +186,7 @@ const contents = {};
 for (const path of [...inputPaths, ".config/repository-template.json"]) {
   const file = resolve(root, path);
   try {
-    contents[path] = readFileSync(file, "utf8");
+    contents[path] = readFileSync(file, "utf-8");
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
   }

@@ -50,7 +50,7 @@ export type OverlaySnapshot = {
 };
 
 export function compareOverlayPaths(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+  return Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8"));
 }
 
 export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFile[] {
