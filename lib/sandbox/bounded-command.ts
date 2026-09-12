@@ -3,8 +3,11 @@ import type { SandboxCommandResult, SandboxRunOptions, SandboxSession } from "ev
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
 
 export class SandboxCommandLimitError extends Error {
-  constructor(readonly code: "timeout" | "no-output-timeout" | "output-limit") {
+  readonly code: "timeout" | "no-output-timeout" | "output-limit";
+
+  constructor(code: "timeout" | "no-output-timeout" | "output-limit") {
     super("The sandbox command exceeded its execution envelope.");
+    this.code = code;
     this.name = "SandboxCommandLimitError";
   }
 }

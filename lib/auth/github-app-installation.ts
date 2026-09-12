@@ -62,28 +62,43 @@ type GitHubStateValidationDiagnostic = {
 };
 
 class GitHubCallbackParseError extends Error {
-  constructor(
-    readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>,
-  ) {
+  readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>;
+
+  constructor(reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>) {
     super("invalid-callback");
+    this.reason = reason;
   }
 }
 
 class GitHubStateValidationError extends Error {
-  constructor(readonly diagnostic: GitHubStateValidationDiagnostic) {
+  readonly diagnostic: GitHubStateValidationDiagnostic;
+
+  constructor(diagnostic: GitHubStateValidationDiagnostic) {
     super("invalid-state");
+    this.diagnostic = diagnostic;
   }
 }
 
 export class GitHubInstallationAuthorizationError extends Error {
+  readonly stage: GitHubInstallationAuthorizationFailureStage;
+  readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
+  readonly returnState?: ProviderConnectionReturn;
+  readonly callback?: GitHubCallbackDiagnostic;
+  readonly stateValidation?: GitHubStateValidationDiagnostic;
+
   constructor(
-    readonly stage: GitHubInstallationAuthorizationFailureStage,
-    readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
-    readonly returnState?: ProviderConnectionReturn,
-    readonly callback?: GitHubCallbackDiagnostic,
-    readonly stateValidation?: GitHubStateValidationDiagnostic,
+    stage: GitHubInstallationAuthorizationFailureStage,
+    category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
+    returnState?: ProviderConnectionReturn,
+    callback?: GitHubCallbackDiagnostic,
+    stateValidation?: GitHubStateValidationDiagnostic,
   ) {
     super(FAILURE_MESSAGE);
+    this.stage = stage;
+    this.category = category;
+    this.returnState = returnState;
+    this.callback = callback;
+    this.stateValidation = stateValidation;
   }
 }
 

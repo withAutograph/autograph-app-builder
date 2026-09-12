@@ -67,11 +67,13 @@ export type VercelAuthorizationStateStore = {
 };
 
 export class VercelInstallationAuthorizationError extends Error {
-  constructor(
-    readonly reason: string,
-    readonly returnState?: ProviderConnectionReturn,
-  ) {
+  readonly reason: string;
+  readonly returnState?: ProviderConnectionReturn;
+
+  constructor(reason: string, returnState?: ProviderConnectionReturn) {
     super(reason);
+    this.reason = reason;
+    this.returnState = returnState;
   }
 }
 

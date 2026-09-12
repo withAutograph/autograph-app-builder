@@ -15,8 +15,11 @@ import type { EveSessionListResult, EveSessionResult } from "./contracts";
 export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
 
 export class McpToolAuthenticationRequiredError extends Error {
-  constructor(readonly challenge: string) {
+  readonly challenge: string;
+
+  constructor(challenge: string) {
     super("Authentication is required before calling this tool.");
+    this.challenge = challenge;
     this.name = "McpToolAuthenticationRequiredError";
   }
 }

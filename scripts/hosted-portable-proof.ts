@@ -274,16 +274,19 @@ export class HostedMcpProofClient {
   private requestId = 0;
   private sessionId?: string;
   private readonly responseBodies: string[] = [];
+  readonly endpoint: string;
+  private readonly token: string | undefined;
+  private readonly fetcher: typeof fetch;
   private discardedResult?: {
     name: (typeof TOOL_NAMES)[number];
     fingerprint: string;
   };
 
-  constructor(
-    readonly endpoint: string,
-    private readonly token: string | undefined,
-    private readonly fetcher: typeof fetch = fetch,
-  ) {}
+  constructor(endpoint: string, token: string | undefined, fetcher: typeof fetch = fetch) {
+    this.endpoint = endpoint;
+    this.token = token;
+    this.fetcher = fetcher;
+  }
 
   private async post(
     method: string,

@@ -42,10 +42,12 @@ function projection(
 class TestEventSource {
   static instances: TestEventSource[] = [];
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
+  readonly url: string;
   closed = false;
   onerror: (() => void) | null = null;
 
-  constructor(readonly url: string) {
+  constructor(url: string) {
+    this.url = url;
     TestEventSource.instances.push(this);
   }
 

@@ -7,10 +7,13 @@ type Credential = {
 };
 
 export class VirtualAuthenticator {
-  private constructor(
-    private readonly session: CDPSession,
-    readonly id: string,
-  ) {}
+  private readonly session: CDPSession;
+  readonly id: string;
+
+  private constructor(session: CDPSession, id: string) {
+    this.session = session;
+    this.id = id;
+  }
 
   static async create(context: BrowserContext, page: Page) {
     const session = await context.newCDPSession(page);
