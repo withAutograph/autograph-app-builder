@@ -57,8 +57,6 @@ export type BuilderDraftAutosave<T> = {
    * settle; the next poll remains authoritative.
    */
   discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
-  /** Drops queued work superseded by a newer remote revision. */
-  discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;

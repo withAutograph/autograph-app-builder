@@ -716,6 +716,7 @@ describe("Vercel-faithful App Builder flow", () => {
       connectedConnections: [],
       storageProvider: null,
       deploymentProvider: null,
+      focusOrigin: "github" as const,
       appNameEditedByUser: true,
       repositoryEditedByUser: false,
     };
