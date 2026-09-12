@@ -84,10 +84,11 @@ export function HandoffProvisioningProgress({
       source.addEventListener("snapshot", receive);
       source.addEventListener("end", receive);
       source.onerror = () => {
-        if (closed) return;
-        // Keep this EventSource alive: its native reconnect sends the most
-        // recent SSE event id as Last-Event-ID. Replacing it here would lose
-        // that cursor and turn a transient disconnect into a full replay.
+        if (!closed) {
+          // Keep this EventSource alive: its native reconnect sends the most
+          // recent SSE event id as Last-Event-ID. Replacing it here would lose
+          // that cursor and turn a transient disconnect into a full replay.
+        }
       };
     };
     connect();
