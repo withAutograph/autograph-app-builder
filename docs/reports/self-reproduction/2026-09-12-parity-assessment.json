@@ -1,0 +1,615 @@
+{
+  "schemaVersion": "self-reproduction-parity/v1",
+  "runId": "2026-09-12-source-audit",
+  "visualScoresAdvisory": true,
+  "rows": [
+    {
+      "side": "reference",
+      "requirementId": "anonymous-entry",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "authentication",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "durable-draft",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "provider-return-success",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "provider-return-error",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "app-creation",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "preview-access",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "cancellation",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "retry",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "session-recovery",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "independent-child",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "documentation",
+      "kind": "workflow",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "server-first",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "narrow-client",
+      "kind": "framework",
+      "status": "failed",
+      "reason": "Whole anonymous and authenticated page shells are client roots; see source audit.",
+      "artifacts": ["2026-09-12-parity-audit.md"]
+    },
+    {
+      "side": "reference",
+      "requirementId": "server-writes",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "auth-cache-isolation",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "suspense",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "cache-components",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "partial-prefetching",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "instant-navigation",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "navigation-continuity",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "pending-optimistic",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "semantic-tokens",
+      "kind": "framework",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop/panel-resize",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop/keyboard",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop/loading",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop/empty",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop/error",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-wide/panel-resize",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-wide/keyboard",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-wide/loading",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-wide/empty",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-wide/error",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-window/panel-resize",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-window/keyboard",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-window/loading",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-window/empty",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "reference",
+      "requirementId": "capture/desktop-window/error",
+      "kind": "capture",
+      "status": "unassessed",
+      "reason": "No evaluator observation supplied.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "anonymous-entry",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "authentication",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "durable-draft",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "provider-return-success",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "provider-return-error",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "app-creation",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "preview-access",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "cancellation",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "retry",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "session-recovery",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "independent-child",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "documentation",
+      "kind": "workflow",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "server-first",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "narrow-client",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "server-writes",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "auth-cache-isolation",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "suspense",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "cache-components",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "partial-prefetching",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "instant-navigation",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "navigation-continuity",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "pending-optimistic",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "semantic-tokens",
+      "kind": "framework",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop/panel-resize",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop/keyboard",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop/loading",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop/empty",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop/error",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-wide/panel-resize",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-wide/keyboard",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-wide/loading",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-wide/empty",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-wide/error",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-window/panel-resize",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-window/keyboard",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-window/loading",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-window/empty",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    },
+    {
+      "side": "candidate",
+      "requirementId": "capture/desktop-window/error",
+      "kind": "capture",
+      "status": "blocked",
+      "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+      "artifacts": []
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 
+import { reconcileDeadEveEvalPrewarmLocks } from "../lib/testing/eve-eval-lifecycle";
 import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
 import { runWithTestCapability } from "./run-with-test-capability.mts";
 import {
@@ -129,6 +130,16 @@ if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =
   gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact";
+if (realSandbox) {
+  const locks = await reconcileDeadEveEvalPrewarmLocks(repositoryRoot);
+  for (const lock of locks) {
+    if (lock.status === "active") continue;
+    const owner = lock.pid === undefined ? "" : ` owned by PID ${lock.pid}`;
+    if (lock.status === "removed")
+      console.error(`eve eval: removed dead prewarm lock ${lock.lock}${owner}`);
+    else console.error(`eve eval: preserved prewarm lock ${lock.lock}${owner}: ${lock.reason}`);
+  }
+}
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
 if (liveModel) {

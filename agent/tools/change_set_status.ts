@@ -12,6 +12,15 @@ import {
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+export function isCandidateExportTextPath(path: string): boolean {
+  if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
+    return false;
+  }
+  return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql)$/u.test(
+    path,
+  );
+}
+
 export async function exactNormalizedChangeSet(input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
@@ -47,19 +56,82 @@ export async function exactNormalizedChangeSet(input: {
   );
 }
 
+async function exportAppliedTextFiles(input: {
+  state: Extract<
+    ReturnType<typeof appBuilderWorkflowState.get>,
+    { phase: "validated" | "reviewed" | "validation_failed" }
+  >;
+  sandbox: SandboxSession;
+}) {
+  const observed = hasTestCapability("simulated-target")
+    ? await inspectFixtureApplyOverlay(
+        input.sandbox,
+        input.state.applyReceipt.applyRoot,
+        input.state.appSpec.appId,
+      )
+    : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
+  const changes = overlayChanges(
+    {
+      files: input.state.applyReceipt.preTree,
+      treeDigest: input.state.applyReceipt.preTreeDigest,
+    },
+    observed,
+  );
+  const changedFiles = changes.filter((change) => change.kind !== "deleted");
+  const textFiles = changedFiles.filter((change) => isCandidateExportTextPath(change.path));
+  return {
+    changes,
+    exportFiles: await Promise.all(
+      textFiles.map(async (change) => ({
+        path: change.path,
+        content: await input.sandbox.readTextFile({
+          path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${change.path}`,
+        }),
+      })),
+    ),
+    exportOmissions: changedFiles
+      .filter((change) => !textFiles.includes(change))
+      .map((change) => ({ path: change.path, reason: "non-text artifact" })),
+  };
+}
+
 export default defineTool({
   description:
-    "Summarize the reviewed changes after repository validation succeeds. This never publishes or changes an external repository.",
-  inputSchema: z.object({}),
-  async execute(_input, ctx) {
-    void _input;
+    "Summarize changes after repository validation succeeds, or export the applied source for diagnosis when validation fails. A failed change set is explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+  inputSchema: z.strictObject({ includeContent: z.boolean().default(false) }),
+  async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "validated" && state.phase !== "reviewed")
+    if (
+      state.phase !== "validated" &&
+      state.phase !== "reviewed" &&
+      state.phase !== "validation_failed"
+    )
       throw new Error("Run the repository validation before reviewing its changes.");
-    const changeSet = await exactNormalizedChangeSet({
-      state,
-      sandbox: await ctx.getSandbox(),
-    });
-    return { ...changeSet, reviewed: state.phase === "reviewed" };
+    const sandbox = await ctx.getSandbox();
+    if (state.phase === "validation_failed") {
+      if (!input.includeContent)
+        return {
+          status: "validation_failed" as const,
+          reviewed: false,
+          validationFailure: state.validationFailure,
+        };
+      return {
+        status: "validation_failed" as const,
+        reviewed: false,
+        validationFailure: state.validationFailure,
+        ...(await exportAppliedTextFiles({ state, sandbox })),
+      };
+    }
+    const changeSet = await exactNormalizedChangeSet({ state, sandbox });
+    const exported = input.includeContent
+      ? await exportAppliedTextFiles({ state, sandbox })
+      : undefined;
+    return {
+      ...changeSet,
+      reviewed: state.phase === "reviewed",
+      ...(exported === undefined
+        ? {}
+        : { exportFiles: exported.exportFiles, exportOmissions: exported.exportOmissions }),
+    };
   },
 });

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "self-reproduction-parity/v1",
+  "runId": "2026-09-12-source-audit",
+  "producer": "evaluator",
+  "fixtureVersion": 1,
+  "reference": {
+    "output": "available",
+    "reason": "Reference source inspected; no runtime fixture results collected.",
+    "sourceRevision": "65f9ed06edb0313207541a1afe7e92d16dd9a85f",
+    "observations": [
+      {
+        "requirementId": "narrow-client",
+        "disposition": "observed",
+        "reason": "Whole anonymous and authenticated page shells are client roots; see source audit.",
+        "method": "source-review",
+        "artifacts": ["2026-09-12-parity-audit.md"],
+        "assertions": [
+          {
+            "id": "interactive-leaves-only",
+            "passed": false,
+            "detail": "anonymous-builder.tsx owns main/header; app-builder.tsx owns the full authenticated main/form.",
+            "artifacts": ["2026-09-12-parity-audit.md"]
+          }
+        ]
+      }
+    ]
+  },
+  "candidate": {
+    "output": "infrastructure-unavailable",
+    "reason": "Reviewed candidate export and paired runtime are unavailable in this worktree.",
+    "sourceRevision": "unavailable",
+    "observations": []
+  }
+}

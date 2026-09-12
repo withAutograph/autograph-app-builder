@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { uiPreviewSourceDigest, validateUiPreview } from "./ui-preview";
+import {
+  publicPreviewIcons,
+  uiPreviewInputSchema,
+  uiPreviewSourceDigest,
+  validateUiPreview,
+} from "./ui-preview";
 import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 const preview = {
@@ -115,6 +120,84 @@ describe("component-backed UI preview policy", () => {
     ).toThrow(/do not define replacement components/u);
   });
 
+  it.each(["button", "input", "select", "textarea", "dialog", "table"])(
+    "rejects a raw %s control even when defined directly in a route",
+    (tag) => {
+      expect(() =>
+        validateUiPreview({
+          ...preview,
+          files: [
+            {
+              path: "src/routes/index.tsx",
+              content: `export default function Page() { return <${tag} />; }`,
+            },
+          ],
+        }),
+      ).toThrow(new Error("Local workflow components must compose public Arrusted primitives."));
+    },
+  );
+
+  it("rejects buttonClassName as an unlisted public catalog import", () => {
+    const helperPreview = {
+      ...preview,
+      files: [
+        {
+          path: "src/routes/index.tsx",
+          content:
+            'import { buttonClassName } from "@autograph/components"; export default function Page() { return <a className={buttonClassName()} href="/requests">Review</a>; }',
+        },
+      ],
+    };
+
+    expect(() => validateUiPreview(helperPreview)).toThrow(
+      new Error(
+        "UI preview catalog import is missing from its manifest: @autograph/components#buttonClassName",
+      ),
+    );
+
+    const result = uiPreviewInputSchema.safeParse({
+      ...helperPreview,
+      manifest: {
+        ...helperPreview.manifest,
+        productionComponents: [
+          ...helperPreview.manifest.productionComponents,
+          { name: "buttonClassName", source: "@autograph/components" },
+        ],
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual([
+        expect.objectContaining({
+          code: "invalid_format",
+          path: ["manifest", "productionComponents", 1, "name"],
+        }),
+      ]);
+    }
+  });
+
+  it("accepts route composition using a public Button and local fixture state", () => {
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content: `import { useState } from "react";
+import { Button } from "@autograph/components";
+export default function Page() {
+  const [remaining, setRemaining] = useState(3);
+  return <section>
+    <p>{remaining} requests awaiting review</p>
+    <Button disabled={remaining === 0} onClick={() => setRemaining(remaining - 1)}>Review next</Button>
+  </section>;
+}`,
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
   it("requires every public component and composition import in the manifest", () => {
     expect(() =>
       validateUiPreview({
@@ -128,6 +211,43 @@ describe("component-backed UI preview policy", () => {
         ],
       }),
     ).toThrow(/missing from its manifest/u);
+  });
+
+  it("rejects invented icons with the exact public inventory", () => {
+    expect(publicPreviewIcons).toContain("ChevronLeft");
+    expect(publicPreviewIcons).not.toContain("ArrowLeft");
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content:
+              'import { ArrowLeft } from "@autograph/icons"; export default function Page() { return <ArrowLeft />; }',
+          },
+        ],
+        manifest: {
+          ...preview.manifest,
+          productionComponents: [],
+          productionIcons: [{ name: "ArrowLeft", source: "@autograph/icons" }],
+        },
+      }),
+    ).toThrow(/not a public @autograph\/icons export.*ChevronLeft/u);
+  });
+
+  it("rejects unrepairable single-line preview source", () => {
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            path: "src/routes/index.tsx",
+            content: `export default function Page() { return <main>${"x".repeat(2100)}</main>; }`,
+          },
+        ],
+        manifest: { ...preview.manifest, productionComponents: [] },
+      }),
+    ).toThrow(/format JSX/u);
   });
 
   it("binds manifest decisions and assumptions into the immutable revision", () => {

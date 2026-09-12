@@ -1,18 +1,6 @@
 #!/bin/sh
-#MISE description="Run the opt-in live App Builder self-reproduction benchmark"
+#MISE description="Run native live self-reproduction and preserve external comparison evidence"
 set -eu
-
-source_root=${SELF_REPRODUCTION_ARRUSTED_ROOT:-}
-if [ -z "$source_root" ] && [ -d "$PWD/../arrusted-development" ]; then
-  source_root=$PWD/../arrusted-development
-fi
-if [ -z "$source_root" ] && [ -d "/Volumes/Home/jasonmorganson/Documents/GitHub/withAutograph/arrusted-development" ]; then
-  source_root=/Volumes/Home/jasonmorganson/Documents/GitHub/withAutograph/arrusted-development
-fi
-if [ -z "$source_root" ] || [ ! -d "$source_root" ]; then
-  echo "eval:self-reproduction: set SELF_REPRODUCTION_ARRUSTED_ROOT to a canonical Arrusted checkout" >&2
-  exit 2
-fi
 
 # Eve deliberately retains interrupted prewarm locks for crash recovery. For
 # this opt-in single-run eval, clear only locks whose recorded owner is dead so
@@ -26,7 +14,4 @@ for owner_file in .eve/sandbox-cache/template-locks/vercel-authorized/*/owner.js
 done
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" --import tsx scripts/run-eve-eval.mts \
-  --gate-a-profile sandbox --gate-a-source-root "$source_root" \
-  --live-model self-reproduction \
-  --strict --verbose --skip-report --timeout 900000 "$@"
+  "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts "$@"

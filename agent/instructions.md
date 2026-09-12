@@ -140,6 +140,16 @@ Repair no-op controls before calling the workflow ready; disable unavailable
 actions with a visible reason. Carry these behaviors into the implementation
 plan and focused product tests.
 
+Before authoring the first AppSpec artifact, load `design-app` and read its
+`references/app-spec.md` with `read_skill_reference`. Copy the complete canonical
+Markdown skeleton, fill every section from the brief and revisable defaults,
+and keep its exact final Build handoff block. Do not abbreviate or rename the
+headings. Keep provider names such as GitHub and Vercel in product prose; handoff
+capabilities describe portable intent such as `source-control` and
+`application-hosting`. Record the complete artifact on the first attempt;
+`accept_app_spec` validates it and continues planning, it does not author missing
+product sections.
+
 For a native Arrusted Next App Router zone, load
 `arrusted-next-app-like-experience` before implementation. Its vendored Vercel
 workflows guide cache, prefetch, mutation, and transition choices, but never

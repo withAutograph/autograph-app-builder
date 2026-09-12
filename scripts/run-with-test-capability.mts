@@ -1,10 +1,14 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, resolve as pathResolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
+
+import {
+  createEveEvalRuntimeDirectories,
+  waitForEveEvalChild,
+} from "../lib/testing/eve-eval-lifecycle";
 
 const MODE_MASK = 18;
 const ZERO = 0;
@@ -23,6 +27,9 @@ if (
   throw new Error("The structural test package root was not owner-bound.");
 const preload = pathToFileURL(
   pathResolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
+).href;
+const evalFetchPreload = pathToFileURL(
+  pathResolve(repositoryRoot, "scripts/eve-eval-fetch-preload.mjs"),
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = pathResolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
@@ -190,21 +197,25 @@ export async function runWithTestCapability(options: {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const publicKeySource = publicKey.export({ format: "der", type: "spki" }).toString("base64");
   const privateKeySource = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+  const evalRuntime = options.profile === "eve" ? createEveEvalRuntimeDirectories() : undefined;
   const child = spawn(options.command, [...options.args], {
     cwd: repositoryRoot,
+    detached: options.profile === "eve" && process.platform !== "win32",
     stdio: ["inherit", "inherit", "inherit", "pipe"],
     env: {
       ...childEnvironment(),
+      HOME: evalRuntime?.home ?? process.env.HOME,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
-      // Never recover another eval's unfinished queues. Keep the directory
-      // after exit for failure diagnostics; it is not a dependency cache.
-      WORKFLOW_LOCAL_DATA_DIR:
-        options.profile === "eve"
-          ? mkdtempSync(pathResolve(tmpdir(), "app-builder-eval-workflow-"))
-          : undefined,
+      // Never recover another eval's unfinished queues. Failed runs retain
+      // this task-owned directory for diagnostics; successful runs remove it.
+      WORKFLOW_LOCAL_DATA_DIR: options.profile === "eve" ? evalRuntime?.workflowData : undefined,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
-      NODE_OPTIONS: `--import=${preload}`,
+      NODE_OPTIONS:
+        options.profile === "eve"
+          ? `--import=${preload} --import=${evalFetchPreload}`
+          : `--import=${preload}`,
+      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
     },
@@ -265,12 +276,12 @@ export async function runWithTestCapability(options: {
       child.kill("SIGKILL");
     }
   });
-  return new Promise<number>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      clearTimeout(timeout);
-      authorization.destroy();
-      resolve(code ?? (signal === null ? 1 : 128));
-    });
-  });
+  try {
+    const exitCode = await waitForEveEvalChild({ authorization, child });
+    if (exitCode === ZERO && evalRuntime !== undefined)
+      rmSync(evalRuntime.root, { recursive: true });
+    return exitCode;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

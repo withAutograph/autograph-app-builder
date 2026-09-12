@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- source traversal preserves deterministic filesystem order. */
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
