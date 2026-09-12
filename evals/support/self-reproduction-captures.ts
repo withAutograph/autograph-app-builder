@@ -6,7 +6,7 @@ import { captureStates, desktopViewports, sides } from "./self-reproduction-pari
 import type { Observation } from "./self-reproduction-parity";
 
 export type CaptureState = (typeof captureStates)[number];
-export type CaptureAdapter = {
+export interface CaptureAdapter {
   // Seed only isolated test-owned records. Missing generated controls must be
   // returned as missing-functionality, never hidden by fixture HTML or mocks.
   prepare: (
@@ -34,7 +34,7 @@ export type CaptureAdapter = {
       detail: string;
     }[]
   >;
-};
+}
 
 /** Uses an already available browser; never starts a server or provider job. */
 export async function captureParity(input: {
