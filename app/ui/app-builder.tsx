@@ -1293,12 +1293,12 @@ export function Builder({
           : undefined;
   const updateBrief = (brief: string) => {
     setForm((current) => {
-      // RHF owns the rendered input. An initial recovery read can settle
-      // between consecutive native events, so the synchronous mirror may
-      // still hold a generated name while the registered field already holds
-      // the user's manual name. Read RHF directly before deciding whether a
-      // brief is allowed to generate a replacement.
-      const currentAppName = builderForm.getValues("appName");
+      // `formSnapshot` is updated atomically by every builder field handler.
+      // Do not read RHF's per-field store here: while an RSC acknowledgement
+      // is hydrating it can briefly combine the latest name with the incoming
+      // brief. That transient composite must never become a durable generated
+      // name on an OAuth-return checkpoint.
+      const currentAppName = current.appName;
       // Preserve a name that RHF knows was entered directly, even if an older
       // Server Action/RSC acknowledgement has not yet caught up with the
       // persisted ownership marker. A newer authoritative remote revision
