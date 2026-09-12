@@ -3,7 +3,6 @@ import core from "ultracite/oxlint/core";
 
 const deferredRules = Object.fromEntries(
   [
-    "eslint/eqeqeq",
     "eslint/func-names",
     "eslint/max-classes-per-file",
     "eslint/no-duplicate-imports",
