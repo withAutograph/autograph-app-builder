@@ -79,7 +79,7 @@ function ruleSignature(
 
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
-  for (const file of files.filter((file) => /\.css$/iu.test(file.path))) {
+  for (const file of files.filter((sourceFile) => /\.css$/iu.test(sourceFile.path))) {
     const css = parse(file.content, { from: file.path });
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP
