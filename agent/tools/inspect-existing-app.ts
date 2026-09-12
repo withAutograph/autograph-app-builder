@@ -4,8 +4,8 @@ import { z } from "zod";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { safeSourcePath } from "@/lib/repository/source-path";
-import sourceStatus from "./source_status";
-import prepareWorkspace from "./prepare_workspace";
+import sourceStatus from "./source-status";
+import prepareWorkspace from "./prepare-workspace";
 
 const maximumFileBytes = 262_144;
 const maximumTotalBytes = 1_048_576;

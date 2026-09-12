@@ -15,7 +15,7 @@ import {
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 
-import acceptAppSpec from "./accept_app_spec";
+import acceptAppSpec from "./accept-app-spec";
 
 export default defineTool({
   description:

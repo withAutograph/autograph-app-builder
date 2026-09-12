@@ -20,7 +20,7 @@ import {
   exactProposalMatch,
   proposalFromJournal,
 } from "@/lib/repository/local-publication";
-import { exactLocalPublicationProposal } from "./local_publication_status";
+import { exactLocalPublicationProposal } from "./local-publication-status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);

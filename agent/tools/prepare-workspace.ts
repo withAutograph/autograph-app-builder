@@ -18,7 +18,7 @@ import {
   readPreparedSandboxWorkspaceRecord,
 } from "@/lib/repository/supported-template";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
-import sourceStatus from "./source_status";
+import sourceStatus from "./source-status";
 
 export default defineTool({
   description:

@@ -14,8 +14,8 @@ import {
   assertUpstreamMutationAllowed,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import sourceStatus from "./source_status";
-import prepareWorkspace from "./prepare_workspace";
+import sourceStatus from "./source-status";
+import prepareWorkspace from "./prepare-workspace";
 
 export default defineTool({
   description:

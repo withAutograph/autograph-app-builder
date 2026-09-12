@@ -70,7 +70,8 @@ function sandboxFixture() {
 describe("fresh bootstrap source workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue();
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The unavailable snapshot is intentional test input.
+    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue(undefined);
     mocks.readPreparedSandboxSourceManifest.mockResolvedValue([
       {
         mode: "100644",
