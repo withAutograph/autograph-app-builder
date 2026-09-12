@@ -910,12 +910,19 @@ export function Builder({
     control: builderForm.control,
     defaultValue: initialForm,
   }) as BuilderForm;
+  // RHF remains the form owner. This ref is only its synchronous mutation
+  // mirror for action boundaries: a provider click can immediately follow an
+  // input event while React is still publishing useWatch's render update.
+  // Reading this mirror prevents a checkpoint from observing the prior field
+  // value during that narrow window.
+  const formSnapshot = useRef<BuilderForm>(initialForm);
   const localFormMutationVersion = useRef(0);
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
-      const current = builderForm.getValues();
+      const current = formSnapshot.current;
       const next = typeof update === "function" ? update(current) : update;
+      formSnapshot.current = next;
       (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
@@ -1168,7 +1175,7 @@ export function Builder({
       // A provider redirect can follow the final input event immediately.
       // Read RHF synchronously so the durable checkpoint always contains that
       // event even before useWatch has produced the next render.
-      form: builderForm.getValues(),
+      form: formSnapshot.current,
       team,
       gitScope,
       model,
@@ -1224,6 +1231,7 @@ export function Builder({
       draftUpdatedAt.current = remote.updatedAt;
       activeDraftId.current = remote.draftId;
       const snapshot = remote.record.draft;
+      formSnapshot.current = snapshot.form;
       builderForm.reset(snapshot.form);
       setTeam(snapshot.team);
       setGitScope(snapshot.gitScope);
@@ -1365,6 +1373,7 @@ export function Builder({
           return;
         }
         const { snapshot } = entry;
+        formSnapshot.current = snapshot.form;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);
@@ -1404,6 +1413,7 @@ export function Builder({
     )
       return;
     const snapshot = resumed.draft;
+    formSnapshot.current = snapshot.form;
     builderForm.reset(snapshot.form);
     activeDraftId.current = durableDraftId;
     draftRevision.current = durableDraftRevision;
