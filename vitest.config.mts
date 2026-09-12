@@ -1,11 +1,10 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig } from "vitest/config";
 
-const dirname = path.dirname(fileURLToPath(import.meta.url));
+const { dirname } = import.meta;
 
 export default defineConfig({
   resolve: {

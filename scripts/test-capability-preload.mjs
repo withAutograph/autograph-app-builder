@@ -27,7 +27,7 @@ const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
   !isAbsolute(repositoryRoot) ||
@@ -117,7 +117,7 @@ function readPortFrame(port) {
   throw new Error("Structural test authorization timed out.");
 }
 function contextForProcess() {
-  return isMainThread ? "main" : `worker:${fileURLToPath(import.meta.url)}`;
+  return isMainThread ? "main" : `worker:${import.meta.filename}`;
 }
 function requestAuthorization() {
   const context = contextForProcess();
