@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { builderHandoffs, builderProvisioningJournals } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {

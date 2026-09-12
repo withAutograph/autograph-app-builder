@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import type { GitHubMutationReceipt } from "./github-publication";
 import { GITHUB_PUBLICATION_VERSION } from "./github-publication";
 import {

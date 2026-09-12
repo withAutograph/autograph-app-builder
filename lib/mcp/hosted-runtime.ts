@@ -1,6 +1,6 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { createSameOriginEveTransport, type HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";

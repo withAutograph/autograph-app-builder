@@ -34,7 +34,7 @@ test.use({ trace: "off", screenshot: "off", video: "off" });
 
 test.beforeEach(async () => resetApplicationState());
 
-async function completeHandoff(page: import("playwright/test").Page) {
+async function completeHandoff(page: Page) {
   await page.getByRole("button", { name: "Create App" }).click();
   await expect(page).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u, {
     timeout: 30_000,

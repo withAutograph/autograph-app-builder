@@ -1,7 +1,7 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { sandboxExecutionLeases } from "../db/schema";
 import { hostedPrincipalSchema, type HostedPrincipal } from "../eve/hosted-auth";
 import {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,

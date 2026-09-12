@@ -1,7 +1,7 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from "./hosted-route";
 
