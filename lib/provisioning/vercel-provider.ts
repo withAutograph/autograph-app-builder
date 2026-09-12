@@ -52,7 +52,7 @@ export async function provisionVercelProject(input: {
       ? `?teamId=${encodeURIComponent(input.installation.scopeId)}`
       : "";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function vercel(args: {
     method?: "GET" | "POST";
     path: string;
@@ -92,7 +92,7 @@ export async function provisionVercelProject(input: {
     return { status: response.status, body };
   }
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function inspect(name: string) {
     return vercel({
       path: `/v9/projects/${encodeURIComponent(name)}`,

@@ -394,7 +394,7 @@ export function createLocalEveSessionService(
   }
   if (options.restartGeneration !== undefined) state.restartGeneration = options.restartGeneration;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function sessionFor(sessionId: string): ClientSession {
     const existing = localSessionHandles.get(sessionId);
     if (existing !== undefined) return existing;
@@ -403,7 +403,7 @@ export function createLocalEveSessionService(
     return attached;
   }
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function recoverDurableTail(sessionId: string) {
     if (!state.recoveryRequired.has(sessionId)) return;
     const existing = state.recoveries.get(sessionId);
@@ -431,7 +431,7 @@ export function createLocalEveSessionService(
     return recovery;
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function sessionAtBufferedTail(sessionId: string): ClientSession {
     const attached = client.sessions.attach(sessionId, {
       streamIndex: localSessionEvents.get(sessionId)?.length ?? 0,
@@ -440,7 +440,7 @@ export function createLocalEveSessionService(
     return attached;
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function consumeDurableTail(
     sessionId: string,
     observeEvent: (event: MessageStreamEvent) => void,
@@ -479,7 +479,7 @@ export function createLocalEveSessionService(
     state.tailPumps.set(sessionId, pump);
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function consumeSessionResponse(sessionId: string, response: CancellableResponse) {
     consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
       cancelTurn: async (turnId) =>
@@ -488,7 +488,7 @@ export function createLocalEveSessionService(
     });
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function touchSession(sessionId: string) {
     const metadata = state.metadata.get(sessionId);
     if (metadata !== undefined)
@@ -498,7 +498,7 @@ export function createLocalEveSessionService(
       });
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function localResultOptions(sessionId: string) {
     const interruption = state.modelInterruptions.get(sessionId);
     return {
@@ -517,7 +517,7 @@ export function createLocalEveSessionService(
     };
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireSettledModelTurn(sessionId: string) {
     if (state.restartInterrupted.has(sessionId)) await recoverDurableTail(sessionId);
     if (state.modelInterruptions.has(sessionId))

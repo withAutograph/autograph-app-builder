@@ -173,7 +173,7 @@ export async function provisionGitHubRepository(input: {
     fetch: request,
   });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function github(args: {
     method?: "GET" | "POST";
     path: string;
@@ -204,7 +204,7 @@ export async function provisionGitHubRepository(input: {
     }
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function installationToken() {
     const authentication = await app.octokit.auth({
       type: "installation",
@@ -230,7 +230,7 @@ export async function provisionGitHubRepository(input: {
     return token;
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function verifyInstallation() {
     const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
       installation_id: Number(input.installation.installationId),
@@ -247,7 +247,7 @@ export async function provisionGitHubRepository(input: {
       throw new Error("installation-inactive");
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refreshUserToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -354,7 +354,7 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function repository(name: string) {
     return github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}`,
@@ -363,7 +363,7 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function writeStarter(name: string) {
     const blobs = new Map<string, string>();
     const writeBlob = async (file: (typeof input.source.files)[number]) => {
@@ -422,7 +422,7 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readBack(name: string): Promise<GitHubProvisionResult> {
     const repo = await repository(name);
     if (repo.status !== 200) throw new Error("repository-missing");

@@ -106,7 +106,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
   let databasePromise: Promise<Database> | undefined;
   const dependencies = { ...defaultDependencies, ...input.dependencies };
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function database(): Promise<Database> {
     if (input.openDatabase === undefined) {
       throw new Error("Hosted GitHub publication database is unconfigured.");

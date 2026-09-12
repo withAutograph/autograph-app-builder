@@ -35,7 +35,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   const isPending = updatePending || isUploading || isDeleting;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -64,7 +64,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(false);
   }
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function handleDelete() {
     const currentImage = session?.user.image;
 

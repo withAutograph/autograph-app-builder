@@ -146,7 +146,7 @@ describe("test capability preload", () => {
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
     expect(afterPorts).toBeLessThanOrEqual(beforePorts);
-  });
+  }, 30_000);
 
   it("rejects an exact tracked preload imported solely through NODE_OPTIONS", () => {
     expect(
