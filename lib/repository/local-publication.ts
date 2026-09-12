@@ -12,6 +12,7 @@ export const LOCAL_PUBLICATION_MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const LOCAL_PUBLICATION_MAX_CHANGE_BYTES = 16 * 1024 * 1024;
 export const LOCAL_PUBLICATION_MAX_DIRTY_BYTES = 8 * 1024 * 1024;
 export const LOCAL_PUBLICATION_ALLOWED_MODES = ["644", "755"] as const;
+const topologyPath = "microfrontends.json";
 
 export const stableDigest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -226,6 +227,13 @@ export function assertExactReviewedChangeSet(review: ReviewedChangeSetReceipt): 
     throw new Error("The outer reviewed change-set receipt digest is malformed.");
 }
 
+export function executionOrder(paths: readonly string[]): readonly string[] {
+  return [
+    ...paths.filter((path) => path !== topologyPath),
+    ...paths.filter((path) => path === topologyPath),
+  ];
+}
+
 export function createLocalPublicationProposal(input: {
   sourceReceipt: SourceReceipt;
   destination: DestinationSnapshot;
@@ -284,42 +292,6 @@ export function createLocalPublicationProposal(input: {
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
 
-export function assertExactProposal(proposal: LocalPublicationProposal): void {
-  if (proposal.version !== LOCAL_PUBLICATION_VERSION)
-    throw new Error("A canonical V2 local-publication proposal is required.");
-  if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
-    throw new Error("The local-publication proposal digest is malformed.");
-  if (
-    JSON.stringify(proposal.approvedPaths) !==
-    JSON.stringify(proposal.changes.map(({ path }) => path))
-  )
-    throw new Error("The local-publication proposal paths are malformed.");
-  if (
-    JSON.stringify(proposal.executionPaths) !==
-    JSON.stringify(executionOrder(proposal.approvedPaths))
-  )
-    throw new Error("The local-publication execution order is malformed.");
-}
-
-const topologyPath = "microfrontends.json";
-
-export function executionOrder(paths: readonly string[]): readonly string[] {
-  return [
-    ...paths.filter((path) => path !== topologyPath),
-    ...paths.filter((path) => path === topologyPath),
-  ];
-}
-
-export function exactProposalMatch(
-  left: LocalPublicationProposal,
-  right: LocalPublicationProposal,
-): boolean {
-  return (
-    left.digest === right.digest &&
-    JSON.stringify(canonicalProposal(left)) === JSON.stringify(canonicalProposal(right))
-  );
-}
-
 function canonicalProposal(proposal: LocalPublicationProposal) {
   return {
     version: proposal.version,
@@ -343,6 +315,33 @@ function canonicalProposal(proposal: LocalPublicationProposal) {
     preconditionStatusDigest: proposal.preconditionStatusDigest,
     unrelatedProjectionDigest: proposal.unrelatedProjectionDigest,
   };
+}
+
+export function assertExactProposal(proposal: LocalPublicationProposal): void {
+  if (proposal.version !== LOCAL_PUBLICATION_VERSION)
+    throw new Error("A canonical V2 local-publication proposal is required.");
+  if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
+    throw new Error("The local-publication proposal digest is malformed.");
+  if (
+    JSON.stringify(proposal.approvedPaths) !==
+    JSON.stringify(proposal.changes.map(({ path }) => path))
+  )
+    throw new Error("The local-publication proposal paths are malformed.");
+  if (
+    JSON.stringify(proposal.executionPaths) !==
+    JSON.stringify(executionOrder(proposal.approvedPaths))
+  )
+    throw new Error("The local-publication execution order is malformed.");
+}
+
+export function exactProposalMatch(
+  left: LocalPublicationProposal,
+  right: LocalPublicationProposal,
+): boolean {
+  return (
+    left.digest === right.digest &&
+    JSON.stringify(canonicalProposal(left)) === JSON.stringify(canonicalProposal(right))
+  );
 }
 
 export function proposalFromJournal(receipt: LocalPublicationJournal): LocalPublicationProposal {

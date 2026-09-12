@@ -83,6 +83,18 @@ export function parseSandboxExecutionLeaseRow(input: unknown) {
   return lease;
 }
 
+export function sandboxLeaseAdvisoryKey(principal: HostedPrincipal, adapterSessionId: string) {
+  return JSON.stringify([
+    "sandbox_execution_lease_v1",
+    "session",
+    principal.issuer,
+    principal.audience,
+    principal.workspaceId,
+    principal.ownerUserId,
+    adapterSessionId,
+  ]);
+}
+
 async function lockExactLease(
   database: Transaction,
   principal: HostedPrincipal,
@@ -364,16 +376,4 @@ export function createPostgresSandboxExecutionLeaseStore(
       });
     },
   };
-}
-
-export function sandboxLeaseAdvisoryKey(principal: HostedPrincipal, adapterSessionId: string) {
-  return JSON.stringify([
-    "sandbox_execution_lease_v1",
-    "session",
-    principal.issuer,
-    principal.audience,
-    principal.workspaceId,
-    principal.ownerUserId,
-    adapterSessionId,
-  ]);
 }

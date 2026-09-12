@@ -88,6 +88,7 @@ export function waitForDevelopmentRuntimeChange(input: {
     let settled = false;
     let debounce: NodeJS.Timeout | undefined;
     let audit: NodeJS.Timeout | undefined;
+    const handlers: { aborted?: () => void } = {};
     const finish = (changed: boolean) => {
       if (settled) return;
       settled = true;
@@ -97,10 +98,11 @@ export function waitForDevelopmentRuntimeChange(input: {
         audit = undefined;
       }
       watcher?.close();
-      input.signal?.removeEventListener("abort", aborted);
+      if (handlers.aborted !== undefined)
+        input.signal?.removeEventListener("abort", handlers.aborted);
       resolve(changed);
     };
-    const aborted = () => finish(false);
+    handlers.aborted = () => finish(false);
     const check = async () => {
       if (checking) {
         pending = true;
@@ -136,7 +138,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       finish(false);
       return;
     }
-    input.signal?.addEventListener("abort", aborted, { once: true });
+    input.signal?.addEventListener("abort", handlers.aborted, { once: true });
     try {
       watcher = watch(input.repositoryRoot, { recursive: true }, schedule);
       watcher.once("error", schedule);

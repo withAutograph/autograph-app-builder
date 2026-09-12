@@ -272,20 +272,21 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         },
       });
       let settled = false;
+      const timer = { timeout: undefined };
       const cleanup = () => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timer.timeout !== undefined) clearTimeout(timer.timeout);
         channel.port1.close();
       };
-      const timeout = setTimeout(
+      timer.timeout = setTimeout(
         () => {
           cleanup();
           void this.terminate();
         },
         isTimeoutFixture ? 250 : timeoutMs,
       );
-      timeout.unref();
+      timer.timeout.unref();
       channel.port1.unref();
       this.once("error", cleanup);
       this.once("exit", cleanup);

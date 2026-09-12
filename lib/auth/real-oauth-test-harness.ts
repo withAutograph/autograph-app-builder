@@ -188,6 +188,18 @@ export async function registerTestCursorClient(harness: RealOAuthHarness) {
 }
 
 /** Complete an actual browser-cookie authorization/consent and PKCE exchange. */
+export async function verifyRealOAuthToken(harness: RealOAuthHarness, accessToken: string) {
+  const response = await harness.customFetchImpl(`${issuer}/jwks`);
+  const jwks = (await response.json()) as { keys: JsonWebKey[] };
+  return (
+    await jwtVerify(accessToken, createLocalJWKSet(jwks), {
+      issuer,
+      audience: resource,
+      algorithms: ["ES256"],
+    })
+  ).payload;
+}
+
 export async function grantRealOAuth(
   harness: RealOAuthHarness,
   browserHeaders: Headers,
@@ -253,18 +265,6 @@ export async function grantRealOAuth(
   const tokens = (await response.json()) as OAuthTokens;
   const claims = await verifyRealOAuthToken(harness, tokens.access_token);
   return { tokens, claims, consentRequired };
-}
-
-export async function verifyRealOAuthToken(harness: RealOAuthHarness, accessToken: string) {
-  const response = await harness.customFetchImpl(`${issuer}/jwks`);
-  const jwks = (await response.json()) as { keys: JsonWebKey[] };
-  return (
-    await jwtVerify(accessToken, createLocalJWKSet(jwks), {
-      issuer,
-      audience: resource,
-      algorithms: ["ES256"],
-    })
-  ).payload;
 }
 
 export async function refreshRealOAuth(

@@ -146,6 +146,20 @@ export type CanonicalTemplateSnapshot = Omit<SupportedTemplateSnapshot, "sourceS
   }[];
 };
 
+function isGitObjectId(value: unknown): value is string {
+  return (
+    typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value))
+  );
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  return Object.keys(value).toSorted().join("\0") === [...expected].toSorted().join("\0");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function parseCanonicalTemplateSnapshot(value: unknown): CanonicalTemplateSnapshot {
   if (
     !isRecord(value) ||
@@ -233,22 +247,8 @@ const clonedSourceReceiptEvidenceKeys = [...legacySourceReceiptEvidenceKeys, "pr
 const legacySourceReceiptKeys = [...legacySourceReceiptEvidenceKeys, "sourcePath"] as const;
 const clonedSourceReceiptKeys = [...clonedSourceReceiptEvidenceKeys, "sourcePath"] as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  return Object.keys(value).toSorted().join("\0") === [...expected].toSorted().join("\0");
-}
-
 function isDigest(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
-}
-
-function isGitObjectId(value: unknown): value is string {
-  return (
-    typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value))
-  );
 }
 
 function sourceReceiptDigest(receipt: UnsignedSourceReceiptEvidence): string {

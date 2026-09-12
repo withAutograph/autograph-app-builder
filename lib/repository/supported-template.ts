@@ -524,23 +524,6 @@ export async function resolveAllowedRepository(input: string): Promise<string> {
   return candidate;
 }
 
-export async function inspectSupportedRepository(input: string): Promise<EligibilityResult> {
-  const sourcePath = await resolveAllowedRepository(input);
-  return inspectSupportedRepositoryAtPath(sourcePath);
-}
-
-/**
- * Inspects a path that was created by the builder's canonical template-clone
- * transport. It is deliberately not exported through a tool boundary: callers
- * must first prove the fixed remote/ref/SHA transport contract.
- */
-export async function inspectBuilderOwnedSupportedRepository(
-  input: string,
-): Promise<EligibilityResult> {
-  return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
-}
-
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<EligibilityResult> {
   const failures: string[] = [];
   let sourceSha: string | undefined;
@@ -588,6 +571,9 @@ async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<Eli
       ];
     }),
   );
+  // Keep this adapter snapshot validator below the repository reader to keep
+  // the contract and its implementation together.
+  // oxlint-disable-next-line eslint/no-use-before-define
   return inspectSupportedTemplateSnapshot({
     sourcePath,
     sourceSha,
@@ -597,11 +583,22 @@ async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<Eli
   });
 }
 
+export async function inspectSupportedRepository(input: string): Promise<EligibilityResult> {
+  const sourcePath = await resolveAllowedRepository(input);
+  return inspectSupportedRepositoryAtPath(sourcePath);
+}
+
 /**
- * Evaluate the repository-owned adapter contract from an already captured
- * snapshot.  The same function is used for ordinary local repositories and
- * for the fixed canonical clone inside an Eve session.
+ * Inspects a path that was created by the builder's canonical template-clone
+ * transport. It is deliberately not exported through a tool boundary: callers
+ * must first prove the fixed remote/ref/SHA transport contract.
  */
+export async function inspectBuilderOwnedSupportedRepository(
+  input: string,
+): Promise<EligibilityResult> {
+  return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
+}
+
 export function inspectSupportedTemplateSnapshot(
   input: SupportedTemplateSnapshot,
 ): EligibilityResult {

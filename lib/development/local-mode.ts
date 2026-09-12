@@ -163,6 +163,20 @@ function safeRelativePath(path: string) {
   );
 }
 
+async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
+  let ancestor = dirname(absolute);
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const info = await lstat(ancestor);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      throw new Error(`Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`);
+    if (ancestor === sourceRoot) break;
+    const parent = dirname(ancestor);
+    if (parent === ancestor) throw new Error("Development source path escaped its checkout.");
+    ancestor = parent;
+  }
+}
+
 async function sourcePaths(sourceRoot: string): Promise<string[]> {
   const { stdout } = await execFileAsync(
     "/usr/bin/git",
@@ -215,20 +229,6 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
   return [...new Set(paths)].toSorted((left, right) =>
     Buffer.from(left).compare(Buffer.from(right)),
   );
-}
-
-async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
-  let ancestor = dirname(absolute);
-  for (;;) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const info = await lstat(ancestor);
-    if (!info.isDirectory() || info.isSymbolicLink())
-      throw new Error(`Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`);
-    if (ancestor === sourceRoot) break;
-    const parent = dirname(ancestor);
-    if (parent === ancestor) throw new Error("Development source path escaped its checkout.");
-    ancestor = parent;
-  }
 }
 
 async function sourceEntry(sourceRoot: string, path: string) {
@@ -327,6 +327,7 @@ export function waitForDevelopmentSourceChange(input: {
     let checking = false;
     let pending = false;
     let settled = false;
+    const handlers: { aborted?: () => void } = {};
     let debounce: NodeJS.Timeout | undefined;
     const timers: { audit?: NodeJS.Timeout } = {};
     let watcher: FSWatcher | undefined;
@@ -336,10 +337,11 @@ export function waitForDevelopmentSourceChange(input: {
       if (debounce !== undefined) clearTimeout(debounce);
       if (timers.audit !== undefined) clearInterval(timers.audit);
       watcher?.close();
-      input.signal?.removeEventListener("abort", aborted);
+      if (handlers.aborted !== undefined)
+        input.signal?.removeEventListener("abort", handlers.aborted);
       resolve(changed);
     };
-    const aborted = () => finish(false);
+    handlers.aborted = () => finish(false);
     const check = async () => {
       if (checking) {
         pending = true;
@@ -373,7 +375,7 @@ export function waitForDevelopmentSourceChange(input: {
       finish(false);
       return;
     }
-    input.signal?.addEventListener("abort", aborted, { once: true });
+    input.signal?.addEventListener("abort", handlers.aborted, { once: true });
     try {
       watcher = watch(input.sourceRoot, { recursive: true }, () =>
         schedule(input.debounceMs ?? 150),

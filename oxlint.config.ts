@@ -9,7 +9,6 @@ export default defineConfig({
     "eslint/curly": "off",
     "eslint/no-shadow": "off",
     "eslint/no-nested-ternary": "off",
-    "eslint/no-use-before-define": "off",
     "eslint/func-style": "off",
     "eslint/require-await": "off",
     "eslint/complexity": "off",

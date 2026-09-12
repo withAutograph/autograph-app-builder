@@ -133,6 +133,14 @@ const ghcrBoundHelperBytes = Buffer.from(
   "utf-8",
 );
 
+function ghcrDockerConfigPath(stateRoot: string): string {
+  return join(stateRoot, ghcrDockerConfigName);
+}
+
+function ghcrBoundHelperPath(stateRoot: string): string {
+  return join(stateRoot, ghcrBoundHelperName);
+}
+
 type GhcrCredentialBinding = Readonly<{
   version: 3;
   platform: string;
@@ -236,17 +244,19 @@ export async function withLifecycleLock<T>(
     const port = lifecycleLockPort(stateRoot, attempt);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const acquired = await new Promise<boolean>((resolve, reject) => {
+      const handlers: { onListening?: () => void } = {};
       const onError = (error: NodeJS.ErrnoException) => {
-        server.removeListener("listening", onListening);
+        if (handlers.onListening !== undefined)
+          server.removeListener("listening", handlers.onListening);
         if (error.code === "EADDRINUSE") resolve(false);
         else reject(error);
       };
-      const onListening = () => {
+      handlers.onListening = () => {
         server.removeListener("error", onError);
         resolve(true);
       };
       server.once("error", onError);
-      server.once("listening", onListening);
+      server.once("listening", handlers.onListening);
       server.listen({ host: "127.0.0.1", port, exclusive: true });
     });
     if (acquired) break;
@@ -310,6 +320,15 @@ function assertDisjointRoots(stateRoot: string, repositoryRoot: string, label: s
     throw new Error(`${label} must be outside the image lifecycle state root.`);
 }
 
+function assertOwnedPrivateDirectory(path: string, label: string): void {
+  const stat = lstatSync(path);
+  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
+    throw new Error(`${label} must be a mode 0700 directory.`);
+  const uid = process.getuid?.();
+  if (uid === undefined || stat.uid !== uid)
+    throw new Error(`${label} must be owned by the current user.`);
+}
+
 function assertLifecycleStateScope(approval: LifecycleApproval): void {
   const builderRoot = process.cwd();
   assertAbsoluteInput(builderRoot, "Builder root");
@@ -325,16 +344,6 @@ function assertLifecycleStateScope(approval: LifecycleApproval): void {
   }
   assertDisjointRoots(approval.stateRoot, builderRoot, "Builder root");
   assertDisjointRoots(approval.stateRoot, approval.arrustedRoot, "Arrusted root");
-}
-
-function assertOwnedPrivateDirectory(path: string, label: string): void {
-  const stat = lstatSync(path);
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
-    throw new Error(`${label} must be a mode 0700 directory.`);
-  const uid = process.getuid?.();
-  if (uid === undefined || stat.uid !== uid)
-    throw new Error(`${label} must be owned by the current user.`);
 }
 
 function exactDockerArgument(dockerfile: string, name: string): string {
@@ -456,6 +465,38 @@ function removeSanitizedGitTree(context: SanitizedGitTree): void {
   rmSync(context.root, { recursive: true, force: false });
 }
 
+function readReceipt(
+  stateRoot: string,
+  filename: string,
+  kind: string,
+  provenance: ImageProvenance,
+): ReceiptEnvelope {
+  const path = join(stateRoot, filename);
+  ensureNoLinkPath(path, `${kind} receipt`);
+  const stat = lstatSync(path);
+  const uid = process.getuid?.();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    (stat.mode & 0o777) !== 0o600 ||
+    uid === undefined ||
+    stat.uid !== uid
+  )
+    throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
+  const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
+  if (
+    parsed.version !== 1 ||
+    parsed.kind !== kind ||
+    parsed.provenance.digest !== provenance.digest
+  )
+    throw new Error(`${kind} receipt does not match exact provenance.`);
+  const { digest, ...unsigned } = parsed;
+  if (digest !== hashArtifact(JSON.stringify(unsigned)))
+    throw new Error(`${kind} receipt digest is invalid.`);
+  assertNoSecretMaterial(parsed);
+  return parsed;
+}
+
 function writeReceipt(
   stateRoot: string,
   filename: string,
@@ -508,39 +549,6 @@ function writeReceipt(
   return receipt;
 }
 
-function readReceipt(
-  stateRoot: string,
-  filename: string,
-  kind: string,
-  provenance: ImageProvenance,
-): ReceiptEnvelope {
-  const path = join(stateRoot, filename);
-  ensureNoLinkPath(path, `${kind} receipt`);
-  const stat = lstatSync(path);
-  const uid = process.getuid?.();
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (stat.mode & 0o777) !== 0o600 ||
-    uid === undefined ||
-    stat.uid !== uid
-  )
-    throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
-  if (
-    parsed.version !== 1 ||
-    parsed.kind !== kind ||
-    parsed.provenance.digest !== provenance.digest
-  )
-    throw new Error(`${kind} receipt does not match exact provenance.`);
-  const { digest, ...unsigned } = parsed;
-  if (digest !== hashArtifact(JSON.stringify(unsigned)))
-    throw new Error(`${kind} receipt digest is invalid.`);
-  assertNoSecretMaterial(parsed);
-  return parsed;
-}
-
 function optionalReceipt(
   stateRoot: string,
   filename: string,
@@ -550,6 +558,40 @@ function optionalReceipt(
   return existsSync(join(stateRoot, filename))
     ? readReceipt(stateRoot, filename, kind, provenance)
     : undefined;
+}
+
+function assertExactGhcrBoundHelper(stateRoot: string): void {
+  const path = ghcrBoundHelperPath(stateRoot);
+  ensureNoLinkPath(path, "GHCR bound helper");
+  const stat = lstatSync(path);
+  const uid = process.getuid?.();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    uid === undefined ||
+    stat.uid !== uid ||
+    (stat.mode & 0o777) !== 0o700
+  )
+    throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
+  if (!readFileSync(path).equals(ghcrBoundHelperBytes))
+    throw new Error("GHCR bound helper does not match the closed implementation.");
+}
+
+function assertExactGhcrDockerConfig(stateRoot: string): void {
+  const path = ghcrDockerConfigPath(stateRoot);
+  ensureNoLinkPath(path, "GHCR Docker configuration");
+  const stat = lstatSync(path);
+  const uid = process.getuid?.();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    uid === undefined ||
+    stat.uid !== uid ||
+    (stat.mode & 0o777) !== 0o600
+  )
+    throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
+  if (!readFileSync(path).equals(ghcrDockerConfigBytes))
+    throw new Error("GHCR Docker configuration does not match the closed schema.");
 }
 
 function verifyStateRootContents(provenance: ImageProvenance): void {
@@ -744,14 +786,6 @@ export function imageToolInvocation(
   };
 }
 
-function ghcrDockerConfigPath(stateRoot: string): string {
-  return join(stateRoot, ghcrDockerConfigName);
-}
-
-function ghcrBoundHelperPath(stateRoot: string): string {
-  return join(stateRoot, ghcrBoundHelperName);
-}
-
 function ensureGithubStateRoot(stateRoot: string): string {
   const path = join(stateRoot, githubStateRootName);
   if (!existsSync(path)) {
@@ -768,46 +802,10 @@ function ensureGithubStateRoot(stateRoot: string): string {
   return path;
 }
 
-function assertExactGhcrDockerConfig(stateRoot: string): void {
-  const path = ghcrDockerConfigPath(stateRoot);
-  ensureNoLinkPath(path, "GHCR Docker configuration");
-  const stat = lstatSync(path);
-  const uid = process.getuid?.();
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    uid === undefined ||
-    stat.uid !== uid ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (stat.mode & 0o777) !== 0o600
-  )
-    throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
-  if (!readFileSync(path).equals(ghcrDockerConfigBytes))
-    throw new Error("GHCR Docker configuration does not match the closed schema.");
-}
-
 function ensureGhcrDockerConfig(stateRoot: string): void {
   const path = ghcrDockerConfigPath(stateRoot);
   if (!existsSync(path)) writeExactFile(path, ghcrDockerConfigBytes, 0o600);
   assertExactGhcrDockerConfig(stateRoot);
-}
-
-function assertExactGhcrBoundHelper(stateRoot: string): void {
-  const path = ghcrBoundHelperPath(stateRoot);
-  ensureNoLinkPath(path, "GHCR bound helper");
-  const stat = lstatSync(path);
-  const uid = process.getuid?.();
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    uid === undefined ||
-    stat.uid !== uid ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (stat.mode & 0o777) !== 0o700
-  )
-    throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
-  if (!readFileSync(path).equals(ghcrBoundHelperBytes))
-    throw new Error("GHCR bound helper does not match the closed implementation.");
 }
 
 function ensureGhcrBoundHelper(stateRoot: string): void {

@@ -92,7 +92,14 @@ function packageEntryPoints(pkg: PackageJson): { suffix: string; target: string 
   return pkg.types || pkg.main ? [{ suffix: "", target: pkg.types ?? pkg.main! }] : [];
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
+function sourcePath(packageRoot: string, target: string): string | undefined {
+  const base = resolve(packageRoot, target);
+  const possibilities = [base, ...sourceExtensions.map((extension) => base + extension)];
+  if (!extname(base))
+    possibilities.push(...sourceExtensions.map((extension) => join(base, `index${extension}`)));
+  return possibilities.find(existsSync);
+}
+
 async function aliasEntryPoints(root: string, limitations: string[]): Promise<EntryPoint[]> {
   let parsed: ts.ParsedCommandLine;
   try {
@@ -121,14 +128,6 @@ async function aliasEntryPoints(root: string, limitations: string[]): Promise<En
       );
   }
   return entries;
-}
-
-function sourcePath(packageRoot: string, target: string): string | undefined {
-  const base = resolve(packageRoot, target);
-  const possibilities = [base, ...sourceExtensions.map((extension) => base + extension)];
-  if (!extname(base))
-    possibilities.push(...sourceExtensions.map((extension) => join(base, `index${extension}`)));
-  return possibilities.find(existsSync);
 }
 
 function literalValues(type: ts.Type): string[] | undefined {

@@ -1046,6 +1046,16 @@ function manifest(files: readonly ExactFile[]): FreshBootstrapFile[] {
   return files.map(({ path, mode, blob }) => ({ path, mode, blob }));
 }
 
+async function pathState(path: string): Promise<"absent" | "directory" | "other"> {
+  try {
+    const value = await lstat(path);
+    return value.isDirectory() && !value.isSymbolicLink() ? "directory" : "other";
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    throw error;
+  }
+}
+
 export async function deriveFreshBootstrapProposal(input: {
   capability?: FreshBootstrapCapability;
   destinationPath: string;
@@ -1334,6 +1344,50 @@ async function materializeFile(
   }
 }
 
+async function assertRawGitAuthority(
+  proposal: FreshBootstrapProposal,
+  root: string,
+): Promise<void> {
+  const rootState = await lstat(root);
+  const gitDirectory = resolve(root, ".git");
+  const gitState = await lstat(gitDirectory);
+  if (
+    rootState.isSymbolicLink() ||
+    !rootState.isDirectory() ||
+    gitState.isSymbolicLink() ||
+    !gitState.isDirectory() ||
+    rootState.uid !== process.geteuid?.() ||
+    gitState.uid !== process.geteuid?.() ||
+    rootState.dev !== gitState.dev ||
+    (rootState.mode & 0o022) !== 0 ||
+    (gitState.mode & 0o022) !== 0 ||
+    (await realpath(root)) !== root ||
+    (await realpath(gitDirectory)) !== gitDirectory ||
+    (await readFile(resolve(gitDirectory, "config"), "utf-8")) !== exactGitConfig ||
+    (await readFile(resolve(gitDirectory, "HEAD"), "utf-8")) !==
+      `ref: refs/heads/${proposal.repositoryIdentity.initialBranch}\n`
+  )
+    throw new Error("The fresh repository Git authority is not local and exact.");
+  for (const forbidden of [
+    resolve(gitDirectory, "commondir"),
+    resolve(gitDirectory, "gitdir"),
+    resolve(gitDirectory, "hooks"),
+    resolve(gitDirectory, "objects", "info", "alternates"),
+    resolve(gitDirectory, "objects", "info", "http-alternates"),
+    resolve(gitDirectory, "info", "grafts"),
+    resolve(gitDirectory, "refs", "replace"),
+    resolve(gitDirectory, "shallow"),
+  ]) {
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await lstat(forbidden);
+      throw new Error("The fresh repository contains forbidden Git authority.");
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
+
 async function initializeGit(input: {
   capability: FreshBootstrapCapability;
   proposal: FreshBootstrapProposal;
@@ -1490,7 +1544,6 @@ async function assertRawGitAuthority(
     }
   }
 }
-
 async function rawWorktreeManifest(
   root: string,
   proposal: FreshBootstrapProposal,
@@ -1892,16 +1945,6 @@ function successReceipt(input: {
     recoveryRequired: false as const,
   };
   return { ...unsigned, digest: freshBootstrapJournalDigest(unsigned) };
-}
-
-async function pathState(path: string): Promise<"absent" | "directory" | "other"> {
-  try {
-    const value = await lstat(path);
-    return value.isDirectory() && !value.isSymbolicLink() ? "directory" : "other";
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
-    throw error;
-  }
 }
 
 export async function readFreshBootstrapJournal(input: {

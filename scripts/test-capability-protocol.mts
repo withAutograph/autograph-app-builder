@@ -21,6 +21,7 @@ export async function relayBoundedFrames(options: {
     let settled = false;
     let sourceEnded = false;
     let waitingForDrain = false;
+    const callbacks: { processBuffered?: () => void } = {};
     const fail = (error: Error) => {
       if (settled) return;
       settled = true;
@@ -36,9 +37,9 @@ export async function relayBoundedFrames(options: {
     };
     const resumeAfterDrain = () => {
       waitingForDrain = false;
-      processBuffered();
+      callbacks.processBuffered?.();
     };
-    const processBuffered = () => {
+    callbacks.processBuffered = () => {
       while (true) {
         const newline = buffered.indexOf(0x0a);
         if (newline === -1) {
@@ -67,11 +68,11 @@ export async function relayBoundedFrames(options: {
     options.source.on("data", (chunk: Buffer) => {
       options.source.pause();
       buffered = Buffer.concat([buffered, chunk]);
-      processBuffered();
+      callbacks.processBuffered?.();
     });
     options.source.once("end", () => {
       sourceEnded = true;
-      processBuffered();
+      callbacks.processBuffered?.();
     });
     options.target.once("finish", () => {
       if (settled) return;

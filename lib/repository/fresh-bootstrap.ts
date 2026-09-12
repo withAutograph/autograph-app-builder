@@ -420,6 +420,11 @@ function isExecutableIdentity(value: unknown): value is ExecutableIdentity {
   );
 }
 
+function dirnameForComparison(path: string): string {
+  const index = path.lastIndexOf("/");
+  return index <= 0 ? "/" : path.slice(0, index);
+}
+
 export function assertExactFreshBootstrapProposal(proposal: FreshBootstrapProposal): void {
   if (
     !isRecord(proposal) ||
@@ -541,11 +546,6 @@ export function assertExactFreshBootstrapProposal(proposal: FreshBootstrapPropos
     throw new Error("The fresh-bootstrap proposal is not canonical V3.");
 }
 
-function dirnameForComparison(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index <= 0 ? "/" : path.slice(0, index);
-}
-
 export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
 
 export function proposalFromFreshBootstrapJournal(
@@ -579,6 +579,38 @@ export function proposalFromFreshBootstrapJournal(
   ])
     Reflect.deleteProperty(candidate, key);
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
+}
+
+function assertExactPathIdentity(value: PathIdentity, label: string): void {
+  if (!isPathIdentity(value))
+    throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);
+}
+
+function assertExactFreshBootstrapLayout(layout: FreshBootstrapLayout): void {
+  const keys =
+    layout.phase === "intent"
+      ? ["phase"]
+      : layout.phase === "stage-owned" || layout.phase === "stage-ready"
+        ? ["phase", "stageIdentity"]
+        : layout.phase === "published"
+          ? [
+              "phase",
+              "destinationIdentity",
+              ...(layout.swappedOldIdentity === undefined ? [] : ["swappedOldIdentity"]),
+            ]
+          : [];
+  if (!hasExactKeys(layout, keys))
+    throw new Error("The fresh-bootstrap layout receipt is malformed.");
+  for (const value of [
+    ...(layout.phase === "stage-owned" || layout.phase === "stage-ready"
+      ? [layout.stageIdentity]
+      : []),
+    ...(layout.phase === "published" ? [layout.destinationIdentity] : []),
+    ...(layout.phase === "published" && layout.swappedOldIdentity !== undefined
+      ? [layout.swappedOldIdentity]
+      : []),
+  ])
+    assertExactPathIdentity(value, "layout");
 }
 
 export function assertCanonicalFreshBootstrapJournal(journal: FreshBootstrapJournal): void {
@@ -699,38 +731,6 @@ export function assertCanonicalFreshBootstrapJournal(journal: FreshBootstrapJour
       throw new Error("The fresh-bootstrap success receipt is malformed.");
   }
   assertExactFreshBootstrapProposal(proposal);
-}
-
-function assertExactFreshBootstrapLayout(layout: FreshBootstrapLayout): void {
-  const keys =
-    layout.phase === "intent"
-      ? ["phase"]
-      : layout.phase === "stage-owned" || layout.phase === "stage-ready"
-        ? ["phase", "stageIdentity"]
-        : layout.phase === "published"
-          ? [
-              "phase",
-              "destinationIdentity",
-              ...(layout.swappedOldIdentity === undefined ? [] : ["swappedOldIdentity"]),
-            ]
-          : [];
-  if (!hasExactKeys(layout, keys))
-    throw new Error("The fresh-bootstrap layout receipt is malformed.");
-  for (const value of [
-    ...(layout.phase === "stage-owned" || layout.phase === "stage-ready"
-      ? [layout.stageIdentity]
-      : []),
-    ...(layout.phase === "published" ? [layout.destinationIdentity] : []),
-    ...(layout.phase === "published" && layout.swappedOldIdentity !== undefined
-      ? [layout.swappedOldIdentity]
-      : []),
-  ])
-    assertExactPathIdentity(value, "layout");
-}
-
-function assertExactPathIdentity(value: PathIdentity, label: string): void {
-  if (!isPathIdentity(value))
-    throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);
 }
 
 export function exactFreshBootstrapProposalMatch(

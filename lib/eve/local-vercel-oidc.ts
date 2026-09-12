@@ -48,6 +48,13 @@ function isContainedPath(parent: string, candidate: string): boolean {
   );
 }
 
+function closedObject(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} was not an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
 export function resolveInstalledEveCli(repositoryRootInput: string): string {
   const repositoryRoot = realpathSync(repositoryRootInput);
   if (repositoryRoot !== resolve(repositoryRootInput)) {
@@ -122,13 +129,6 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Repository Eve dependency was not pinned to 0.44.4.");
   }
   return cli;
-}
-
-function closedObject(value: unknown, name: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${name} was not an object.`);
-  }
-  return value as Record<string, unknown>;
 }
 
 function requiredString(value: Record<string, unknown>, key: string): string {
@@ -220,15 +220,6 @@ function decodeClaims(token: string): VercelOidcClaims {
   };
 }
 
-export function validateLocalVercelOidcToken(input: {
-  token: string;
-  project: LinkedVercelProject;
-  nowEpochSeconds: number;
-}): string {
-  validateLocalVercelOidcClaims(input);
-  return input.token;
-}
-
 export function validateLocalVercelOidcClaims(input: {
   token: string;
   project: LinkedVercelProject;
@@ -283,4 +274,13 @@ export function validateLocalVercelOidcClaims(input: {
     notBefore: claims.nbf,
     expiresAt: claims.exp,
   };
+}
+
+export function validateLocalVercelOidcToken(input: {
+  token: string;
+  project: LinkedVercelProject;
+  nowEpochSeconds: number;
+}): string {
+  validateLocalVercelOidcClaims(input);
+  return input.token;
 }

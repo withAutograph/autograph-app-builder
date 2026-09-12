@@ -53,23 +53,6 @@ export function initialCompensationState(fixture: CompensationFixture): Compensa
   };
 }
 
-export function calculateCompensation(input: CompensationAssumptions) {
-  if (Object.keys(validateCompensation(input)).length > 0) return undefined;
-  const currentTax = Math.round(input.baseSalary * input.employerTaxRate);
-  const proposedBase = Math.round(input.baseSalary * (1 + input.plannedIncrease));
-  const proposedTax = Math.round(proposedBase * input.employerTaxRate);
-  const currentTotal = input.baseSalary + input.targetBonus + input.annualBenefits + currentTax;
-  const proposedTotal = proposedBase + input.targetBonus + input.annualBenefits + proposedTax;
-  return {
-    currentTax,
-    currentTotal,
-    proposedBase,
-    proposedTax,
-    proposedTotal,
-    proposedMidpointDelta: proposedBase - input.bandMidpoint,
-  };
-}
-
 export function validateCompensation(input: CompensationAssumptions) {
   const errors: Partial<Record<keyof CompensationAssumptions, string>> = {};
   for (const field of ["baseSalary", "targetBonus", "annualBenefits", "bandMidpoint"] as const) {
@@ -91,6 +74,23 @@ export function validateCompensation(input: CompensationAssumptions) {
   )
     errors.plannedIncrease = "Enter a percentage from -100 to 100.";
   return errors;
+}
+
+export function calculateCompensation(input: CompensationAssumptions) {
+  if (Object.keys(validateCompensation(input)).length > 0) return undefined;
+  const currentTax = Math.round(input.baseSalary * input.employerTaxRate);
+  const proposedBase = Math.round(input.baseSalary * (1 + input.plannedIncrease));
+  const proposedTax = Math.round(proposedBase * input.employerTaxRate);
+  const currentTotal = input.baseSalary + input.targetBonus + input.annualBenefits + currentTax;
+  const proposedTotal = proposedBase + input.targetBonus + input.annualBenefits + proposedTax;
+  return {
+    currentTax,
+    currentTotal,
+    proposedBase,
+    proposedTax,
+    proposedTotal,
+    proposedMidpointDelta: proposedBase - input.bandMidpoint,
+  };
 }
 
 export function reduceCompensationState(

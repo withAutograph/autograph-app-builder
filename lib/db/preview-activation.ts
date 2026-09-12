@@ -182,6 +182,10 @@ export interface PreviewActivationStore {
   >;
 }
 
+function digest(value: string): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
 function canonicalRequest(request: PreviewActivationPlanRequest) {
   const secretDigest =
     request.action === "oauth.initialize"
@@ -197,10 +201,6 @@ function canonicalRequest(request: PreviewActivationPlanRequest) {
         ? { password: secretDigest }
         : {}),
   });
-}
-
-function digest(value: string): `sha256:${string}` {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 export function planPreviewActivation(input: unknown) {

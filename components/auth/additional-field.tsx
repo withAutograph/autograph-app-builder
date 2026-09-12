@@ -108,6 +108,243 @@ function CopyButton({
 }
 
 /** Renders a single additional user field via shadcn primitives. */
+function DateInput({ name, field, isPending }: AdditionalFieldProps) {
+  const { localization } = useAuth();
+  const inputType = resolveInputType(field);
+  const isDateTime = inputType === "datetime";
+
+  const [date, setDate] = useState<Date | undefined>(toDate(field.defaultValue));
+  const [time, setTime] = useState<string>(isDateTime && date ? formatTime(date) : "");
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string>();
+
+  // Compose the hidden form value: ISO date for "date", ISO datetime for
+  // "datetime" (date + time).
+  let formValue = "";
+  if (date) {
+    if (isDateTime && time && time.trim() !== "") {
+      const [h = "0", m = "0", s = "0"] = time.split(":");
+      const combined = new Date(date);
+      combined.setHours(Number(h), Number(m), Number(s), 0);
+      formValue = combined.toISOString();
+    } else {
+      // Anchor to local midnight then serialize as ISO so the downstream
+      // `parseAdditionalFieldValue` parses the same calendar day regardless
+      // of timezone (a bare "YYYY-MM-DD" would be parsed as UTC midnight).
+      // Datetime fields with a blank time also fall through here, defaulting
+      // the time to local midnight since the parsed value is always a `Date`.
+      const localMidnight = new Date(date);
+      localMidnight.setHours(0, 0, 0, 0);
+      formValue = localMidnight.toISOString();
+    }
+  }
+
+  return (
+    <Field data-invalid={!!error}>
+      <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
+
+      <div className="relative flex gap-2">
+        {/* Visually-hidden input so required constraint validation fires on submit.
+            onInvalid suppresses the native browser balloon and routes the message
+            through the styled <FieldError> below — matching the pattern used by
+            the Name / Email / Password fields in the sign-up form. */}
+        <input
+          aria-label={typeof field.label === "string" ? field.label : name}
+          type="text"
+          name={name}
+          value={formValue}
+          onChange={() => {
+            // This field is display-only in the current authentication flow.
+          }}
+          required={field.required}
+          tabIndex={-1}
+          className="sr-only"
+          onInvalid={(e) => {
+            e.preventDefault();
+            setError((e.target as HTMLInputElement).validationMessage);
+          }}
+        />
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            type="button"
+            id={`${name}-date`}
+            data-empty={!date}
+            aria-invalid={!!error}
+            disabled={isPending || field.readOnly}
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "flex-1 justify-between font-normal",
+              "data-[empty=true]:text-muted-foreground",
+            )}
+          >
+            {date ? format(date, "PPP") : <span>{field.placeholder}</span>}
+
+            {isDateTime ? <ChevronDownIcon /> : <CalendarIcon />}
+          </PopoverTrigger>
+
+          <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={date}
+              defaultMonth={date}
+              captionLayout="dropdown"
+              onSelect={(value) => {
+                setDate(value);
+                if (value) setError(undefined);
+                if (!isDateTime) setOpen(false);
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+
+        {isDateTime && (
+          <Field className="w-32">
+            <FieldLabel htmlFor={`${name}-time`} className="sr-only">
+              {localization.settings.time}
+            </FieldLabel>
+
+            <Input
+              type="time"
+              id={`${name}-time`}
+              step="1"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              disabled={isPending || field.readOnly}
+              className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+            />
+          </Field>
+        )}
+      </div>
+
+      <FieldError>{error}</FieldError>
+    </Field>
+  );
+}
+
+function SliderField({ name, field, isPending }: AdditionalFieldProps) {
+  const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
+  const min = field.min ?? 0;
+  const max = field.max ?? 100;
+  const step = field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
+  const initial =
+    typeof field.defaultValue === "number"
+      ? field.defaultValue
+      : field.defaultValue !== null &&
+          field.defaultValue !== undefined &&
+          !Number.isNaN(Number(field.defaultValue))
+        ? Number(field.defaultValue)
+        : min;
+
+  const [value, setValue] = useState<number>(initial);
+
+  const formatter = new Intl.NumberFormat(undefined, field.formatOptions);
+
+  return (
+    <Field>
+      <div className="flex items-center justify-between gap-2">
+        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {formatter.format(value)}
+        </span>
+      </div>
+
+      <Slider
+        id={name}
+        name={name}
+        value={[value]}
+        onValueChange={(v) => setValue((Array.isArray(v) ? v[0] : v) ?? min)}
+        min={min}
+        max={max}
+        step={step}
+        disabled={isPending || field.readOnly}
+      />
+
+      <FieldError />
+    </Field>
+  );
+}
+
+function InputField({ name, field, isPending }: AdditionalFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const hasPrefix = field.prefix !== null && field.prefix !== undefined;
+  const hasSuffix = (field.suffix !== null && field.suffix !== undefined) || field.copyable;
+
+  const isNumeric = field.type === "number";
+  const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
+  const nativeInputType = isNumeric ? "number" : undefined;
+  const nativeInputMode = isNumeric ? (maxFractionDigits ? "decimal" : "numeric") : undefined;
+  const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
+
+  if (hasPrefix || hasSuffix) {
+    return (
+      <Field>
+        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+        <InputGroup>
+          {hasPrefix && <InputGroupAddon align="inline-start">{field.prefix}</InputGroupAddon>}
+
+          <InputGroupInput
+            ref={inputRef}
+            id={name}
+            name={name}
+            type={nativeInputType}
+            inputMode={nativeInputMode}
+            step={nativeStep}
+            defaultValue={
+              field.defaultValue === null || field.defaultValue === undefined
+                ? undefined
+                : String(field.defaultValue)
+            }
+            placeholder={field.placeholder}
+            required={field.required}
+            readOnly={field.readOnly}
+            disabled={isPending}
+          />
+
+          {field.copyable ? (
+            <InputGroupAddon align="inline-end">
+              <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
+            </InputGroupAddon>
+          ) : (
+            field.suffix !== null &&
+            field.suffix !== undefined && (
+              <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
+            )
+          )}
+        </InputGroup>
+
+        <FieldError />
+      </Field>
+    );
+  }
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
+
+      <Input
+        id={name}
+        name={name}
+        type={nativeInputType}
+        inputMode={nativeInputMode}
+        step={nativeStep}
+        defaultValue={
+          field.defaultValue === null || field.defaultValue === undefined
+            ? undefined
+            : String(field.defaultValue)
+        }
+        placeholder={field.placeholder}
+        required={field.required}
+        readOnly={field.readOnly}
+        disabled={isPending}
+      />
+
+      <FieldError />
+    </Field>
+  );
+}
+
 export function AdditionalField({
   name,
   field: configuredField,
@@ -328,249 +565,14 @@ export function AdditionalField({
   return <InputField name={name} field={field} isPending={isPending} />;
 }
 
-function InputField({ name, field, isPending }: AdditionalFieldProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const hasPrefix = field.prefix !== null && field.prefix !== undefined;
-  const hasSuffix = (field.suffix !== null && field.suffix !== undefined) || field.copyable;
-
-  const isNumeric = field.type === "number";
-  const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
-  const nativeInputType = isNumeric ? "number" : undefined;
-  const nativeInputMode = isNumeric ? (maxFractionDigits ? "decimal" : "numeric") : undefined;
-  const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
-
-  if (hasPrefix || hasSuffix) {
-    return (
-      <Field>
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-        <InputGroup>
-          {hasPrefix && <InputGroupAddon align="inline-start">{field.prefix}</InputGroupAddon>}
-
-          <InputGroupInput
-            ref={inputRef}
-            id={name}
-            name={name}
-            type={nativeInputType}
-            inputMode={nativeInputMode}
-            step={nativeStep}
-            defaultValue={
-              field.defaultValue === null || field.defaultValue === undefined
-                ? undefined
-                : String(field.defaultValue)
-            }
-            placeholder={field.placeholder}
-            required={field.required}
-            readOnly={field.readOnly}
-            disabled={isPending}
-          />
-
-          {field.copyable ? (
-            <InputGroupAddon align="inline-end">
-              <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
-            </InputGroupAddon>
-          ) : (
-            field.suffix !== null &&
-            field.suffix !== undefined && (
-              <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
-            )
-          )}
-        </InputGroup>
-
-        <FieldError />
-      </Field>
-    );
-  }
-
-  return (
-    <Field>
-      <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-
-      <Input
-        id={name}
-        name={name}
-        type={nativeInputType}
-        inputMode={nativeInputMode}
-        step={nativeStep}
-        defaultValue={
-          field.defaultValue === null || field.defaultValue === undefined
-            ? undefined
-            : String(field.defaultValue)
-        }
-        placeholder={field.placeholder}
-        required={field.required}
-        readOnly={field.readOnly}
-        disabled={isPending}
-      />
-
-      <FieldError />
-    </Field>
-  );
-}
-
 /**
  * Slider field. Radix Slider doesn't render the current value, so we render
  * it next to the label and control the state to keep the displayed value in
  * sync. The selected value is submitted via the underlying Radix `name` prop.
  */
-function SliderField({ name, field, isPending }: AdditionalFieldProps) {
-  const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
-  const min = field.min ?? 0;
-  const max = field.max ?? 100;
-  const step = field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
-  const initial =
-    typeof field.defaultValue === "number"
-      ? field.defaultValue
-      : field.defaultValue !== null &&
-          field.defaultValue !== undefined &&
-          !Number.isNaN(Number(field.defaultValue))
-        ? Number(field.defaultValue)
-        : min;
-
-  const [value, setValue] = useState<number>(initial);
-
-  const formatter = new Intl.NumberFormat(undefined, field.formatOptions);
-
-  return (
-    <Field>
-      <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor={name}>{field.label}</FieldLabel>
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {formatter.format(value)}
-        </span>
-      </div>
-
-      <Slider
-        id={name}
-        name={name}
-        value={[value]}
-        onValueChange={(v) => setValue((Array.isArray(v) ? v[0] : v) ?? min)}
-        min={min}
-        max={max}
-        step={step}
-        disabled={isPending || field.readOnly}
-      />
-
-      <FieldError />
-    </Field>
-  );
-}
 
 /**
  * Date / datetime input. Composes `Popover` + `Calendar` for the date and
  * (optionally) `<input type="time">` for the time. Submits the combined ISO
  * value via a hidden `<input>` so it shows up in `FormData`.
  */
-function DateInput({ name, field, isPending }: AdditionalFieldProps) {
-  const { localization } = useAuth();
-  const inputType = resolveInputType(field);
-  const isDateTime = inputType === "datetime";
-
-  const [date, setDate] = useState<Date | undefined>(toDate(field.defaultValue));
-  const [time, setTime] = useState<string>(isDateTime && date ? formatTime(date) : "");
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string>();
-
-  // Compose the hidden form value: ISO date for "date", ISO datetime for
-  // "datetime" (date + time).
-  let formValue = "";
-  if (date) {
-    if (isDateTime && time && time.trim() !== "") {
-      const [h = "0", m = "0", s = "0"] = time.split(":");
-      const combined = new Date(date);
-      combined.setHours(Number(h), Number(m), Number(s), 0);
-      formValue = combined.toISOString();
-    } else {
-      // Anchor to local midnight then serialize as ISO so the downstream
-      // `parseAdditionalFieldValue` parses the same calendar day regardless
-      // of timezone (a bare "YYYY-MM-DD" would be parsed as UTC midnight).
-      // Datetime fields with a blank time also fall through here, defaulting
-      // the time to local midnight since the parsed value is always a `Date`.
-      const localMidnight = new Date(date);
-      localMidnight.setHours(0, 0, 0, 0);
-      formValue = localMidnight.toISOString();
-    }
-  }
-
-  return (
-    <Field data-invalid={!!error}>
-      <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
-
-      <div className="relative flex gap-2">
-        {/* Visually-hidden input so required constraint validation fires on submit.
-            onInvalid suppresses the native browser balloon and routes the message
-            through the styled <FieldError> below — matching the pattern used by
-            the Name / Email / Password fields in the sign-up form. */}
-        <input
-          aria-label={typeof field.label === "string" ? field.label : name}
-          type="text"
-          name={name}
-          value={formValue}
-          onChange={() => {
-            // This field is display-only in the current authentication flow.
-          }}
-          required={field.required}
-          tabIndex={-1}
-          className="sr-only"
-          onInvalid={(e) => {
-            e.preventDefault();
-            setError((e.target as HTMLInputElement).validationMessage);
-          }}
-        />
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            type="button"
-            id={`${name}-date`}
-            data-empty={!date}
-            aria-invalid={!!error}
-            disabled={isPending || field.readOnly}
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "flex-1 justify-between font-normal",
-              "data-[empty=true]:text-muted-foreground",
-            )}
-          >
-            {date ? format(date, "PPP") : <span>{field.placeholder}</span>}
-
-            {isDateTime ? <ChevronDownIcon /> : <CalendarIcon />}
-          </PopoverTrigger>
-
-          <PopoverContent className="w-auto overflow-hidden p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={date}
-              defaultMonth={date}
-              captionLayout="dropdown"
-              onSelect={(value) => {
-                setDate(value);
-                if (value) setError(undefined);
-                if (!isDateTime) setOpen(false);
-              }}
-            />
-          </PopoverContent>
-        </Popover>
-
-        {isDateTime && (
-          <Field className="w-32">
-            <FieldLabel htmlFor={`${name}-time`} className="sr-only">
-              {localization.settings.time}
-            </FieldLabel>
-
-            <Input
-              type="time"
-              id={`${name}-time`}
-              step="1"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              disabled={isPending || field.readOnly}
-              className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-            />
-          </Field>
-        )}
-      </div>
-
-      <FieldError>{error}</FieldError>
-    </Field>
-  );
-}

@@ -105,6 +105,10 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
 };
 
 /** Reject persisted V2 receipts whose durable fields no longer bind together. */
+export function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 export function assertExactDependencyPreparationReceipt(
   receipt: DependencyPreparationReceipt,
 ): void {
@@ -428,10 +432,6 @@ export function workflowWorkspace(
   state: AppBuilderWorkflowState,
 ): PreparedSandboxWorkspace | undefined {
   return state.phase === "empty" ? undefined : state.workspace;
-}
-
-export function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 export function validAppId(appId: string): boolean {

@@ -23,6 +23,10 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
 /** Clone a private GitHub source through the writable Vercel Sandbox. */
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
 export async function cloneGitHubSource(input: {
   sandbox: SandboxSession;
   url: string;
@@ -41,10 +45,6 @@ export async function cloneGitHubSource(input: {
   });
   if (result.exitCode !== 0)
     throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
-}
-
-function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function parseRemote(input: string) {
@@ -314,6 +314,36 @@ function sandboxGitHubSourceReinspectionCommand(input: { remote: string; branch:
   return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
 }
 
+export async function readSandboxGitHubSourceSnapshot(
+  sandbox: SandboxSession,
+): Promise<CanonicalTemplateSnapshot> {
+  const result = await sandbox.run({
+    command:
+      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
+    workingDirectory: "/workspace",
+  });
+  if (result.exitCode !== 0)
+    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
+  const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
+  if (
+    sourceSha === undefined ||
+    sourceTree === undefined ||
+    !SHA.test(sourceSha) ||
+    !SHA.test(sourceTree)
+  )
+    throw new Error("GitHub did not return a repository revision.");
+  return {
+    sourcePath: SANDBOX_WORKSPACE,
+    sourceSha,
+    sourceTree,
+    dirtyPaths: [],
+    contents: {},
+    contract: [],
+  };
+}
+
+// Kept temporarily for stored receipt parsing while the legacy inspection
+// writer is removed from the active source path.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function reinspectGitHubSourceWorkspace(input: {
   sandbox: SandboxSession;
@@ -400,33 +430,5 @@ export async function inspectGitHubSourceSandboxWorkspace(input: {
     // Compatibility remains repository-command-owned. This value is only
     // diagnostic state retained for legacy callers, never a runtime gate.
     eligibilityDigest: workspaceDigest,
-  };
-}
-
-export async function readSandboxGitHubSourceSnapshot(
-  sandbox: SandboxSession,
-): Promise<CanonicalTemplateSnapshot> {
-  const result = await sandbox.run({
-    command:
-      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
-    workingDirectory: "/workspace",
-  });
-  if (result.exitCode !== 0)
-    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
-  const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
-  if (
-    sourceSha === undefined ||
-    sourceTree === undefined ||
-    !SHA.test(sourceSha) ||
-    !SHA.test(sourceTree)
-  )
-    throw new Error("GitHub did not return a repository revision.");
-  return {
-    sourcePath: SANDBOX_WORKSPACE,
-    sourceSha,
-    sourceTree,
-    dirtyPaths: [],
-    contents: {},
-    contract: [],
   };
 }
