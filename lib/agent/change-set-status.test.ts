@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isCandidateExportTextPath } from "./change_set_status";
+import { isCandidateExportTextPath } from "../../agent/tools/change_set_status";
 
 describe("reviewed candidate export", () => {
   it.each([
