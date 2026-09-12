@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { hostedGitHubInstallationBindings, hostedGitHubInstallations } from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
   encryptVercelToken,

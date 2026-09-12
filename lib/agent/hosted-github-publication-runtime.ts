@@ -1,6 +1,6 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import {
   exactForwardedSessionAuthority,

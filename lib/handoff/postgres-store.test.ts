@@ -2,7 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
-import { builderHandoffs } from "../db/schema";
+import type { builderHandoffs } from "../db/schema";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 
 const authority = {

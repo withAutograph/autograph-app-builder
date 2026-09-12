@@ -8,7 +8,6 @@ export default defineConfig({
     "import/consistent-type-specifier-style": "off",
     "unicorn/import-style": "off",
     "typescript/consistent-type-definitions": "off",
-    "typescript/consistent-type-imports": "off",
     "eslint/curly": "off",
     "eslint/no-await-in-loop": "off",
     "eslint/no-bitwise": "off",

@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationProposals } from "../db/schema";
 import {

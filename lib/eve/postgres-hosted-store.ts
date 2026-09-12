@@ -2,7 +2,7 @@ import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { agentOperations, agentSessions } from "../db/schema";
 import { eveSessionResultSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, tenantKeyFor, type HostedPrincipal } from "./hosted-auth";

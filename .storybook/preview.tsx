@@ -4,7 +4,7 @@ import { expect } from "storybook/test";
 
 import appStyles from "../app/ui/app-builder.module.css";
 import { AppShell } from "../components/app-shell";
-import { authClient } from "../lib/auth-client";
+import type { authClient } from "../lib/auth-client";
 import { getQueryClient } from "../lib/query-client";
 import "../app/globals.css";
 import "./preview.css";
