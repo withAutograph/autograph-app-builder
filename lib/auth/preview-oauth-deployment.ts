@@ -170,7 +170,7 @@ export async function ensurePreviewSessionOrganization(input: {
   headers: Headers;
 }) {
   const current = await input.auth.api.getSession({ headers: input.headers });
-  if (!current?.user) return undefined;
+  if (!current?.user) return;
 
   const ensured = await input.authority.ensureOrganizationForVerifiedUser({
     userId: current.user.id,
