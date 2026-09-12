@@ -33,7 +33,7 @@ function binding(
 function store(bindings: HostedGitHubInstallationBinding[]): HostedGitHubInstallationStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => undefined),
+    read: vi.fn(async () => {}),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     bind: vi.fn(),

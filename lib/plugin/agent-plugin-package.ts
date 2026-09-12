@@ -97,7 +97,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
 };
 
 const schemaVersion = (schema: unknown) => {
-  if (typeof schema !== "string") return undefined;
+  if (typeof schema !== "string") return;
   return schema.match(/\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
 };
 

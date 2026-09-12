@@ -21,6 +21,13 @@ interface VercelOidcClaims {
   environment: string;
 }
 
+function closedObject(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} was not an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function assertOwnerNonWritable(path: string): void {
   const stat = statSync(path);
   const ownerId = process.getuid?.();
@@ -46,13 +53,6 @@ function isContainedPath(parent: string, candidate: string): boolean {
     relativeCandidate !== ".." &&
     !relativeCandidate.startsWith(`..${sep}`)
   );
-}
-
-function closedObject(value: unknown, name: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${name} was not an object.`);
-  }
-  return value as Record<string, unknown>;
 }
 
 export function resolveInstalledEveCli(repositoryRootInput: string): string {

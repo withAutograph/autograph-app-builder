@@ -9,7 +9,7 @@ const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
 
 const mappedIpv4 = (host: string) => {
   const match = host.match(/^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/u);
-  if (!match) return undefined;
+  if (!match) return;
   const high = Number.parseInt(match[1], 16);
   const low = Number.parseInt(match[2], 16);
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.

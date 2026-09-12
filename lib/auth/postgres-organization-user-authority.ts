@@ -280,19 +280,18 @@ export function createPostgresPreviewOrganizationAuthority(
 
     async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
       if (issuer !== authority.issuer || audience !== authority.audience) {
-        return undefined;
+        return;
       }
-      return (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId;
+      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      return activeOrganization?.workspaceId;
     },
 
     async isActiveMember({ issuer, audience, workspaceId, ownerUserId }) {
       if (issuer !== authority.issuer || audience !== authority.audience) {
         return false;
       }
-      return (
-        (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId ===
-        workspaceId
-      );
+      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      return activeOrganization?.workspaceId === workspaceId;
     },
   };
 }

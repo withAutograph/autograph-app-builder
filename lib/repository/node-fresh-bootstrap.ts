@@ -574,7 +574,9 @@ async function createInitialJournal(
     await link(candidate, path);
     await syncDirectory(dirname(path));
   } finally {
-    await unlink(candidate).catch(() => undefined);
+    await unlink(candidate).catch(() => {
+      // Cleanup errors are intentionally ignored.
+    });
     await syncDirectory(dirname(path));
   }
 }

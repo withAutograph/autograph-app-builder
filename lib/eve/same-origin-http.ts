@@ -328,7 +328,8 @@ async function readInstalledSnapshot(input: {
 async function readSnapshot(
   input: Parameters<typeof readInstalledSnapshot>[0],
 ): Promise<HostedEngineSnapshot> {
-  return (await readInstalledSnapshot(input)).snapshot;
+  const installedSnapshot = await readInstalledSnapshot(input);
+  return installedSnapshot.snapshot;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

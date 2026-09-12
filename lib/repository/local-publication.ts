@@ -14,11 +14,43 @@ export const LOCAL_PUBLICATION_MAX_DIRTY_BYTES = 8 * 1024 * 1024;
 export const LOCAL_PUBLICATION_ALLOWED_MODES = ["644", "755"] as const;
 const topologyPath = "microfrontends.json";
 
+export function executionOrder(paths: readonly string[]): readonly string[] {
+  return [
+    ...paths.filter((path) => path !== topologyPath),
+    ...paths.filter((path) => path === topologyPath),
+  ];
+}
+
 export const stableDigest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 export const contentDigest = (value: Uint8Array): string =>
   createHash("sha256").update(value).digest("hex");
+
+function canonicalProposal(proposal: LocalPublicationProposal) {
+  return {
+    version: proposal.version,
+    destinationPath: proposal.destinationPath,
+    rootIdentity: proposal.rootIdentity,
+    gitDirectoryPath: proposal.gitDirectoryPath,
+    gitDirectoryIdentity: proposal.gitDirectoryIdentity,
+    sourceReceiptDigest: proposal.sourceReceiptDigest,
+    sourceTree: proposal.sourceTree,
+    contractDigest: proposal.contractDigest,
+    baseSha: proposal.baseSha,
+    headReference: proposal.headReference,
+    indexFileDigest: proposal.indexFileDigest,
+    remoteDigest: proposal.remoteDigest,
+    reviewDigest: proposal.reviewDigest,
+    changeSetDigest: proposal.changeSetDigest,
+    approvedPaths: proposal.approvedPaths,
+    executionPaths: proposal.executionPaths,
+    changes: proposal.changes,
+    intendedOutcome: proposal.intendedOutcome,
+    preconditionStatusDigest: proposal.preconditionStatusDigest,
+    unrelatedProjectionDigest: proposal.unrelatedProjectionDigest,
+  };
+}
 
 export interface DirtyPathSnapshot {
   path: string;
@@ -227,13 +259,6 @@ export function assertExactReviewedChangeSet(review: ReviewedChangeSetReceipt): 
     throw new Error("The outer reviewed change-set receipt digest is malformed.");
 }
 
-export function executionOrder(paths: readonly string[]): readonly string[] {
-  return [
-    ...paths.filter((path) => path !== topologyPath),
-    ...paths.filter((path) => path === topologyPath),
-  ];
-}
-
 export function createLocalPublicationProposal(input: {
   sourceReceipt: SourceReceipt;
   destination: DestinationSnapshot;
@@ -290,31 +315,6 @@ export function createLocalPublicationProposal(input: {
     unrelatedProjectionDigest: unrelatedProjectionDigest(destination, review.approvedPaths),
   };
   return { ...unsigned, digest: stableDigest(unsigned) };
-}
-
-function canonicalProposal(proposal: LocalPublicationProposal) {
-  return {
-    version: proposal.version,
-    destinationPath: proposal.destinationPath,
-    rootIdentity: proposal.rootIdentity,
-    gitDirectoryPath: proposal.gitDirectoryPath,
-    gitDirectoryIdentity: proposal.gitDirectoryIdentity,
-    sourceReceiptDigest: proposal.sourceReceiptDigest,
-    sourceTree: proposal.sourceTree,
-    contractDigest: proposal.contractDigest,
-    baseSha: proposal.baseSha,
-    headReference: proposal.headReference,
-    indexFileDigest: proposal.indexFileDigest,
-    remoteDigest: proposal.remoteDigest,
-    reviewDigest: proposal.reviewDigest,
-    changeSetDigest: proposal.changeSetDigest,
-    approvedPaths: proposal.approvedPaths,
-    executionPaths: proposal.executionPaths,
-    changes: proposal.changes,
-    intendedOutcome: proposal.intendedOutcome,
-    preconditionStatusDigest: proposal.preconditionStatusDigest,
-    unrelatedProjectionDigest: proposal.unrelatedProjectionDigest,
-  };
 }
 
 export function assertExactProposal(proposal: LocalPublicationProposal): void {

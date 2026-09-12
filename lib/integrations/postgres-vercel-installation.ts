@@ -46,7 +46,7 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) return undefined;
+  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) return;
   return {
     binding: {
       installationId: row.installationId,
@@ -107,7 +107,7 @@ export function createPostgresVercelAuthorizationStateStore(
           returnTo: vercelInstallationAuthorizationStates.returnTo,
           resumeKey: vercelInstallationAuthorizationStates.resumeKey,
         });
-      if (rows.length !== 1) return undefined;
+      if (rows.length !== 1) return;
       return parseProviderConnectionReturn({
         returnTo: rows[0]!.returnTo,
         ...(rows[0]?.resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
@@ -131,7 +131,7 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (!rows[0]) return undefined;
+      if (!rows[0]) return;
       return parseProviderConnectionReturn({
         returnTo: rows[0].returnTo,
         ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),

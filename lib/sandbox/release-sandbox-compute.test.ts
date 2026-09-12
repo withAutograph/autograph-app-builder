@@ -79,7 +79,7 @@ describe("Eve durable turn execution envelope", () => {
         isMember,
       });
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      const stop = vi.fn(async () => undefined);
+      const stop = vi.fn(async () => {});
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const getSandbox = vi.fn(async () => ({
         id: "provider_session_1",

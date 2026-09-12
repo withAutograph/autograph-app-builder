@@ -224,7 +224,6 @@ export function preparedProviderFixture(input: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           read: async (owner) => {
             expect(owner).toEqual(input.authority);
-            return undefined;
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           list: async (owner) => {

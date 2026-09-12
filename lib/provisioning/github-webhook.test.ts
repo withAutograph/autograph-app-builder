@@ -39,7 +39,7 @@ function database() {
       updates.push(table);
       return {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        set: () => ({ where: async () => undefined }),
+        set: () => ({ where: async () => {} }),
       };
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

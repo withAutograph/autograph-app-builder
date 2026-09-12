@@ -124,7 +124,9 @@ export async function captureParity(input: {
           };
         } finally {
           // Preserve the case receipt if the browser disconnected during cleanup.
-          await context?.close().catch(() => undefined);
+          await context?.close().catch(() => {
+            // Cleanup errors are intentionally ignored.
+          });
         }
         await mkdir(dirname(join(input.outputRoot, receipt)), { recursive: true });
         await writeFile(

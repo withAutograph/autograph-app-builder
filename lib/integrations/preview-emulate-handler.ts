@@ -97,7 +97,7 @@ export function createPreviewEmulateHandler(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handler(environment: NodeJS.ProcessEnv) {
   const emulation = readPreviewProviderEmulation(environment);
-  if (!emulation) return undefined;
+  if (!emulation) return;
   if (active?.namespace === emulation.namespace) return active.handler;
   const created = createPreviewEmulateHandler({
     emulation,

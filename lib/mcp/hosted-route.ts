@@ -135,19 +135,20 @@ export function createDeploymentMcpRequestHandler(input: {
                   });
                 const repositoryAccessRuntime =
                   await import("../agent/deployment-repository-access-runtime");
-                return (
+                const repositoryRuntime =
                   await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
                     forwardedSessionAuth(principal, sourceHandoffId),
-                  )
-                ).classify({ repository });
+                  );
+                return repositoryRuntime.classify({ repository });
               },
             },
             async beforeRead({ principal, adapterSessionId, sourceHandoffId }) {
               try {
+                const repositoryRuntime =
+                  await import("../agent/deployment-repository-access-runtime");
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
-                  (await import("../agent/deployment-repository-access-runtime"))
-                    .resumeAuthorizedRepositoryAccessForSession;
+                  repositoryRuntime.resumeAuthorizedRepositoryAccessForSession;
                 await resumeRepositoryAccess({
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,

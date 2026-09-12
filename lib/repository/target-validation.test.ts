@@ -72,7 +72,7 @@ function sandboxFixture() {
       id: "sandbox",
       run,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => undefined),
+      writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession,
   };
 }

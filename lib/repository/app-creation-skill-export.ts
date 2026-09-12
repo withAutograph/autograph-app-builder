@@ -60,9 +60,8 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   const files: ExportedSkillFile[] = [];
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function visit(directory: string): Promise<void> {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).toSorted(
-      (left, right) => left.name.localeCompare(right.name),
-    )) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink())
         throw new Error("App-creation skill exports do not accept symbolic links.");
@@ -71,7 +70,8 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
       else if (entry.isFile()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-bitwise -- Preserve sequential traversal and permission-mode bitmask.
-        const mode = (await lstat(path)).mode & 0o777;
+        const stats = await lstat(path);
+        const mode = stats.mode & 0o777;
         if (mode !== 0o644 && mode !== 0o755)
           throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
         files.push({
@@ -86,7 +86,8 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   for (const root of APP_CREATION_SKILL_ROOTS) {
     const directory = join(sourceRoot, root);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (!(await lstat(directory)).isDirectory())
+    const stats = await lstat(directory);
+    if (!stats.isDirectory())
       throw new Error(`App-creation skill root is not a directory: ${root}`);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await visit(directory);

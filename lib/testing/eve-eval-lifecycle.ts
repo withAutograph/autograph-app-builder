@@ -245,7 +245,7 @@ export function waitForEveEvalChild(
 ): Promise<number> {
   const signalTarget = input.signalTarget ?? process;
   const gracefulTimeoutMs = input.gracefulTimeoutMs ?? 16_000;
-  return new Promise<number>((resolve, reject) => {
+  return new Promise<number>((_resolve, reject) => {
     let requestedSignal: EvalSignal | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -300,7 +300,7 @@ export function waitForEveEvalChild(
       // share the same descendant cleanup boundary.
       forceGroup();
       cleanup();
-      resolve(code ?? signalExitCode(requestedSignal ?? signal));
+      _resolve(code ?? signalExitCode(requestedSignal ?? signal));
     };
     Object.assign(handlers, { interrupt, terminate, failed, exited });
     signalTarget.on("SIGINT", handlers.interrupt);

@@ -67,7 +67,7 @@ describe("Vercel integration security", () => {
           async create() {},
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async consume() {
-            if (consumed) return undefined;
+            if (consumed) return;
             consumed = true;
             return recoveredReturnState;
           },

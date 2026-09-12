@@ -7,7 +7,9 @@ import { authClient } from "@/lib/auth-client";
 import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
 import { WorkspaceSetupStatus } from "@/app/ui/workspace-setup-status";
 
-const subscribeToLocation = () => () => undefined;
+const subscribeToLocation = () => () => {
+  // The setup page does not subscribe to location changes.
+};
 const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 

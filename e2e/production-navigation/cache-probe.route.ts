@@ -17,7 +17,7 @@ function installCatalogFixture() {
   }
   if (installed) return;
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
+  globalThis.fetch = (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url !== catalogUrl) return realFetch(input, init);
     upstreamCalls += 1;

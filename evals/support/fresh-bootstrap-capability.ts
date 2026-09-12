@@ -69,7 +69,9 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       capability,
       allowedRoot: capability.allowedRoot.path,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-      cleanup: async () => undefined,
+      cleanup: async () => {
+        // The production capability owns no local resources.
+      },
     };
   }
   const owner = await realpath(await mkdtemp(join(tmpdir(), "app-builder-fresh-eval-")));

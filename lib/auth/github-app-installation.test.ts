@@ -66,7 +66,7 @@ function harness(input?: {
   const installationStore: HostedGitHubInstallationStore = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read() {
-      return undefined;
+      // This test double has no persisted record.
     },
     bind,
   };

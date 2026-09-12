@@ -16,6 +16,18 @@ import { sandboxExecutionPolicyDigest } from "./execution-policy";
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
+export function sandboxLeaseAdvisoryKey(principal: HostedPrincipal, adapterSessionId: string) {
+  return JSON.stringify([
+    "sandbox_execution_lease_v1",
+    "session",
+    principal.issuer,
+    principal.audience,
+    principal.workspaceId,
+    principal.ownerUserId,
+    adapterSessionId,
+  ]);
+}
+
 async function postgresNowEpochMs(database: Transaction) {
   const rows = await database.execute(sql`select clock_timestamp() as "database_now"`);
   const result = rows as unknown as
@@ -81,18 +93,6 @@ export function parseSandboxExecutionLeaseRow(input: unknown) {
     throw new Error("Sandbox execution lease row is not canonically bound.");
   }
   return lease;
-}
-
-export function sandboxLeaseAdvisoryKey(principal: HostedPrincipal, adapterSessionId: string) {
-  return JSON.stringify([
-    "sandbox_execution_lease_v1",
-    "session",
-    principal.issuer,
-    principal.audience,
-    principal.workspaceId,
-    principal.ownerUserId,
-    adapterSessionId,
-  ]);
 }
 
 async function lockExactLease(

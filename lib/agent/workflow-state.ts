@@ -104,7 +104,6 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
   digest: string;
 };
 
-/** Reject persisted V2 receipts whose durable fields no longer bind together. */
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
