@@ -59,14 +59,14 @@ const output = join(await realpath(requestedParent), basename(requestedOutput));
 await mkdir(output, { mode: 0o700 });
 const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
-for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
-  const source = resolve(repositoryRoot, path);
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  if ((await lstat(source)).isSymbolicLink())
-    throw new Error(`Portable source cannot be a symbolic link: ${path}`);
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await cp(source, join(core, path), { recursive: true });
-}
+await Promise.all(
+  ["plugin.json", "mcp.json", "LICENSE", "skills"].map(async (sourcePath) => {
+    const source = resolve(repositoryRoot, sourcePath);
+    if ((await lstat(source)).isSymbolicLink())
+      throw new Error(`Portable source cannot be a symbolic link: ${sourcePath}`);
+    await cp(source, join(core, sourcePath), { recursive: true });
+  }),
+);
 const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));
 mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
 await writeFile(join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
@@ -96,40 +96,39 @@ await writeFile(
 
 const clientRoot = join(output, "clients");
 await mkdir(clientRoot);
-for (const client of ["vscode", "cursor", "codex"] as const) {
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await writeFile(
-    join(clientRoot, `${client}.client-harness.json`),
-    `${JSON.stringify(
-      {
-        format: "agent-plugins-client-harness-v2",
-        client,
-        pluginRoot: "../app-builder",
-        mcp: "../app-builder/mcp.json",
-        transport: { type: "streamable-http", url: `${endpoint}/mcp` },
-        oauth: {
-          protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
+await Promise.all(
+  (["vscode", "cursor", "codex"] as const).map((client) =>
+    writeFile(
+      join(clientRoot, `${client}.client-harness.json`),
+      `${JSON.stringify(
+        {
+          format: "agent-plugins-client-harness-v2",
+          client,
+          pluginRoot: "../app-builder",
+          mcp: "../app-builder/mcp.json",
+          transport: { type: "streamable-http", url: `${endpoint}/mcp` },
+          oauth: {
+            protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
+          },
         },
-      },
-      null,
-      2,
-    )}\n`,
-  );
-}
+        null,
+        2,
+      )}\n`,
+    ),
+  ),
+);
 
-const files = new Map<string, Uint8Array>();
-async function collect(directory: string) {
-  for (const entry of (await readdir(directory)).toSorted()) {
-    const path = join(directory, entry);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const info = await stat(path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (info.isDirectory()) await collect(path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    else files.set(relative(output, path), await readFile(path));
-  }
+async function collectFiles(root: string, directory: string): Promise<Map<string, Uint8Array>> {
+  const entries = await Promise.all(
+    (await readdir(directory)).toSorted().map(async (entry) => {
+      const path = join(directory, entry);
+      if ((await stat(path)).isDirectory()) return collectFiles(root, path);
+      return new Map([[relative(root, path), await readFile(path)]]);
+    }),
+  );
+  return new Map(entries.flatMap((entry) => [...entry]));
 }
-await collect(core);
+const files = await collectFiles(output, core);
 const archive = deterministicGzip(deterministicTar(files));
 const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf-8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
@@ -146,31 +145,30 @@ const codexManifest = JSON.parse(await readFile(resolve(".codex-plugin/plugin.js
 if (codexManifest.name !== portable.name || codexManifest.version !== portable.version)
   throw new Error("The Codex adapter name and version must match the portable manifest.");
 const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];
-const codexMarketplaceAssetPaths: string[] = [];
-for (const reference of new Set(codexAssetReferences)) {
-  if (
-    typeof reference !== "string" ||
-    !reference.startsWith("./") ||
-    reference.includes("\\") ||
-    reference
-      .slice(2)
-      .split("/")
-      .some((part: string) => part === "" || part === "." || part === "..")
-  )
-    throw new Error("Codex manifest asset references must be safe relative paths.");
-  const relativeAssetPath = reference.slice(2);
-  const sourceAsset = readTrackedTreeBlob({
-    repositoryRoot,
-    tree: source.tree,
-    path: relativeAssetPath,
-  });
-  const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
-  codexMarketplaceAssetPaths.push(`plugins/${portable.name}/${relativeAssetPath}`);
-}
+const codexMarketplaceAssetPaths = await Promise.all(
+  [...new Set(codexAssetReferences)].map(async (reference) => {
+    if (
+      typeof reference !== "string" ||
+      !reference.startsWith("./") ||
+      reference.includes("\\") ||
+      reference
+        .slice(2)
+        .split("/")
+        .some((part: string) => part === "" || part === "." || part === "..")
+    )
+      throw new Error("Codex manifest asset references must be safe relative paths.");
+    const relativeAssetPath = reference.slice(2);
+    const sourceAsset = readTrackedTreeBlob({
+      repositoryRoot,
+      tree: source.tree,
+      path: relativeAssetPath,
+    });
+    const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
+    await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
+    await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
+    return `plugins/${portable.name}/${relativeAssetPath}`;
+  }),
+);
 await writeFile(
   join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
   `${JSON.stringify(codexManifest, null, 2)}\n`,
@@ -218,19 +216,7 @@ await writeFile(
     2,
   )}\n`,
 );
-const marketplaceFiles = new Map<string, Uint8Array>();
-async function collectMarketplace(directory: string) {
-  for (const entry of (await readdir(directory)).toSorted()) {
-    const path = join(directory, entry);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const info = await stat(path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (info.isDirectory()) await collectMarketplace(path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    else marketplaceFiles.set(relative(marketplaceRoot, path), await readFile(path));
-  }
-}
-await collectMarketplace(marketplaceRoot);
+const marketplaceFiles = await collectFiles(marketplaceRoot, marketplaceRoot);
 const marketplaceArchive = deterministicGzip(deterministicTar(marketplaceFiles));
 const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.version}.tar.gz`;
 await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);

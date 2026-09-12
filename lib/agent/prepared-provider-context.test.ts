@@ -75,23 +75,25 @@ describe("prepared provider continuity", () => {
     expect(intent.provisioning.vercel.projectId).toBe("prj_1");
   });
   it("retries rate-limited 403s and rejects a project readback for another account", async () => {
-    for (const response of [
-      new Response(null, { status: 403, headers: { "retry-after": "30" } }),
-      Response.json({ id: "prj_1", name: "stock", accountId: "team_other" }),
-    ])
-      expect(
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await readPreparedVercelAccess({
-          authority,
-          intent,
-          readCredential: async () => credential,
-          fetch: async () => response,
-        }),
-      ).toEqual({
-        status: "provider-unavailable",
-        action: "retry",
-        retryable: true,
-      });
+    await Promise.all(
+      [
+        new Response(null, { status: 403, headers: { "retry-after": "30" } }),
+        Response.json({ id: "prj_1", name: "stock", accountId: "team_other" }),
+      ].map(async (response) => {
+        expect(
+          await readPreparedVercelAccess({
+            authority,
+            intent,
+            readCredential: async () => credential,
+            fetch: async () => response,
+          }),
+        ).toEqual({
+          status: "provider-unavailable",
+          action: "retry",
+          retryable: true,
+        });
+      }),
+    );
     expect(
       await readPreparedVercelAccess({
         authority,
@@ -271,23 +273,24 @@ describe("prepared provider continuity", () => {
   });
 
   it("treats transport, storage, malformed responses, and incorrect readbacks as retryable", async () => {
-    for (const request of [
-      async () => {
-        throw new Error(credential.token);
-      },
-      async () => new Response("invalid-json"),
-      async () => Response.json({ id: "another-project", name: "wrong" }),
-    ]) {
-      expect(
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await readPreparedVercelAccess({
-          authority,
-          intent,
-          readCredential: async () => credential,
-          fetch: request,
-        }),
-      ).toMatchObject({ status: "provider-unavailable", action: "retry" });
-    }
+    await Promise.all(
+      [
+        async () => {
+          throw new Error(credential.token);
+        },
+        async () => new Response("invalid-json"),
+        async () => Response.json({ id: "another-project", name: "wrong" }),
+      ].map(async (request) => {
+        expect(
+          await readPreparedVercelAccess({
+            authority,
+            intent,
+            readCredential: async () => credential,
+            fetch: request,
+          }),
+        ).toMatchObject({ status: "provider-unavailable", action: "retry" });
+      }),
+    );
     expect(
       await readPreparedVercelAccess({
         authority,

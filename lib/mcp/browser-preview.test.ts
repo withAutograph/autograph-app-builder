@@ -123,32 +123,31 @@ describe("Browser prototype preview", () => {
         prototype: new Error("private resolver failure"),
       },
     ];
-    const projections: Record<string, string | number | null>[] = [];
-    for (const candidate of cases) {
-      const handler = createPrototypePreviewRequestHandler({
-        resolvePrototype: async () => {
-          if (candidate.prototype instanceof Error) throw candidate.prototype;
-          return candidate.prototype;
-        },
-      });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const response = await handler(
-        new Request(`https://builder.example.test/preview/session-one/${digest}`),
-        candidate.route,
-      );
-      projections.push({
-        status: response.status,
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        body: await response.text(),
-        cache: response.headers.get("cache-control"),
-        contentSecurityPolicy: response.headers.get("content-security-policy"),
-        contentType: response.headers.get("content-type"),
-        crossOriginResourcePolicy: response.headers.get("cross-origin-resource-policy"),
-        permissionsPolicy: response.headers.get("permissions-policy"),
-        referrerPolicy: response.headers.get("referrer-policy"),
-        contentTypeOptions: response.headers.get("x-content-type-options"),
-      });
-    }
+    const projections = await Promise.all(
+      cases.map(async (candidate) => {
+        const handler = createPrototypePreviewRequestHandler({
+          resolvePrototype: async () => {
+            if (candidate.prototype instanceof Error) throw candidate.prototype;
+            return candidate.prototype;
+          },
+        });
+        const response = await handler(
+          new Request(`https://builder.example.test/preview/session-one/${digest}`),
+          candidate.route,
+        );
+        return {
+          status: response.status,
+          body: await response.text(),
+          cache: response.headers.get("cache-control"),
+          contentSecurityPolicy: response.headers.get("content-security-policy"),
+          contentType: response.headers.get("content-type"),
+          crossOriginResourcePolicy: response.headers.get("cross-origin-resource-policy"),
+          permissionsPolicy: response.headers.get("permissions-policy"),
+          referrerPolicy: response.headers.get("referrer-policy"),
+          contentTypeOptions: response.headers.get("x-content-type-options"),
+        };
+      }),
+    );
     expect(new Set(projections.map((projection) => JSON.stringify(projection))).size).toBe(1);
     expect(projections[0]).toEqual({
       status: 404,

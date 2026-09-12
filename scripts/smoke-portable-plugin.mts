@@ -37,50 +37,53 @@ const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => to
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
   throw new Error("Offline MCP discovery did not return the exact five tools.");
 
-for (const client of ["vscode", "cursor", "codex"] as const) {
-  const root = join(installRoot, client);
-  const pluginRoot = join(root, "app-builder");
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await validateAgentPluginPackage({
-    pluginRoot,
-    repositoryRoot: resolve("."),
-    release: true,
-    packageKind: "generated-artifact",
-  });
-  for (const [path, digest] of Object.entries(receipt.coreFiles as Record<string, string>)) {
-    const relativePath = path.replace(/^app-builder\//u, "");
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await readFile(join(pluginRoot, relativePath));
-    if (sha256(bytes) !== digest)
-      throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
-  }
-  for (const forbidden of [".codex-plugin", ".app.json"]) {
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await lstat(join(pluginRoot, forbidden));
-      throw new Error(`${client} portable root contains ${forbidden}.`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  const harness = JSON.parse(await readFile(join(root, "client-harness.json"), "utf-8"));
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  const installation = JSON.parse(await readFile(join(root, "installation-receipt.json"), "utf-8"));
-  if (
-    harness.format !== "agent-plugins-client-harness-v2" ||
-    harness.client !== client ||
-    harness.pluginRoot !== "./app-builder" ||
-    harness.mcp !== "./app-builder/mcp.json" ||
-    harness.transport?.type !== "streamable-http" ||
-    harness.transport?.url !== receipt.endpoint ||
-    harness.oauth?.protectedResourceMetadata !==
-      `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource` ||
-    installation.client !== client ||
-    installation.releaseArchive.sha256 !== receipt.archive.sha256
-  )
-    throw new Error(`${client} offline harness metadata was invalid.`);
-}
+await Promise.all(
+  (["vscode", "cursor", "codex"] as const).map(async (client) => {
+    const root = join(installRoot, client);
+    const pluginRoot = join(root, "app-builder");
+    await Promise.all([
+      validateAgentPluginPackage({
+        pluginRoot,
+        repositoryRoot: resolve("."),
+        release: true,
+        packageKind: "generated-artifact",
+      }),
+      ...Object.entries(receipt.coreFiles as Record<string, string>).map(async ([path, digest]) => {
+        const relativePath = path.replace(/^app-builder\//u, "");
+        const bytes = await readFile(join(pluginRoot, relativePath));
+        if (sha256(bytes) !== digest)
+          throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
+      }),
+      ...[".codex-plugin", ".app.json"].map(async (forbidden) => {
+        try {
+          await lstat(join(pluginRoot, forbidden));
+          throw new Error(`${client} portable root contains ${forbidden}.`);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }),
+    ]);
+    const [harnessBytes, installationBytes] = await Promise.all([
+      readFile(join(root, "client-harness.json"), "utf-8"),
+      readFile(join(root, "installation-receipt.json"), "utf-8"),
+    ]);
+    const harness = JSON.parse(harnessBytes);
+    const installation = JSON.parse(installationBytes);
+    if (
+      harness.format !== "agent-plugins-client-harness-v2" ||
+      harness.client !== client ||
+      harness.pluginRoot !== "./app-builder" ||
+      harness.mcp !== "./app-builder/mcp.json" ||
+      harness.transport?.type !== "streamable-http" ||
+      harness.transport?.url !== receipt.endpoint ||
+      harness.oauth?.protectedResourceMetadata !==
+        `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource` ||
+      installation.client !== client ||
+      installation.releaseArchive.sha256 !== receipt.archive.sha256
+    )
+      throw new Error(`${client} offline harness metadata was invalid.`);
+  }),
+);
 console.log(
   "Portable VS Code, Cursor, and Codex package loading plus exact-five-tool discovery passed.",
 );

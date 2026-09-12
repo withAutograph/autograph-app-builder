@@ -78,27 +78,26 @@ describe("hosted route composition", () => {
   });
 
   it("fails closed without constructing storage when hosted configuration is invalid", async () => {
-    for (const invalidEnvironment of [
-      { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
-      { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
-    ]) {
-      const openDatabase = vi.fn(() => ({}) as unknown as Database);
-      const handler = createDeploymentMcpRequestHandler({
-        environment: invalidEnvironment,
-        workloadIdentity,
-        openDatabase,
-        now: () => nowEpochMs,
-      });
-
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const response = await handler(request());
-      expect(response.status).toBe(503);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(response.json()).resolves.toEqual({
-        error: "service_unavailable",
-      });
-      expect(openDatabase).not.toHaveBeenCalled();
-    }
+    await Promise.all(
+      [
+        { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
+        { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
+      ].map(async (invalidEnvironment) => {
+        const openDatabase = vi.fn(() => ({}) as unknown as Database);
+        const handler = createDeploymentMcpRequestHandler({
+          environment: invalidEnvironment,
+          workloadIdentity,
+          openDatabase,
+          now: () => nowEpochMs,
+        });
+        const response = await handler(request());
+        expect(response.status).toBe(503);
+        await expect(response.json()).resolves.toEqual({
+          error: "service_unavailable",
+        });
+        expect(openDatabase).not.toHaveBeenCalled();
+      }),
+    );
   });
 
   it("binds every hosted request to the exact configured MCP resource before opening storage", async () => {
