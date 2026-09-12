@@ -975,9 +975,10 @@ export function createGitHubAppInstallationAuthorization(input: {
                 appSlug: config.appSlug,
                 requestedInstallationId: state.installationId,
               });
-          if (installation.suspendedAt !== null) throw new Error();
+          if (installation.suspendedAt !== null)
+            throw new Error("GitHub installation is suspended.");
           if (installation.accountType === "User" && installation.accountId !== providerUserId)
-            throw new Error();
+            throw new Error("GitHub installation belongs to another provider user.");
         } catch {
           throw new GitHubInstallationAuthorizationError("installation-identity-validation");
         }

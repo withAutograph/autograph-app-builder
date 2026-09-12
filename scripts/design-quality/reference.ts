@@ -92,7 +92,7 @@ async function aliasEntryPoints(root: string, limitations: string[]): Promise<En
   let parsed: ts.ParsedCommandLine;
   try {
     const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
-    if (config.error) throw new Error();
+    if (config.error) throw new Error("Unable to read TypeScript configuration.");
     parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   } catch {
     limitations.push(
