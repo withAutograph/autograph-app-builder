@@ -15,7 +15,6 @@ export default defineConfig({
     "eslint/sort-keys": "off",
     "promise/avoid-new": "off",
     "typescript/no-non-null-assertion": "off",
-    "unicorn/filename-case": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-useless-undefined": "off",
   },
