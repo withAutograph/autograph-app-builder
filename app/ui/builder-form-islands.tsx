@@ -9,6 +9,7 @@ import { BuildWithSection } from "./builder-destination";
 import { ProviderNotices } from "./builder-provider-notices";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderDraftStatus() {
   const { draftSaveError, draftSyncNotice, autosave, setDraftSaveError } =
     useBuilderControllerContext();
@@ -41,11 +42,13 @@ export function BuilderDraftStatus() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderProviderNotices() {
   const { visibleProviderNotices } = useBuilderControllerContext();
   return <ProviderNotices notices={visibleProviderNotices} />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderAppDetails() {
   const {
     form,
@@ -86,6 +89,7 @@ export function BuilderAppDetails() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderDestination() {
   const { comingSoonEnabled, form, setForm } = useBuilderControllerContext();
   return (
@@ -98,6 +102,7 @@ export function BuilderDestination() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderModel() {
   const { form, integrations, model, modelOptions, zdrOnly, setModel, setZdrOnly, router } =
     useBuilderControllerContext();
@@ -123,6 +128,7 @@ export function BuilderModel() {
   ) : null;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderStorage() {
   const {
     integrations,
@@ -166,6 +172,7 @@ export function BuilderStorage() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderDeployment() {
   const {
     integrations,
@@ -197,6 +204,7 @@ export function BuilderDeployment() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderConnections() {
   const {
     connectedConnections,
@@ -232,6 +240,7 @@ export function BuilderConnections() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderSubmit() {
   const { canSubmit, submitGuidance } = useBuilderControllerContext();
   return (

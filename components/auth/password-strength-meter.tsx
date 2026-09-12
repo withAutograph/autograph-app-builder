@@ -31,6 +31,7 @@ export interface PasswordStrengthMeterProps {
  * empty. The score never gates submission: your server rules stay the
  * authority on what is acceptable.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function PasswordStrengthMeter({ password, className }: PasswordStrengthMeterProps) {
   const { emailAndPassword, localization } = useAuth();
 

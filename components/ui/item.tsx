@@ -7,6 +7,7 @@ import type { VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -21,6 +22,7 @@ function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemSeparator({ className, ...props }: React.ComponentProps<typeof Separator>) {
   return (
     <Separator
@@ -54,6 +56,7 @@ const itemVariants = cva(
   },
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function Item({
   className,
   variant = "default",
@@ -95,6 +98,7 @@ const itemMediaVariants = cva(
   },
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemMedia({
   className,
   variant = "default",
@@ -110,6 +114,7 @@ function ItemMedia({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -123,6 +128,7 @@ function ItemContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -136,6 +142,7 @@ function ItemTitle({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
@@ -149,12 +156,14 @@ function ItemDescription({ className, ...props }: React.ComponentProps<"p">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemActions({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="item-actions" className={cn("flex items-center gap-2", className)} {...props} />
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -165,6 +174,7 @@ function ItemHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ItemFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

@@ -47,6 +47,7 @@ interface Tokens {
   scope: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exchange(page: Page, form: Record<string, string>): Promise<Tokens> {
   // Catch transport/JSON failures so Playwright cannot render token request
   // parameters or raw provider errors in a failed assertion/report.
@@ -71,6 +72,7 @@ async function exchange(page: Page, form: Record<string, string>): Promise<Token
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, workspaceId: string) {
   let stage = "JWKS readback";
   try {
@@ -197,6 +199,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
     callbackServer!.listen(8787, "127.0.0.1", resolve);
   });
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function grant(first: boolean) {
     callback = undefined;
     const verifier = randomBytes(48).toString("base64url");

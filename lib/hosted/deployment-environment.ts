@@ -25,6 +25,7 @@ const hostedDeploymentEnvironmentBindingSchema = z
  * Returns the one exact supported deployment environment only after the
  * explicit App Builder binding agrees with Vercel's invocation environment.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedDeploymentEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): HostedDeploymentEnvironment {

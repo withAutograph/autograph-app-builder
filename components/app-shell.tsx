@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Providers } from "@/components/providers";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-shell">

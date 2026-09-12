@@ -45,14 +45,17 @@ const providerDescriptors = {
   },
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerDescriptor(provider: EmulatedProvider) {
   return providerDescriptors[provider];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function localApprovalButtonName(provider: EmulatedProvider) {
   return providerDescriptor(provider).approvalButton;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resetApplicationState() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -79,6 +82,7 @@ export async function resetApplicationState() {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function applicationCounts() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -112,6 +116,7 @@ export async function applicationCounts() {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
@@ -122,16 +127,19 @@ export async function currentSession(page: Page) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function signOut(page: Page) {
   await page.goto("/auth/sign-out");
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
   await expect.poll(() => currentSession(page)).toBeNull();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForSocialSignInReady(page: Page) {
   await expect(page.locator('[data-auth-social-ready="true"]').first()).toBeAttached();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function finishOAuth(page: Page, provider: EmulatedProvider, callbackURL = "/") {
   await page.goto(`/auth/sign-in?callbackURL=${encodeURIComponent(callbackURL)}`);
   await waitForSocialSignInReady(page);
@@ -151,6 +159,7 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   await expect(page).toHaveURL(new URL(callbackURL, appOrigin).href, { timeout: 30_000 });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForBuilderReady(page: Page) {
   // The server route streams an instant shell before the client form leaf is
   // hydrated and its device-recovery check settles. Waiting for editability
@@ -159,12 +168,14 @@ export async function waitForBuilderReady(page: Page) {
   await expect(page.getByLabel("App Name")).toBeEditable();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForAnonymousBuilderReady(page: Page) {
   // The anonymous composer is also a controlled client field. Its disabled
   // state prevents an early DOM write from being lost while React hydrates.
   await expect(page.getByLabel("What should this app do?")).toBeEditable();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForHandoffContent(page: Page, appName: string) {
   // The handoff route streams its shell while request-fresh session and journal
   // data resolve on the server. Match the route navigation budget instead of
@@ -174,6 +185,7 @@ export async function waitForHandoffContent(page: Page, appName: string) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function registerPasskey(context: BrowserContext, page: Page, callbackURL = "/") {
   const authenticator = await VirtualAuthenticator.create(context, page);
   await page.goto(`/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
@@ -184,6 +196,7 @@ export async function registerPasskey(context: BrowserContext, page: Page, callb
   return authenticator;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function openProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await page.getByRole("checkbox", { name: new RegExp(provider, "u") }).check();
@@ -197,6 +210,7 @@ export async function openProviderConnection(page: Page, provider: EmulatedProvi
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function advanceProviderConnectionToApproval(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await page.getByRole("button", { name: descriptor.installationButton }).click();
@@ -206,6 +220,7 @@ export async function advanceProviderConnectionToApproval(page: Page, provider: 
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function selectProviderIdentity(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
@@ -224,6 +239,7 @@ export async function selectProviderIdentity(page: Page, provider: EmulatedProvi
   await waitForBuilderReady(page);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function approveProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await selectProviderIdentity(page, provider);
@@ -231,12 +247,14 @@ export async function approveProviderConnection(page: Page, provider: EmulatedPr
   await expect(page.getByLabel(descriptor.selectedControl)).toBeFocused();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function installProvider(page: Page, provider: EmulatedProvider) {
   await openProviderConnection(page, provider);
   await advanceProviderConnectionToApproval(page, provider);
   await approveProviderConnection(page, provider);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reopenProviderConnection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   const reconnect = page.getByRole("button", {
@@ -247,6 +265,7 @@ export async function reopenProviderConnection(page: Page, provider: EmulatedPro
   await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function expectProviderSelection(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await waitForBuilderReady(page);
@@ -254,6 +273,7 @@ export async function expectProviderSelection(page: Page, provider: EmulatedProv
   await expect(page.getByLabel(descriptor.selectedControl)).toHaveValue(descriptor.selectedValue);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function installBrowserBoundaries(
   context: BrowserContext,
   mode: "success" | "blocked" = "success",
@@ -299,7 +319,7 @@ export async function installBrowserBoundaries(
   }, mode);
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
   return page.evaluate(() => {
     const state = (

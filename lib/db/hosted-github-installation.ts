@@ -33,6 +33,7 @@ export const hostedGitHubInstallationApplyRequestSchema = planSchema
 const digest = (value: string): `sha256:${string}` =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(input: z.infer<typeof planSchema>): string {
   return JSON.stringify({
     version: input.version,
@@ -43,6 +44,7 @@ function canonical(input: z.infer<typeof planSchema>): string {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function planHostedGitHubInstallation(input: unknown) {
   const request = planSchema.parse(input);
   const requestJson = canonical(request);
@@ -57,6 +59,7 @@ export function planHostedGitHubInstallation(input: unknown) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function bindHostedGitHubInstallation(input: {
   request: unknown;
   store: HostedGitHubInstallationStore;

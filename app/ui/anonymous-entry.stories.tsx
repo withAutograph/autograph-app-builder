@@ -3,6 +3,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { AnonymousBrief } from "./anonymous-brief";
 import { AnonymousBuilderShell } from "./anonymous-builder-shell";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AnonymousBuilder({ onContinue }: { onContinue?: (brief: string) => void }) {
   return (
     <AnonymousBuilderShell>

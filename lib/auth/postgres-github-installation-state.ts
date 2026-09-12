@@ -8,6 +8,7 @@ import type { GitHubInstallationAuthorizationStateStore } from "./github-app-ins
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubInstallationAuthorizationStateStore(
   database: Database,
 ): GitHubInstallationAuthorizationStateStore {

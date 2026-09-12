@@ -16,6 +16,7 @@ export interface SessionResponse {
   response: SessionAnswer;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function InputControl({
   answer,
   isSubmitting = false,
@@ -84,6 +85,7 @@ export function InputControl({
   return <p className="fallback">Answer this request in chat to continue.</p>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AuthorizationControl({
   canOpen,
   canRefresh,
@@ -106,6 +108,7 @@ export function AuthorizationControl({
     : undefined;
   const provider = storeIn?.title || challenge?.displayName || request.title;
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
     if (!challenge?.url || !canOpen) return;
     setError("");
@@ -117,6 +120,7 @@ export function AuthorizationControl({
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refresh() {
     if (!canRefresh || refreshing) return;
     setRefreshing(true);
@@ -186,6 +190,7 @@ export function AuthorizationControl({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
   canCallTools,
   canOpenLinks,
@@ -225,6 +230,7 @@ export function SessionAppView({
       : undefined
     : "Answer in chat to continue.";
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submitApproval(
     request: PublicInputRequest,
     response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
@@ -241,6 +247,7 @@ export function SessionAppView({
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submit() {
     if (!result || !complete || !canCallTools || state === "submitting") return;
     setState("submitting");

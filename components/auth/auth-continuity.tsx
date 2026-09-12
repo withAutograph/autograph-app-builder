@@ -10,6 +10,7 @@ import autographIcon from "@/assets/autograph-icon.png";
 
 const anonymousBriefStorageKey = "autograph-app-brief";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AuthContinuity({
   children,
   action = "sign-in",

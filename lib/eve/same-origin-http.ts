@@ -79,6 +79,7 @@ export interface HostedWorkloadIdentity {
   token: () => Promise<string>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactToken(value: string): string {
   if (
     value.length === 0 ||
@@ -91,10 +92,12 @@ function exactToken(value: string): string {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function endpoint(config: z.infer<typeof sameOriginConfigSchema>, path: string): string {
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: string) {
   const principal = hostedPrincipalSchema.parse(principalInput);
   return {
@@ -118,6 +121,7 @@ function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: s
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function workloadHeaders(identity: HostedWorkloadIdentity) {
   const token = exactToken(await identity.token());
   return {
@@ -126,6 +130,7 @@ async function workloadHeaders(identity: HostedWorkloadIdentity) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0];
   if (contentType !== "application/json") {
@@ -145,6 +150,7 @@ async function boundedJson(response: Response): Promise<unknown> {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function postMutation(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
@@ -197,6 +203,7 @@ async function postMutation(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function authenticatedFetch(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
@@ -213,6 +220,7 @@ async function authenticatedFetch(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readInstalledSnapshot(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
@@ -316,12 +324,14 @@ async function readInstalledSnapshot(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readSnapshot(
   input: Parameters<typeof readInstalledSnapshot>[0],
 ): Promise<HostedEngineSnapshot> {
   return (await readInstalledSnapshot(input)).snapshot;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined {
   let active: string | undefined;
   for (const event of events) {
@@ -345,6 +355,7 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
   return active;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cancellationSettled(
   events: readonly MessageStreamEvent[],
   startIndex: number,
@@ -360,6 +371,7 @@ function cancellationSettled(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function outstandingRequestIds(events: readonly MessageStreamEvent[]): ReadonlySet<string> {
   const outstanding = new Set<string>();
   for (const event of events) {
@@ -372,6 +384,7 @@ function outstandingRequestIds(events: readonly MessageStreamEvent[]): ReadonlyS
   return outstanding;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readRespondSettlement(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
@@ -392,6 +405,7 @@ async function readRespondSettlement(input: {
   throw new SubmissionOutcomeUnknownError();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSameOriginEveTransport(input: {
   config: unknown;
   workloadIdentity: HostedWorkloadIdentity;

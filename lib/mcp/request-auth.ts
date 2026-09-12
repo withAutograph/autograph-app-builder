@@ -72,6 +72,7 @@ export const hostedMcpAuthConfigSchema = z
 
 export type HostedMcpAuthConfig = z.infer<typeof hostedMcpAuthConfigSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedMcpAuthConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): HostedMcpAuthConfig {
@@ -95,6 +96,7 @@ export class BearerAuthorizationError extends Error {
 // padding. In particular, embedded padding and combined header values fail.
 const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseStrictBearerAuthorization(authorization: string | null): string {
   if (authorization === null) throw new BearerAuthorizationError();
   const match = /^Bearer (?<token>[^ ]+)$/iu.exec(authorization);
@@ -116,6 +118,7 @@ const oauthScopeTokenPattern =
  * issuer, audience, algorithm, key ID, expiry, and not-before time are all
  * mandatory. Only the closed claims projection leaves this boundary.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRemoteJwksAccessTokenVerifier(input: {
   config: HostedMcpAuthConfig;
   fetchImplementation?: typeof fetch;
@@ -190,6 +193,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
   const config = hostedMcpAuthConfigSchema.parse(configInput);
   return {
@@ -207,11 +211,13 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   const metadataUrl = new URL("/.well-known/oauth-protected-resource", config.resourceUrl).href;
   return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(", ")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unauthorizedResponse(
   config: HostedMcpAuthConfig,
   scopes = ["autograph:session"],
@@ -232,6 +238,7 @@ export function unauthorizedResponse(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function forbiddenResponse(
   config: HostedMcpAuthConfig,
   scopes = ["autograph:session"],
@@ -252,6 +259,7 @@ export function forbiddenResponse(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function notFoundResponse(): Response {
   return Response.json(
     { error: "not_found" },
@@ -259,6 +267,7 @@ export function notFoundResponse(): Response {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unavailableResponse(): Response {
   return Response.json(
     { error: "service_unavailable" },

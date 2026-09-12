@@ -26,6 +26,7 @@ const config = {
   resource: authority.audience,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function harness(input?: {
   membership?: () => boolean;
   fetch?: typeof fetch;
@@ -87,6 +88,7 @@ function harness(input?: {
   return { authorization, bind, events, membership };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function setupCallbackUrl(state: string, setupAction: "install" | "update" = "install") {
   const url = new URL("https://builder.example/github/installations/callback");
   url.searchParams.set("installation_id", "98765");
@@ -95,6 +97,7 @@ function setupCallbackUrl(state: string, setupAction: "install" | "update" = "in
   return url.toString();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorizationCallbackUrl(state: string) {
   const url = new URL("https://builder.example/github/installations/callback");
   url.searchParams.set("code", "one-time-code");
@@ -104,6 +107,7 @@ function authorizationCallbackUrl(state: string) {
 
 const DEFAULT_RETURN_STATE = { returnTo: "/" as const };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function prepareAuthorization(
   authorization: ReturnType<typeof createGitHubAppInstallationAuthorization>,
   returnState: { returnTo: "/" | `/handoff/${string}`; resumeKey?: string } = DEFAULT_RETURN_STATE,
@@ -125,6 +129,7 @@ async function prepareAuthorization(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function successfulFetch(
   seen: { url: string; init?: RequestInit }[],
   repositorySelection: "all" | "selected" = "selected",

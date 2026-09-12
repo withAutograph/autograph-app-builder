@@ -60,6 +60,7 @@ export interface RepositoryAccessContinuationStore {
 const continuationDigest = (continuationId: string) =>
   createHash("sha256").update(continuationId).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactEveAuthorizationCallback(input: { callbackUrl: string; issuer: string }) {
   const callback = new URL(input.callbackUrl);
   const issuer = new URL(input.issuer);
@@ -80,6 +81,7 @@ function exactEveAuthorizationCallback(input: { callbackUrl: string; issuer: str
   return callback;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRepositoryAccessContinuationService(input: {
   store: RepositoryAccessContinuationStore;
   now?: () => Date;

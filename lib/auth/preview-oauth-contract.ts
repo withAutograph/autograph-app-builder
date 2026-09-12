@@ -89,6 +89,7 @@ export interface PreviewOAuthMembershipAuthority {
  * protocol side effects remain request-time behavior behind the deployment
  * gate documented in docs/hosted-eve-bridge.md.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildPreviewMcpOAuthOptions(input: {
   config: unknown;
   membership: PreviewOAuthMembershipAuthority;
@@ -182,6 +183,7 @@ export function buildPreviewMcpOAuthOptions(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildPreviewCimdOptions(input: {
   fetchClientMetadataResource: CimdOptions["fetchClientMetadataResource"];
 }): CimdOptions {
@@ -217,6 +219,7 @@ export function buildPreviewCimdOptions(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readPreviewOAuthContractConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {

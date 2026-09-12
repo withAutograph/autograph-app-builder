@@ -19,6 +19,7 @@ const normal = (value: string) => value.trim();
 const key = (selector: string, property: string, value: string) =>
   `${normal(selector)}\u0000${property}\u0000${normal(value)}`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalSelector(value: string) {
   let output = "";
   let pendingSpace = false;
@@ -51,6 +52,7 @@ function canonicalSelector(value: string) {
   return output.trim();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ruleSignature(
   selector: string,
   declarations: { prop: string; value: string; important?: boolean }[],
@@ -77,6 +79,7 @@ function ruleSignature(
     .join("\u0001")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((sourceFile) => /\.css$/iu.test(sourceFile.path))) {
@@ -105,6 +108,7 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
   return evidence;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generatedCssRule(
   generated: CssRuleEvidence[],
   shared: CssRuleEvidence[],

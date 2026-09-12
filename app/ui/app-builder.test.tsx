@@ -30,7 +30,7 @@ const builderActions = vi.hoisted(() => ({
   loadActiveBuilderDraft: vi.fn(async () => undefined),
 }));
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function defaultContinuation(
   _previous: unknown,
   input: {
@@ -190,6 +190,7 @@ const integrationState = {
 
 const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
     authenticated?: boolean;
@@ -221,6 +222,7 @@ function AppBuilder(
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(ui: ReactNode) {
   container = document.createElement("div");
   document.body.append(container);
@@ -230,6 +232,7 @@ async function render(ui: ReactNode) {
   return container;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype =
     control instanceof HTMLTextAreaElement
@@ -243,16 +246,19 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function click(element: HTMLElement) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => element.click());
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function focus(element: HTMLElement) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => element.focus());
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function press(element: HTMLElement, key: string) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () =>

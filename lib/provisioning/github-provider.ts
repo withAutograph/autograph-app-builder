@@ -25,6 +25,7 @@ const configSchema = z
 
 export type GitHubProvisioningConfig = z.infer<typeof configSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readGitHubProvisioningEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): GitHubProvisioningConfig {
@@ -43,39 +44,47 @@ interface JsonResponse {
   body: unknown;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function property(value: unknown, key: string) {
   if (!record(value) || !(key in value)) throw new Error("invalid-response");
   return value[key];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
   if (typeof result !== "string") throw new Error("invalid-response");
   return result;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function decimalProperty(value: unknown, key: string) {
   const result = property(value, key);
   return decimal.parse(typeof result === "number" ? String(result) : result);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function marker(requestId: string) {
   return `Created by Autograph App Builder request ${requestId}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitBlobSha(bytes: Uint8Array) {
   return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function starterSourceBinding(source: StarterSource) {
   if (source.provenance !== undefined) {
     if (source.provenance.method === "git-clone-v1") {
@@ -136,6 +145,7 @@ export function starterSourceBinding(source: StarterSource) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function provisionGitHubRepository(input: {
   config: GitHubProvisioningConfig;
   authority: BuilderProvisionAuthority;
@@ -163,6 +173,7 @@ export async function provisionGitHubRepository(input: {
     fetch: request,
   });
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function github(args: {
     method?: "GET" | "POST";
     path: string;
@@ -193,6 +204,7 @@ export async function provisionGitHubRepository(input: {
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function installationToken() {
     const authentication = await app.octokit.auth({
       type: "installation",
@@ -218,6 +230,7 @@ export async function provisionGitHubRepository(input: {
     return token;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function verifyInstallation() {
     const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
       installation_id: Number(input.installation.installationId),
@@ -234,6 +247,7 @@ export async function provisionGitHubRepository(input: {
       throw new Error("installation-inactive");
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refreshUserToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -340,7 +354,7 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function repository(name: string) {
     return github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}`,
@@ -349,6 +363,7 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function writeStarter(name: string) {
     const blobs = new Map<string, string>();
     const writeBlob = async (file: (typeof input.source.files)[number]) => {
@@ -407,6 +422,7 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readBack(name: string): Promise<GitHubProvisionResult> {
     const repo = await repository(name);
     if (repo.status !== 200) throw new Error("repository-missing");

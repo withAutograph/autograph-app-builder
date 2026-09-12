@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import styles from "./app-builder.module.css";
 import { AutographMark } from "./autograph-mark";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AnonymousBuilderShell({ children }: { children: ReactNode }) {
   return (
     <main className={styles.anonymousPage} id="main-content">

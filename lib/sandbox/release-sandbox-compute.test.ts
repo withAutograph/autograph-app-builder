@@ -13,6 +13,7 @@ const originalEnvironment = {
   EVE_HOSTED_SANDBOX_EXECUTION: process.env.EVE_HOSTED_SANDBOX_EXECUTION,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function restoreEnvironment() {
   for (const [key, value] of Object.entries(originalEnvironment)) {
     if (value === undefined) Reflect.deleteProperty(process.env, key);

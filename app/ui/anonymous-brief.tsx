@@ -10,6 +10,7 @@ const suggestions = [
   "Create an internal operations dashboard",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function subscribeToClientSnapshot() {
   return () => {
     // The client snapshot has no external subscription.
@@ -20,6 +21,7 @@ function subscribeToClientSnapshot() {
  * The anonymous brief is deliberately browser-local until authentication.
  * The authenticated builder claims it through the existing redirect bridge.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AnonymousBrief({ onContinue }: { onContinue?: (brief: string) => void }) {
   const router = useRouter();
   const [brief, setBrief] = useState("");

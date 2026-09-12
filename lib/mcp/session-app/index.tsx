@@ -16,6 +16,7 @@ const app = new App(
 let latestResult: EveSessionResult | undefined;
 const resultListeners = new Set<() => void>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publishResult(result?: EveSessionResult) {
   latestResult = result;
   for (const listener of resultListeners) listener();
@@ -25,6 +26,7 @@ app.ontoolresult = ({ structuredContent }) => {
   publishResult(structuredContent as EveSessionResult | undefined);
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionAppContainer() {
   const result = useSyncExternalStore(
     (listener) => {
@@ -78,6 +80,7 @@ function SessionAppContainer() {
     };
   }, [authorizationRequestKey, capabilities?.serverTools, refresh]);
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function respond(responses: SessionResponse[]) {
     if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({

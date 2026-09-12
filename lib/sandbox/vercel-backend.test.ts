@@ -17,6 +17,7 @@ import {
 const runtimeContext = { appRoot: "/app" };
 const templateKey = "template-key";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function recoveryInput(input?: {
   readonly bootstrap?: NonNullable<SandboxBackendPrewarmInput["bootstrap"]>;
   readonly seedFiles?: readonly SandboxSeedFile[];
@@ -35,6 +36,7 @@ function recoveryInput(input?: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function backendFactory(input: {
   readonly create: ReturnType<typeof vi.fn>;
   readonly prewarm: ReturnType<typeof vi.fn>;

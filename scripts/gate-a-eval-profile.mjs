@@ -24,10 +24,12 @@ export const gateAEnvironmentFields = Object.freeze([
 
 const imagePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fail(field) {
   throw new Error(`The trusted Gate A eval ${field} was invalid.`);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
   return (
     typeof value === "object" &&
@@ -36,11 +38,13 @@ function exactKeys(value, keys) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function within(root, candidate) {
   const path = relative(root, candidate);
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observeRoot(path, repositoryRoot) {
   if (typeof path !== "string" || !isAbsolute(path)) fail("root");
   try {
@@ -72,6 +76,7 @@ function observeRoot(path, repositoryRoot) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observeReadOnlyRoot(path, repositoryRoot) {
   if (path === null) return null;
   if (typeof path !== "string" || !isAbsolute(path)) fail("source root");
@@ -104,6 +109,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateReadOnlyRootIdentity(value, repositoryRoot) {
   if (value === null) return null;
   if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"]))
@@ -114,6 +120,7 @@ function validateReadOnlyRootIdentity(value, repositoryRoot) {
   return observed;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateRootIdentity(value, repositoryRoot) {
   if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"])) fail("root identity");
   const observed = observeRoot(value.path, repositoryRoot);
@@ -122,6 +129,7 @@ function validateRootIdentity(value, repositoryRoot) {
   return observed;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGateAEvalProfile(input, repositoryRoot) {
   if (!isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot)
     fail("repository root");
@@ -171,6 +179,7 @@ export function createGateAEvalProfile(input, repositoryRoot) {
   fail("profile");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateGateAEvalProfile(value, repositoryRoot) {
   if (typeof value !== "object" || value === null || value.version !== 1) fail("profile envelope");
   if (value.profile === "general" && exactKeys(value, ["version", "profile", "localPublication"]))
@@ -214,6 +223,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
   fail("profile envelope");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function installGateAEvalProfile(environment, value, repositoryRoot) {
   const profile = validateGateAEvalProfile(value, repositoryRoot);
   for (const field of gateAEnvironmentFields) Reflect.deleteProperty(environment, field);

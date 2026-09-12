@@ -252,6 +252,7 @@ export const parityAssessmentSchema = z
 export type Assessment = z.infer<typeof parityAssessmentSchema>;
 
 /** artifactExists must verify a nonempty file within the evaluator evidence root. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function assessParity(
   input: unknown,
   artifactExists: (path: string) => Promise<boolean>,

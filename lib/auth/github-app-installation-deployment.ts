@@ -42,6 +42,7 @@ const noStoreHeaders = {
   "Referrer-Policy": "no-referrer",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppInstallationRouteHandlers(input: {
   origin: string;
   authorityForRequest: (request: Request) => Promise<Authority | undefined>;
@@ -206,6 +207,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
 
 let deploymentHandlers: ReturnType<typeof createGitHubAppInstallationRouteHandlers> | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getGitHubAppInstallationDeploymentHandlers(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
@@ -272,6 +274,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   return deploymentHandlers;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppInstallationDeploymentHandler(
   kind: "start" | "callback",
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,

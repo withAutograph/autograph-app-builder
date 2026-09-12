@@ -7,10 +7,12 @@ const pollIntervalMs = 250;
 const maxStreamMs = 30_000;
 const heartbeatIntervalMs = 10_000;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function event(data: unknown, id: string, name = "snapshot") {
   return encoder.encode(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function heartbeat() {
   return encoder.encode(": keep-alive\n\n");
 }
@@ -20,6 +22,7 @@ function heartbeat() {
  * the source of truth; SSE only provides a low-latency projection of its
  * revisions and therefore survives reconnects through the normal GET route.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");

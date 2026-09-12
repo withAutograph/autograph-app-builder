@@ -26,6 +26,7 @@ const context = {
 };
 const sessionAuth = { current: context, initiator: context };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function fixture() {
   let record: BuilderHandoffRecord | undefined;
   const handoffs = createBuilderHandoffService({

@@ -11,6 +11,7 @@ import { HandoffProvisioningProgress } from "../../../ui/handoff-provisioning-pr
 import styles from "../../../ui/app-builder.module.css";
 import handoffStyles from "../../../ui/handoff.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const requestHeaders = await headers();

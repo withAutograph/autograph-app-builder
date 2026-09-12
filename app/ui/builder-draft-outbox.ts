@@ -37,6 +37,7 @@ const databaseName = "autograph-builder-draft-outbox";
 const storeName = "pending";
 const memoryFallback = new Map<string, unknown>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result), {
@@ -48,6 +49,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function transactionResult(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.addEventListener("complete", () => resolve(), { once: true });
@@ -60,6 +62,7 @@ function transactionResult(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = factory.open(databaseName, 1);
@@ -80,6 +83,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function defaultFactory() {
   return typeof indexedDB === "undefined" ? undefined : indexedDB;
 }
@@ -88,12 +92,14 @@ function defaultFactory() {
  * Saves only the newest unacknowledged snapshot. All operations are serialized
  * so a delayed older write can never overwrite a newer outbox entry.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderDraftOutbox<T>(
   options: BuilderDraftOutboxOptions,
 ): BuilderDraftOutbox<T> {
   const factory = options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
   let operations = Promise.resolve();
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
     // This queue deliberately composes the next operation without awaiting it here.
     // oxlint-disable-next-line promise/prefer-await-to-then
@@ -107,6 +113,7 @@ export function createBuilderDraftOutbox<T>(
     return result;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function withDatabase<Result>(
     operation: (database: IDBDatabase) => Promise<Result>,
     fallback: () => Result,

@@ -16,6 +16,7 @@ import {
 } from "./development-toolchain";
 import type { DevelopmentVercelBootstrapInput } from "./development-toolchain";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
   const sourceArchive = Buffer.from("source");
   return {

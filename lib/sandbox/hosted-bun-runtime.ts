@@ -12,6 +12,7 @@ const hostedBunRuntimeInstallRequest = {
 } as const;
 
 /** Installs the builder-owned Bun runtime at most once for each live sandbox. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedBunRuntimeInstaller() {
   const installs = new Map<string, Promise<void>>();
 

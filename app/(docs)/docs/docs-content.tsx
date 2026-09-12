@@ -6,6 +6,7 @@ import Troubleshooting from "@/content/docs/troubleshooting.mdx";
 
 import type { DocsDocument } from "./docs-registry";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function DocsContent({ slug }: Pick<DocsDocument, "slug">) {
   switch (slug) {
     case "overview": {

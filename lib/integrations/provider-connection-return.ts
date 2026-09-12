@@ -17,10 +17,12 @@ export interface ProviderConnectionReturn {
   resumeKey?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function first(value: string | string[] | undefined) {
   return typeof value === "string" ? value : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseProviderConnectionReturn(input: {
   returnTo?: string | string[];
   resumeKey?: string | string[];
@@ -33,6 +35,7 @@ export function parseProviderConnectionReturn(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionReturnFromFormData(formData: FormData): ProviderConnectionReturn {
   return parseProviderConnectionReturn({
     returnTo: formData.get("returnTo")?.toString(),
@@ -40,6 +43,7 @@ export function providerConnectionReturnFromFormData(formData: FormData): Provid
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeProviderConnectionReturn(input: {
   returnTo?: string | string[];
   resumeKey?: string | string[];
@@ -51,6 +55,7 @@ export function safeProviderConnectionReturn(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionRedirect(input: {
   origin: string;
   provider: "vercel" | "github";
@@ -69,6 +74,7 @@ export function providerConnectionRedirect(input: {
   return url.toString();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseProviderResumeKey(value: string | string[] | undefined) {
   const parsed = resumeKeySchema.safeParse(first(value));
   return parsed.success ? parsed.data : undefined;

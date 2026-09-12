@@ -1,5 +1,6 @@
 import type { Adherence, Observation } from "./evidence";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function escapeHtml(value: unknown) {
   return String(value).replaceAll(
     /[&<>"']/gu,
@@ -7,7 +8,7 @@ export function escapeHtml(value: unknown) {
   );
 }
 // Keep report rendering helpers scoped to the report artifact.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export function renderReport(report: {
   createdAt: string;
   source: unknown;

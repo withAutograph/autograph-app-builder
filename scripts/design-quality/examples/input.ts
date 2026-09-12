@@ -15,7 +15,7 @@ interface ExampleConfig {
   stateTarget: string;
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function text(root: string, path: string) {
   return readFile(resolve(root, path), "utf-8");
 }
@@ -132,6 +132,7 @@ const exampleManifests: Record<
 };
 
 /** Assemble a checked-in case into the exact input accepted by renderUiPreview. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadDesignQualityExample(
   id: DesignQualityExampleId,
   repositoryRoot = process.cwd(),

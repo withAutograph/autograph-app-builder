@@ -3,6 +3,7 @@ import { providerConnectionFailureMessage } from "@/lib/integrations/provider-co
 import type { ProviderConnectionNotice } from "@/lib/integrations/provider-connection-status";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderNotices({ notices }: { notices: ProviderConnectionNotice[] }) {
   if (!notices.length) return null;
   return (

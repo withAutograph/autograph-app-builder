@@ -28,10 +28,12 @@ export interface ArrustedTemplateReader {
   }>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function privateTemplateRepository(value: unknown) {
   if (!record(value)) return false;
   return (
@@ -43,6 +45,7 @@ function privateTemplateRepository(value: unknown) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readOnlyReaderPermissions(value: unknown) {
   if (!record(value)) return false;
   if (
@@ -54,6 +57,7 @@ function readOnlyReaderPermissions(value: unknown) {
   return Object.values(value).every((permission) => permission === "read");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactTemplateRepositoryIds(value: unknown) {
   return Array.isArray(value) && value.length === 1 && value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
 }
@@ -65,6 +69,7 @@ type TemplateReaderFailureStage =
   | "repository_inventory"
   | "repository_shape";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unavailable(stage?: TemplateReaderFailureStage): never {
   if (stage !== undefined)
     console.warn(
@@ -80,6 +85,7 @@ function unavailable(stage?: TemplateReaderFailureStage): never {
  * This is deliberately separate from the tenant-selected publishing
  * installation. It accepts only the deployment-owned fixed installation ID.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readDeploymentArrustedTemplateReaderConfig(
   environment: Readonly<Record<string, string | undefined>>,
 ): ArrustedTemplateReaderConfig {
@@ -99,6 +105,7 @@ export function readDeploymentArrustedTemplateReaderConfig(
   return { ...credentials, installationId: installation.data };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createArrustedTemplateReader(input: {
   config: ArrustedTemplateReaderConfig;
   fetch?: typeof fetch;
@@ -170,6 +177,7 @@ export function createArrustedTemplateReader(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deploymentArrustedTemplateReader(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {

@@ -2,6 +2,7 @@ export const DEFAULT_AUTH_REDIRECT_TO = "/auth/setting-up?callbackURL=%2F";
 
 export type AuthPageSearchParams = Record<string, string | string[] | undefined>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams) {
   const serialized = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
@@ -15,6 +16,7 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
   return search ? `?${search}` : "";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
   const callbackURL = new URLSearchParams(search).get("callbackURL");
   if (!callbackURL) return defaultURL;
@@ -30,6 +32,7 @@ export function resolveAuthCallbackURL(defaultURL: string, search: string, sameO
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveProviderCallbackURL(
   redirectTo: string,
   callbackURL: string,
@@ -40,6 +43,7 @@ export function resolveProviderCallbackURL(
   return providerCallbackURL;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolvePasskeyRedirectTo(redirectTo: string, search: string, origin: string) {
   const searchParams = new URLSearchParams(search);
   const inheritedRedirect = searchParams.get("redirectTo");

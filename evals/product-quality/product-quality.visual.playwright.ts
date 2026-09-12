@@ -14,6 +14,7 @@ import { vendorOnboardingPrototype } from "../../agent/agent";
 let prototypeServer: Server | undefined;
 let prototypeUrl = "";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function loadPrototype(page: Page) {
   await page.goto(prototypeUrl);
   await page.addScriptTag({ content: axe.source });

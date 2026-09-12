@@ -15,6 +15,7 @@ import type {
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
@@ -25,6 +26,7 @@ function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readActiveVercelInstallationToken(input: {
   database: Database;
   config: VercelIntegrationConfig;
@@ -69,6 +71,7 @@ export async function readActiveVercelInstallationToken(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresVercelAuthorizationStateStore(
   database: Database,
 ): VercelAuthorizationStateStore {
@@ -137,6 +140,7 @@ export function createPostgresVercelAuthorizationStateStore(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresVercelInstallationStore(input: {
   database: Database;
   config: VercelIntegrationConfig;

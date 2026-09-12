@@ -22,6 +22,7 @@ import {
 } from "@/lib/repository/node-fresh-bootstrap";
 import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshWorkflow() {
   const workflow = appBuilderWorkflowState.get();
   if (

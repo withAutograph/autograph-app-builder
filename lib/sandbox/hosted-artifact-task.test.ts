@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createTaskFixture() {
   const root = mkdtempSync(join(tmpdir(), "hosted-artifact-task-"));
   const bin = join(root, "bin");
@@ -41,6 +42,7 @@ printf '%s\\n' "$@" >> "$MISE_CALLS"
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readCalls(path: string) {
   return readFileSync(path, "utf-8").trim().split("\n");
 }

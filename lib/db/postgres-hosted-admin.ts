@@ -19,6 +19,7 @@ import type { HostedAdminStore } from "./hosted-admin";
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function membershipPredicate(
   authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
 ) {
@@ -30,6 +31,7 @@ function membershipPredicate(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function operationTenantPredicate(
   authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
 ) {
@@ -41,6 +43,7 @@ function operationTenantPredicate(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sessionTenantPredicate(
   authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
 ) {
@@ -52,6 +55,7 @@ function sessionTenantPredicate(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function integrationTenantPredicate(
   table:
     | typeof hostedGitHubInstallations
@@ -71,6 +75,7 @@ function integrationTenantPredicate(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function deleteExpired(
   transaction: Transaction,
   input: Parameters<HostedAdminStore["applyRetention"]>[0],
@@ -164,6 +169,7 @@ async function deleteExpired(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedAdminStore(database: Database): HostedAdminStore {
   return {
     async seedMembership({ authority, now }) {

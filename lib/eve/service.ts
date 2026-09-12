@@ -67,6 +67,7 @@ export interface EveSessionService {
   cancel: (input: { sessionId: string; turnId?: string }) => Promise<EveSessionResult>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toEveInputResponse(
   requestId: string,
   response:
@@ -86,6 +87,7 @@ export function toEveInputResponse(
         };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toEveInputResponses(
   responses: Parameters<EveSessionService["respond"]>[0]["responses"],
 ) {
@@ -135,6 +137,7 @@ const localModelTurnTimeoutMs = 360_000;
 const localModelTurnInterruptedMessage =
   "Autograph paused because a response took too long. Your progress is saved; try again in a moment.";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function settleLocalCancellation(operation: Promise<unknown>) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -157,6 +160,7 @@ const localRuntimeGlobal = globalThis as typeof globalThis & {
   [localEveRuntimeStateKey]?: LocalEveRuntimeState;
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) return existing;
@@ -175,11 +179,13 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function localSessionTitle(prompt: string): string {
   const title = prompt.trim().split(/\r?\n/u, 1)[0]?.trim() ?? "";
   return title.slice(0, 200) || "Untitled app";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function localCycleGeneration(environment: NodeJS.ProcessEnv | Record<string, string | undefined>) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
@@ -195,6 +201,7 @@ function localCycleGeneration(environment: NodeJS.ProcessEnv | Record<string, st
   return `local:${path}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function localEveRestartGeneration(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
@@ -208,6 +215,7 @@ function localEveRestartGeneration(
   return readLocalEveCycleBinding(path);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function resultForEvents(
   sessionId: string,
   snapshotEvents: readonly MessageStreamEvent[],
@@ -237,6 +245,7 @@ function resultForEvents(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function acceptedResult(
   sessionId: string,
   snapshotEvents: readonly MessageStreamEvent[] = [],
@@ -255,6 +264,7 @@ function acceptedResult(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function consumeResponse(
   state: LocalEveRuntimeState,
   sessionId: string,
@@ -347,6 +357,7 @@ function consumeResponse(
   })();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createLocalEveSessionService(
   client: Pick<Client, "sessions">,
   options: {
@@ -383,6 +394,7 @@ export function createLocalEveSessionService(
   }
   if (options.restartGeneration !== undefined) state.restartGeneration = options.restartGeneration;
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function sessionFor(sessionId: string): ClientSession {
     const existing = localSessionHandles.get(sessionId);
     if (existing !== undefined) return existing;
@@ -391,7 +403,7 @@ export function createLocalEveSessionService(
     return attached;
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function recoverDurableTail(sessionId: string) {
     if (!state.recoveryRequired.has(sessionId)) return;
     const existing = state.recoveries.get(sessionId);
@@ -419,6 +431,7 @@ export function createLocalEveSessionService(
     return recovery;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function sessionAtBufferedTail(sessionId: string): ClientSession {
     const attached = client.sessions.attach(sessionId, {
       streamIndex: localSessionEvents.get(sessionId)?.length ?? 0,
@@ -427,6 +440,7 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function consumeDurableTail(
     sessionId: string,
     observeEvent: (event: MessageStreamEvent) => void,
@@ -465,6 +479,7 @@ export function createLocalEveSessionService(
     state.tailPumps.set(sessionId, pump);
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function consumeSessionResponse(sessionId: string, response: CancellableResponse) {
     consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
       cancelTurn: async (turnId) =>
@@ -473,6 +488,7 @@ export function createLocalEveSessionService(
     });
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function touchSession(sessionId: string) {
     const metadata = state.metadata.get(sessionId);
     if (metadata !== undefined)
@@ -482,6 +498,7 @@ export function createLocalEveSessionService(
       });
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function localResultOptions(sessionId: string) {
     const interruption = state.modelInterruptions.get(sessionId);
     return {
@@ -500,6 +517,7 @@ export function createLocalEveSessionService(
     };
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireSettledModelTurn(sessionId: string) {
     if (state.restartInterrupted.has(sessionId)) await recoverDurableTail(sessionId);
     if (state.modelInterruptions.has(sessionId))
@@ -677,6 +695,7 @@ const notConfigured = async (): Promise<never> => {
 };
 
 /** Hosted use stays fail-closed until the authenticated durable adapter is wired. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createEveSessionService(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): EveSessionService {

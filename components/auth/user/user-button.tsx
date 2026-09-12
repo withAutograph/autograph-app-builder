@@ -40,6 +40,7 @@ export interface UserButtonProps {
  * @param variant - Visual variant of the trigger button
  * @returns The dropdown menu component with user actions
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function UserButton({
   className,
   align,

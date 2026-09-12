@@ -5,10 +5,12 @@ class UnexpectedDevelopmentToolsError extends Error {
   name = "UnexpectedDevelopmentToolsError";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function abortReason(signal: AbortSignal | undefined) {
   return signal?.reason ?? new Error("Development MCP readiness was aborted.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsonRpcBody(text: string) {
   const data = text
     .split("\n")
@@ -21,6 +23,7 @@ function jsonRpcBody(text: string) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function mcpRequest(input: {
   endpoint: string;
   body: Record<string, unknown>;
@@ -46,6 +49,7 @@ async function mcpRequest(input: {
   return { body: text ? jsonRpcBody(text) : undefined, sessionId };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function developmentMcpToolNames(input: {
   endpoint: string;
   fetcher?: typeof fetch;
@@ -91,6 +95,7 @@ export async function developmentMcpToolNames(input: {
   return (listed.body?.result?.tools ?? []).map((tool) => tool.name ?? "");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForDevelopmentMcp(input: {
   endpoint: string;
   timeoutMs?: number;

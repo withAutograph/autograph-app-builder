@@ -16,6 +16,7 @@ interface Props {
 }
 
 /** Development-only consent surface; real provider installation pages remain external. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   const [{ provider }, query] = await Promise.all([params, searchParams]);
   let emulation;

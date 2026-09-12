@@ -5,6 +5,7 @@ interface PasskeyErrorEnvelope {
   error?: unknown;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function passkeyErrorCode(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
 
@@ -16,6 +17,7 @@ export function passkeyErrorCode(value: unknown): string | undefined {
   return typeof nestedCode === "string" ? nestedCode : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isPasskeyOnboardingAlreadyAuthenticated(value: unknown) {
   return passkeyErrorCode(value) === PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED;
 }

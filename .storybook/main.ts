@@ -8,6 +8,7 @@ import {
   builderResourceProvisioningFlag,
 } from "../lib/feature-flags.ts";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function resolveFlagForStorybook(flag: {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
@@ -24,6 +25,7 @@ async function resolveFlagForStorybook(flag: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveBuilderFlagsForStorybook() {
   const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
     resolveFlagForStorybook(builderConnectionsFlag),

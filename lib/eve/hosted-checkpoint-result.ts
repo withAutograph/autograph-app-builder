@@ -2,6 +2,7 @@ import { eveSessionResultSchema } from "../mcp/contracts";
 import type { EveSessionResult } from "../mcp/contracts";
 import type { HostedSessionCheckpoint } from "./hosted-store";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resultFromHostedCheckpoint(
   sessionId: string,
   checkpoint: HostedSessionCheckpoint,

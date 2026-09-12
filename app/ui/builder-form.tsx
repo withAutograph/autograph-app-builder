@@ -7,6 +7,7 @@ import { useBuilderController } from "./use-builder-controller";
 import styles from "./app-builder.module.css";
 
 /** Browser behavior wraps server-composed form content without importing it. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function Builder({
   children,
   draftStatus,

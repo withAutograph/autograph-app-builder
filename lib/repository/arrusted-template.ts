@@ -51,6 +51,7 @@ type TemplateAcquisitionFailureStage =
   | "readiness"
   | "workspace_record";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function acquisitionStage<T>(
   stage: TemplateAcquisitionFailureStage,
   operation: () => Promise<T>,
@@ -68,14 +69,17 @@ async function acquisitionStage<T>(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classifySandboxCloneFailure(stderr: string) {
   if (/authentication failed|could not read username|repository not found/u.test(stderr))
     return "github-auth" as const;
@@ -85,12 +89,14 @@ export function classifySandboxCloneFailure(stderr: string) {
   return "git-command" as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxCloneFailureStage(stderr: string) {
   return stderr.match(
     /AUTOGRAPH_CLONE_STAGE=(?<stage>prepare-directory|initialize|configure-remote|credential|clone|verify-remote|resolve-ref|checkout|clean-worktree|gitmodules|gitlinks|inspect)/u,
   )?.[1];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sanitizeSandboxCloneError(stderr: string, token: string) {
   const sanitized = stderr
     .replaceAll(token, "[redacted]")
@@ -219,6 +225,7 @@ writeFileSync(
 console.log(JSON.stringify({ sourceSha, sourceTree, workspaceDigest: sha256(JSON.stringify(files)) }));
 `;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxCloneCommand() {
   const script = [
     "set -eu",
@@ -252,6 +259,7 @@ function sandboxCloneCommand() {
   return `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 /bin/sh -ceu ${shellQuote(script)}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
   const raw = await sandbox.readTextFile({ path: SANDBOX_CLONE_INSPECTION });
   if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES)
@@ -267,7 +275,7 @@ async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
 
 // Legacy clone implementation retained only while callers finish moving to
 // the direct Vercel source API.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars, eslint/func-style
 async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession; token: string }) {
   const existing = await inspectPreparedSandboxWorkspace(input.sandbox);
   if (existing.state === "prepared") {
@@ -376,6 +384,7 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
  * session workspace. Its closed inspection snapshot produces the V4 receipt
  * and the same checkout is sealed for later target commands.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function acquireCanonicalArrustedTemplate(input: {
   sandbox: SandboxSession | (() => Promise<SandboxSession>);
   sessionId?: string;
@@ -423,6 +432,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
 }
 
 /** Re-inspect the already-cloned workspace without fetching or cloning. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   sandbox: SandboxSession;
   receipt: ClonedTemplateReceipt;
@@ -465,6 +475,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
  * workspace as current planning input; hosted release adapters retain their
  * closed receipt checks until the moving-source policy reaches those paths.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectSourceBoundSandboxWorkspace(input: {
   sandbox: SandboxSession;
   receipt: SourceReceipt;
@@ -514,6 +525,7 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   return observed;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function templateReadinessAttestationDigest(input: {
   sha: string;
   tree: string;

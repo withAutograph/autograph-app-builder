@@ -19,6 +19,7 @@ import { executeBuilderProvisioning, readBuilderProvisioning } from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderProvisioningRouteHandler(input: {
   origin: string;
   enabled: () => Promise<boolean>;
@@ -115,6 +116,7 @@ export function createBuilderProvisioningRouteHandler(input: {
 
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderProvisioningDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {

@@ -56,6 +56,7 @@ export type DevelopmentVercelBootstrapInput = Readonly<{
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
     NODE_ENV: "production",
@@ -73,6 +74,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(sourceRoot: string, args: readonly string[]) {
   return execFileSync(
     "/usr/bin/git",
@@ -81,6 +83,7 @@ function git(sourceRoot: string, args: readonly string[]) {
   ).trim();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0)
@@ -88,6 +91,7 @@ function required(environment: Environment, name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactSourceRoot(path: string) {
   if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
     throw new Error("Development Vercel source root was not canonical.");
@@ -103,6 +107,7 @@ function exactSourceRoot(path: string) {
   return path;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digestFileOrAbsent(path: string) {
   try {
     const info = lstatSync(path);
@@ -115,6 +120,7 @@ function digestFileOrAbsent(path: string) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertInput(input: DevelopmentVercelBootstrapInput) {
   if (
     !sha256Pattern.test(input.sourceFingerprint) ||
@@ -235,6 +241,7 @@ const developmentToolchainCase = (architecture: keyof typeof hostedToolchainArti
 };
 
 /** Installs exact tools inside the disposable template, never on the host. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentPinnedToolchainCommand() {
   return `set -euo pipefail
 case "$(uname -m)" in
@@ -319,6 +326,7 @@ printf '%s\n' 'development_toolchain_ready'
 exit 0`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentPinnedToolchainKey() {
   return sha256(
     JSON.stringify({
@@ -335,6 +343,7 @@ export function developmentPinnedToolchainKey() {
 }
 
 /** Reads only the exact transient Arrusted snapshot selected by `mise run dev`. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readDevelopmentVercelBootstrapInput(
   environment: Environment = process.env,
 ): DevelopmentVercelBootstrapInput {
@@ -384,6 +393,7 @@ export function readDevelopmentVercelBootstrapInput(
 }
 
 /** Builds the standard development-execution cache once per dependency key. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyCommand(input: DevelopmentVercelBootstrapInput) {
   assertInput(input);
   return `set -euo pipefail
@@ -474,6 +484,7 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
  * tree, then installs the same reusable development cache that template
  * bootstrap creates.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey))
     throw new Error("Development dependency key was invalid.");
@@ -546,12 +557,14 @@ printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 }
 
 /** Agent and skill edits may change Eve's authored key; the provider key may not. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelProviderTemplateKey(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey))
     throw new Error("Development dependency key was invalid.");
   return `app-builder-development-${dependencyKey}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelRevalidationKey(
   input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
 ) {
@@ -567,6 +580,7 @@ export function developmentVercelRevalidationKey(
   )}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentExecutionArtifactDigest(environment: Environment = process.env) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||

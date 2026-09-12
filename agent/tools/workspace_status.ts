@@ -8,6 +8,7 @@ import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-te
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
@@ -22,6 +23,7 @@ function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>):
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function statusReceipt(
   state: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
   recovered: boolean,

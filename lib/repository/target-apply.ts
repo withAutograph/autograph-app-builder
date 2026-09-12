@@ -50,10 +50,12 @@ export interface OverlaySnapshot {
   files: readonly OverlayFile[];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function compareOverlayPaths(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8"));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFile[] {
   return files
     .map(({ path, mode, digest }) => ({ path, mode, digest }))
@@ -171,6 +173,7 @@ export type TargetApplyResult =
   | { ok: true; receipt: TargetApplyReceipt }
   | { ok: false; receipt: TargetApplyFailureReceipt };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertCurrentTargetApplyReceipt(input: {
   version: number;
   appSpecPath?: string;
@@ -193,6 +196,7 @@ export function assertCurrentTargetApplyReceipt(input: {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandFailureKind"] {
   if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
   if (/permission denied|eacces|eperm/iu.test(stderr)) return "permission-denied";
@@ -212,6 +216,7 @@ function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandF
   return "unknown";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function missingDependency(output: string): string | undefined {
   const match =
     /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(?<dependency>@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
@@ -220,12 +225,14 @@ function missingDependency(output: string): string | undefined {
   return match?.[1];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function applyOverlayRoot(proposalDigest: string): string {
   if (!digestSchema.safeParse(proposalDigest).success)
     throw new Error("The target proposal digest is invalid.");
   return `.app-builder/apply/${proposalDigest}/repository`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
@@ -274,6 +281,7 @@ export async function materializeFreshApplyOverlay(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function restorePreparedAppSpecBaseline(input: {
   sandbox: SandboxSession;
   applyRoot: string;
@@ -290,6 +298,7 @@ async function restorePreparedAppSpecBaseline(input: {
   await input.sandbox.writeBinaryFile({ path: applyPath, content: prepared });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function stageAcceptedAppSpec(input: {
   sandbox: SandboxSession;
   applyRoot: string;
@@ -343,12 +352,14 @@ for (const file of files)
   process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
 `;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function overlaySnapshotCommand(): string {
   if (OVERLAY_SNAPSHOT_SCRIPT.includes("'"))
     throw new Error("The overlay snapshot script is not shell-safe.");
   return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
@@ -382,6 +393,7 @@ export async function inspectApplyOverlay(
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectFixtureApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
@@ -432,6 +444,7 @@ export async function inspectFixtureApplyOverlay(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot): OverlayChange[] {
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
@@ -473,6 +486,7 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
     });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
@@ -503,6 +517,7 @@ function parseTargetReceipt(
   return receipt;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandReceipt {
   const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
   return {
@@ -521,6 +536,7 @@ function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandRece
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
     if ("operation" in proposal) {
@@ -623,6 +639,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
@@ -694,6 +711,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function executeProposalBoundApply(input: {
   sandbox: SandboxSession;
   executor: ApplyCommandExecutor;

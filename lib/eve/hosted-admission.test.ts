@@ -5,6 +5,7 @@ import { createHostedEveSessionService } from "./hosted-service";
 import type { HostedEveTransport } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function principal(ownerUserId: string): HostedPrincipal {
   return {
     issuer: "https://builder.example.test/api/auth",
@@ -22,6 +23,7 @@ function principal(ownerUserId: string): HostedPrincipal {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function service(input: {
   store: InMemoryHostedEveStore;
   ownerUserId: string;
@@ -61,6 +63,7 @@ function service(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startTwice(hosted: ReturnType<typeof service>, first = "one", second = "two") {
   await hosted.start({ prompt: "Build", clientRequestId: first });
   return hosted.start({ prompt: "Build again", clientRequestId: second });

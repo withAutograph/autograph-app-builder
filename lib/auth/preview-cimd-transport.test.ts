@@ -13,6 +13,7 @@ const publicAddresses: LookupAddress[] = [
   { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
 ];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runLookup(options: LookupOptions) {
   return new Promise<{
     address: string | LookupAddress[];
@@ -31,6 +32,7 @@ function runLookup(options: LookupOptions) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: number }) {
   const observed: { options?: RequestOptions; url?: URL } = {};
   const requestHttps = vi.fn(

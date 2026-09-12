@@ -13,6 +13,7 @@ import {
 } from "@/lib/repository/node-branch-worktree-publication";
 import { branchPublicationDigest } from "@/lib/agent/branch-worktree-publication-schema";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function branchWorkflow() {
   const workflow = appBuilderWorkflowState.get();
   if (
@@ -27,7 +28,7 @@ function branchWorkflow() {
   return workflow;
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function exactBranchWorktreePublicationProposal(input: {
   expectedReviewDigest: string;
 }) {

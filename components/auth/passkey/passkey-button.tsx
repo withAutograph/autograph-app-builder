@@ -31,6 +31,7 @@ interface OnboardingResponse {
 
 const passkeyResponseTimeoutMs = 3000;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;
   try {
@@ -55,6 +56,7 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
  *
  * @param view - Current auth view. Selects registration on `"signUp"`.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function PasskeyButton({ view }: PasskeyButtonProps) {
   const { authClient, localization, redirectTo, navigate } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);

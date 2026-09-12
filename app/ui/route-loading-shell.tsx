@@ -9,6 +9,7 @@ interface AuthLoadingShellProps {
  * are partially prefetched by Next before the authenticated route content is
  * available, so a transition always has useful UI to show.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AuthLoadingShell({
   title,
   description = "Preparing secure sign-in…",
@@ -40,6 +41,7 @@ interface ProviderConnectionLoadingShellProps {
   title: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderConnectionLoadingShell({
   description,
   title,
@@ -67,6 +69,7 @@ export function ProviderConnectionLoadingShell({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function HandoffLoadingShell() {
   return (
     <main

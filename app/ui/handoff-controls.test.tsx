@@ -36,6 +36,7 @@ const initial: HandoffControlData = {
   true;
 let root: Root | undefined;
 let container: HTMLDivElement;
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(data = initial) {
   container = document.createElement("div");
   document.body.append(container);
@@ -44,6 +45,7 @@ async function render(data = initial) {
   await act(async () => root?.render(<HandoffControls initial={data} />));
   return container;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function click(text: string) {
   const button = [...container.querySelectorAll("button")].find(
     (element) => element.textContent === text,
@@ -52,6 +54,7 @@ async function click(text: string) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => button!.click());
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function visibility(value: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", {
     configurable: true,

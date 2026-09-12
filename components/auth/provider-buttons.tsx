@@ -21,6 +21,7 @@ export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
  *
  * @param socialLayout - Preferred layout for the provider buttons; `"auto"` chooses based on the number of providers.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: ProviderButtonsProps) {
   const { socialProviders } = useAuth();
   // Better Auth starts social sign-in through a client mutation. Keep its

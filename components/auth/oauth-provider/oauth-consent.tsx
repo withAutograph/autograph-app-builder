@@ -47,6 +47,7 @@ const subscribeToLocation = () => () => {
 const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function OAuthConsent({ className }: OAuthConsentProps) {
   const { authClient } = useAuth();
   const { localization, scopeMetadata } = useAuthPlugin(oauthProviderPlugin);

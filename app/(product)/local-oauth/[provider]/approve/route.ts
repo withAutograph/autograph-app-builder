@@ -12,6 +12,7 @@ const authorizationFields = [
   "code_challenge_method",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);
@@ -44,6 +45,7 @@ export async function GET(request: Request, context: { params: Promise<{ provide
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);

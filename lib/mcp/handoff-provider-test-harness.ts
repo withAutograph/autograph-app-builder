@@ -14,6 +14,7 @@ import { createGitHubAppHttpProvider } from "../repository/github-app-http-provi
 import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import type { BuilderProvisionJournalRow } from "../provisioning/journal";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedJournal(
   authority: HostedSessionTenantAuthority,
   requestId: string,
@@ -75,6 +76,7 @@ export function preparedJournal(
 }
 
 /** Reconstruct the trusted engine envelope from the verified MCP transport input. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sessionEnvelope(principal: HostedPrincipal, sourceHandoffId: string) {
   const current = {
     attributes: {
@@ -93,6 +95,7 @@ export function sessionEnvelope(principal: HostedPrincipal, sourceHandoffId: str
 }
 
 /** Real provider adapters with injected HTTP mocks; no running emulators or live providers. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedProviderFixture(input: {
   authority: HostedSessionTenantAuthority;
   handoffs: BuilderHandoffStore;
@@ -245,6 +248,7 @@ export function preparedProviderFixture(input: {
       });
     },
   );
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function createReader() {
     return createPreparedAppContextReader({
       readHandoff: createPreparedHandoffReader({

@@ -10,6 +10,7 @@ import {
 import { isProductFacing } from "./support/public-conversation";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertQuality(report: { hardFailures: readonly string[] }, label: string) {
   return satisfies(
     () => report.hardFailures.length === 0,

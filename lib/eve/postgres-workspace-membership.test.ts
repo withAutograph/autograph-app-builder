@@ -18,6 +18,7 @@ const principal: HostedPrincipal = {
   scopes: ["autograph:session"],
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => rows);

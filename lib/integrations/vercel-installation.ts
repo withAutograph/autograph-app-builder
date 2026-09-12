@@ -30,6 +30,7 @@ const configSchema = z
 
 export type VercelIntegrationConfig = z.infer<typeof configSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readVercelIntegrationEnvironment(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): VercelIntegrationConfig {
@@ -101,14 +102,17 @@ export interface VercelInstallationStore {
   deactivate: (installationId: string, now: Date) => Promise<number>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorityDigest(authority: Authority) {
   return digest(JSON.stringify(hostedTenantAuthoritySchema.parse(authority)));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function encryptVercelToken(input: { token: string; key: Buffer; associatedData: string }) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
@@ -121,6 +125,7 @@ export function encryptVercelToken(input: { token: string; key: Buffer; associat
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function decryptVercelToken(input: {
   encryptedToken: string;
   tokenIv: string;
@@ -165,6 +170,7 @@ const userSchema = z
   })
   .passthrough();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelInstallationAuthorization(input: {
   config: VercelIntegrationConfig;
   states: VercelAuthorizationStateStore;
@@ -328,6 +334,7 @@ export function createVercelInstallationAuthorization(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyVercelWebhook(input: {
   body: string;
   signature: string | null;

@@ -28,6 +28,7 @@ export interface AddPasskeyDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { authenticatorAttachment, localization: passkeyLocalization } =

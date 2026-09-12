@@ -15,6 +15,7 @@ const CREATE_APP_STORY_PREFIX = "Create App/";
 const CREATE_APP_COMPONENT_STORY_PREFIX = "Components/Create App/";
 const CONNECTION_DRAWER_STORY = "Components/Connections/Connection Drawer";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function usesCreateAppShell(title: string) {
   return (
     title.startsWith(CREATE_APP_STORY_PREFIX) ||

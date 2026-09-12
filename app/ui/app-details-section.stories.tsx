@@ -48,6 +48,7 @@ export const CycleBrief: Story = {
   },
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function GeneratedNameHarness() {
   const [brief, setBrief] = useState("");
   const [appName, setAppName] = useState("");

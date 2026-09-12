@@ -4,6 +4,7 @@ import type { HostedWorkloadIdentity } from "./same-origin-http";
 
 const MAX_TOKEN_BYTES = 8192;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactToken(value: string): string {
   if (
     value.length === 0 ||
@@ -24,6 +25,7 @@ function exactToken(value: string): string {
  * same-project Eve service verifies that project-bound token directly. The user
  * principal is carried separately as Eve's closed forwarded-principal metadata.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelWorkloadIdentity(
   dependencies: {
     getToken?: () => Promise<string>;

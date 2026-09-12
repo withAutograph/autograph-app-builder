@@ -19,6 +19,7 @@ import {
 } from "./spend-import-state";
 import type { SpendFixture } from "./spend-import-state";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function fixture<T>(id: string): Promise<T> {
   return JSON.parse(
     await readFile(resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf-8"),

@@ -51,6 +51,7 @@ export const portableReleaseReceiptSchema = z
 
 export type PortableReleaseReceipt = z.infer<typeof portableReleaseReceiptSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeRelative(path: string) {
   return (
     path !== "" &&
@@ -60,6 +61,7 @@ function safeRelative(path: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function archiveFiles(archive: Uint8Array) {
   const tar = gunzipSync(archive);
   const files = new Map<string, Uint8Array>();
@@ -92,6 +94,7 @@ export function archiveFiles(archive: Uint8Array) {
   return files;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function regularFile(path: string) {
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink())
@@ -99,6 +102,7 @@ async function regularFile(path: string) {
   return readFile(path);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(repositoryRoot: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
@@ -112,12 +116,14 @@ function git(repositoryRoot: string, ...args: string[]) {
   }).trim();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(actual: Record<string, string>, expected: string[]) {
   const keys = Object.keys(actual).toSorted();
   if (JSON.stringify(keys) !== JSON.stringify([...expected].toSorted()))
     throw new Error("Receipt file inventory was not exact.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function verifyPortableProofArtifact(input: {
   releaseRoot: string;
   installRoot: string;

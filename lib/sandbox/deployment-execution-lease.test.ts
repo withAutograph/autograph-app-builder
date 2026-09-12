@@ -25,7 +25,7 @@ const forwarded = () => ({
 });
 const sessionAuth = () => ({ current: forwarded(), initiator: forwarded() });
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture(stop = vi.fn(async () => undefined)) {
   return {
     id: "provider_session_1",
@@ -33,6 +33,7 @@ function sandboxFixture(stop = vi.fn(async () => undefined)) {
   } as unknown as RuntimeSandboxSession;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function install(store: InMemorySandboxExecutionLeaseStore, member = true) {
   setHostedSandboxExecutionLeaseDependenciesForTest({
     enabled: () => true,

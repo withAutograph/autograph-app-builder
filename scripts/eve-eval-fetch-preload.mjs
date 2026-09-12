@@ -9,6 +9,7 @@
  * warnings. Remove it when Eve no longer retains listeners on the shared
  * evaluation signal.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isolateAbortSignalPerFetch(fetchImplementation) {
   return function fetchWithIsolatedSignal(input, init) {
     if (init?.signal === undefined || init.signal === null)

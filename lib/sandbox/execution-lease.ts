@@ -109,10 +109,12 @@ export interface SandboxExecutionLeaseStore {
   }) => Promise<SandboxExecutionLease | null>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxLeaseKey(principal: HostedPrincipal, adapterSessionId: string): string {
   return JSON.stringify([tenantKeyFor(principal), adapterSessionId]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxLeaseReceiptDigest(lease: SandboxExecutionLease): string {
   return `sha256:${createHash("sha256")
     .update(JSON.stringify(sandboxExecutionLeaseSchema.parse(lease)))
@@ -287,6 +289,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reconcileExpiredSandboxLeases(input: {
   store: SandboxExecutionLeaseStore;
   stopSandbox: (providerSandboxId: string) => Promise<void>;

@@ -13,6 +13,7 @@ import type {
   PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createAuthority(input?: { failure?: OrganizationProvisioningFailure }) {
   const authority: PreviewOrganizationUserAuthority = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

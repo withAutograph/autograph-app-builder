@@ -39,6 +39,7 @@ export interface AuthenticatedBuilderProps {
 }
 
 /** Client-only form, draft, and continuation coordination below the server shell. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderContinuation({
   children,
   draftStatus,

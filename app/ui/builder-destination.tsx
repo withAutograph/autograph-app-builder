@@ -5,6 +5,7 @@ import { SectionShell } from "../../components/create-app/choice-card";
 import styles from "./app-builder.module.css";
 import type { BuildDestination } from "./builder-types";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function CursorMark() {
   return (
     <svg
@@ -24,6 +25,7 @@ function CursorMark() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuildWithSection({
   bare = false,
   children,

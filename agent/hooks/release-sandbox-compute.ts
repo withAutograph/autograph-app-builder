@@ -7,6 +7,7 @@ import {
   releaseHostedSandboxExecutionLease,
 } from "../../lib/sandbox/deployment-execution-lease";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function release(
   ctx: HookContext,
   reason:

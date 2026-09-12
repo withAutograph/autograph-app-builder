@@ -41,6 +41,7 @@ if (values.help) {
   );
   process.exit(0);
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sources(root: string, relative = ""): Promise<{ path: string; content: string }[]> {
   const files = [];
   for (const entry of await readdir(join(root, relative), {
@@ -56,6 +57,7 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
   }
   return files;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function main() {
   if (values["list-cases"]) {
     for (const designCase of await listDesignCases())

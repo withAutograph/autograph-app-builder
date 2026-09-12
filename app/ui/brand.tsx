@@ -2,6 +2,7 @@ interface IconProps {
   className?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ArrowIcon({ className }: IconProps) {
   return (
     <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
@@ -10,6 +11,7 @@ export function ArrowIcon({ className }: IconProps) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function CopyIcon({ className }: IconProps) {
   return (
     <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
@@ -19,6 +21,7 @@ export function CopyIcon({ className }: IconProps) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden="true">
@@ -27,6 +30,7 @@ export function BrandMark() {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
   return (
     <span className="brand-lockup" data-compact={compact || undefined}>

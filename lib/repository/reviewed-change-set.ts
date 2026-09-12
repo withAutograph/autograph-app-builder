@@ -44,6 +44,7 @@ export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveNormalizedChangeSet(
   apply: TargetApplyReceipt,
   validation: TargetValidationReceipt,
@@ -88,6 +89,7 @@ export function deriveNormalizedChangeSet(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createReviewedChangeSetReceipt(
   changeSet: NormalizedChangeSet,
   reviewedByCallId: string,

@@ -6,6 +6,7 @@ import { SearchCombobox } from "./search-combobox";
 import type { ComboOption } from "./search-combobox";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ModelControls({
   available,
   model,

@@ -40,6 +40,7 @@ const git = (root: string, args: readonly string[]) =>
     env: sanitizedEnvironment(),
   }).trim();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ensureNoLinkPath(path: string, label: string): void {
   const canonical = resolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
@@ -54,16 +55,19 @@ function ensureNoLinkPath(path: string, label: string): void {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertAbsoluteInput(path: string, label: string): void {
   if (!isAbsolute(path) || resolve(path) !== path)
     throw new Error(`${label} must be an absolute normalized path.`);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function containsPath(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
   return path === "" || (!path.startsWith(`..${sep}`) && path !== "..");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   const descriptor = openSync(
     path,
@@ -82,6 +86,7 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   chmodSync(path, mode);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function materializeSanitizedGitTree(
   sourceRoot: string,
   destinationRoot: string,

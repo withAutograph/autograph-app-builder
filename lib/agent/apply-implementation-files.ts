@@ -42,6 +42,7 @@ export const implementationFilesSchema = z
 
 export type ImplementationFile = z.infer<typeof implementationFilesSchema>[number];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withImplementationFiles(
   executor: ApplyCommandExecutor,
   files: readonly ImplementationFile[],

@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/preview-auth-ui";
 import type { AuthPageSearchParams } from "@/lib/auth/preview-auth-ui";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function hasAuthenticatedVisitor() {
   const requestHeaders = await headers();
   const session = await getPreviewOAuthDeploymentSession({
@@ -25,6 +26,7 @@ async function hasAuthenticatedVisitor() {
   return Boolean(session?.user);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function RedirectAuthenticatedVisitor({
   searchParams,
 }: {
@@ -40,6 +42,7 @@ async function RedirectAuthenticatedVisitor({
   redirect(signInRedirectTo);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SignUpSurface() {
   return (
     <main className="flex min-h-svh items-center justify-center p-6">

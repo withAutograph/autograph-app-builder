@@ -16,6 +16,7 @@ import {
   proposalFromJournal,
 } from "@/lib/repository/local-publication";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicationWorkflow() {
   const workflow = appBuilderWorkflowState.get();
   if (
@@ -30,6 +31,7 @@ function publicationWorkflow() {
   return workflow;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertJournalMatchesWorkflow(
   workflow: ReturnType<typeof publicationWorkflow>,
   destinationPath: string,
@@ -69,6 +71,7 @@ function assertJournalMatchesWorkflow(
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exactLocalPublicationProposal(input: {
   destinationPath: string;
   expectedReviewDigest: string;

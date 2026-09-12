@@ -22,6 +22,7 @@ export type WorkflowEvidence = Record<string, { status: RequirementStatus; evide
 
 const ignored = new Set([".git", ".next", ".artifacts", "node_modules", "coverage"]);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readSource(root: string, current = root): Promise<SourceFile[]> {
   const entries = await readdir(current, { withFileTypes: true });
   const sourceFiles = await Promise.all(
@@ -36,14 +37,17 @@ export async function readSource(root: string, current = root): Promise<SourceFi
   return sourceFiles.flat();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function any(files: SourceFile[], expression: RegExp) {
   return files.some((file) => expression.test(file.content));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function count(files: SourceFile[], expression: RegExp) {
   return files.reduce((total, file) => total + (file.content.match(expression)?.length ?? 0), 0);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function auditFramework(files: SourceFile[]) {
   // Generated skill payloads can quote deprecated APIs as guidance. They are
   // not application implementation evidence.
@@ -79,6 +83,7 @@ export function auditFramework(files: SourceFile[]) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildRequirements(
   candidate: SourceFile[] | undefined,
   workflowEvidence?: WorkflowEvidence,
@@ -145,6 +150,7 @@ export function buildRequirements(
   ];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function frameworkRequirements(
   audit: ReturnType<typeof auditFramework>,
   side: "reference" | "candidate",
@@ -224,6 +230,7 @@ export function frameworkRequirements(
   ];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function prioritizedGaps(requirements: Requirement[]) {
   return requirements
     .filter((requirement) => requirement.status === "failed" || requirement.status === "blocked")

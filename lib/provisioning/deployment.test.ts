@@ -33,6 +33,7 @@ const response = {
   updatedAt: "2026-08-30T12:00:00.000Z",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function dependencies() {
   return { journal: {} } as BuilderProvisioningDependencies;
 }

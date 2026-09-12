@@ -53,6 +53,7 @@ export interface BuilderDraftStore {
   deleteInactiveSince: (input: { now: Date; maxAgeMs?: number }) => Promise<number>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderDraftService(input: { store: BuilderDraftStore; now?: () => Date }) {
   const now = input.now ?? (() => new Date());
   return {

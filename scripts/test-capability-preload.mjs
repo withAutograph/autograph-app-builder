@@ -59,6 +59,7 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment)
@@ -74,6 +75,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   return environment;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof) {
   return JSON.stringify({
     version: proof.version,
@@ -86,6 +88,7 @@ function canonical(proof) {
     gateAEvalProfile: proof.gateAEvalProfile,
   });
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
   return (
     typeof value === "object" &&
@@ -93,6 +96,7 @@ function exactKeys(value, keys) {
     Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
   );
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readFdFrame() {
   let source = "";
   while (!source.includes("\n")) {
@@ -111,6 +115,7 @@ function readFdFrame() {
     throw new Error("Structural test authorization was not one frame.");
   return JSON.parse(source);
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -120,9 +125,11 @@ function readPortFrame(port) {
   }
   throw new Error("Structural test authorization timed out.");
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function contextForProcess() {
   return isMainThread ? "main" : `worker:${import.meta.filename}`;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestAuthorization() {
   const context = contextForProcess();
   const port =
@@ -185,6 +192,7 @@ function requestAuthorization() {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function workerFilename(value) {
   try {
     return realpathSync(value instanceof URL ? fileURLToPath(value) : String(value));
@@ -192,6 +200,7 @@ function workerFilename(value) {
     return undefined;
   }
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function allowedWorkerPaths() {
   const paths = [
     resolve(repositoryRoot, "scripts/test-capability-worker-fixture.mjs"),
@@ -217,6 +226,7 @@ function allowedWorkerPaths() {
     }),
   );
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function eveRuntimeWorkerPath() {
   return realpathSync(
     resolve(
@@ -225,6 +235,7 @@ function eveRuntimeWorkerPath() {
     ),
   );
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, gateAEvalProfile) {
   const allowed = allowedWorkerPaths();
   const eveWorker = eveRuntimeWorkerPath();

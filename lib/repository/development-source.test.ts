@@ -21,6 +21,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true });
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactEnvironment(root: string) {
   return {
     APP_BUILDER_EXECUTION_MODE: "development",
@@ -43,12 +44,14 @@ function exactEnvironment(root: string) {
   } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureRoot() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-development-source-")));
   roots.push(root);
   return root;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receipt(root: string, sourceKind: SourceKind = "fresh-template") {
   return {
     version: 3 as const,

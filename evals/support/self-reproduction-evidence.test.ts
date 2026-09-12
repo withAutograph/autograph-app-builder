@@ -14,6 +14,7 @@ import {
 
 const directories: string[] = [];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function capture() {
   const directory = mkdtempSync(join(tmpdir(), "self-reproduction-evidence-"));
   directories.push(directory);
@@ -23,6 +24,7 @@ function capture() {
   return { logPath, transcriptPath, records, sink: evidenceSink(logPath, transcriptPath, records) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receipt(record: unknown) {
   return `${evidencePrefix}${JSON.stringify(record)}\n`;
 }

@@ -29,6 +29,7 @@ export interface PreviewCimdTransportDependencies {
   timeoutSignal?: (milliseconds: number) => AbortSignal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function lookupError(hostname: string): NodeJS.ErrnoException {
   return Object.assign(
     new Error(`No pinned address satisfies the requested family for ${hostname}.`),
@@ -36,6 +37,7 @@ function lookupError(hostname: string): NodeJS.ErrnoException {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function addressesForOptions(
   addresses: readonly LookupAddress[],
   options: LookupOptions,
@@ -51,6 +53,7 @@ function addressesForOptions(
  * Node can request `all: true` when automatic family selection is enabled. In
  * that case the callback must receive the pinned address array, not a scalar.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): LookupFunction {
   const pinnedAddresses = addresses.map(({ address, family }) => ({
     address,
@@ -74,6 +77,7 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
   // oxlint-enable promise/prefer-await-to-callbacks
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function responseHeaders(headers: IncomingMessage["headers"]): Headers {
   const result = new Headers();
   for (const [name, value] of Object.entries(headers)) {
@@ -86,6 +90,7 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
   return result;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
   if (signal.aborted) return Promise.reject<T>(signal.reason);
 
@@ -120,6 +125,7 @@ const DEFAULT_PREVIEW_CIMD_DEPENDENCIES: PreviewCimdTransportDependencies = {
   requestHttps,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewCimdTransport(
   dependencies: PreviewCimdTransportDependencies = DEFAULT_PREVIEW_CIMD_DEPENDENCIES,
 ): ClientMetadataResourceFetch {

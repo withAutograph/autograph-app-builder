@@ -6,6 +6,7 @@ import styles from "./emulation-approval.module.css";
 
 export type EmulatedProvider = "github" | "vercel";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function VercelMark({ size = 20 }: { size?: number }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="currentColor">
@@ -14,10 +15,12 @@ export function VercelMark({ size = 20 }: { size?: number }) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ProviderMark({ provider }: { provider: EmulatedProvider }) {
   return provider === "github" ? <FaGithub aria-hidden="true" size={20} /> : <VercelMark />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function EmulationApproval({
   provider,
   environment,

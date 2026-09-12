@@ -26,12 +26,14 @@ const silentConsole = new Proxy(console, {
 
 type Fetch = typeof fetch;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestUrl(resource: RequestInfo | URL): URL {
   if (typeof resource === "string") return new URL(resource);
   if (resource instanceof URL) return resource;
   return new URL(resource.url);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedResponse(response: Response): Promise<Response> {
   const declared = response.headers.get("content-length");
   if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)) {
@@ -68,6 +70,7 @@ async function boundedResponse(response: Response): Promise<Response> {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
   return async (resource, init) => {
     const url = requestUrl(resource);
@@ -92,6 +95,7 @@ export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function octokitClass(request: Fetch) {
   return Octokit.defaults({
     baseUrl: GITHUB_API_ORIGIN,
@@ -105,6 +109,7 @@ function octokitClass(request: Fetch) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubOAuthApp(input: {
   clientId: string;
   clientSecret: string;
@@ -158,6 +163,7 @@ export function createGitHubOAuthApp(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubApp(input: { appId: string; privateKey: string; fetch?: Fetch }) {
   return new App({
     appId: input.appId,
@@ -180,6 +186,7 @@ export function createGitHubApp(input: { appId: string; privateKey: string; fetc
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubTokenOctokit(input: { token: string; fetch?: Fetch }) {
   const GitHubOctokit = octokitClass(input.fetch ?? fetch);
   return new GitHubOctokit({ auth: input.token });

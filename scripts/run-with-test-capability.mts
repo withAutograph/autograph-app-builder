@@ -51,6 +51,7 @@ const allowedEnvironment = [
   "VERCEL_PROJECT_ID",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function childEnvironment(): NodeJS.ProcessEnv {
   const environment: Record<string, string | undefined> = {
     PATH: "/usr/bin:/bin",
@@ -62,6 +63,7 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return environment as NodeJS.ProcessEnv;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
   if (
     typeof profile !== "object" ||
@@ -75,6 +77,7 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
   return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof: Record<string, unknown>) {
   return JSON.stringify({
     version: proof.version,
@@ -88,6 +91,7 @@ function canonical(proof: Record<string, unknown>) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactParentArguments(): readonly string[] {
   const pid = process.ppid;
   const expectedExecutable = realpathSync("/bin/sh");
@@ -141,6 +145,7 @@ function exactParentArguments(): readonly string[] {
   throw new Error("Structural test launcher inspection is unsupported.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verifyTrustedLauncher(profile: "eve" | "vitest") {
   const launcherStat = statSync(launcher, { bigint: true });
   if (
@@ -171,7 +176,7 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     throw new Error("The structural test launcher argv was invalid.");
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function runWithTestCapability(options: {
   profile: "eve" | "vitest";
   command: string;

@@ -33,6 +33,7 @@ const forwarded = {
   subject: authority.ownerUserId,
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sessionAuth() {
   return {
     current: structuredClone(forwarded),
@@ -70,6 +71,7 @@ const receipts: GitHubPublicationReceiptStore = {
 
 const adapter = {} as GitHubPublicationAdapter;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function dependencies(input?: {
   activeMember?: boolean;
   boundInstallation?: typeof installation | null;

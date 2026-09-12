@@ -12,6 +12,7 @@ const maximumRequestBytes = 65_536;
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pageData(
   row: Awaited<ReturnType<ReturnType<typeof createBuilderDraftService>["readActive"]>>,
 ) {
@@ -24,6 +25,7 @@ function pageData(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function getAuthenticatedBuilderDraftContext(input: {
   environment: Environment;
   headers: Headers;
@@ -48,6 +50,7 @@ export async function getAuthenticatedBuilderDraftContext(input: {
 }
 
 /** Request-fresh RSC read; callers pass `await headers()` from their route. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readAuthenticatedActiveBuilderDraft(input: {
   environment: Environment;
   headers: Headers;
@@ -57,6 +60,7 @@ export async function readAuthenticatedActiveBuilderDraft(input: {
   return pageData(await context.drafts.readActive(context.authority));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readAuthenticatedBuilderDraft(input: {
   environment: Environment;
   headers: Headers;
@@ -72,7 +76,7 @@ export async function readAuthenticatedBuilderDraft(input: {
 }
 
 /** Scheduled-maintenance entry point. Do not invoke from actions or requests. */
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function deleteInactiveBuilderDraftsForMaintenance(input: {
   environment: Environment;
   now?: () => Date;
@@ -85,6 +89,7 @@ export async function deleteInactiveBuilderDraftsForMaintenance(input: {
   }).deleteInactiveSince(input.maxAgeMs);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderDraftRouteHandler(input: {
   origin: string;
   authorityForRequest: (request: Request) => Promise<
@@ -158,6 +163,7 @@ export function createBuilderDraftRouteHandler(input: {
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
 /** Intended route import: `getBuilderDraftDeploymentHandler(process.env)`. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderDraftDeploymentHandler(environment: Environment) {
   if (handler) return handler;
   const preview = readPreviewOAuthRuntimeConfig(environment);

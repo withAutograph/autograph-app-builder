@@ -22,10 +22,12 @@ const closedDevelopmentBinding = (environment: Environment) =>
   environment.EVE_HOSTED_ADAPTER === "0" &&
   environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS === "0";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canAutoSelectDevelopmentSource(environment: Environment = process.env) {
   return !isHostedVercelRuntime(environment) && closedDevelopmentBinding(environment);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0)
@@ -33,6 +35,7 @@ function required(environment: Environment, name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactDevelopmentSourceRoot(path: string) {
   if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
     throw new Error("Development source root was not canonical.");
@@ -47,6 +50,7 @@ function exactDevelopmentSourceRoot(path: string) {
  * dev` authority. Hosted execution and non-development explicit paths
  * deliberately fall through to their existing readers.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function developmentSourceReceipt(
   sourceKind: SourceKind,
   suppliedPath?: string,

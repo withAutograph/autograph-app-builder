@@ -17,6 +17,7 @@ import type {
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, requestId: string) {
   return and(
     eq(builderProvisioningJournals.issuer, authority.issuer),
@@ -27,6 +28,7 @@ function predicate(authority: BuilderProvisionAuthority, requestId: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseRow(
   row: typeof builderProvisioningJournals.$inferSelect,
 ): BuilderProvisionJournalRow {
@@ -47,6 +49,7 @@ function parseRow(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresBuilderProvisionJournalStore(
   database: Database,
 ): BuilderProvisionJournalStore {

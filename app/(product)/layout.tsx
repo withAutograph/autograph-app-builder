@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description: "Design, plan, create, and validate supported apps with Autograph App Builder.",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html

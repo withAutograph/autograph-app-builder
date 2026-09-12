@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AuthRouteProvider } from "@/components/providers";
 import { passkeysFlag } from "@/lib/feature-flags";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function AuthConfiguration({ children }: { children: ReactNode }) {
   const passkeysEnabled = await passkeysFlag();
   const showEmulatedProviders =
@@ -28,6 +29,7 @@ async function AuthConfiguration({ children }: { children: ReactNode }) {
 }
 
 /** Keep request-fresh auth configuration below each destination's static shell. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function RouteProviders({
   children,
   fallback,

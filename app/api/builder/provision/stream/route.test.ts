@@ -13,6 +13,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
 
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function projection(
   revision: number,
   status: "pending" | "settled" = "settled",
@@ -32,11 +33,13 @@ function projection(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mockProjection(value: BuilderProvisionProjection) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   deployment.handler.mockImplementation(async () => Response.json(value));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readAll(response: Response) {
   return await response.text();
 }

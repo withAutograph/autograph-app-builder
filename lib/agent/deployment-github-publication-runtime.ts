@@ -31,6 +31,7 @@ export type DeploymentGitHubPublicationConfig =
       };
     };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rejectAmbientGitHubAuthority(
   environment: Readonly<Record<string, string | undefined>>,
 ): void {
@@ -43,6 +44,7 @@ function rejectAmbientGitHubAuthority(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readDeploymentGitHubPublicationConfig(
   environment: Readonly<Record<string, string | undefined>>,
 ): DeploymentGitHubPublicationConfig {
@@ -73,6 +75,7 @@ export function readDeploymentGitHubPublicationConfig(
 
 type Database = ReturnType<typeof openHostedPostgresDatabase>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   environment: Readonly<Record<string, string | undefined>>;
   openDatabase?: (databaseUrl: string) => Database | Promise<Database>;
@@ -111,7 +114,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
 let defaultResolver: HostedGitHubPublicationRuntimeResolver | undefined;
 
 /** Lazily parses deployment configuration so local discovery stays disabled. */
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function githubPublicationRuntimeForSession(sessionAuth: unknown) {
   defaultResolver ??= createDeploymentGitHubPublicationRuntimeResolver({
     environment: process.env,

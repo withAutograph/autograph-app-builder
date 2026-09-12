@@ -17,6 +17,7 @@ export interface LastUsedBadgeProps {
  * Displays an indicator when one of the supplied method IDs matches Better
  * Auth's stored last login method.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function LastUsedBadge({ method, compact, floating }: LastUsedBadgeProps) {
   const { method: lastLoginMethod, localization } = useLastLoginMethod();
   const methods = Array.isArray(method) ? method : [method];

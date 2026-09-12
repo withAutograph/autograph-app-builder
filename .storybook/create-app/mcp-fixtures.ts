@@ -77,6 +77,7 @@ export const authorizationRequest: PublicInputRequest = {
   },
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sessionResult(inputRequests: PublicInputRequest[]): EveSessionResult {
   return {
     sessionId: "session-story",

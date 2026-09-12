@@ -14,11 +14,13 @@ type Handler = ReturnType<typeof createEmulateHandler>;
 
 let active: { namespace: string; handler: Handler } | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(value: string | undefined, name: string) {
   if (!value) throw new Error(`${name} is required for Preview emulation.`);
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewEmulateHandler(input: {
   emulation: PreviewProviderEmulation;
   databaseUrl: string;
@@ -92,6 +94,7 @@ export function createPreviewEmulateHandler(input: {
   return durableHandler;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handler(environment: NodeJS.ProcessEnv) {
   const emulation = readPreviewProviderEmulation(environment);
   if (!emulation) return undefined;
@@ -105,7 +108,7 @@ function handler(environment: NodeJS.ProcessEnv) {
   return created;
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function invokePreviewEmulateRequest(request: Request) {
   const selected = handler(process.env);
   if (!selected) return new Response("Not found", { status: 404 });
@@ -122,6 +125,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
   return selectedMethod(request, { params: Promise.resolve({ path }) });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function previewEmulateRoute(method: keyof Handler) {
   return async (request: Request, context: { params: Promise<{ path: string[] }> }) => {
     try {

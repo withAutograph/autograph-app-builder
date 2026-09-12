@@ -24,6 +24,7 @@ import handoffStyles from "./handoff.module.css";
 
 export type { HandoffControlData } from "@/app/actions/handoff-renewal";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
   if (
     value.version !== 1 ||
@@ -47,12 +48,14 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function subscribeToClientSnapshot() {
   return () => {
     // Hydration readiness has no external subscription.
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   // The instant server shell is visible before browser event handlers exist.
   // Do not expose an enabled action that can silently discard that first click.

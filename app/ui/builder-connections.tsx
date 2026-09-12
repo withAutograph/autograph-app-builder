@@ -35,10 +35,12 @@ const connectionDescriptions: Record<string, string> = {
   "Sage Intacct": "Import vendor data from a Sage Intacct company",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function connectionDescription(name: string) {
   return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
     quickbooks: SiQuickbooks,
@@ -54,6 +56,7 @@ export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) 
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionsSection({
   bare = false,
   connected,
@@ -166,6 +169,7 @@ export function ConnectionsSection({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionDrawer({
   flow,
   onClose,

@@ -14,6 +14,7 @@ import { themePlugin } from "@/lib/auth/theme-plugin";
  */
 // Keep keyboard handling local to the theme toggle.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ThemeToggleItem() {
   const { useTheme, localization } = useAuthPlugin(themePlugin);
   const { theme, setTheme, themes = [] } = useTheme();

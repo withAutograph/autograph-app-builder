@@ -15,6 +15,7 @@ export const sha256 = (value: Uint8Array | string) =>
   createHash("sha256").update(value).digest("hex");
 
 /** Matches one exact canonical fetch remote, allowing Git's optional .git suffix. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository: string) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
@@ -29,6 +30,7 @@ export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releaseEndpoint(value: string | undefined) {
   if (!value) throw new Error("Usage: --endpoint https://agent.example.com");
   const endpoint = new URL(value);
@@ -47,6 +49,7 @@ export function releaseEndpoint(value: string | undefined) {
   return endpoint.origin;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function registeredAutographToolNames(handlerSource: string) {
   const names = [...handlerSource.matchAll(/server\.registerTool\(\s*"(?<name>[^"]+)"/gu)].map(
     (match) => match[1],
@@ -66,6 +69,7 @@ const write = (target: Buffer, offset: number, value: string, length: number) =>
 const octal = (value: number, length: number) => `${value.toString(8).padStart(length - 1, "0")}\0`;
 
 /** Creates a deterministic USTAR archive (sorted files, fixed modes and epoch mtimes). */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deterministicTar(files: ReadonlyMap<string, Uint8Array>) {
   const chunks: Buffer[] = [];
   for (const [name, content] of [...files].toSorted(([a], [b]) => a.localeCompare(b))) {

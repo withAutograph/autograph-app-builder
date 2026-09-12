@@ -20,6 +20,7 @@ let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function Harness({
   outbox,
   save,
@@ -36,6 +37,7 @@ function Harness({
   return null;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(props: Parameters<typeof Harness>[0], strict = false) {
   container = document.createElement("div");
   document.body.append(container);

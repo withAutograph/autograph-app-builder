@@ -42,11 +42,13 @@ export type HandoffRenewalActionState =
   | { status: "unavailable" }
   | { status: "error" };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestUrl(path: string) {
   const preview = readPreviewOAuthRuntimeConfig(process.env);
   return `${new URL(preview.issuer).origin}${path}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sameOriginHeaders() {
   const incoming = await headers();
   const forwarded = new Headers(incoming);
@@ -55,6 +57,7 @@ async function sameOriginHeaders() {
   return forwarded;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function toControlData(
   value: Awaited<ReturnType<typeof getBuilderHandoffPageData>>,
 ): HandoffControlData | undefined {
@@ -75,6 +78,7 @@ function toControlData(
  * reuses the deployment handler so the request is still authorized solely by
  * the current Better Auth session and tenant authority, never client input.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function renewBuilderHandoff(
   _previous: HandoffRenewalActionState | undefined,
   untrustedInput: { handoffId: string; creationRequestId: string },

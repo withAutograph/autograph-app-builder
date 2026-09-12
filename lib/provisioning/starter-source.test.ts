@@ -8,6 +8,7 @@ import { loadStarterSource } from "./starter-source";
 
 const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture() {
   const file = new TextEncoder().encode("# Exact starter\n");
   const archive = deterministicGzip(deterministicTar(new Map([["README.md", file]])));

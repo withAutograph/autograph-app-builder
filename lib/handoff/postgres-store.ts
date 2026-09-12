@@ -11,6 +11,7 @@ import type { BuilderHandoffStore } from "./service";
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Authority = BuilderHandoffRecord["authority"];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorityPredicate(authorityInput: Authority) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
@@ -21,6 +22,7 @@ function authorityPredicate(authorityInput: Authority) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffRecord {
   return builderHandoffRecordSchema.parse({
     version: 1,
@@ -41,6 +43,7 @@ function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffReco
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresBuilderHandoffStore(database: Database): BuilderHandoffStore {
   const read: BuilderHandoffStore["read"] = async (input) => {
     const rows = await database

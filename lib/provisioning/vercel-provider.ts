@@ -23,11 +23,13 @@ const projectSchema = z
   })
   .passthrough();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function provisionVercelProject(input: {
   installation: VercelInstallationBinding;
   token: string;
@@ -50,6 +52,7 @@ export async function provisionVercelProject(input: {
       ? `?teamId=${encodeURIComponent(input.installation.scopeId)}`
       : "";
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function vercel(args: {
     method?: "GET" | "POST";
     path: string;
@@ -89,7 +92,7 @@ export async function provisionVercelProject(input: {
     return { status: response.status, body };
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function inspect(name: string) {
     return vercel({
       path: `/v9/projects/${encodeURIComponent(name)}`,

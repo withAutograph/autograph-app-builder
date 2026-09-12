@@ -13,6 +13,7 @@ import {
   waitForForwardedEveChild,
 } from "./local-eve-launch";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture() {
   const stateRoot = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-local-eve-")));
   chmodSync(stateRoot, 0o700);

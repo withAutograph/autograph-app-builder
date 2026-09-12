@@ -16,6 +16,7 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => [
@@ -26,6 +27,7 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
 }
 
 /** App-owned approval UI for Emulate's local authorization-code flow. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   let parsed;

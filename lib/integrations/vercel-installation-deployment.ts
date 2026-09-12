@@ -33,6 +33,7 @@ const noStoreHeaders = {
   "Referrer-Policy": "no-referrer",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function deployment(environment: NodeJS.ProcessEnv | Record<string, string | undefined>) {
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const preview = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
@@ -80,6 +81,7 @@ function deployment(environment: NodeJS.ProcessEnv | Record<string, string | und
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelInstallationDeploymentHandler(
   kind: "start" | "callback",
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
@@ -213,6 +215,7 @@ const webhookSchema = z
   })
   .passthrough();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelWebhookDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {

@@ -126,10 +126,12 @@ export const hostedPreviewActivationReceiptSchema = z
 
 export type HostedPreviewActivationReceipt = z.infer<typeof hostedPreviewActivationReceiptSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: unknown): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildHostedPreviewSourceConfigurationReceipt(input: {
   sourceSha: string;
   sourceTree: string;

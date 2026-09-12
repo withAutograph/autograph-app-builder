@@ -13,6 +13,7 @@ export const sessionStatusSchema = z.enum([
 
 export type EveSessionStatus = z.infer<typeof sessionStatusSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isLoopbackHostname(hostname: string): boolean {
   return ["localhost", "127.0.0.1", "[::1]"].includes(hostname.toLowerCase());
 }

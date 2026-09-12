@@ -21,6 +21,7 @@ type RequestInput = HostedAdminPlanRequest extends infer Request
     : never
   : never;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request(value: RequestInput): HostedAdminPlanRequest {
   return {
     version: 1,
@@ -30,6 +31,7 @@ function request(value: RequestInput): HostedAdminPlanRequest {
   } as HostedAdminPlanRequest;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function store(): HostedAdminStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -52,6 +54,7 @@ function store(): HostedAdminStore {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function confirmed(planRequest: HostedAdminPlanRequest) {
   return {
     ...planRequest,

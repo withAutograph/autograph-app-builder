@@ -12,6 +12,7 @@ afterEach(() => {
   for (const output of outputs.splice(0)) rmSync(output, { recursive: true, force: true });
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function run(script: string) {
   const output = mkdtempSync(join(tmpdir(), "self-reproduction-report-test-"));
   outputs.push(output);
@@ -61,6 +62,7 @@ function run(script: string) {
   return { result, report, output };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function emit(records: unknown[], verdict = "passed") {
   return `${records
     .map((record) => `console.log(${JSON.stringify(evidencePrefix + JSON.stringify(record))});`)

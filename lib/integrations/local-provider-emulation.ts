@@ -37,6 +37,7 @@ const vercelHost = z
     return `https://${normalized}`;
   });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readVercelPreviewOrigin(hostname: string | undefined): string | undefined {
   return hostname === undefined ? undefined : vercelHost.parse(hostname);
 }
@@ -72,6 +73,7 @@ export type PreviewProviderEmulation = SharedProviderEmulation & {
 
 export type ProviderEmulation = LocalProviderEmulation | PreviewProviderEmulation;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function previewEmulationNamespace(input: {
   repository: string;
   project: string;
@@ -80,6 +82,7 @@ export function previewEmulationNamespace(input: {
   return `${input.repository.toLowerCase()}:${input.project.toLowerCase()}:${input.branch}:seed-v2`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readPreviewProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): PreviewProviderEmulation | undefined {
@@ -136,6 +139,7 @@ export function readPreviewProviderEmulation(
 }
 
 /** Development-only loopback transport. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readLocalProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): LocalProviderEmulation | undefined {
@@ -175,6 +179,7 @@ export function readLocalProviderEmulation(
   return { mode: "local", ...parsed };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): ProviderEmulation | undefined {
@@ -184,6 +189,7 @@ export function readProviderEmulation(
   return local ?? preview;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerEmulationEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ) {

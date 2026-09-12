@@ -22,6 +22,7 @@ vi.mock("@/app/actions/builder", () => ({
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function projection(
   revision: number,
   status: "pending" | "settled" = "pending",
@@ -79,6 +80,7 @@ class TestEventSource {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(initial = projection(1)) {
   container = document.createElement("div");
   document.body.append(container);

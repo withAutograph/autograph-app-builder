@@ -25,6 +25,7 @@ type ModelState = BuilderIntegrationState["models"];
 // Availability fallback only, never a freshness cache. The Next adapter owns TTL.
 let lastKnownGood: ModelState | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadGatewayModels(input?: {
   fetch?: typeof fetch;
   defaultModelId?: string;
@@ -67,6 +68,7 @@ export async function loadGatewayModels(input?: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resetGatewayModelCacheForTests() {
   lastKnownGood = undefined;
 }

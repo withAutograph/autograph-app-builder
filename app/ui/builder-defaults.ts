@@ -68,6 +68,7 @@ const randomNameNouns = [
   "Workshop",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function repositoryNameFromAppName(appName: string) {
   return appName
     .normalize("NFKD")
@@ -80,6 +81,7 @@ export function repositoryNameFromAppName(appName: string) {
     .replaceAll(/-+$/gu, "");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function appNameFromBrief(brief: string) {
   const firstContentLine = brief
     .split("\n")
@@ -106,6 +108,7 @@ export function appNameFromBrief(brief: string) {
     .trimEnd();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function randomAppName(seed?: string) {
   if (!seed) {
     const adjective = randomNameAdjectives[Math.floor(Math.random() * randomNameAdjectives.length)];

@@ -25,6 +25,7 @@ const github = {
   },
 } satisfies GitHubProvisionResult;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installation(scopeType: "team" | "user") {
   return {
     installationId: "icfg_1",

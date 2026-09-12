@@ -125,6 +125,7 @@ export interface HostedMcpRuntime {
   now?: () => number;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withHostedBuilderHandoffs(input: {
   service: EveSessionService;
   principal: HostedPrincipal;
@@ -177,6 +178,7 @@ export function withHostedBuilderHandoffs(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string; advertiseOauth?: boolean } = {},
@@ -369,6 +371,7 @@ export function createAutographMcpHandler(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function adapterMode(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): "local" | "hosted" | "unconfigured" | "invalid" {
@@ -392,6 +395,7 @@ const publicDiscoveryMethods = new Set([
   "prompts/list",
 ]);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
@@ -421,6 +425,7 @@ const discoveryOnlyService = new Proxy({} as EveSessionService, {
   },
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authenticationRequiredService(challenge: string) {
   return new Proxy({} as EveSessionService, {
     get() {
@@ -432,6 +437,7 @@ function authenticationRequiredService(challenge: string) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function isToolCallRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
@@ -451,6 +457,7 @@ const hostedToolNames = new Set([
   "autograph_cancel",
 ]);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function requiredScopesForRequest(request: Request): Promise<string[]> {
   try {
     const body: unknown = await request.clone().json();
@@ -474,6 +481,7 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
   return ["autograph:session"];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function hostedServiceForRequest(
   request: Request,
   runtime: HostedMcpRuntime,
@@ -545,6 +553,7 @@ async function hostedServiceForRequest(
       });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createMcpRequestHandler(
   input: {
     environment?: NodeJS.ProcessEnv | Record<string, string | undefined>;

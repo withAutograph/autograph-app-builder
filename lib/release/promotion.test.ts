@@ -20,6 +20,7 @@ import { deterministicTar, TOOL_NAMES } from "../../scripts/portable-release";
 const digest = "a".repeat(64);
 const object = "b".repeat(40);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unsigned(): PromotionReceiptUnsigned {
   return {
     format: "autograph-release-promotion-v1",
@@ -96,6 +97,7 @@ function unsigned(): PromotionReceiptUnsigned {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function candidate() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "promotion-")));
   await chmod(root, 0o700);

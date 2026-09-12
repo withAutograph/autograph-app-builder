@@ -55,6 +55,7 @@ const legacyReceipt = {
   provenance: undefined,
 } as unknown as SourceReceipt;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>

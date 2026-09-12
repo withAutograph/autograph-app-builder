@@ -15,6 +15,7 @@ export interface SignOutProps {
  * @param className - Optional additional class names appended to the root element
  * @returns The spinner shown during sign-out
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SignOut({ className }: SignOutProps) {
   const { authClient, basePaths, viewPaths } = useAuth();
   const signInHref = `${basePaths.auth}/${viewPaths.auth.signIn}`;

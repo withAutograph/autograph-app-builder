@@ -28,10 +28,12 @@ const previewRouteInputSchema = z
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function loopbackDevelopmentOrigin(port: number): string {
   return `http://127.0.0.1:${unprivilegedPortSchema.parse(port)}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function prototypePreviewRequestUrl(input: {
   environment: Environment;
   requestUrl: string;
@@ -91,6 +93,7 @@ const previewResponseHeaders = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function emptyPreviewNotFoundResponse(): Response {
   return new Response(null, {
     status: 404,
@@ -98,12 +101,14 @@ function emptyPreviewNotFoundResponse(): Response {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function equalDigest(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left, "hex");
   const rightBytes = Buffer.from(right, "hex");
   return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function previewUrl(input: {
   requestUrl: string;
   sessionId: string;
@@ -125,6 +130,7 @@ function previewUrl(input: {
   return publicPrototypePreviewUrlSchema.safeParse(candidate).success ? candidate : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function attachPrototypePreviewUrl(
   resultInput: EveSessionResult,
   requestUrl: string,
@@ -151,6 +157,7 @@ export type PrototypePreviewResolver = (input: {
   sessionId: string;
 }) => Promise<PublicPrototype | undefined>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPrototypePreviewRequestHandler(input: {
   resolvePrototype: PrototypePreviewResolver;
 }) {
@@ -187,6 +194,7 @@ export function createPrototypePreviewRequestHandler(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createServicePrototypePreviewResolver(input: {
   serviceForRequest: (request: Request) => Promise<EveSessionService | undefined>;
 }): PrototypePreviewResolver {

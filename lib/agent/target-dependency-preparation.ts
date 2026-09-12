@@ -31,6 +31,7 @@ export interface TargetDependencyPreparationResult {
  * Records checkout-backed planning state. Repository commands own dependency
  * installation; this helper does not install, inspect, or verify a cache.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function prepareOrReuseDependencies(input: {
   current: DependencyPreparationState;
   callId: string;

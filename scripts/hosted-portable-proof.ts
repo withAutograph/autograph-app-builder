@@ -118,6 +118,7 @@ export type HostedProofScenario = z.infer<typeof hostedProofScenarioSchema>;
 export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
   if (value !== null && typeof value === "object")
@@ -130,6 +131,7 @@ function canonicalPublicResult(value: unknown): string {
   return primitive;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicResultFingerprint(result: EveSessionResult) {
   return digest(canonicalPublicResult(result));
 }
@@ -146,12 +148,14 @@ const tokenClaimsSchema = z
   })
   .passthrough();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tokenClaims(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("OAuth access token must be a JWT.");
   return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyWorkspaceTokenPair(input: {
   primary: string;
   secondary: string;
@@ -221,6 +225,7 @@ const draftPrReceiptSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScenario) {
   const marker = "AUTOGRAPH_DRAFT_PR_RECEIPT ";
   const candidates = text.split("\n").filter((line) => line.startsWith(marker));
@@ -247,6 +252,7 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
   return { receipt, evidenceDigest: digest(JSON.stringify(receipt)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsonRpcPayload(text: string) {
   const contentTypePayload = text
     .split("\n")
@@ -436,6 +442,7 @@ export class HostedMcpProofClient {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyProtectedResourceMetadata(input: {
   endpoint: string;
   scenario: HostedProofScenario;
@@ -464,12 +471,14 @@ async function verifyProtectedResourceMetadata(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function toolSession(name: string, result: Awaited<ReturnType<HostedMcpProofClient["callTool"]>>) {
   if (result.isError || result.session?.success !== true)
     throw new Error(`${name} returned a tool error or invalid public result.`);
   return result.session.data;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assistantText(result: EveSessionResult) {
   return result.events
     .filter((event) => event.type === "assistant_message")
@@ -477,6 +486,7 @@ function assistantText(result: EveSessionResult) {
     .join("\n");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function responseFor(
   request: NonNullable<EveSessionResult["inputRequests"]>[number],
   scenario: HostedProofScenario,
@@ -515,6 +525,7 @@ function responseFor(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function pollUntilSettled(input: {
   client: HostedMcpProofClient;
   scenario: HostedProofScenario;
@@ -610,7 +621,7 @@ export interface HostedProofResult {
 }
 
 // Keep proof helpers scoped to the hosted portable proof boundary.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export async function runHostedProof(input: {
   endpoint: string;
   token: string;

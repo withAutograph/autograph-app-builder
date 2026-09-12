@@ -4,6 +4,7 @@ import type { UseFormRegisterReturn } from "react-hook-form";
 
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AppDetailsSection({
   bare = false,
   appName,

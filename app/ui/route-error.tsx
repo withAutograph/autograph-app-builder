@@ -12,6 +12,7 @@ const clientReady = () => true;
 const serverReady = () => false;
 
 /** Recovery re-fetches the segment through Next, never an application mutation. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function RouteError({ retry, title }: RouteErrorProps & { title: string }) {
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
 

@@ -24,6 +24,7 @@ export type ImageLifecycleAction =
   | "prepare-proof-runtime"
   | "prove";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseLifecycleArguments(
   action: ImageLifecycleAction,
   args: readonly string[],
@@ -66,7 +67,7 @@ export function parseLifecycleArguments(
   };
 }
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function runImageLifecycleTask(
   action: ImageLifecycleAction,
   args: readonly string[],

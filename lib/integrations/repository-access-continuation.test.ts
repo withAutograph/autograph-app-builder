@@ -14,10 +14,12 @@ const authority = {
 };
 const continuationId = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameAuthority(left: typeof authority, right: typeof authority) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): RepositoryAccessContinuationStore & {
   records: RepositoryAccessContinuation[];
 } {

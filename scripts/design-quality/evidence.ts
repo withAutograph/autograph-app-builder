@@ -21,6 +21,7 @@ export interface Observation {
 export const evaluatorVersion = 3;
 export const dimensions: Dimension[] = ["component", "api", "styling"];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function scoreAdherence(
   observations: Observation[],
   limitations: string[] = [],

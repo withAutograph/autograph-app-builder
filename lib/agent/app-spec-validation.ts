@@ -92,12 +92,14 @@ export type AppSpecValidationResult =
   | { valid: true }
   | { valid: false; issues: AppSpecValidationIssue[] };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function normalizedStrings(value: unknown, pattern: RegExp): string[] {
   if (!Array.isArray(value)) return [];
   return [
@@ -112,6 +114,7 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
  * The agent should not spend turns repairing ordering, unknown keys, or a
  * mechanical enum that the builder can resolve deterministically.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function normalizeBuildReadyAppSpec(content: string): string {
   const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
   const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
@@ -149,6 +152,7 @@ export function normalizeBuildReadyAppSpec(content: string): string {
   return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateBuildReadyAppSpec(content: string): AppSpecValidationResult {
   const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
   const issues: AppSpecValidationIssue[] = [];
@@ -210,6 +214,7 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
   return issues.length === 0 ? { valid: true } : { valid: false, issues };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function appSpecRepairDiagnostic(
   result: Extract<AppSpecValidationResult, { valid: false }>,
 ): string {

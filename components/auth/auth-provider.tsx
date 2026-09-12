@@ -32,6 +32,7 @@ declare module "@better-auth-ui/core" {
  * @param children - React nodes to render inside the authentication provider
  * @returns A React element that renders an authentication provider configured with the provided props and toast handler
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AuthProvider({ children, ...config }: AuthProviderProps) {
   return (
     <AuthProviderPrimitive {...config}>

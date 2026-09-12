@@ -27,6 +27,7 @@ type BuilderIntegrationRequest = {
 
 const databases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseFor(databaseUrl: string) {
   const existing = databases.get(databaseUrl);
   if (existing) return existing;
@@ -37,6 +38,7 @@ function databaseFor(databaseUrl: string) {
 
 // Keep state loading scoped to the integration deployment boundary.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadBuilderIntegrationState(
   input: BuilderIntegrationRequest,
   loadModels: (input: { force?: boolean }) => Promise<BuilderIntegrationState["models"]> = () =>

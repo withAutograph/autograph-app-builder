@@ -3,7 +3,7 @@ import { verifyLocalVercelRelay } from "@/lib/integrations/local-oauth-relay";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning route contract
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function GET(request: Request) {
   let emulation;
   try {

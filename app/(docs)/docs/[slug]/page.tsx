@@ -10,12 +10,14 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generateStaticParams() {
   return docs
     .filter((document) => document.slug !== "overview")
     .map((document) => ({ slug: document.slug }));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const document = getDocument(slug);
@@ -26,6 +28,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function DocumentContent({ params }: PageProps) {
   const { slug } = await params;
   const document = getDocument(slug);
@@ -37,6 +40,7 @@ async function DocumentContent({ params }: PageProps) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function DocsLoading() {
   return <main aria-busy="true" className="min-h-screen" />;
 }

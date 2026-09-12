@@ -40,6 +40,7 @@ interface PasskeyOnboardingReadOptions {
   previewCanonicalOrigin?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactOrigin(value: string | undefined) {
   const url = new URL(value ?? "");
   if (url.pathname !== "/api/auth" || url.search || url.hash) {
@@ -48,10 +49,12 @@ function exactOrigin(value: string | undefined) {
   return url.origin;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isLoopback(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readPasskeyOnboardingConfig(
   environment: Readonly<Record<string, string | undefined>>,
   options: PasskeyOnboardingReadOptions = {},
@@ -150,10 +153,12 @@ export function readPasskeyOnboardingConfig(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function encode(value: string) {
   return Buffer.from(value, "utf-8").toString("base64url");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sign(encodedPayload: string, secret: string) {
   return createHmac("sha256", secret)
     .update("autograph-passkey-onboarding-v1\0")
@@ -161,10 +166,12 @@ function sign(encodedPayload: string, secret: string) {
     .digest("base64url");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tokenDigest(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function personalWorkspaceSlug(userId: string, deploymentId: string) {
   const digest = createHash("sha256")
     .update("autograph-passkey-workspace-v1\0")
@@ -175,6 +182,7 @@ function personalWorkspaceSlug(userId: string, deploymentId: string) {
   return `personal-${digest.slice(0, 24)}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPasskeyOnboardingToken(config: PasskeyOnboardingConfig, now = new Date()) {
   const payload = tokenPayloadSchema.parse({
     version: TOKEN_VERSION,
@@ -190,6 +198,7 @@ export function createPasskeyOnboardingToken(config: PasskeyOnboardingConfig, no
   return { payload, token, digest: tokenDigest(token) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyPasskeyOnboardingToken(
   token: string | null | undefined,
   config: PasskeyOnboardingConfig,
@@ -221,6 +230,7 @@ export function verifyPasskeyOnboardingToken(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function onboardingUnavailable() {
   return APIError.from("FORBIDDEN", {
     code: "PASSKEY_ONBOARDING_UNAVAILABLE",
@@ -228,6 +238,7 @@ function onboardingUnavailable() {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function invalidOnboardingAuthority() {
   return APIError.from("UNAUTHORIZED", {
     code: "PASSKEY_ONBOARDING_AUTHORITY_INVALID",
@@ -235,6 +246,7 @@ function invalidOnboardingAuthority() {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function onboardingAlreadyAuthenticated() {
   return APIError.from("CONFLICT", {
     code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
@@ -248,6 +260,7 @@ type PasskeyOnboardingContextAdapter = Pick<
 >;
 
 /** @internal */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function issuePasskeyOnboardingContext(
   adapter: PasskeyOnboardingContextAdapter,
   config: PasskeyOnboardingConfig,
@@ -282,6 +295,7 @@ export async function issuePasskeyOnboardingContext(
 }
 
 /** @internal */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
   context: string | null | undefined,
@@ -291,6 +305,7 @@ export function authenticatedPasskeyRegistration(
   return { userId, name: "Additional passkey" };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPasskeyOnboardingPlugin(input: {
   config: PasskeyOnboardingConfig | null;
   now?: () => Date;
@@ -420,6 +435,7 @@ export function createPasskeyOnboardingPlugin(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPasskeyPlugin(input: {
   config: PasskeyOnboardingConfig | null;
   now?: () => Date;

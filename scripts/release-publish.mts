@@ -25,6 +25,7 @@ import { TOOL_NAMES } from "./portable-release";
 
 const execFileAsync = promisify(execFile);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
@@ -51,6 +52,7 @@ function parseArguments(args: readonly string[]) {
   return { candidateRoot, tokenFile };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
   if (value === undefined || !isAbsolute(value))
@@ -58,6 +60,7 @@ function requiredExecutable(name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function ownerToken(path: string) {
   const canonical = await realpath(resolve(path));
   const info = await lstat(canonical);
@@ -76,6 +79,7 @@ async function ownerToken(path: string) {
   return token;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function deploymentIdentity(value: string) {
   const parsed = JSON.parse(value) as { id?: unknown; url?: unknown };
   if (
@@ -88,6 +92,7 @@ function deploymentIdentity(value: string) {
   return { id: parsed.id, url: parsed.url } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sealPublicationTree(root: string, current = root) {
   for (const entry of await readdir(current, { withFileTypes: true })) {
     const path = join(current, entry.name);
@@ -107,10 +112,10 @@ async function sealPublicationTree(root: string, current = root) {
 }
 
 // Keep publication cleanup scoped to the release command.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 async function removePublicationTree(root: string) {
   // Keep publication cleanup helpers local to this operation.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
   async function makeWritable(path: string) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) return;

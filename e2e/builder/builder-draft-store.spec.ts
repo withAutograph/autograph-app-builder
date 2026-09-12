@@ -14,6 +14,7 @@ const authority = {
   workspaceId: "draft-race-workspace",
   ownerUserId: "draft-race-owner",
 };
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(brief: string): BuilderDraftRecord {
   return {
     version: 1,
@@ -43,6 +44,7 @@ function record(brief: string): BuilderDraftRecord {
     },
   };
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function saveInput(draftId: string, brief: string, expectedRevision = 0) {
   return {
     authority,

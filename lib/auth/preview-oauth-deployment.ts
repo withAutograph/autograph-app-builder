@@ -19,6 +19,7 @@ interface PreviewOAuthDeploymentRuntime {
 
 let deploymentRuntime: PreviewOAuthDeploymentRuntime | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function selfServiceSignupAuthority(
   environment: PreviewOAuthRuntimeConfig["environment"],
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
@@ -28,6 +29,7 @@ export function selfServiceSignupAuthority(
   return environment === "local" || emulated ? async () => true : managedAuthority;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
@@ -108,18 +110,21 @@ function getPreviewOAuthDeploymentRuntime(
  * mutation. The first request fails closed unless every Preview binding is
  * present and exact.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getPreviewOAuthDeploymentAuth(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return getPreviewOAuthDeploymentRuntime(environment).auth;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getPreviewOAuthDeploymentOrigin(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   return getPreviewOAuthDeploymentRuntime(environment).origin;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getPreviewOAuthDeploymentSession(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -158,6 +163,7 @@ interface PreviewSessionOrganizationAuth {
  * this idempotent recovery covers sessions that predate self-serve onboarding
  * or provider-link callbacks that reuse an existing session.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function ensurePreviewSessionOrganization(input: {
   auth: PreviewSessionOrganizationAuth;
   authority: PreviewOrganizationUserAuthority;
@@ -185,6 +191,7 @@ export async function ensurePreviewSessionOrganization(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -197,6 +204,7 @@ export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewOAuthRequestHandler(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   getAuth?: typeof getPreviewOAuthDeploymentAuth;
@@ -245,6 +253,7 @@ export function createPreviewOAuthRequestHandler(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewOAuthWellKnownHandler(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   getAuth?: typeof getPreviewOAuthDeploymentAuth;

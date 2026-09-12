@@ -4,6 +4,7 @@ import Link from "next/link";
 import { UserButton } from "../../components/auth/user/user-button";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function Header() {
   return (
     <header className={styles.header}>

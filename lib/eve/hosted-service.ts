@@ -119,16 +119,19 @@ export interface HostedEveTransport {
   }) => Promise<HostedEngineSnapshot>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertNever(value: never): never {
   void value;
   throw new HostedSubmissionUnknownError();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.trim().split(/\r?\n/u, 1)[0]?.trim() ?? "";
   return firstLine.slice(0, 200) || "Untitled app";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionStageSchema> {
   if (result.status === "completed") return "complete";
   if (["failed", "cancelled"].includes(result.status)) return "needs_attention";
@@ -175,6 +178,7 @@ const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
   },
 ];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function truncateUtf8(value: string, maximumBytes: number): string {
   if (maximumBytes === 0) return "";
   const encoder = new TextEncoder();
@@ -190,6 +194,7 @@ function truncateUtf8(value: string, maximumBytes: number): string {
   return value.slice(0, end);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function checkpointInputRequest(
   request: PublicInputRequest,
   profile: CheckpointInputProfile,
@@ -246,6 +251,7 @@ function checkpointInputRequest(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function checkpointEvent(
   event: z.infer<typeof publicEveEventSchema>,
   profile: CheckpointInputProfile,
@@ -258,6 +264,7 @@ function checkpointEvent(
   return event;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function checkpointForSnapshot(
   sessionId: string,
   snapshot: HostedEngineSnapshot,
@@ -300,6 +307,7 @@ function checkpointForSnapshot(
     ),
   );
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function fitCheckpoint(input: {
     profile: CheckpointInputProfile;
     includePrototype: boolean;
@@ -378,12 +386,14 @@ function checkpointForSnapshot(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>): string {
   const prompt = recoveryPromptForSession(record);
   if (prompt === undefined) throw new HostedSessionRecoveryUnavailableError();
   return prompt;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
   store: HostedEveStore;
@@ -403,6 +413,7 @@ export function createHostedEveSessionService(input: {
     input.sessionTimeoutPolicy ?? DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
   );
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function requireOwnedOperation(
     operationInput: unknown,
     expected: {
@@ -433,6 +444,7 @@ export function createHostedEveSessionService(input: {
     return operation;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireSession(sessionId: string) {
     const session = await input.store.getSession(principal, sessionId);
     if (session === null) throw new HostedSessionNotFoundError();
@@ -446,6 +458,7 @@ export function createHostedEveSessionService(input: {
     return parsed;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireBoundSucceededStartSession(operation: HostedOperationRecord) {
     if (
       operation.kind !== "start" ||
@@ -473,6 +486,7 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function mutate<T extends { clientRequestId: string }>(options: {
     kind: HostedOperationKind;
     request: T;
@@ -677,6 +691,7 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function observeSnapshot(
     sessionId: string,
     snapshot: HostedEngineSnapshot,
@@ -703,6 +718,7 @@ export function createHostedEveSessionService(input: {
     return completeResult;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readSession(inputValue: { sessionId: string; cursor: number; limit: number }) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));

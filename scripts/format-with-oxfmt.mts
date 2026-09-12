@@ -1,5 +1,6 @@
 import { format } from "oxfmt";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function formatWithOxfmt(path: string, source: string) {
   const result = await format(path, source);
   if (result.errors.length > 0) {

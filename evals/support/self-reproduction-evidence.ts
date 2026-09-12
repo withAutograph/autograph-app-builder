@@ -5,6 +5,7 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sanitizeEvidence(value: unknown): unknown {
   if (typeof value === "string")
     return value
@@ -33,10 +34,12 @@ export function sanitizeEvidence(value: unknown): unknown {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function digest(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
   if (exitCode !== 0) return { status: "failed", reason: "Native eval failed or was interrupted." };
   if (!records.some((record) => record.kind === "eval-completed"))
@@ -53,12 +56,14 @@ export function evidenceCompletion(exitCode: number | null, records: Record<stri
 }
 
 /** Line framing prevents credentials split across stream chunks leaking to disk. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evidenceSink(
   logPath: string,
   transcriptPath: string,
   records: Record<string, unknown>[],
 ) {
   let pending = "";
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function line(raw: string) {
     appendFileSync(logPath, `${sanitizeEvidence(raw)}\n`, { mode: 0o600 });
     const start = raw.indexOf(evidencePrefix);
@@ -98,6 +103,7 @@ export function evidenceSink(
 
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function changeSetStatusOutput(
   record: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -120,6 +126,7 @@ function changeSetStatusOutput(
   return event.data.toolName === "change_set_status" ? event.data.result : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportProvenanceFromEvidence(
   records: readonly Record<string, unknown>[],
 ): "native reviewed change_set_status export" | "native unreviewed validation-failed export" {
@@ -133,6 +140,7 @@ export function candidateExportProvenanceFromEvidence(
   return "native reviewed change_set_status export";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportFromEvidence(
   records: readonly Record<string, unknown>[],
 ): CandidateExportFile[] | undefined {

@@ -37,6 +37,7 @@ export interface HostedGitHubPublicationRuntimeResolver {
   resolve: (sessionAuth: unknown) => Promise<GitHubPublicationRuntime>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   try {
     return exactForwardedSessionAuthority(sessionAuth);
@@ -95,6 +96,7 @@ const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = 
  * The resolver owns no environment parsing and cannot adopt an ambient or
  * process-wide GitHub installation identifier.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedGitHubPublicationRuntimeResolver(input: {
   enabled: boolean;
   openDatabase?: () => Database | Promise<Database>;
@@ -104,7 +106,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
   let databasePromise: Promise<Database> | undefined;
   const dependencies = { ...defaultDependencies, ...input.dependencies };
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function database(): Promise<Database> {
     if (input.openDatabase === undefined) {
       throw new Error("Hosted GitHub publication database is unconfigured.");

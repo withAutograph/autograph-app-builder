@@ -12,6 +12,7 @@ const stream = (...chunks: string[]) =>
     },
   });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function processFixture(stdout: string[], stderr: string[] = []) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const kill = vi.fn(async () => undefined);

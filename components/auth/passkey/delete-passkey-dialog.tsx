@@ -33,6 +33,7 @@ export interface DeletePasskeyDialogProps {
   passkey: ListedPasskey;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);

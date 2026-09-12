@@ -11,6 +11,7 @@ export const HOSTED_DEPENDENCY_ARCHIVE_SHA256 =
   "419ee6e19631b147b6b014942c060528dcef02a8e34fc7ab28615c16ef6ebefa";
 export const HOSTED_DEPENDENCY_ARCHIVE_BYTES = 176_461_350;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hostedExecutionArtifactDigest(): string {
   return `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`;
 }

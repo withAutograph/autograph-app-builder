@@ -48,12 +48,14 @@ import {
 
 const preferredModelId = activeBuilderModelId;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function subscribeToClientSnapshot() {
   return () => {
     // The client snapshot has no external subscription.
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useBuilderController({
   initialBrief,
   generatedNameSeed,
@@ -778,6 +780,7 @@ export function useBuilderController({
     // target a stale, non-authoritative draft.
     router.push(`/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`);
   };
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (checkpointing.current || submissionPending || !canSubmit) return;

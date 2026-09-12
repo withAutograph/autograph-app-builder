@@ -87,6 +87,7 @@ export type BranchWorktreePublicationJournal =
   | BranchWorktreePublicationSuccessReceipt
   | BranchWorktreePublicationFailureReceipt;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalProposal(proposal: BranchWorktreePublicationProposal) {
   const unsigned = {
     ...proposal,
@@ -95,6 +96,7 @@ function canonicalProposal(proposal: BranchWorktreePublicationProposal) {
   return unsigned;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchPublicationIdentity(input: {
   sourceReceiptDigest: string;
   reviewDigest: string;
@@ -102,10 +104,12 @@ export function branchPublicationIdentity(input: {
   return stableDigest(input);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchNameForIdentity(identity: string): string {
   return `app-builder/review-${identity}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBranchWorktreePublicationProposal(input: {
   sourceReceipt: SourceReceipt;
   source: DestinationSnapshot;
@@ -174,6 +178,7 @@ export function createBranchWorktreePublicationProposal(input: {
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactBranchWorktreeProposal(
   proposal: BranchWorktreePublicationProposal,
 ): void {
@@ -197,6 +202,7 @@ export function assertExactBranchWorktreeProposal(
     throw new Error("The branch-worktree publication paths are malformed.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function proposalFromBranchJournal(
   journal: BranchWorktreePublicationJournal,
 ): BranchWorktreePublicationProposal {
@@ -230,12 +236,14 @@ export function proposalFromBranchJournal(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchJournalDigest(
   journal: Omit<BranchWorktreePublicationJournal, "digest">,
 ): string {
   return createHash("sha256").update(JSON.stringify(journal)).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertCanonicalBranchWorktreeJournal(
   journal: BranchWorktreePublicationJournal,
 ): void {
@@ -245,6 +253,7 @@ export function assertCanonicalBranchWorktreeJournal(
   assertExactBranchWorktreeProposal(proposalFromBranchJournal(journal));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactBranchWorktreeProposalMatch(
   left: BranchWorktreePublicationProposal,
   right: BranchWorktreePublicationProposal,

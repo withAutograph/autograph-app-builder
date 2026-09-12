@@ -2,6 +2,7 @@ import type { EveEvalContext } from "eve/evals";
 
 import { BUILD_READY_APP_SPEC } from "./app-spec";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function prepareReviewedWorkflow(
   t: EveEvalContext,
   repository: string,

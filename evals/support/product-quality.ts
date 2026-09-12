@@ -95,6 +95,7 @@ export interface ConversationQualityReport {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evaluateConversationQuality(input: {
   scenario: ProductQualityScenario;
   reply: string;
@@ -141,6 +142,7 @@ export interface PrototypeQualityReport {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evaluatePrototypeQuality(input: {
   scenario: ProductQualityScenario;
   html: string;
@@ -181,6 +183,7 @@ export function evaluatePrototypeQuality(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function productQualityScenario(id: ProductQualityScenario["id"]): ProductQualityScenario {
   const scenario = PRODUCT_QUALITY_SCENARIOS.find((candidate) => candidate.id === id);
   if (scenario === undefined) throw new Error(`Unknown product eval ${id}.`);

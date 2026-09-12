@@ -21,6 +21,7 @@ import type { DevelopmentSnapshot } from "./local-mode";
  * overlays between targeted restarts.  Do not use this for hosted or release
  * paths.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function makeDevelopmentWorkAreaWritable(
   path: string,
   preserveRuntime = false,
@@ -47,6 +48,7 @@ async function makeDevelopmentWorkAreaWritable(
  * supervisor keeps reusable caches separately and creates a new application
  * for the next targeted restart.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createDevelopmentApplication(input: {
   repositoryRoot: string;
   runRoot: string;
@@ -88,6 +90,7 @@ export async function createDevelopmentApplication(input: {
  * Reusable package and dependency caches deliberately live outside this tree;
  * workflow queues and application-local Eve state never do.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createDevelopmentCycle(input: {
   repositoryRoot: string;
   supervisorRoot: string;
@@ -128,6 +131,7 @@ export async function createDevelopmentCycle(input: {
  * The staging snapshot makes a runtime restart observe the current checkout
  * without ever letting a watcher see a partially copied application tree.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function refreshDevelopmentApplication(input: {
   repositoryRoot: string;
   applicationRoot: string;

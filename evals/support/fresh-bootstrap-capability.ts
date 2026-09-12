@@ -16,6 +16,7 @@ import {
 import { withFreshBootstrapTestCapability } from "@/lib/agent/fresh-bootstrap-capability";
 import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withFreshBootstrapEvalCapability<T>(
   capability: FreshBootstrapCapability,
   operation: () => Promise<T>,
@@ -28,6 +29,7 @@ export function withFreshBootstrapEvalCapability<T>(
   return operation();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function identity(path: string): Promise<PathIdentity> {
   const canonical = await realpath(path);
   const value = await lstat(canonical);
@@ -42,6 +44,7 @@ async function identity(path: string): Promise<PathIdentity> {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function executableIdentity(path: string): Promise<ExecutableIdentity> {
   return {
     ...(await identity(path)),
@@ -51,6 +54,7 @@ async function executableIdentity(path: string): Promise<ExecutableIdentity> {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createFreshBootstrapEvalCapability(): Promise<{
   capability: FreshBootstrapCapability;
   allowedRoot: string;

@@ -20,6 +20,7 @@ interface OrganizationRow {
   role: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function resultRows<T>(input: unknown): readonly T[] {
   if (Array.isArray(input)) return input as T[];
   if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
@@ -28,6 +29,7 @@ function resultRows<T>(input: unknown): readonly T[] {
   throw new Error("PostgreSQL returned an unsupported organization result.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function activeOrganizations(
   database: Database | Transaction,
   authority: { issuer: string; audience: string },
@@ -47,6 +49,7 @@ async function activeOrganizations(
   return resultRows<OrganizationRow>(result);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function oneAuthorizedOrganization(
   rows: readonly OrganizationRow[],
 ): EnsuredOrganization | undefined {
@@ -60,6 +63,7 @@ function oneAuthorizedOrganization(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exactActiveOrganization(
   database: Database | Transaction,
   authority: { issuer: string; audience: string },
@@ -68,11 +72,13 @@ async function exactActiveOrganization(
   return oneAuthorizedOrganization(await activeOrganizations(database, authority, userId));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function personalWorkspaceSlug(userId: string) {
   const digest = createHash("sha256").update(userId).digest("hex");
   return `personal-${digest.slice(0, 24)}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function personalWorkspaceName(name: string) {
   const [firstName] = name.trim().split(/\s+/u);
   return firstName ? `${firstName}’s Workspace` : "My Workspace";
@@ -87,6 +93,7 @@ export type PostgresPreviewOrganizationAuthority = PreviewOrganizationUserAuthor
  * fully transaction-bound, so a callback crash or retry cannot leave partial
  * organization state or create a duplicate personal workspace.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresPreviewOrganizationAuthority(
   database: Database,
   authority: {

@@ -9,6 +9,7 @@ export const cursorClientId = "autograph-cursor-desktop";
 export const cursorRedirectUri = "http://localhost:8787/callback";
 
 // Stable Better Auth schema fields, shared with the actual-handler test harness.
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function cursorClientRegistration() {
   return {
     clientId: cursorClientId,
@@ -34,6 +35,7 @@ export function cursorClientRegistration() {
 type Database = PostgresJsDatabase<typeof schema>;
 type Reader = Pick<Database, "select">;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateResource(resource: string) {
   readPreviewOAuthContractConfig({
     BETTER_AUTH_URL: `${new URL(resource).origin}/api/auth`,
@@ -42,6 +44,7 @@ function validateResource(resource: string) {
 }
 
 /** Read only. Errors propagate so unavailable storage cannot expose an install link. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function isCursorClientReady(database: Reader, resource: string): Promise<boolean> {
   validateResource(resource);
   const [client] = await database
@@ -81,6 +84,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
 }
 
 /** Explicit deployment operation. Never invoke from request handlers or readiness checks. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function setupCursorClient(database: Database, resource: string) {
   validateResource(resource);
   await database.transaction(async (tx) => {

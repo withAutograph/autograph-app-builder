@@ -13,6 +13,7 @@ import {
 import styles from "./app-builder.module.css";
 
 /** Server-owned form structure; only the controls subscribe to the live draft. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderFormContent({ connectionsEnabled }: { connectionsEnabled: boolean }) {
   return (
     <>

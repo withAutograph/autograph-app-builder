@@ -8,6 +8,7 @@ import type { HandoffProvisioningContinuationState } from "@/app/actions/builder
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readProjection(value: unknown): BuilderProvisionProjection | undefined {
   const parsed = builderProvisionProjectionSchema.safeParse(value);
   return parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;
@@ -18,6 +19,7 @@ function readProjection(value: unknown): BuilderProvisionProjection | undefined 
  * durable state while this component consumes its revisioned SSE projection
  * and asks one Server Action to claim visible-route continuation work.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function HandoffProvisioningProgress({
   handoffId,
   initial,

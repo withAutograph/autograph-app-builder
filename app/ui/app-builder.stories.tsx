@@ -9,6 +9,7 @@ import { AuthenticatedBuilder } from "./authenticated-builder";
 import { Header } from "./builder-shell";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AppBuilderStory(props: ComponentProps<typeof AuthenticatedBuilder>) {
   return (
     <div className={styles.appShell}>

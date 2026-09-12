@@ -7,6 +7,7 @@ import type { DocsDocument } from "./docs-registry";
 
 import styles from "./docs.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function DocsShell({ children, document }: { children: ReactNode; document: DocsDocument }) {
   const { next, previous } = getAdjacentDocuments(document);
 

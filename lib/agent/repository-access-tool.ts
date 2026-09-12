@@ -17,6 +17,7 @@ export interface RepositoryAccessToolInput {
   selectedInstallationId?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveRepositoryAccessForTool(
   input: RepositoryAccessToolInput,
   ctx: ToolContext,

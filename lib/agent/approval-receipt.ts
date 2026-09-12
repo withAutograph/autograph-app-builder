@@ -37,10 +37,12 @@ export type ApprovalTarget = Pick<
   "repositoryId" | "repository" | "baseRef" | "baseSha"
 >;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
   return approvalReceiptSchema.parse(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalTarget(receipt: ApprovalReceipt): ApprovalTarget {
   return {
     repositoryId: receipt.repositoryId,
@@ -50,6 +52,7 @@ export function approvalTarget(receipt: ApprovalReceipt): ApprovalTarget {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalTargetFromGitHubSource(
   source: ImmutableGitHubSourceReceipt,
 ): ApprovalTarget {
@@ -61,6 +64,7 @@ export function approvalTargetFromGitHubSource(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
   actual: ApprovalReceipt;
   phase: ApprovalReceipt["phase"];
@@ -87,6 +91,7 @@ export function assertApprovalReceipt(input: {
   return actual;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined;
   const record = input as Record<string, unknown>;
@@ -157,6 +162,7 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   return undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalRequestDecision(input: {
   phase: "appspec" | "change_set";
   toolName: "accept_app_spec" | "accept_change_set";

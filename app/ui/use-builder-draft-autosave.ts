@@ -61,16 +61,19 @@ export interface BuilderDraftAutosave<T> {
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createMutationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
     return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cloneSnapshot<T>(snapshot: T): T {
   return structuredClone(snapshot);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function browserIsOnline() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
 }
@@ -80,6 +83,7 @@ function browserIsOnline() {
  * outbox, and never installs a beforeunload warning. Call `flush` before a
  * provider redirect; browser hiding automatically makes a best-effort flush.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useBuilderDraftAutosave<T>(
   options: BuilderDraftAutosaveOptions<T>,
 ): BuilderDraftAutosave<T> {

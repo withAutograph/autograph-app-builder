@@ -21,11 +21,13 @@ const principal: HostedPrincipal = {
 
 const config = { baseUrl: "https://builder.example.test" };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function identity(token = "project-oidc-token"): HostedWorkloadIdentity {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return { token: vi.fn(async () => token) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function accepted(sessionId = "wrun_1") {
   return Response.json(
     { ok: true, sessionId, status: "accepted" },
@@ -33,6 +35,7 @@ function accepted(sessionId = "wrun_1") {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stream(
   events: unknown[] = [
     {
@@ -54,6 +57,7 @@ function stream(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingApprovalEvents(requestId: string) {
   return [
     {
@@ -84,6 +88,7 @@ function pendingApprovalEvents(requestId: string) {
 
 // Keep event fixture construction scoped to this test.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function plannedEvents() {
   const callId = "call_plan";
   const appSpecDigest = "a".repeat(64);

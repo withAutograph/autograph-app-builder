@@ -26,6 +26,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handoff(overrides: Partial<{ handoffId: string; status: "prepared" | "continued" }> = {}) {
   return {
     version: 1 as const,

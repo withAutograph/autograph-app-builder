@@ -46,6 +46,7 @@ interface PageProps {
   }>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function currentUser() {
   const state = await resolveWorkspaceOnboardingState(async () =>
     ensurePreviewOAuthDeploymentSessionOrganization({
@@ -85,6 +86,7 @@ async function currentUser() {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
   const [query, user] = await Promise.all([searchParams, currentUser()]);

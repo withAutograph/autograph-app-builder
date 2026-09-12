@@ -4,6 +4,7 @@ import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
 
 const MAX_SECRET_BYTES = 8192;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readPrivateDatabaseUrl(fd: number): string {
   if (!Number.isInteger(fd) || fd < 0) {
     throw new Error("The database URL fd was invalid.");

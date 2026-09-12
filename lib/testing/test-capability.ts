@@ -21,6 +21,7 @@ const exactCapabilities = (value: unknown): value is readonly TestCapability[] =
   new Set(value).size === value.length &&
   value.every((entry) => TEST_CAPABILITIES.includes(entry as TestCapability));
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function testCapabilityEnabled(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>>,
@@ -43,6 +44,7 @@ export function testCapabilityEnabled(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hasTestCapability(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>> = process.env,

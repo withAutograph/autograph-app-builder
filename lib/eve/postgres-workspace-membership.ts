@@ -13,6 +13,7 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
  * tenant, but only a currently active exact user/workspace row admits it.
  * Missing rows, revoked rows, and database errors all fail closed.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresWorkspaceMembership(database: Database): HostedWorkspaceMembership {
   return {
     async isMember({ principal: principalInput, workspaceId }) {
@@ -43,6 +44,7 @@ export function createPostgresWorkspaceMembership(database: Database): HostedWor
 
 /** Consent-time authority for the future Preview issuer. Exactly one active
  * workspace is required; zero or multiple rows fail closed without guessing. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresOAuthMembershipAuthority(database: Database) {
   return {
     async activeWorkspaceForUser(input: {

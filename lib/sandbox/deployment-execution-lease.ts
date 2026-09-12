@@ -41,6 +41,7 @@ interface RuntimeDependencies {
 const commandAuthorities = new Map<string, CommandAuthority>();
 let database: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isHostedSandboxExecutionEnabled(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
@@ -50,12 +51,14 @@ export function isHostedSandboxExecutionEnabled(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedLeaseEnabled(environment: Readonly<Record<string, string | undefined>>) {
   if (!isHostedSandboxExecutionEnabled(environment)) return false;
   readHostedDeploymentEnvironment(environment);
   return true;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedLeaseDatabase(environment: Readonly<Record<string, string | undefined>>) {
   database ??= openHostedPostgresDatabase(parseHostedDatabaseUrl(environment.DATABASE_URL));
   return database;
@@ -76,6 +79,7 @@ const defaultDependencies: RuntimeDependencies = {
 
 let dependencies = defaultDependencies;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
   const preserved =
     error instanceof Error
@@ -91,6 +95,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
   return preserved;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
     ? ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
@@ -99,6 +104,7 @@ export function sandboxCleanupEvidence(error: unknown) {
     : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function stopWithin(
   sandbox: Pick<RuntimeSandboxSession, "stop">,
   timeoutMs = SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
@@ -128,6 +134,7 @@ async function stopWithin(
 }
 
 /** Acquire one epoch at Eve's awaited `turn.started` boundary. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function acquireHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
@@ -178,6 +185,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
 }
 
 /** Reassert the current durable epoch immediately before command dispatch. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function assertHostedSandboxCommandAuthority(input: {
   sessionId: string;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -211,6 +219,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
 }
 
 /** Stop compute and release without consulting process-local command state. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function releaseHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
@@ -249,12 +258,14 @@ export async function releaseHostedSandboxExecutionLease(input: {
     : ({ released: true, lease: released } as const);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function setHostedSandboxExecutionLeaseDependenciesForTest(
   replacement: RuntimeDependencies,
 ) {
   dependencies = replacement;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearHostedSandboxExecutionLeaseCacheForTest() {
   commandAuthorities.clear();
   database = undefined;

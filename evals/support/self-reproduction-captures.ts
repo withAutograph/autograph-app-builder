@@ -37,6 +37,7 @@ export interface CaptureAdapter {
 }
 
 /** Uses an already available browser; never starts a server or provider job. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function captureParity(input: {
   browser: Browser;
   outputRoot: string;

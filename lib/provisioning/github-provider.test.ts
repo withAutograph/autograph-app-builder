@@ -53,6 +53,7 @@ const config = {
   privateKey: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function credentialStore(): GitHubUserCredentialStore {
   return {
     bind: vi.fn(),

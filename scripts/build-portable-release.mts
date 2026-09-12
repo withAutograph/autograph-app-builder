@@ -118,6 +118,7 @@ await Promise.all(
   ),
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function collectFiles(root: string, directory: string): Promise<Map<string, Uint8Array>> {
   const entries = await Promise.all(
     (await readdir(directory)).toSorted().map(async (entry) => {

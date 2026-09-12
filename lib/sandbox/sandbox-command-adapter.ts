@@ -1,5 +1,6 @@
 import type { SandboxBackend, SandboxBackendHandle, SandboxSession } from "eve/sandbox";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createAuthorizedSandboxSession(input: {
   session: SandboxSession;
   authorize?: () => Promise<unknown>;
@@ -36,6 +37,7 @@ export function createAuthorizedSandboxSession(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function wrapHandle<SO>(input: {
   handle: SandboxBackendHandle<SO>;
   authorize: () => Promise<unknown>;
@@ -56,6 +58,7 @@ function wrapHandle<SO>(input: {
 }
 
 /** Preserves tenant-bound command authority without replacing Vercel's transport. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createAuthorizedSandboxBackend<BO, SO>(input: {
   backend: SandboxBackend<BO, SO>;
   authorizeSessionCommand: (sessionId: string) => Promise<unknown>;

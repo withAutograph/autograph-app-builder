@@ -35,6 +35,7 @@ const proposalRowSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalKind(
   proposal: GitHubPublicationProposal,
 ): "fresh-repository" | "draft-pull-request" {
@@ -43,6 +44,7 @@ function proposalKind(
     : "draft-pull-request";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseProposal(input: unknown): GitHubPublicationProposal {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("GitHub publication proposal JSON is malformed.");
@@ -56,6 +58,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   return proposal as DraftPullRequestProposal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);
@@ -69,6 +72,7 @@ export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublica
   return proposal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
   return {
     proposalDigest: proposal.digest,
@@ -84,6 +88,7 @@ function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
  * mutation journal. Indexed columns are redundant query aids and are rebound to
  * the closed JSON authority every time a row is read.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubPublicationStores(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,

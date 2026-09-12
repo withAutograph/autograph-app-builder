@@ -1,10 +1,12 @@
 import type { SourceWorkflowState } from "./source-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canInspectExistingApplication(state: AppBuilderWorkflowState): boolean {
   return state.phase !== "empty";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function existingRepositoryAcquisitionReceipt(
   state: SourceWorkflowState,
   expectedDigest: string,

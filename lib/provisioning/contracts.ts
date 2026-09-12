@@ -6,6 +6,7 @@ import type { BuilderProvisionRequest, BuilderProvisionResponse } from "./contra
 
 export * from "./contracts-schema";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function builderProvisionRequestDigest(input: BuilderProvisionRequest): string {
   const request = builderProvisionRequestSchema.parse(input);
   return createHash("sha256")
@@ -21,6 +22,7 @@ export function builderProvisionRequestDigest(input: BuilderProvisionRequest): s
     .digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function initialBuilderProvisionResponse(
   input: BuilderProvisionRequest,
   now = new Date(),

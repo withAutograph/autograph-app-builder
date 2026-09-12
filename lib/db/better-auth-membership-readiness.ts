@@ -25,16 +25,19 @@ export const betterAuthMembershipReadBackSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalRows(rows: z.infer<typeof migrationRowSchema>[]) {
   return [...rows].toSorted((left, right) =>
     JSON.stringify(left).localeCompare(JSON.stringify(right)),
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyBetterAuthMembershipReadBack(input: { readBack: unknown; observedAt: Date }) {
   const readBack = betterAuthMembershipReadBackSchema.parse(input.readBack);
   if (!Number.isFinite(input.observedAt.getTime())) {

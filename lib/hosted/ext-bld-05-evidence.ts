@@ -107,6 +107,7 @@ export const extBld05EvidenceReceiptSchema = z
 
 export type ExtBld05EvidenceReceipt = z.infer<typeof extBld05EvidenceReceiptSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value !== null && typeof value === "object") {
@@ -118,10 +119,12 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: unknown): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceReceipt {
   const evidence = extBld05EvidenceInputSchema.parse(input);
   return extBld05EvidenceReceiptSchema.parse({

@@ -27,6 +27,7 @@ const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(valu
 const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unicodeDraftMaterial() {
   const bytes = new TextEncoder().encode("export default null;\n");
   const digest = createHash("sha256").update(bytes).digest("hex");
@@ -127,6 +128,7 @@ function unicodeDraftMaterial() {
   return { proposal, content };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshProposal(): FreshRepositoryProposal {
   const installationIdentityDigest = "1".repeat(64);
   const sourceReceiptDigest = "2".repeat(64);
@@ -163,6 +165,7 @@ function freshProposal(): FreshRepositoryProposal {
   return { ...unsigned, digest: hash(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   return Response.json(value, {
     status,
@@ -173,6 +176,7 @@ function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function providerFetch(input?: {
   extraPermission?: boolean;
   fail?: boolean;
@@ -217,6 +221,7 @@ function providerFetch(input?: {
   return { calls, implementation };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createProvider(fetchImplementation: typeof fetch) {
   return createGitHubAppHttpProvider({
     config: {

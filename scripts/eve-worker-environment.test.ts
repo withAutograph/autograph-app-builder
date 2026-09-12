@@ -6,6 +6,7 @@ import { captureEveWorkerEnvelope, installEveWorkerEnvelope } from "./eve-worker
 
 const appRoot = "/owned/app";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function trustedSource(overrides: Record<string, string | undefined> = {}) {
   return {
     EVE_DEV: "1",
