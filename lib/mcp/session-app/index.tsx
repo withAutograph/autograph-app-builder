@@ -103,7 +103,7 @@ function SessionAppContainer() {
   );
 }
 
-const root = document.getElementById("root");
+const root = document.querySelector("#root");
 if (!root) throw new Error("Missing MCP App root.");
 createRoot(root).render(<SessionAppContainer />);
 void app.connect();

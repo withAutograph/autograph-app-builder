@@ -1364,7 +1364,7 @@ export function Builder({
             : undefined;
     if (!id) return;
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById(id)?.focus();
+      document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [initialDraft, interactive, resumedGitHubConnection, resumedVercelConnection]);
