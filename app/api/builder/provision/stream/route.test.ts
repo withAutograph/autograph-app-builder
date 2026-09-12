@@ -66,9 +66,7 @@ describe("GET /api/builder/provision/stream", () => {
       ),
     );
 
-    expect(response.headers.get("content-type")).toBe(
-      "text/event-stream; charset=utf-8",
-    );
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(response.headers.get("cache-control")).toBe("no-cache, no-store");
     expect(await readAll(response)).toBe(
       `id: 4\nevent: snapshot\ndata: ${JSON.stringify(projection(4))}\n\n` +

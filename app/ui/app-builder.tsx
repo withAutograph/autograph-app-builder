@@ -1024,11 +1024,7 @@ export function Builder({
     new Map<
       string,
       {
-        resolve: (saved: {
-          draftId: string;
-          revision: number;
-          updatedAt: string;
-        }) => void;
+        resolve: (saved: { draftId: string; revision: number; updatedAt: string }) => void;
         reject: (error: Error) => void;
       }
     >(),
@@ -1347,7 +1343,7 @@ export function Builder({
           void discardPendingDraft();
           return;
         }
-        const {snapshot} = entry;
+        const { snapshot } = entry;
         builderForm.reset(snapshot.form);
         setTeam(snapshot.team);
         setGitScope(snapshot.gitScope);
