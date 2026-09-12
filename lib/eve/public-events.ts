@@ -22,7 +22,7 @@ import {
   githubRepositoryAccessViewModel,
 } from "../integrations/store-in-view-model";
 
-export type InternalEveEvent = {
+export interface InternalEveEvent {
   type: string;
   index: number;
   turnId?: string;
@@ -34,7 +34,7 @@ export type InternalEveEvent = {
   message?: string;
   status?: EveSessionStatus;
   requestIds?: string[];
-};
+}
 
 const progressStates = new Set(["started", "completed", "failed"]);
 const silentInternalApprovalTools = new Set([

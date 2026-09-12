@@ -96,7 +96,7 @@ type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
   cancel: () => Promise<unknown>;
 };
 
-type LocalEveRuntimeState = {
+interface LocalEveRuntimeState {
   generation: string;
   /** The Eve child that was serving when this state was last observed. */
   restartGeneration?: string;
@@ -121,7 +121,7 @@ type LocalEveRuntimeState = {
   /** One durable tail reader per locally active public session. */
   tailPumps: Map<string, Promise<void>>;
   metadata: Map<string, { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }>;
-};
+}
 
 const localCancellationTimeoutMs = 5000;
 // Repository apply and validation run inside the Vercel Sandbox.  Their

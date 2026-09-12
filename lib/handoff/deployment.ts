@@ -89,7 +89,7 @@ export const builderHandoffCreateRequestSchema = z
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
 
-export type BuilderHandoffPageData = {
+export interface BuilderHandoffPageData {
   version: 1;
   handoffId: string;
   expiresAt: string;
@@ -100,7 +100,7 @@ export type BuilderHandoffPageData = {
   mcpUrl: string;
   /** Current journal revision when this handoff has provider work. */
   provisioningRevision?: number;
-};
+}
 
 export function createBuilderHandoffRouteHandler(input: {
   origin: string;

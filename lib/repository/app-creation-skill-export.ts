@@ -28,19 +28,19 @@ export const APP_CREATION_SKILL_EXPORT_DEPENDENCY_PATHS = [
   "tsconfig.json",
 ] as const;
 
-type ExportedSkillFile = {
+interface ExportedSkillFile {
   path: string;
   mode: "100644" | "100755";
   sha256: string;
-};
+}
 
-export type AppCreationSkillExportManifest = {
+export interface AppCreationSkillExportManifest {
   version: 1;
   roots: typeof APP_CREATION_SKILL_ROOTS;
   fileCount: number;
   files: ExportedSkillFile[];
   digest: string;
-};
+}
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 

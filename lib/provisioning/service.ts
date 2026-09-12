@@ -19,7 +19,7 @@ import { cloneStarterSource } from "./starter-source";
 import type { StarterSource } from "./starter-source";
 import { provisionVercelProject } from "./vercel-provider";
 
-type VercelCredential = {
+interface VercelCredential {
   binding: {
     installationId: string;
     scopeId: string;
@@ -31,7 +31,7 @@ type VercelCredential = {
     updatedAt: Date;
   };
   token: string;
-};
+}
 
 export interface BuilderProvisioningDependencies {
   journal: BuilderProvisionJournalStore;

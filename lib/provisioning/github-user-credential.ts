@@ -43,14 +43,14 @@ export const githubUserTokenSetSchema = z
   });
 
 export type GitHubUserTokenSet = z.infer<typeof githubUserTokenSetSchema>;
-export type GitHubUserCredential = {
+export interface GitHubUserCredential {
   providerUserId: string;
   providerLogin: string;
   tokens: GitHubUserTokenSet;
   revision: number;
   active: boolean;
   updatedAt: Date;
-};
+}
 
 export interface GitHubUserCredentialStore {
   bind: (input: {

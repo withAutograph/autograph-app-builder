@@ -1,5 +1,5 @@
 export type Dimension = "component" | "api" | "styling";
-export type Observation = {
+export interface Observation {
   id: string;
   dimension: Dimension;
   verdict: "conforming" | "nonconforming" | "unassessed";
@@ -16,7 +16,7 @@ export type Observation = {
     reason: string;
     source: { path: string; line: number; column?: number };
   };
-};
+}
 
 export const evaluatorVersion = 3;
 export const dimensions: Dimension[] = ["component", "api", "styling"];

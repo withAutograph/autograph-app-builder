@@ -22,7 +22,10 @@ export const viewports = [
   { name: "desktop-window", width: 1024, height: 768 },
 ];
 
-export type DesktopSize = { width: number; height: number };
+export interface DesktopSize {
+  width: number;
+  height: number;
+}
 
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
@@ -184,7 +187,10 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
 export const arrustedSharedSource = (path: string | undefined) =>
   Boolean(path?.replaceAll("\\", "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/u));
 
-type CssSourceFile = { path: string; content: string };
+interface CssSourceFile {
+  path: string;
+  content: string;
+}
 
 /**
  * Verify that a rendered declaration maps to one exact checked-in shared CSS

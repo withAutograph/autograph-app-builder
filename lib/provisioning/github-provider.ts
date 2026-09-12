@@ -38,7 +38,10 @@ export function readGitHubProvisioningEnvironment(
   return parsed;
 }
 
-type JsonResponse = { status: number; body: unknown };
+interface JsonResponse {
+  status: number;
+  body: unknown;
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

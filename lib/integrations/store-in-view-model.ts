@@ -50,13 +50,13 @@ export const githubRepositoryAccessSchema = z
 
 export type GitHubRepositoryAccess = z.infer<typeof githubRepositoryAccessSchema>;
 
-type StoreInScopeView = {
+interface StoreInScopeView {
   id: string;
   label: string;
   detail?: string;
-};
+}
 
-export type GitHubStoreInViewModel = {
+export interface GitHubStoreInViewModel {
   action: "connect" | "update";
   actionLabel: "Connect GitHub" | "Update GitHub access";
   title: "Connect GitHub" | "Update GitHub access";
@@ -64,7 +64,7 @@ export type GitHubStoreInViewModel = {
   desiredRepository?: string;
   scopes: StoreInScopeView[];
   scopeSummary: string;
-};
+}
 
 export function githubStoreInViewModel(input: {
   action: "connect" | "update";

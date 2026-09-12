@@ -1,6 +1,6 @@
 export type BuildDestination = "web" | "codex" | "cursor";
 
-export type BuilderForm = {
+export interface BuilderForm {
   appName: string;
   repository: string;
   brief: string;
@@ -10,13 +10,13 @@ export type BuilderForm = {
   vercelInstallationId?: string;
   githubInstallationId?: string;
   modelId: string;
-};
+}
 
 export type ProviderField = "vercel" | "github";
 export type StorageProvider = "github" | "gitlab" | "bitbucket";
 export type DeploymentProvider = "vercel" | "netlify" | "cloudflare";
 
-export type BuilderDraft = {
+export interface BuilderDraft {
   version: 1;
   form: BuilderForm;
   team: string;
@@ -31,4 +31,4 @@ export type BuilderDraft = {
   focusOrigin: ProviderField;
   appNameEditedByUser: boolean;
   repositoryEditedByUser: boolean;
-};
+}

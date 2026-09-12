@@ -58,14 +58,17 @@ export function withPreparedGitHubSelection(
   return selectedInstallationId ? { ...input, selectedInstallationId } : input;
 }
 
-type VercelCredential = { binding: VercelInstallationBinding; token: string };
+interface VercelCredential {
+  binding: VercelInstallationBinding;
+  token: string;
+}
 type Authority = ReturnType<typeof exactForwardedSessionAuthority>["authority"];
-type VercelScope = {
+interface VercelScope {
   installationId: string;
   type: "team" | "user";
   id: string;
   slug: string;
-};
+}
 export type PreparedVercelAccess =
   | { status: "not-selected" }
   | { status: "resource-unavailable"; action: "review-selection" }

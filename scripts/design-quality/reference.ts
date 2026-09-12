@@ -3,46 +3,49 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import ts from "typescript";
 
-export type PublicProp = {
+export interface PublicProp {
   required: boolean;
   /** Literal values accepted by a union-typed prop, when TypeScript can prove them. */
   values?: string[];
   /** Broad primitive kinds proven by TypeScript; any and unknown are omitted. */
   primitiveKinds?: ("string" | "number" | "boolean")[];
-};
+}
 
-export type PublicExport = {
+export interface PublicExport {
   props?: Record<string, PublicProp>;
-};
+}
 
 /** The target-owned public surface used by source evidence. */
-export type Reference = {
+export interface Reference {
   modules: Record<string, { exports: Record<string, PublicExport> }>;
   limitations: string[];
   arrustedRoot?: string;
-};
+}
 
-export type TypedJsxAttribute = {
+export interface TypedJsxAttribute {
   path: string;
   start: number;
   verdict: "conforming" | "nonconforming" | "unassessed";
   reason: string;
-};
-export type ImplementationDiagnostic = {
+}
+export interface ImplementationDiagnostic {
   path: string;
   line: number;
   column: number;
   code: number;
   message: string;
-};
+}
 
-type PackageJson = {
+interface PackageJson {
   name?: string;
   exports?: unknown;
   main?: string;
   types?: string;
-};
-type EntryPoint = { module: string; path: string };
+}
+interface EntryPoint {
+  module: string;
+  path: string;
+}
 
 const relevantModule = /^@autograph\/(?:components|compositions|icons)(?:$|\/)/u;
 const sourceExtensions = [".tsx", ".ts", ".jsx", ".js", ".d.ts"];

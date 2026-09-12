@@ -8,23 +8,23 @@ export type BuilderDraftAutosaveStatus = "idle" | "saving" | "saved" | "offline"
 
 export type BuilderDraftAutosaveReason = "debounce" | "flush" | "visibilitychange" | "pagehide";
 
-export type BuilderDraftSaveContext<T> = {
+export interface BuilderDraftSaveContext<T> {
   mutationId: string;
   snapshot: T;
   reason: BuilderDraftAutosaveReason;
   /** True when the caller may use fetch keepalive/beacon semantics. */
   keepalive: boolean;
-};
+}
 
-export type BuilderDraftSaveAcknowledgement = {
+export interface BuilderDraftSaveAcknowledgement {
   /** Must exactly match the dispatched mutation ID before the outbox is cleared. */
   mutationId: string;
   /** The monotonic server revision that acknowledged this exact snapshot. */
   revision: number;
   savedAt?: string;
-};
+}
 
-export type BuilderDraftAutosaveOptions<T> = {
+export interface BuilderDraftAutosaveOptions<T> {
   outbox: BuilderDraftOutbox<T>;
   save: (context: BuilderDraftSaveContext<T>) => Promise<BuilderDraftSaveAcknowledgement>;
   debounceMs?: number;
@@ -36,9 +36,9 @@ export type BuilderDraftAutosaveOptions<T> = {
   onVisibilityFlush?: (reason: "visibilitychange" | "pagehide") => void;
   /** Acknowledgements advance local revision knowledge but never reset the form. */
   onAcknowledged?: (acknowledgement: BuilderDraftSaveAcknowledgement) => void;
-};
+}
 
-export type BuilderDraftAutosave<T> = {
+export interface BuilderDraftAutosave<T> {
   status: BuilderDraftAutosaveStatus;
   error: Error | undefined;
   lastSavedAt: string | undefined;
@@ -57,7 +57,7 @@ export type BuilderDraftAutosave<T> = {
    * settle; the next poll remains authoritative.
    */
   discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
-};
+}
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
 

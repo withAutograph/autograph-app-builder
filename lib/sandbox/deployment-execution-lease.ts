@@ -17,18 +17,18 @@ import { createPostgresSandboxExecutionLeaseStore } from "./postgres-execution-l
 export const HOSTED_SANDBOX_EXECUTION_ACTIVATION = "enabled-v1";
 const cleanupEvidenceKey = Symbol.for("autograph.app-builder.sandbox-cleanup-evidence.v1");
 
-export type SandboxCleanupEvidence = {
+export interface SandboxCleanupEvidence {
   attempted: true;
   stopped: boolean;
   timedOut: boolean;
-};
+}
 
-type CommandAuthority = {
+interface CommandAuthority {
   lease: SandboxExecutionLease;
   store: SandboxExecutionLeaseStore;
-};
+}
 
-type RuntimeDependencies = {
+interface RuntimeDependencies {
   enabled: (environment: Readonly<Record<string, string | undefined>>) => boolean;
   store: (environment: Readonly<Record<string, string | undefined>>) => SandboxExecutionLeaseStore;
   isMember: (input: {
@@ -36,7 +36,7 @@ type RuntimeDependencies = {
     workspaceId: string;
     environment: Readonly<Record<string, string | undefined>>;
   }) => Promise<boolean>;
-};
+}
 
 const commandAuthorities = new Map<string, CommandAuthority>();
 let database: ReturnType<typeof openHostedPostgresDatabase> | undefined;

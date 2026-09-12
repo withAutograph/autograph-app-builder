@@ -10,13 +10,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-export type UserAvatarProps = {
+export interface UserAvatarProps {
   className?: string;
   fallback?: ReactNode;
   isPending?: boolean;
   /** `User` */
   user?: User & { username?: string | null; displayUsername?: string | null };
-};
+}
 
 /**
  * Display a user's avatar using session information or an explicit user prop.

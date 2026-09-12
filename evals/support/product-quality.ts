@@ -1,7 +1,7 @@
 import { validateBuildReadyAppSpec } from "../../lib/agent/app-spec-validation";
 import { isProductFacing, forbiddenPublicVocabulary } from "./public-conversation";
 
-export type ProductQualityScenario = {
+export interface ProductQualityScenario {
   id:
     | "vendor-onboarding"
     | "material-product-ambiguity"
@@ -17,7 +17,7 @@ export type ProductQualityScenario = {
       requiredText: readonly string[];
     };
   };
-};
+}
 
 export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
   {
@@ -86,14 +86,14 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
   },
 ];
 
-export type ConversationQualityReport = {
+export interface ConversationQualityReport {
   hardFailures: readonly string[];
   score: {
     productFacing: boolean;
     structured: boolean;
     productive: boolean;
   };
-};
+}
 
 export function evaluateConversationQuality(input: {
   scenario: ProductQualityScenario;
@@ -133,13 +133,13 @@ export function evaluateConversationQuality(input: {
   };
 }
 
-export type PrototypeQualityReport = {
+export interface PrototypeQualityReport {
   hardFailures: readonly string[];
   score: {
     semanticStructure: boolean;
     contentComplete: boolean;
   };
-};
+}
 
 export function evaluatePrototypeQuality(input: {
   scenario: ProductQualityScenario;

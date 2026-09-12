@@ -47,12 +47,12 @@ const developmentTools = {
   rust: HOSTED_RUST_VERSION,
 } as const;
 
-type DevelopmentSupervisorState = {
+interface DevelopmentSupervisorState {
   fingerprint?: string;
   result?: Awaited<ReturnType<typeof createDevelopmentPackage>>;
   dependencyKey?: string;
   snapshot?: DevelopmentSnapshot;
-};
+}
 
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];

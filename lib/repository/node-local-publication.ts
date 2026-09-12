@@ -51,14 +51,14 @@ import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 
-type FileState = {
+interface FileState {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   bytes?: Uint8Array;
   digest?: string;
-};
+}
 
-export type LocalPublicationFaultHooks = {
+export interface LocalPublicationFaultHooks {
   beforeMutation?: (path: string, index: number) => void | Promise<void>;
   afterMutation?: (path: string, index: number) => void | Promise<void>;
   beforeRollback?: (path: string, index: number) => void | Promise<void>;
@@ -69,7 +69,7 @@ export type LocalPublicationFaultHooks = {
   afterPendingJournal?: () => void | Promise<void>;
   beforeTerminalJournalWrite?: (status: "succeeded" | "failed") => void | Promise<void>;
   preservePendingOnFailure?: boolean;
-};
+}
 
 function fixedGitEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
@@ -208,14 +208,14 @@ function fieldAfter(record: string, spaceCount: number): string {
   return record.slice(offset);
 }
 
-export type ParsedGitStatus = {
+export interface ParsedGitStatus {
   path: string;
   originalPath?: string;
   indexStatus: string;
   worktreeStatus: string;
   indexMode?: string;
   indexObjectId?: string;
-};
+}
 
 function statusMetadata(record: string): {
   indexMode?: string;

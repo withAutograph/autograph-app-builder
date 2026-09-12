@@ -253,11 +253,11 @@ export type DependencyCacheManifest =
   | z.infer<typeof developmentDependencyCacheManifestSchema>
   | z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
 
-export type ObservedDependencyCache = {
+export interface ObservedDependencyCache {
   manifest: DependencyCacheManifest;
   manifestDigest: string;
   contentDigest: string;
-};
+}
 
 const executionDependencyRootSchema = z.strictObject({
   path: cacheSourcePathSchema.refine(
@@ -310,10 +310,10 @@ export function shouldPreferLiveTemplateDependencies(
   return environment.APP_BUILDER_EXECUTION_MODE !== "development";
 }
 
-type ExactSourceBinding = {
+interface ExactSourceBinding {
   sourceSha: string;
   sourceTree: string;
-};
+}
 
 type ExactDependencyReceiptBinding = ExactSourceBinding & {
   sourceReceiptDigest: string;

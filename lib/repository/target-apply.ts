@@ -39,16 +39,16 @@ export const targetApplyCommandReceiptSchema = z.strictObject({
 
 export type TargetApplyCommandReceipt = z.infer<typeof targetApplyCommandReceiptSchema>;
 
-export type OverlayFile = {
+export interface OverlayFile {
   path: string;
   mode: string;
   digest: string;
-};
+}
 
-export type OverlaySnapshot = {
+export interface OverlaySnapshot {
   treeDigest: string;
   files: readonly OverlayFile[];
-};
+}
 
 export function compareOverlayPaths(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8"));
@@ -60,18 +60,18 @@ export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFil
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
 
-export type OverlayChange = {
+export interface OverlayChange {
   path: string;
   kind: "added" | "modified" | "deleted";
   before?: { mode: string; digest: string };
   after?: { mode: string; digest: string };
-};
+}
 
-export type ApplyCommandResult = {
+export interface ApplyCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
-};
+}
 
 export type ApplyCommandExecutor = (input: {
   sandbox: SandboxSession;
@@ -81,7 +81,7 @@ export type ApplyCommandExecutor = (input: {
   proposal: TargetProposal;
 }) => Promise<ApplyCommandResult>;
 
-export type TargetApplyBinding = {
+export interface TargetApplyBinding {
   sourceSha: string;
   sourceTree: string;
   sourceReceiptDigest: string;
@@ -96,7 +96,7 @@ export type TargetApplyBinding = {
   dependencyCacheDigest: string;
   dependencyCacheContentDigest: string;
   proposalDigest: string;
-};
+}
 
 type ApplyResultBase = TargetApplyBinding & {
   version: 2;
@@ -114,12 +114,12 @@ type ApplyResultBase = TargetApplyBinding & {
   appliedByCallId: string;
 };
 
-type ObservedApplyResult = {
+interface ObservedApplyResult {
   postTree: readonly OverlayFile[];
   postTreeDigest: string;
   changes: readonly OverlayChange[];
   changedContentDigest: string;
-};
+}
 
 export type TargetApplyReceipt = ApplyResultBase &
   ObservedApplyResult & {

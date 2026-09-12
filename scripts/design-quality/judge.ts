@@ -37,12 +37,12 @@ export const judgmentSchema = z.object({
   ),
   limitations: z.array(z.string()),
 });
-export type ImageEvidence = {
+export interface ImageEvidence {
   name: string;
   path: string;
   width: number;
   height: number;
-};
+}
 export function validateJudgment(value: unknown, images: ImageEvidence[]) {
   const judgment = judgmentSchema.parse(value);
   for (const finding of judgment.findings) {

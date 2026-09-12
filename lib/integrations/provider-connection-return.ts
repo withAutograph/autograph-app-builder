@@ -12,10 +12,10 @@ export const providerConnectionReturnToSchema = z.union([
     .transform((value) => value as `/handoff/${string}`),
 ]);
 
-export type ProviderConnectionReturn = {
+export interface ProviderConnectionReturn {
   returnTo: z.infer<typeof providerConnectionReturnToSchema>;
   resumeKey?: string;
-};
+}
 
 function first(value: string | string[] | undefined) {
   return typeof value === "string" ? value : undefined;

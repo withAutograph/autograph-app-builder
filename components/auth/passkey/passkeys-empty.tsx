@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/empty";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 
-export type PasskeysEmptyProps = {
+export interface PasskeysEmptyProps {
   onAddPress: () => void;
-};
+}
 
 export function PasskeysEmpty({ onAddPress }: PasskeysEmptyProps) {
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);

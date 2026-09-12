@@ -55,12 +55,12 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   }
 }
 
-type PublicationStores = {
+interface PublicationStores {
   proposals: GitHubPublicationProposalStore;
   receipts: GitHubPublicationReceiptStore;
-};
+}
 
-export type HostedGitHubPublicationRuntimeResolverDependencies = {
+export interface HostedGitHubPublicationRuntimeResolverDependencies {
   readPreparedHandoff: (sessionAuth: unknown) => Promise<
     | (BuilderHandoffIntent & {
         providers?: {
@@ -75,7 +75,7 @@ export type HostedGitHubPublicationRuntimeResolverDependencies = {
     database: Database,
     authority: HostedGitHubTenantAuthority,
   ) => PublicationStores;
-};
+}
 
 const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = {
   async readPreparedHandoff(sessionAuth) {

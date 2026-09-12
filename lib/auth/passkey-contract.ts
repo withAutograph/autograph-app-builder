@@ -1,9 +1,9 @@
 export const PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED = "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
 
-type PasskeyErrorEnvelope = {
+interface PasskeyErrorEnvelope {
   code?: unknown;
   error?: unknown;
-};
+}
 
 export function passkeyErrorCode(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;

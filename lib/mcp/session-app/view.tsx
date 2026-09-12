@@ -11,10 +11,10 @@ export type SessionAnswer =
   | { kind: "deny" }
   | { kind: "answer"; value: string; optionId?: string };
 
-export type SessionResponse = {
+export interface SessionResponse {
   requestId: string;
   response: SessionAnswer;
-};
+}
 
 export function InputControl({
   answer,

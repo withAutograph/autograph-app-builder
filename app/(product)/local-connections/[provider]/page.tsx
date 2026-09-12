@@ -10,10 +10,10 @@ import {
   EMULATED_VERCEL_TEAM_ID,
 } from "@/lib/integrations/provider-emulation-seed";
 
-type Props = {
+interface Props {
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
+}
 
 /** Development-only consent surface; real provider installation pages remain external. */
 async function LocalConnectionBridgeContent({ params, searchParams }: Props) {

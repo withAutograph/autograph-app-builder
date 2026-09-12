@@ -4,16 +4,16 @@
  * detail: callers only deal in snapshots and mutation IDs.
  */
 
-export type BuilderDraftOutboxEntry<T> = {
+export interface BuilderDraftOutboxEntry<T> {
   version: 1;
   /** The authoritative revision on which this local edit was based. */
   baseRevision: number;
   mutationId: string;
   snapshot: T;
   createdAt: number;
-};
+}
 
-export type BuilderDraftOutbox<T> = {
+export interface BuilderDraftOutbox<T> {
   read: () => Promise<BuilderDraftOutboxEntry<T> | undefined>;
   write: (entry: BuilderDraftOutboxEntry<T>) => Promise<void>;
   clearIfMutationId: (mutationId: string) => Promise<boolean>;
@@ -24,14 +24,14 @@ export type BuilderDraftOutbox<T> = {
   }) => Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
   clear: () => Promise<void>;
-};
+}
 
-export type BuilderDraftOutboxOptions = {
+export interface BuilderDraftOutboxOptions {
   /** Namespaces drafts in the browser origin. Include the draft ID in this key. */
   key: string;
   /** Injectable for tests and for WebViews that expose a non-global factory. */
   indexedDB?: IDBFactory | null;
-};
+}
 
 const databaseName = "autograph-builder-draft-outbox";
 const storeName = "pending";

@@ -19,9 +19,9 @@ import { DeletePasskeyDialog } from "./delete-passkey-dialog";
 import type { ListedPasskey } from "./delete-passkey-dialog";
 import { RenamePasskeyDialog } from "./rename-passkey-dialog";
 
-export type PasskeyProps = {
+export interface PasskeyProps {
   passkey: ListedPasskey;
-};
+}
 
 export function Passkey({ passkey }: PasskeyProps) {
   const { localization } = useAuth();

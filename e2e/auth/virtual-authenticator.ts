@@ -1,10 +1,10 @@
 import type { BrowserContext, CDPSession, Page } from "playwright/test";
 
-type Credential = {
+interface Credential {
   credentialId: string;
   rpId: string;
   userHandle?: string;
-};
+}
 
 export class VirtualAuthenticator {
   private readonly session: CDPSession;

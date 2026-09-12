@@ -9,7 +9,10 @@ import autographIcon from "../../assets/autograph-icon.png";
 import styles from "./app-builder.module.css";
 
 export type ConnectionStage = "connect" | "configure" | "customize";
-export type ConnectionFlow = { name: string; stage: ConnectionStage };
+export interface ConnectionFlow {
+  name: string;
+  stage: ConnectionStage;
+}
 
 const featuredConnections = [
   ["QuickBooks", "quickbooks"],

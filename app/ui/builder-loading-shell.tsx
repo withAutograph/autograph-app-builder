@@ -1,10 +1,10 @@
-type BuilderLoadingShellProps = {
+interface BuilderLoadingShellProps {
   /**
    * This fallback is reused for the route segment and a page-local Suspense
    * boundary, so it must be useful during client navigations as well.
    */
   title?: string;
-};
+}
 
 /** Static shell for request-bound builder content. */
 export function BuilderLoadingShell({ title = "Create an app" }: BuilderLoadingShellProps) {

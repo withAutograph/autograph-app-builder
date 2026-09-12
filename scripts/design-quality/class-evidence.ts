@@ -1,17 +1,20 @@
 import ts from "typescript";
 
-export type SourceFile = { path: string; content: string };
+export interface SourceFile {
+  path: string;
+  content: string;
+}
 
-export type IntrinsicClassSignature = {
+export interface IntrinsicClassSignature {
   tag: string;
   classes: string[];
   source: { path: string; line: number; column: number };
-};
+}
 
-export type ClassTokenEvidence = {
+export interface ClassTokenEvidence {
   token: string;
   source: IntrinsicClassSignature["source"];
-};
+}
 
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
   const { initializer } = attribute;
@@ -141,10 +144,10 @@ export function uniqueIntrinsicSignature(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-export type SignatureAttribution = {
+export interface SignatureAttribution {
   provenance: "generated" | "shared" | "unknown";
   source?: IntrinsicClassSignature["source"];
-};
+}
 
 /**
  * Generated source alone cannot exclude a shared component using the same DOM

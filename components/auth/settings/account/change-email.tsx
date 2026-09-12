@@ -14,9 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-export type ChangeEmailProps = {
+export interface ChangeEmailProps {
   className?: string;
-};
+}
 
 /**
  * Render a card containing a form to view and update the authenticated user's email.

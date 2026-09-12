@@ -11,10 +11,10 @@ import {
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import type { ProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
-type Props = {
+interface Props {
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
+}
 
 function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(

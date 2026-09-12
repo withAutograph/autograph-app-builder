@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from "react";
 import { ChoiceCard, SectionShell } from "./choice-card";
 import type { CreateAppSectionId } from "./choice-card";
 
-export type ProviderChoice<Provider extends string> = {
+export interface ProviderChoice<Provider extends string> {
   available: boolean;
   icon: ComponentType<{
     "aria-hidden"?: boolean | "true" | "false";
@@ -11,7 +11,7 @@ export type ProviderChoice<Provider extends string> = {
   }>;
   name: string;
   provider: Provider;
-};
+}
 
 export function ProviderChoiceSection<Provider extends string>({
   bare = false,

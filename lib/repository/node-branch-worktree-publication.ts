@@ -52,7 +52,7 @@ import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import { resolveAllowedRepository, SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";
 
-export type BranchWorktreePublicationFaultHooks = {
+export interface BranchWorktreePublicationFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
   beforePendingJournal?: () => void | Promise<void>;
   afterPendingJournal?: () => void | Promise<void>;
@@ -62,13 +62,13 @@ export type BranchWorktreePublicationFaultHooks = {
   beforeSourcePostcondition?: () => void | Promise<void>;
   beforeTerminalJournal?: () => void | Promise<void>;
   preserveNonterminalJournal?: boolean;
-};
+}
 
-type FileState = {
+interface FileState {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   digest?: string;
-};
+}
 
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -349,12 +349,12 @@ async function assertPublicationLayoutSafe(): Promise<void> {
     });
 }
 
-type PublicationLock = {
+interface PublicationLock {
   pid: number;
   assertHeld: () => void;
   lost: Promise<never>;
   release: () => Promise<void>;
-};
+}
 
 async function assertOwnedPublicationFileHandle(
   handle: Awaited<ReturnType<typeof open>>,
@@ -847,13 +847,13 @@ async function createOrRepairExactWorktree(
   });
 }
 
-type TreeEntry = {
+interface TreeEntry {
   path: string;
   mode: "644" | "755" | "120000";
   objectId: string;
   bytes: Buffer;
   state: FileState;
-};
+}
 
 function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
   const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
