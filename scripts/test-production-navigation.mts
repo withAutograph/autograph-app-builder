@@ -24,10 +24,6 @@ if (
 ) {
   throw new Error("Use mise run test:production-navigation.");
 }
-async function runDocker(args: string[]) {
-  assertRunning();
-  return await execute(docker, ["--host", dockerHost, ...args]);
-}
 // Deliberately do not inherit credentials, deployment metadata or Node preloads.
 const environment: NodeJS.ProcessEnv = {
   PATH: process.env.PATH,
@@ -53,6 +49,11 @@ const upgradedSockets = new Set<Duplex>();
 
 function assertRunning() {
   if (cancelled) throw new Error("Production navigation was cancelled.");
+}
+
+async function runDocker(args: string[]) {
+  assertRunning();
+  return await execute(docker, ["--host", dockerHost, ...args]);
 }
 
 async function stopChild(child: ChildProcess) {
