@@ -18,7 +18,6 @@ const deferredRules = Object.fromEntries(
     "eslint/no-plusplus",
     "eslint/no-script-url",
     "eslint/no-template-curly-in-string",
-    "eslint/no-throw-literal",
     "eslint/no-unreachable",
     "eslint/no-unsafe-finally",
     "eslint/no-unsafe-optional-chaining",
