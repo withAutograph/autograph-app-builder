@@ -32,6 +32,48 @@ const principal: HostedPrincipal = {
   scopes: Object.values(hostedEveOperationScopes),
 };
 
+const snapshot: HostedEngineSnapshot = {
+  status: "waiting",
+  events: [
+    {
+      type: "assistant.message",
+      index: 0,
+      turnId: "turn_1",
+      text: "Ready.",
+    },
+    { type: "reasoning.delta", index: 1, text: "private reasoning" },
+    { type: "tool.result", index: 2, message: "private tool output" },
+    { type: "status", index: 3, status: "waiting" },
+  ],
+};
+
+function transport(overrides: Partial<HostedEveTransport> = {}) {
+  const base: HostedEveTransport = {
+    start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
+    get: vi.fn(() => Promise.resolve(snapshot)),
+    send: vi.fn(() => Promise.resolve(snapshot)),
+    respond: vi.fn(() => Promise.resolve(snapshot)),
+    cancel: vi.fn(() => Promise.resolve(snapshot)),
+  };
+  return { ...base, ...overrides };
+}
+
+function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
+  return {
+    status: "input_required",
+    events: requestIds.map((requestId, index) => ({
+      type: "input.requested",
+      index,
+      request: {
+        requestId,
+        kind: "approval",
+        title: requestId,
+        allowFreeform: false,
+      },
+    })),
+  };
+}
+
 describe("prepared handoff session continuity", () => {
   const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
   it("retains the internal reference across service recreation, follow-ups, and approval responses", async () => {
@@ -193,53 +235,6 @@ describe("prepared handoff session continuity", () => {
     expect(beforeRead).toHaveBeenLastCalledWith(expect.objectContaining({ sourceHandoffId }));
   });
 });
-
-const snapshot: HostedEngineSnapshot = {
-  status: "waiting",
-  events: [
-    {
-      type: "assistant.message",
-      index: 0,
-      turnId: "turn_1",
-      text: "Ready.",
-    },
-    { type: "reasoning.delta", index: 1, text: "private reasoning" },
-    { type: "tool.result", index: 2, message: "private tool output" },
-    { type: "status", index: 3, status: "waiting" },
-  ],
-};
-
-function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
-  return {
-    status: "input_required",
-    events: requestIds.map((requestId, index) => ({
-      type: "input.requested",
-      index,
-      request: {
-        requestId,
-        kind: "approval",
-        title: requestId,
-        allowFreeform: false,
-      },
-    })),
-  };
-}
-
-function transport(overrides: Partial<HostedEveTransport> = {}) {
-  const base: HostedEveTransport = {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    get: vi.fn(async () => snapshot),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    send: vi.fn(async () => snapshot),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    respond: vi.fn(async () => snapshot),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    cancel: vi.fn(async () => snapshot),
-  };
-  return { ...base, ...overrides };
-}
 
 function reservationStore(
   makeReservation: (candidate: HostedOperationRecord) => unknown,

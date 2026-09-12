@@ -202,6 +202,30 @@ export async function createDevelopmentPackage(input: {
   }
 }
 
+async function disableGlobalDevelopmentPackage(codexHome: string) {
+  const configPath = join(codexHome, "config.toml");
+  const config = await readFile(configPath, "utf-8");
+  let inPlugin = false;
+  let updated = false;
+  const scoped = config
+    .split("\n")
+    .map((line) => {
+      if (line.trimStart().startsWith("[")) {
+        inPlugin = line.trim() === `[plugins."${DEVELOPMENT_PLUGIN_SELECTOR}"]`;
+      }
+      if (inPlugin && /^\s*enabled\s*=\s*(?<enabled>true|false)\s*$/u.test(line)) {
+        updated = true;
+        return "enabled = false";
+      }
+      return line;
+    })
+    .join("\n");
+  if (!updated) {
+    throw new Error("Codex did not write the development plugin enablement setting.");
+  }
+  await writeFile(configPath, scoped);
+}
+
 export async function registerDevelopmentPackage(input: {
   codexBin: string;
   codexHome: string;
@@ -275,30 +299,6 @@ export async function registerDevelopmentPackage(input: {
 
 // `codex plugin add` writes this canonical table to the user config. Keep the
 // installed package available, but let the repository config enable it.
-async function disableGlobalDevelopmentPackage(codexHome: string) {
-  const configPath = join(codexHome, "config.toml");
-  const config = await readFile(configPath, "utf-8");
-  let inPlugin = false;
-  let updated = false;
-  const scoped = config
-    .split("\n")
-    .map((line) => {
-      if (line.trimStart().startsWith("[")) {
-        inPlugin = line.trim() === `[plugins."${DEVELOPMENT_PLUGIN_SELECTOR}"]`;
-      }
-      if (inPlugin && /^\s*enabled\s*=\s*(?<enabled>true|false)\s*$/u.test(line)) {
-        updated = true;
-        return "enabled = false";
-      }
-      return line;
-    })
-    .join("\n");
-  if (!updated) {
-    throw new Error("Codex did not write the development plugin enablement setting.");
-  }
-  await writeFile(configPath, scoped);
-}
-
 export function developmentLaunchEnvironment(input: {
   sourceRoot: string;
   snapshotRoot: string;

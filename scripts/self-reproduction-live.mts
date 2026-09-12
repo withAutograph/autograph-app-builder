@@ -4,6 +4,12 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join, resolve as pathResolve } from "node:path";
 
+function required(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} was required for the live self-reproduction run.`);
+  return value;
+}
+
 const root = pathResolve(import.meta.dirname, "..");
 const candidateRoot = required("SELF_REPRODUCTION_CANDIDATE_ROOT");
 const arrustedRoot = required("SELF_REPRODUCTION_ARRUSTED_ROOT");
@@ -19,12 +25,6 @@ const generationTimeoutMs = Number(process.env.SELF_REPRODUCTION_GENERATION_TIME
 const providerRequestTimeoutMs = Number(
   process.env.SELF_REPRODUCTION_PROVIDER_REQUEST_TIMEOUT_MS ?? "30000",
 );
-
-function required(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} was required for the live self-reproduction run.`);
-  return value;
-}
 
 async function availableLoopbackPort(configured: string | undefined): Promise<number> {
   if (configured !== undefined) {

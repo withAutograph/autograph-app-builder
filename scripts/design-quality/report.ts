@@ -120,6 +120,21 @@ export function renderReport(report: {
           )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
       : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
     implementationFindings;
+  const judge = report.judge as {
+    status?: string;
+    subjectiveScore?: number;
+    reason?: string;
+    ratings?: Record<string, { score: number; reason: string }>;
+    strengths?: string[];
+    findings?: {
+      image: string;
+      severity: string;
+      region: { x: number; y: number; width: number; height: number };
+      explanation: string;
+      improvement: string;
+    }[];
+    limitations?: string[];
+  };
   const annotated = (c: { name: string; state: string; width?: number; height?: number }) => {
     const overlays = observations
       .map((o, index) => ({ o, index }))
@@ -147,21 +162,6 @@ export function renderReport(report: {
       })
       .join("");
     return `<div class="capture"><img src="${escapeHtml(c.name)}.png" alt="${escapeHtml(c.name)} ${escapeHtml(c.state)} screenshot">${overlays}${aiOverlays}</div><a href="${escapeHtml(c.name)}.png">Original, unmodified screenshot</a>`;
-  };
-  const judge = report.judge as {
-    status?: string;
-    subjectiveScore?: number;
-    reason?: string;
-    ratings?: Record<string, { score: number; reason: string }>;
-    strengths?: string[];
-    findings?: {
-      image: string;
-      severity: string;
-      region: { x: number; y: number; width: number; height: number };
-      explanation: string;
-      improvement: string;
-    }[];
-    limitations?: string[];
   };
   const summary = `<p><strong>${judge.status === "complete" ? `Subjective design score: ${judge.subjectiveScore}/100` : escapeHtml(judge.reason ?? "AI scoring not run")}</strong></p><p>One model assessment; not an objective rating. Token adherence is reported separately below.</p>${
     judge.ratings

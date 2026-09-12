@@ -11,6 +11,8 @@ export const ARRUSTED_IMAGE_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0
 
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
+const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
+const secretValue = /(?<value>bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
 const digestReference = new RegExp(
   `^${IMAGE_REPOSITORY.replaceAll(".", "[.]")}@sha256:[0-9a-f]{64}$`,
   "u",
@@ -136,6 +138,23 @@ export function assertStandaloneGitMetadata(isDirectory: boolean, label: string)
     );
 }
 
+export function assertNoSecretMaterial(value: unknown, path = "receipt"): void {
+  if (typeof value === "string") {
+    if (secretValue.test(value)) throw new Error(`${path} contains secret-like material.`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const [index, entry] of value.entries())
+      assertNoSecretMaterial(entry, `${path}[${index}]`);
+    return;
+  }
+  if (typeof value !== "object" || value === null) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (secretKey.test(key)) throw new Error(`${path}.${key} is a forbidden secret field.`);
+    assertNoSecretMaterial(entry, `${path}.${key}`);
+  }
+}
+
 export function createExactImageProvenance(input: ExactProvenanceInput): ImageProvenance {
   exactSha(input.expectedBuilderCommit, sha40, "Expected Builder commit");
   exactSha(input.expectedBuilderTree, sha40, "Expected Builder tree");
@@ -234,6 +253,12 @@ export function assertGhcrUsername(username: string): void {
   if (!/^[A-Za-z0-9-]{1,39}$/u.test(username)) throw new Error("GHCR username is malformed.");
 }
 
+export function exactDigestReference(reference: string): string {
+  if (!digestReference.test(reference))
+    throw new Error("The image reference must be the fixed GHCR repository at an exact digest.");
+  return reference;
+}
+
 export function remoteIndexCommand(reference: string): CommandSpec {
   return {
     program: "docker-buildx",
@@ -260,12 +285,6 @@ export function remoteImageCommand(reference: string): CommandSpec {
     program: "docker-buildx",
     args: ["imagetools", "inspect", exactDigestReference(reference), "--format", "{{json .Image}}"],
   };
-}
-
-export function exactDigestReference(reference: string): string {
-  if (!digestReference.test(reference))
-    throw new Error("The image reference must be the fixed GHCR repository at an exact digest.");
-  return reference;
 }
 
 export function imagePreloadCommand(reference: string): CommandSpec {
@@ -323,6 +342,12 @@ interface ImageInspect {
     size?: unknown;
     platform?: unknown;
   };
+}
+
+function hasExactKeys(value: object, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).toSorted();
+  const wanted = [...expected].toSorted();
+  return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
 export function parseLocalImageInspection(
@@ -386,12 +411,6 @@ const ociIndexMediaType = "application/vnd.oci.image.index.v1+json";
 const ociManifestMediaType = "application/vnd.oci.image.manifest.v1+json";
 const ociConfigMediaType = "application/vnd.oci.image.config.v1+json";
 const ociLayerMediaType = "application/vnd.oci.image.layer.v1.tar+gzip";
-
-function hasExactKeys(value: object, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).toSorted();
-  const wanted = [...expected].toSorted();
-  return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
-}
 
 function isExactDigest(value: unknown): value is string {
   return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
@@ -636,26 +655,6 @@ export function parseRemoteImageInspection(
     attestationPolicy: "descriptor-bound-not-trusted",
     revision: provenance.builder.commit,
   };
-}
-
-const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
-const secretValue = /(?<value>bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
-
-export function assertNoSecretMaterial(value: unknown, path = "receipt"): void {
-  if (typeof value === "string") {
-    if (secretValue.test(value)) throw new Error(`${path} contains secret-like material.`);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const [index, entry] of value.entries())
-      assertNoSecretMaterial(entry, `${path}[${index}]`);
-    return;
-  }
-  if (typeof value !== "object" || value === null) return;
-  for (const [key, entry] of Object.entries(value)) {
-    if (secretKey.test(key)) throw new Error(`${path}.${key} is a forbidden secret field.`);
-    assertNoSecretMaterial(entry, `${path}.${key}`);
-  }
 }
 
 export function hashArtifact(content: string | Uint8Array): string {

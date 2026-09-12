@@ -330,6 +330,10 @@ async function dirtyEntry(root: string, parsed: ParsedGitStatus): Promise<DirtyP
   };
 }
 
+function gitOwnedPath(root: string, name: string): string {
+  return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
+}
+
 export async function inspectLocalPublicationDestination(input: {
   destinationPath: string;
   sourceReceipt: SourceReceipt;
@@ -471,6 +475,10 @@ async function syncDirectory(path: string): Promise<void> {
   }
 }
 
+function sameFileState(left: FileState, right: FileState): boolean {
+  return left.kind === right.kind && left.mode === right.mode && left.digest === right.digest;
+}
+
 async function atomicWrite(
   path: string,
   bytes: Uint8Array,
@@ -497,15 +505,6 @@ async function atomicWrite(
   await syncDirectory(dirname(path));
 }
 
-function sameFileState(left: FileState, right: FileState): boolean {
-  return left.kind === right.kind && left.mode === right.mode && left.digest === right.digest;
-}
-
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-async function gitOwnedPath(root: string, name: string): Promise<string> {
-  return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
-}
-
 async function writeJournal(path: string, journal: LocalPublicationJournal): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await atomicWrite(path, Buffer.from(`${JSON.stringify(journal)}\n`), "644");
@@ -527,6 +526,16 @@ async function createInitialJournal(
   }
 }
 
+function assertJournal(journal: LocalPublicationJournal): void {
+  if (
+    journal === null ||
+    typeof journal !== "object" ||
+    (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
+  )
+    throw new Error("The durable local-publication journal has an unsupported state.");
+  assertCanonicalLocalPublicationJournal(journal);
+}
+
 export async function readLocalPublicationJournal(
   destinationPath: string,
 ): Promise<LocalPublicationJournal | undefined> {
@@ -542,16 +551,6 @@ export async function readLocalPublicationJournal(
       cause: error,
     });
   }
-}
-
-function assertJournal(journal: LocalPublicationJournal): void {
-  if (
-    journal === null ||
-    typeof journal !== "object" ||
-    (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
-  )
-    throw new Error("The durable local-publication journal has an unsupported state.");
-  assertCanonicalLocalPublicationJournal(journal);
 }
 
 async function acquireLock(root: string): Promise<() => Promise<void>> {

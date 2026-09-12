@@ -479,6 +479,11 @@ function oauthErrorCategoryFromException(error: unknown) {
   }
 }
 
+function propertyOrUndefined(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  return key in value ? (value as Record<string, unknown>)[key] : undefined;
+}
+
 function normalizedUserTokens(authentication: unknown, now: number) {
   try {
     const accessToken = stringProperty(authentication, "token");
@@ -525,11 +530,6 @@ function normalizedUserTokens(authentication: unknown, now: number) {
   } catch {
     throw new GitHubInstallationAuthorizationError("token-response-schema");
   }
-}
-
-function propertyOrUndefined(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  return key in value ? (value as Record<string, unknown>)[key] : undefined;
 }
 
 function installationIdentity(value: unknown) {

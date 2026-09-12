@@ -115,6 +115,14 @@ export function initialBuilderProvisionJournalRecord(
   });
 }
 
+function operationSettled(record: BuilderProvisionJournalRecord, operation: "github" | "vercel") {
+  const selected =
+    operation === "github"
+      ? record.request.providers.githubInstallationId !== undefined
+      : record.request.providers.vercelInstallationId !== undefined;
+  return !selected || record.operations[operation].attempted;
+}
+
 export async function updateBuilderProvisionJournal(input: {
   store: BuilderProvisionJournalStore;
   authority: BuilderProvisionAuthority;
@@ -147,12 +155,4 @@ export async function updateBuilderProvisionJournal(input: {
     if (saved) return saved;
   }
   throw new Error("provision-journal-contention");
-}
-
-function operationSettled(record: BuilderProvisionJournalRecord, operation: "github" | "vercel") {
-  const selected =
-    operation === "github"
-      ? record.request.providers.githubInstallationId !== undefined
-      : record.request.providers.vercelInstallationId !== undefined;
-  return !selected || record.operations[operation].attempted;
 }

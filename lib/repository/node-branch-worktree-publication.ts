@@ -377,6 +377,46 @@ async function assertOwnedPublicationFileHandle(
     throw new Error("The builder-owned publication file descriptor is unsafe.");
 }
 
+async function syncDirectory(path: string, builderOwned = false): Promise<void> {
+  if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional binary open-flag combination.
+  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    if (!(await handle.stat()).isDirectory())
+      throw new Error("The builder-owned publication directory is unsafe.");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function durableDirectory(path: string): Promise<void> {
+  const root = publicationRoot();
+  if (!within(root, path))
+    throw new Error("The builder-owned publication directory escapes its root.");
+  let cursor = root;
+  for (const segment of relative(root, path).split(sep).filter(Boolean)) {
+    const parent = cursor;
+    cursor = pathResolve(cursor, segment);
+    let created = false;
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await mkdir(cursor, { mode: 0o700 });
+      created = true;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    if (created) await chmod(cursor, 0o700);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    await assertContainedNoLinkPath(cursor, { leaf: "directory" });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    await syncDirectory(cursor, true);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    await syncDirectory(parent, true);
+  }
+}
+
 async function acquirePublicationLock(identity: string): Promise<PublicationLock> {
   const path = pathResolve(publicationRoot(), "locks", `${identity}.lock`);
   const directory = dirname(path);
@@ -525,46 +565,6 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
         throw lockLostError();
     },
   };
-}
-
-async function syncDirectory(path: string, builderOwned = false): Promise<void> {
-  if (builderOwned) await assertContainedNoLinkPath(path, { leaf: "directory" });
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-  try {
-    if (!(await handle.stat()).isDirectory())
-      throw new Error("The builder-owned publication directory is unsafe.");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-async function durableDirectory(path: string): Promise<void> {
-  const root = publicationRoot();
-  if (!within(root, path))
-    throw new Error("The builder-owned publication directory escapes its root.");
-  let cursor = root;
-  for (const segment of relative(root, path).split(sep).filter(Boolean)) {
-    const parent = cursor;
-    cursor = pathResolve(cursor, segment);
-    let created = false;
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await mkdir(cursor, { mode: 0o700 });
-      created = true;
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (created) await chmod(cursor, 0o700);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertContainedNoLinkPath(cursor, { leaf: "directory" });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await syncDirectory(cursor, true);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await syncDirectory(parent, true);
-  }
 }
 
 async function atomicWrite(path: string, value: string): Promise<void> {
@@ -724,6 +724,75 @@ function registeredWorktreeEntries(
   });
 }
 
+function exactStateMatches(state: FileState, expected: FileState): boolean {
+  return (
+    state.kind === expected.kind && state.mode === expected.mode && state.digest === expected.digest
+  );
+}
+
+async function fileState(path: string): Promise<FileState> {
+  try {
+    const info = await lstat(path);
+    if (info.isSymbolicLink())
+      return {
+        kind: "symlink",
+        digest: contentDigest(Buffer.from(await readlink(path))),
+      };
+    if (info.isDirectory()) return { kind: "directory" };
+    if (!info.isFile()) return { kind: "special" };
+    const bytes = await readFile(path);
+    return {
+      kind: "regular",
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
+      mode: (info.mode & 0o777).toString(8),
+      digest: contentDigest(bytes),
+    };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
+    throw error;
+  }
+}
+
+function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
+  const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
+  const result: TreeEntry[] = [];
+  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
+    const match =
+      /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        record,
+      );
+    if (match === null) throw new Error("The source tree contains an unsupported entry.");
+    const { mode, type, objectId, path } = match.groups ?? {};
+    if (mode === "160000" || type !== "blob")
+      throw new Error("Branch-worktree publication does not materialize Git submodules.");
+    if (path === undefined || objectId === undefined || !safeSourcePath(path))
+      throw new Error("The source tree contains an unsafe path.");
+    const bytes = gitBuffer(sourcePath, ["cat-file", "blob", objectId]);
+    if (mode === "120000") {
+      const target = bytes.toString("utf-8");
+      if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0"))
+        throw new Error("The source tree contains an invalid symbolic link.");
+      result.push({
+        path,
+        mode: "120000",
+        objectId,
+        bytes,
+        state: { kind: "symlink", digest: contentDigest(bytes) },
+      });
+      continue;
+    }
+    const fileMode = mode === "100755" ? "755" : "644";
+    result.push({
+      path,
+      mode: fileMode,
+      objectId,
+      bytes,
+      state: { kind: "regular", mode: fileMode, digest: contentDigest(bytes) },
+    });
+  }
+  return result;
+}
+
 async function assertOwnedPartialWorktree(
   proposal: BranchWorktreePublicationProposal,
 ): Promise<void> {
@@ -878,43 +947,68 @@ interface TreeEntry {
   state: FileState;
 }
 
-function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
-  const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
-  const result: TreeEntry[] = [];
-  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
-    const match =
-      /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-        record,
-      );
-    if (match === null) throw new Error("The source tree contains an unsupported entry.");
-    if (match[1] === "160000" || match[2] !== "blob")
-      throw new Error("Branch-worktree publication does not materialize Git submodules.");
-    const { 4: path } = match;
-    if (!safeSourcePath(path)) throw new Error("The source tree contains an unsafe path.");
-    const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
-    if (match[1] === "120000") {
-      const target = bytes.toString("utf-8");
-      if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0"))
-        throw new Error("The source tree contains an invalid symbolic link.");
-      result.push({
-        path,
-        mode: "120000",
-        objectId: match[3],
-        bytes,
-        state: { kind: "symlink", digest: contentDigest(bytes) },
-      });
-      continue;
+async function materializeAtomically(
+  proposal: BranchWorktreePublicationProposal,
+  target: string,
+  bytes: Uint8Array,
+  mode: string | "120000",
+): Promise<void> {
+  const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
+  await durableDirectory(staging);
+  const temporary = pathResolve(staging, randomUUID());
+  try {
+    if (mode === "120000") {
+      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
+      await syncDirectory(staging, true);
+    } else {
+      const handle = await open(temporary, "wx", Number.parseInt(mode, 8));
+      try {
+        await handle.writeFile(bytes);
+        await handle.chmod(Number.parseInt(mode, 8));
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
     }
-    const mode = match[1] === "100755" ? "755" : "644";
-    result.push({
-      path,
-      mode,
-      objectId: match[3],
-      bytes,
-      state: { kind: "regular", mode, digest: contentDigest(bytes) },
-    });
+    await rename(temporary, target);
+    await syncDirectory(dirname(target));
+  } finally {
+    await unlink(temporary).catch(() => undefined);
   }
-  return result;
+}
+
+async function safeTarget(root: string, path: string, createParents: boolean): Promise<string> {
+  if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
+  const target = pathResolve(root, path);
+  if (!within(root, target)) throw new Error("The approved path escapes the publication worktree.");
+  let cursor = root;
+  for (const segment of path.split("/").slice(0, -1)) {
+    cursor = pathResolve(cursor, segment);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const state = await fileState(cursor);
+    if (state.kind === "absent" && createParents) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await mkdir(cursor, { mode: 0o755 });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await syncDirectory(dirname(cursor));
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await syncDirectory(cursor);
+    } else if (state.kind !== "directory" && state.kind !== "absent")
+      throw new Error("The approved path traverses a non-directory entry.");
+  }
+  const state = await fileState(target);
+  if (["directory", "symlink", "special"].includes(state.kind))
+    throw new Error("The approved path names a non-regular entry.");
+  return target;
+}
+
+function matches(
+  state: FileState,
+  expected: { mode: string; digest: string } | undefined,
+): boolean {
+  return expected === undefined
+    ? state.kind === "absent"
+    : state.kind === "regular" && state.mode === expected.mode && state.digest === expected.digest;
 }
 
 async function ensureExactBaseMaterialization(
@@ -1103,99 +1197,6 @@ async function assertExactSource(input: {
     throw new Error(
       "The source SHA, index, remote, status, review, paths, modes, or digests changed after approval.",
     );
-}
-
-async function fileState(path: string): Promise<FileState> {
-  try {
-    const info = await lstat(path);
-    if (info.isSymbolicLink())
-      return {
-        kind: "symlink",
-        digest: contentDigest(Buffer.from(await readlink(path))),
-      };
-    if (info.isDirectory()) return { kind: "directory" };
-    if (!info.isFile()) return { kind: "special" };
-    const bytes = await readFile(path);
-    return {
-      kind: "regular",
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      mode: (info.mode & 0o777).toString(8),
-      digest: contentDigest(bytes),
-    };
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
-    throw error;
-  }
-}
-
-function matches(
-  state: FileState,
-  expected: { mode: string; digest: string } | undefined,
-): boolean {
-  return expected === undefined
-    ? state.kind === "absent"
-    : state.kind === "regular" && state.mode === expected.mode && state.digest === expected.digest;
-}
-
-function exactStateMatches(state: FileState, expected: FileState): boolean {
-  return (
-    state.kind === expected.kind && state.mode === expected.mode && state.digest === expected.digest
-  );
-}
-
-async function safeTarget(root: string, path: string, createParents: boolean): Promise<string> {
-  if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
-  const target = pathResolve(root, path);
-  if (!within(root, target)) throw new Error("The approved path escapes the publication worktree.");
-  let cursor = root;
-  for (const segment of path.split("/").slice(0, -1)) {
-    cursor = pathResolve(cursor, segment);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const state = await fileState(cursor);
-    if (state.kind === "absent" && createParents) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await mkdir(cursor, { mode: 0o755 });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await syncDirectory(dirname(cursor));
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await syncDirectory(cursor);
-    } else if (state.kind !== "directory" && state.kind !== "absent")
-      throw new Error("The approved path traverses a non-directory entry.");
-  }
-  const state = await fileState(target);
-  if (["directory", "symlink", "special"].includes(state.kind))
-    throw new Error("The approved path names a non-regular entry.");
-  return target;
-}
-
-async function materializeAtomically(
-  proposal: BranchWorktreePublicationProposal,
-  target: string,
-  bytes: Uint8Array,
-  mode: string | "120000",
-): Promise<void> {
-  const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
-  await durableDirectory(staging);
-  const temporary = pathResolve(staging, randomUUID());
-  try {
-    if (mode === "120000") {
-      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
-      await syncDirectory(staging, true);
-    } else {
-      const handle = await open(temporary, "wx", Number.parseInt(mode, 8));
-      try {
-        await handle.writeFile(bytes);
-        await handle.chmod(Number.parseInt(mode, 8));
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-    }
-    await rename(temporary, target);
-    await syncDirectory(dirname(target));
-  } finally {
-    await unlink(temporary).catch(() => undefined);
-  }
 }
 
 async function writePostimage(

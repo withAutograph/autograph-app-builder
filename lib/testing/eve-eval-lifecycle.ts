@@ -250,12 +250,18 @@ export function waitForEveEvalChild(
         if (!isErrno(error, "ESRCH")) throw error;
       }
     };
+    const handlers = {} as {
+      interrupt: () => void;
+      terminate: () => void;
+      failed: (error: Error) => void;
+      exited: (code: number | null, signal: NodeJS.Signals | null) => void;
+    };
     const cleanup = () => {
       if (forceTimer !== undefined) clearTimeout(forceTimer);
-      signalTarget.off("SIGINT", interrupt);
-      signalTarget.off("SIGTERM", terminate);
-      input.child.off("error", failed);
-      input.child.off("exit", exited);
+      signalTarget.off("SIGINT", handlers.interrupt);
+      signalTarget.off("SIGTERM", handlers.terminate);
+      input.child.off("error", handlers.failed);
+      input.child.off("exit", handlers.exited);
       input.authorization.destroy();
     };
     const requestStop = (signal: EvalSignal) => {
@@ -286,9 +292,10 @@ export function waitForEveEvalChild(
       cleanup();
       resolve(code ?? signalExitCode(requestedSignal ?? signal));
     };
-    signalTarget.on("SIGINT", interrupt);
-    signalTarget.on("SIGTERM", terminate);
-    input.child.once("error", failed);
-    input.child.once("exit", exited);
+    Object.assign(handlers, { interrupt, terminate, failed, exited });
+    signalTarget.on("SIGINT", handlers.interrupt);
+    signalTarget.on("SIGTERM", handlers.terminate);
+    input.child.once("error", handlers.failed);
+    input.child.once("exit", handlers.exited);
   });
 }

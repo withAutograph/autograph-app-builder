@@ -321,6 +321,16 @@ type ExactDependencyReceiptBinding = ExactSourceBinding & {
   targetTree: string;
 };
 
+export function dependencyTargetForWorkspace(
+  cache: ObservedDependencyCache,
+  workspace: ExactSourceBinding,
+): { sha: string; tree: string } {
+  return cache.manifest.scope === "development-execution" ||
+    cache.manifest.scope === "live-template-execution"
+    ? { sha: workspace.sourceSha, tree: workspace.sourceTree }
+    : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
+}
+
 export function assertExactDependencyTargetBinding(input: {
   workspace: ExactSourceBinding;
   sourceReceipt: ExactSourceBinding & { digest?: string };
@@ -351,16 +361,6 @@ export function assertExactDependencyTargetBinding(input: {
         input.dependencyReceipt.targetTree !== target.tree))
   )
     throw new Error("The prepared source does not match the immutable dependency target.");
-}
-
-export function dependencyTargetForWorkspace(
-  cache: ObservedDependencyCache,
-  workspace: ExactSourceBinding,
-): { sha: string; tree: string } {
-  return cache.manifest.scope === "development-execution" ||
-    cache.manifest.scope === "live-template-execution"
-    ? { sha: workspace.sourceSha, tree: workspace.sourceTree }
-    : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
 }
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -442,6 +442,10 @@ const hostedSeedDependencyCacheEnabled = (
 const hostedWorkspaceDependencyExtractionEnabled = (
   environment: Readonly<Record<string, string | undefined>>,
 ) => environment.VERCEL === "1" || hostedArtifactDependencyCacheEnabled(environment);
+
+function isDevelopmentExecution(environment: Readonly<Record<string, string | undefined>>) {
+  return environment.APP_BUILDER_EXECUTION_MODE === "development";
+}
 
 export function materializedDependencyNodeModulesRoot(
   contentDigest: string,
@@ -587,6 +591,14 @@ for (const root of layout.roots) {
 }
 `;
 
+function boundedOutput(stdout: string, stderr: string, label: string) {
+  if (
+    Buffer.byteLength(stdout) > DEPENDENCY_CACHE_OUTPUT_BYTES ||
+    Buffer.byteLength(stderr) > DEPENDENCY_CACHE_OUTPUT_BYTES
+  )
+    throw new Error(`${label} output exceeded the fixed size limit.`);
+}
+
 export async function materializeExecutionDependencyView(input: {
   sandbox: SandboxSession;
   layout: ExecutionDependencyLayout;
@@ -620,10 +632,6 @@ export async function materializeExecutionDependencyView(input: {
     throw new Error("The dependency execution view could not be materialized.");
 }
 
-function isDevelopmentExecution(environment: Readonly<Record<string, string | undefined>>) {
-  return environment.APP_BUILDER_EXECUTION_MODE === "development";
-}
-
 function dependencyCachePaths(environment: Readonly<Record<string, string | undefined>>) {
   const root = isDevelopmentExecution(environment)
     ? DEVELOPMENT_DEPENDENCY_CACHE_ROOT
@@ -635,14 +643,6 @@ function dependencyCachePaths(environment: Readonly<Record<string, string | unde
     archive: `${root}/node-modules.tar.gz`,
     cargoArchive: `${root}/cargo-closure.tar.gz`,
   };
-}
-
-function boundedOutput(stdout: string, stderr: string, label: string) {
-  if (
-    Buffer.byteLength(stdout) > DEPENDENCY_CACHE_OUTPUT_BYTES ||
-    Buffer.byteLength(stderr) > DEPENDENCY_CACHE_OUTPUT_BYTES
-  )
-    throw new Error(`${label} output exceeded the fixed size limit.`);
 }
 
 function commandPayload(output: string) {

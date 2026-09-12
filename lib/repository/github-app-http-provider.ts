@@ -493,17 +493,6 @@ export function createGitHubAppHttpProvider(input: {
     return objectId.parse(stringProperty(response.body, "sha"));
   }
 
-  async function repositorySnapshotForProposal(
-    proposal: DraftPullRequestProposal,
-    permissions: PermissionSnapshot,
-  ) {
-    const snapshot = await repositoryById(proposal.repositoryId, proposal.baseBranch, permissions);
-    return {
-      snapshot: publicRepositorySnapshot(snapshot),
-      accessToken: snapshot.accessToken,
-    };
-  }
-
   // Keep the repository projection local to this provider.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   function publicRepositorySnapshot(snapshot: Awaited<ReturnType<typeof repositoryById>>) {
@@ -516,6 +505,17 @@ export function createGitHubAppHttpProvider(input: {
       headSha: snapshot.headSha,
       headTree: snapshot.headTree,
       repositoryVariableNames: snapshot.repositoryVariableNames,
+    };
+  }
+
+  async function repositorySnapshotForProposal(
+    proposal: DraftPullRequestProposal,
+    permissions: PermissionSnapshot,
+  ) {
+    const snapshot = await repositoryById(proposal.repositoryId, proposal.baseBranch, permissions);
+    return {
+      snapshot: publicRepositorySnapshot(snapshot),
+      accessToken: snapshot.accessToken,
     };
   }
 

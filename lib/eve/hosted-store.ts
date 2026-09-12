@@ -91,6 +91,19 @@ export const hostedSessionCheckpointSchema = z
 
 export type HostedSessionCheckpoint = z.infer<typeof hostedSessionCheckpointSchema>;
 
+function canonicalRecordValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalRecordValue).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function hostedSessionCheckpointDigest(checkpoint: HostedSessionCheckpoint): string {
   const parsed = hostedSessionCheckpointSchema.parse(checkpoint);
   return `sha256:${createHash("sha256").update(canonicalRecordValue(parsed)).digest("hex")}`;
@@ -257,19 +270,6 @@ export function isHostedSessionExpired(input: {
 
 /** Compute recovery only. User-visible session records do not expire. */
 export const isHostedSessionComputeLeaseExpired = isHostedSessionExpired;
-
-function canonicalRecordValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalRecordValue).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
 
 export function hostedSessionRecordDigest(record: HostedSessionRecord): string {
   const parsed = hostedSessionRecordSchema.parse(record);

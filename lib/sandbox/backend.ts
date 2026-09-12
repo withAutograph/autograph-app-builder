@@ -71,6 +71,12 @@ export function sandboxBackendPlan(input: {
 }
 
 /** Constructs only the backend selected by the environment plan. */
+export function isVercelSandboxBackend(
+  kind: SandboxBackendKind,
+): kind is "vercel-development" | "vercel-preview" | "vercel-production" {
+  return kind === "vercel-development" || kind === "vercel-preview" || kind === "vercel-production";
+}
+
 export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
   kind: SandboxBackendKind,
   factories: {
@@ -84,12 +90,6 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
   if (isVercelSandboxBackend(kind)) return factories.vercelHosted();
   if (kind === "local-microsandbox") return factories.localMicrosandbox();
   return factories.nonExecuting();
-}
-
-export function isVercelSandboxBackend(
-  kind: SandboxBackendKind,
-): kind is "vercel-development" | "vercel-preview" | "vercel-production" {
-  return kind === "vercel-development" || kind === "vercel-preview" || kind === "vercel-production";
 }
 
 export function isHostedVercelSandboxBackend(

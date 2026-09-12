@@ -625,17 +625,6 @@ export function deriveInstalledEveStatus(events: readonly MessageStreamEvent[]):
 }
 
 /** Project one durable Eve stream into a dense, cursor-addressable public stream. */
-export function projectInstalledEveEvents(events: readonly MessageStreamEvent[]): PublicEveEvent[] {
-  return events
-    .flatMap((event) => projectInstalledEveEvent(event, 0))
-    .flatMap((event) => {
-      const projected = toPublicEvent(event);
-      return projected === null ? [] : [projected];
-    })
-    .map((event, index) => ({ ...event, index }));
-}
-
-/** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */
 export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
   switch (event.type) {
     case "assistant.message": {
@@ -682,3 +671,15 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
     }
   }
 }
+
+export function projectInstalledEveEvents(events: readonly MessageStreamEvent[]): PublicEveEvent[] {
+  return events
+    .flatMap((event) => projectInstalledEveEvent(event, 0))
+    .flatMap((event) => {
+      const projected = toPublicEvent(event);
+      return projected === null ? [] : [projected];
+    })
+    .map((event, index) => ({ ...event, index }));
+}
+
+/** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */

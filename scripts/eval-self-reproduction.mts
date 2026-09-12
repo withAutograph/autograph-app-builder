@@ -73,6 +73,14 @@ async function artifactFile(name: string, content: string) {
   await rename(`${path}.partial`, path);
 }
 
+function escape(value: string) {
+  return value.replaceAll(
+    /[&<>"']/gu,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
+  );
+}
+
 async function jsonFile(name: string, data: unknown) {
   await artifactFile(name, `${JSON.stringify(sanitizeEvidence(data), null, 2)}\n`);
 }
@@ -99,14 +107,6 @@ function revision(directory: string | undefined) {
 
 function requirementRow(requirement: Requirement) {
   return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.title)}</th><td>${escape(requirement.expected)}</td><td>${escape(requirement.evidence.join(" "))}</td><td>${escape(requirement.likelyLayer)}</td><td>${escape(requirement.recommendation)}</td></tr>`;
-}
-
-function escape(value: string) {
-  return value.replaceAll(
-    /[&<>"']/gu,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
-  );
 }
 
 function reportHtml(report: {
