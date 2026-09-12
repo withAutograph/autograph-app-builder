@@ -19,62 +19,107 @@ and implementation plan are ready.
 
 Apply labels to material decisions, not every sentence.
 
-## Required sections
+## Canonical complete skeleton
 
-Use each of these exact level-two headings once. Content may be concise, but it
-must record confirmed behavior, an accepted default, an explicit deferral, or a
-non-goal rather than silently omitting the decision.
+Before the first AppSpec recording or `accept_app_spec` call, copy the entire
+Markdown block below. Replace the section bodies with this app's product
+meaning, prototype references, and labeled defaults or deferrals. Keep all 14
+exact level-two headings once, even when a section only says why it does not
+apply. Do not submit the instructions around the block or the outer four-backtick
+fence. Do not use a shorter example or reconstruct the headings from memory.
 
-1. `## Status and prototype`: version, prototype paths, and status.
-2. `## User and outcome`: primary user, JTBD, desired outcome, and observable
-   success.
-3. `## Interfaces and navigation`: approved interfaces, navigation, and
-   first-use path.
-4. `## Controls and behavior`: visible controls, actions, states, and
-   cross-interface behavior. Record each control's precondition, observable
-   result, cancellation/error behavior, and any explained unavailable state
-   using `references/interactions.md`; distinguish simulated effects from
-   intended production behavior.
-5. `## Data model`: data objects, identities, fields, and relationships.
-6. `## Integrations and reconciliation`: integrations, imports, refresh,
-   source-of-truth, and reconciliation policy.
-7. `## Temporal semantics`: as-of and effective-date behavior.
-8. `## Writes, review, and authority`: reads, writes, drafts, review,
-   provenance, and authority.
-9. `## Access and tenancy`: roles, permissions, sensitivity, and tenant/app
-   scope.
-10. `## Agent behavior`: agent jobs, evidence, tools, limits, and human
-    confirmation points.
-11. `## Operational states`: empty, loading, degraded, error, and first-use
-    behavior.
-12. `## Defaults, non-goals, and risks`: accepted defaults, non-goals,
-    explicit deferrals, risks, and unresolved questions.
-13. `## Acceptance walkthrough`: the plain-language acceptance walkthrough,
-    including every enabled navigation and action path, expected visible state
-    changes, and any behavior not yet verified in the Browser.
-14. For a build-ready AppSpec, one strict `## Build handoff` block using the
-    shape below.
+The final section must be exactly `## Build handoff`, one blank line, and one
+lowercase `json` fenced block. End the document at that block's closing fence:
+no conclusion, checklist, comments, or additional sections after it. The
+handoff is a machine-readable projection of this same product specification.
+
+````markdown
+# AppSpec: <product name>
+
+## Status and prototype
+
+Version 1. Record the current Browser prototype paths and revision. Label safe
+revisable defaults as system_default; do not call them user_confirmed.
+
+## User and outcome
+
+Describe the primary user, job to be done, desired outcome, and observable success.
+
+## Interfaces and navigation
+
+List the approved interfaces, navigation, and first-use path from the prototype.
+
+## Controls and behavior
+
+Give every visible control an action, state transition, and cross-interface effect. Record each control's precondition, observable result, cancellation/error behavior, and any explained unavailable state using `references/interactions.md`; distinguish simulated effects from intended production behavior.
+
+## Data model
+
+Describe owned objects, stable identities, fields, and relationships, or explicitly
+state that no owned data is needed. Match schema.kind below to this decision.
+
+## Integrations and reconciliation
+
+Describe provider choices in prose, source of truth, refresh, imports, and
+reconciliation. For a GitHub and Vercel workflow, describe which source-control
+and application-hosting operations are required and which need separate approval.
+Use only the provider-neutral intent in optionalCapabilities below. Explicitly
+defer integrations that are outside the first version.
+
+## Temporal semantics
+
+Define timestamps, as-of/effective dates, stale data behavior, or an explicit non-goal.
+
+## Writes, review, and authority
+
+Identify reads, writes, drafts, review, provenance, and human approval before
+repository publication, deployment, or other outward effects.
+
+## Access and tenancy
+
+Define roles, permissions, data sensitivity, and tenant/app scope.
+
+## Agent behavior
+
+Define agent jobs, evidence, tools, limits, and human confirmation points,
+or state that the first version has no agent behavior.
+
+## Operational states
+
+Define first-use, empty, loading, degraded, error, and recovery behavior.
+
+## Defaults, non-goals, and risks
+
+Label revisable defaults, explicit deferrals, non-goals, and risks. Resolve
+material product questions before marking build-ready.
+
+## Acceptance walkthrough
+
+Describe a concrete sequence from first use through the primary user's successful
+outcome, including every enabled navigation and action path, expected visible state changes, review, one failure/recovery path, and any behavior not yet verified in the Browser.
 
 ## Build handoff
-
-Include exactly one level-two `Build handoff` heading followed by exactly one
-`json` fenced block. This is the machine-readable projection of the accepted
-AppSpec, not a second product specification:
 
 ```json
 {
   "status": "build-ready",
-  "owner": "finance-platform",
-  "schema": {
-    "kind": "kernel"
-  },
-  "additionalPublicRoutes": ["/expenses", "/expenses/:path*"],
+  "owner": "product-operations",
+  "schema": { "kind": "kernel" },
+  "additionalPublicRoutes": [],
   "optionalCapabilities": {
-    "integrations": ["accounting-sync"],
-    "hostedResources": ["relational-database"]
+    "integrations": ["application-hosting", "source-control"],
+    "hostedResources": []
   }
 }
 ```
+````
+
+The skeleton's capability pair illustrates a GitHub/Vercel workflow; include it
+only when those operations are part of this app. Empty arrays are correct when
+no optional capabilities apply. Replace the instructional prose above with
+actual product decisions; completeness includes meaningful section content.
+
+## Build handoff
 
 Every object is closed. Arrays must be sorted and contain no duplicates.
 
@@ -86,8 +131,22 @@ Every object is closed. Arrays must be sorted and contain no duplicates.
 - `schema.kind` is `none` when the app owns no kernel data, otherwise `kernel`.
 - `additionalPublicRoutes` contains only exceptional public routes. Do not list
   the derived `/<app-id>` or `/<app-id>/:path*` routes.
-- Capability values are provider-neutral lowercase kebab-case identifiers. Use
-  empty arrays when none apply.
+- Both capability arrays use provider-neutral lowercase kebab-case identifiers.
+  Name what the app needs, not the vendor that supplies it. For example:
+
+  | Product prose                                | Handoff intent when required          |
+  | -------------------------------------------- | ------------------------------------- |
+  | GitHub repositories, branches, pull requests | `source-control` integration          |
+  | Vercel previews and deployments              | `application-hosting` integration     |
+  | Neon or another relational database          | `relational-database` hosted resource |
+
+  Never put `github`, `github-repositories`, `vercel`, `vercel-deployments`,
+  `neon`, or other provider names in either array. The planner rejects provider
+  segments even when the identifier is valid kebab-case. Keep the requested
+  provider and its behavior in `Integrations and reconciliation` prose; do not
+  silently discard a required integration to make validation pass. Do not use
+  `hostedResources` to list providers the app connects to; it describes resources
+  the app itself needs. Use empty arrays when none apply.
 
 Do not include app id, runtime, workspace, package, project, local port, schema
 path, authorization copies, workspace dependencies, credentials, secrets,
@@ -111,9 +170,7 @@ Mark build-ready only when:
 - integrations and data objects are confirmed or deferred;
 - sources, identities, relationships, and temporal meaning are adequate for the
   first workflow;
-- every enabled control and action has demonstrated fixture-backed behavior,
-  unavailable actions have visible reasons, and the production implementation
-  meaning is recorded; a button label or attached handler is not proof;
+- every visible control and action has host-owned behavior;
 - writes, review, provenance, access, and agent authority are settled;
 - blocking inference labels have become confirmed, defaulted, deferred, or
   non-goals; and

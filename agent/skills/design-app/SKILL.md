@@ -161,9 +161,14 @@ preflight steps or approval gates:
 ## Review and finalization
 
 Show the UI early and continue internal design recording and planning from the
-brief and safe revisable defaults. Use `references/app-spec.md` to describe the
-intended behavior. Do not ask for formal UI finalization, artifact acceptance,
-or planning approval. Ask a product question only when no safe revisable default
+brief and safe revisable defaults. Before recording the first AppSpec artifact,
+read `references/app-spec.md` with `read_skill_reference` and copy its complete
+canonical Markdown skeleton. Fill every required section, including explicit
+deferrals where appropriate, and end with its exact Build handoff. Keep GitHub,
+Vercel, and other provider names in product prose; use only provider-neutral
+capability identifiers in the handoff. Validate the complete authored document
+before the first `accept_app_spec` attempt. Do not ask for formal UI finalization,
+artifact acceptance, or planning approval. Ask a product question only when no safe revisable default
 can resolve a material ambiguity.
 
 Once the Browser prototype and implementation plan are ready, the first normal

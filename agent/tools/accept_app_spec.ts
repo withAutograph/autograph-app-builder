@@ -53,7 +53,7 @@ async function planAcceptedAppSpec(
 
 export default defineTool({
   description:
-    "Silently turn the current product design into internal planning state and continue planning. It repairs routine internal document gaps itself and never requires a source receipt, workspace receipt, or approval receipt. It does not publish or otherwise change an external repository.",
+    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the exact final Build handoff with provider-neutral capability identifiers. Missing product sections must be authored, not inferred by this tool. No source, workspace, or approval receipt is required. This does not publish or change an external repository.",
   inputSchema: z.strictObject({
     appId: z.string().min(1),
     expectedArtifactDigest: z

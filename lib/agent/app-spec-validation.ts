@@ -27,7 +27,30 @@ export const BUILD_READY_HANDOFF_EXAMPLE = {
 
 const capabilityIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const publicRoutePattern = /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+(?:\*)?$/u;
-const capabilityId = z.string().regex(capabilityIdPattern);
+// The Arrusted planner rejects these provider segments. Include source-control
+// brands here too: product prose can name a provider, but capability intent
+// must remain portable. Do not silently strip or guess replacements in the
+// normalizer, since that can change the requested integration's meaning.
+const providerCapabilitySegments = new Set([
+  "aws",
+  "azure",
+  "cloudflare",
+  "gcp",
+  "github",
+  "gitlab",
+  "neon",
+  "vercel",
+]);
+const capabilityId = z
+  .string()
+  .regex(capabilityIdPattern)
+  .refine(
+    (value) =>
+      !value
+        .split("-")
+        .some((segment) => providerCapabilitySegments.has(segment)),
+    "Use provider-neutral capability identifiers (for example source-control or application-hosting); keep provider names in Integrations and reconciliation prose.",
+  );
 const publicRoute = z.string().regex(publicRoutePattern);
 const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
   z.array(item).superRefine((values, context) => {
