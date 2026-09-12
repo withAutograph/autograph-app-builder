@@ -11,7 +11,7 @@ describe("hosted Bun runtime", () => {
     // Eve exposes a PromiseLike command, not a native Promise with .catch().
     const run = vi.fn(() => {
       const result = Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
-      const thenProperty = String.fromCharCode(116, 104, 101, 110);
+      const thenProperty = String.fromCodePoint(116, 104, 101, 110);
       return Object.fromEntries([
         [thenProperty, result.then.bind(result)],
       ]) as unknown as PromiseLike<{

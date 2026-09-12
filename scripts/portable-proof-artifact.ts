@@ -77,7 +77,7 @@ export function archiveFiles(archive: Uint8Array) {
     const [type] = header.slice(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0)
       throw new Error("Archive entry name or size was invalid.");
-    if (![0, "0".charCodeAt(0)].includes(type) || files.has(name))
+    if (![0, "0".codePointAt(0)].includes(type) || files.has(name))
       throw new Error("Archive must contain unique regular files only.");
     const contentStart = offset + 512;
     const contentEnd = contentStart + size;

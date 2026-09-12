@@ -178,7 +178,7 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
     return true;
   };
   for (const sourceLine of output
-    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replace(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .split("\n")) {
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {

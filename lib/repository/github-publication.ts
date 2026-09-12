@@ -409,7 +409,7 @@ function safeBranch(value: unknown): value is string {
     !value.includes("@{") &&
     !/[~^:?*[\\\s]/u.test(value) &&
     !Array.from(value).some((character) => {
-      const code = character.charCodeAt(0);
+      const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     }) &&
     value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
@@ -1179,7 +1179,7 @@ function safeTitle(value: string): boolean {
     value.length > 0 &&
     value.length <= 120 &&
     !Array.from(value).some((character) => {
-      const code = character.charCodeAt(0);
+      const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     })
   );

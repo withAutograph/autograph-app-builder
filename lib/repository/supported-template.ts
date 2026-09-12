@@ -905,7 +905,7 @@ async function verifyDevelopmentSandboxWorkspace(
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
   });
   const normalizedStdout = inspection.stdout
-    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||

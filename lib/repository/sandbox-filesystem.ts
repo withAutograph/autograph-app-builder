@@ -4,7 +4,7 @@ const DIRECTORY_BATCH_SIZE = 256;
 const DIRECTORY_TIMEOUT_MS = 30_000;
 
 function quoteSandboxArgument(value: string): string {
-  const singleQuote = String.fromCharCode(39);
+  const singleQuote = String.fromCodePoint(39);
   const escapedQuote = `${singleQuote}"${singleQuote}"${singleQuote}`;
   return `${singleQuote}${value.replaceAll(singleQuote, escapedQuote)}${singleQuote}`;
 }

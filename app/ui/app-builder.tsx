@@ -252,7 +252,7 @@ function randomAppName(seed?: string) {
     return `${adjective} ${noun}`;
   }
   const hash = [...seed].reduce(
-    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
     0,
   );
   const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
