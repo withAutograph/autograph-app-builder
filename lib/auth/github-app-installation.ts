@@ -66,6 +66,7 @@ class GitHubCallbackParseError extends Error {
 
   constructor(reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>) {
     super("invalid-callback");
+    this.name = "GitHubCallbackParseError";
     this.reason = reason;
   }
 }
@@ -75,6 +76,7 @@ class GitHubStateValidationError extends Error {
 
   constructor(diagnostic: GitHubStateValidationDiagnostic) {
     super("invalid-state");
+    this.name = "GitHubStateValidationError";
     this.diagnostic = diagnostic;
   }
 }
@@ -94,6 +96,7 @@ export class GitHubInstallationAuthorizationError extends Error {
     stateValidation?: GitHubStateValidationDiagnostic,
   ) {
     super(FAILURE_MESSAGE);
+    this.name = "GitHubInstallationAuthorizationError";
     this.stage = stage;
     this.category = category;
     this.returnState = returnState;

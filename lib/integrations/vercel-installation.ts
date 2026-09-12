@@ -72,6 +72,7 @@ export class VercelInstallationAuthorizationError extends Error {
 
   constructor(reason: string, returnState?: ProviderConnectionReturn) {
     super(reason);
+    this.name = "VercelInstallationAuthorizationError";
     this.reason = reason;
     this.returnState = returnState;
   }

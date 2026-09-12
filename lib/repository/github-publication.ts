@@ -355,6 +355,7 @@ export interface GitHubPublicationReceiptStore {
 export class GitHubOutcomeUnknownError extends Error {
   constructor() {
     super("GitHub mutation outcome is unknown; durable intent remains pending.");
+    this.name = "GitHubOutcomeUnknownError";
   }
 }
 

@@ -1,7 +1,9 @@
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import { setTimeout as delay } from "node:timers/promises";
 
-class UnexpectedDevelopmentToolsError extends Error {}
+class UnexpectedDevelopmentToolsError extends Error {
+  name = "UnexpectedDevelopmentToolsError";
+}
 
 function abortReason(signal: AbortSignal | undefined) {
   return signal?.reason ?? new Error("Development MCP readiness was aborted.");
