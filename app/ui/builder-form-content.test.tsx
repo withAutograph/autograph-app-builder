@@ -22,7 +22,7 @@ describe("server-composed builder content", () => {
     expect(html).toContain("<h1>Build an app</h1>");
     expect(html).toContain("Describe what you want to build");
     for (const section of ["app-details", "build-with", "store-in", "deploy-to"]) {
-      expect(html.match(new RegExp(`data-create-app-section="${section}"`, "g"))).toHaveLength(1);
+      expect(html.match(new RegExp(`data-create-app-section="${section}"`, "gu"))).toHaveLength(1);
     }
     expect(html).not.toContain('data-create-app-section="connections"');
     expect(html).toContain("Where do you want to store this app?");

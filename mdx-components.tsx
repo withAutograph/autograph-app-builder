@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 function headingId(children: ReactNode) {
   return String(children)
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/(^-|-$)/g, "");
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/(^-|-$)/gu, "");
 }
 
 const components: MDXComponents = {

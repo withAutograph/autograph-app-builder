@@ -33,13 +33,13 @@ function canonicalSelector(value: string) {
       output += char;
       continue;
     }
-    if (/\s/.test(char)) {
+    if (/\s/u.test(char)) {
       pendingSpace = Boolean(output);
       continue;
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/.test(previous) && !/[>+~),:=]/.test(char)) output += " ";
+      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) output += " ";
     }
     pendingSpace = false;
     output += char;
@@ -75,7 +75,7 @@ function ruleSignature(
 
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
-  for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
+  for (const file of files.filter((file) => /\.css$/iu.test(file.path))) {
     const css = parse(file.content, { from: file.path });
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP

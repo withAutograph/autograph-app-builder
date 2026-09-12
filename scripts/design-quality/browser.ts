@@ -24,7 +24,7 @@ export type DesktopSize = { width: number; height: number };
 
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
-  const match = /^([1-9]\d*)x([1-9]\d*)$/.exec(value);
+  const match = /^([1-9]\d*)x([1-9]\d*)$/u.exec(value);
   if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
   const width = Number(match[1]);
   const height = Number(match[2]);
@@ -88,10 +88,10 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
   const unique = [...new Set(values)];
   if (unique.length !== 1) return "unassessed" as const;
   const value = unique[0]!;
-  if (/var\(--/.test(value)) return "token-reference" as const;
+  if (/var\(--/u.test(value)) return "token-reference" as const;
   if (
-    /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/.test(value) ||
-    /%|\d(?:\.\d+)?fr\b/.test(value)
+    /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
+    /%|\d(?:\.\d+)?fr\b/u.test(value)
   )
     return "structural" as const;
   return tokenValues.includes(computed)
@@ -121,7 +121,7 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
   return value && node.nodeName
     ? {
         tag: node.nodeName.toLowerCase(),
-        classes: [...new Set(value.split(/\s+/).filter(Boolean))].toSorted(),
+        classes: [...new Set(value.split(/\s+/u).filter(Boolean))].toSorted(),
       }
     : undefined;
 }
@@ -151,7 +151,7 @@ function singleGapValue(value: string): string | undefined {
     else if (character === ")") {
       depth -= 1;
       if (depth < 0) return undefined;
-    } else if (depth === 0 && /\s/.test(character)) return undefined;
+    } else if (depth === 0 && /\s/u.test(character)) return undefined;
   }
   return depth === 0 ? candidate : undefined;
 }
@@ -162,7 +162,7 @@ export const sourcePath = (value: string | undefined) => {
     const url = new URL(value);
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
   } catch {
-    return value.split(/[?#]/, 1)[0];
+    return value.split(/[?#]/u, 1)[0];
   }
 };
 
@@ -172,7 +172,7 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
     return Boolean(
-      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
+      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`)),
     );
   });
 };
@@ -180,7 +180,7 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
 // A stylesheet URL alone is not provenance. The only shared source family we
 // recognise in browser evidence is the checked-in Arrusted design-system tree.
 export const arrustedSharedSource = (path: string | undefined) =>
-  Boolean(path?.replaceAll("\\", "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
+  Boolean(path?.replaceAll("\\", "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/u));
 
 type CssSourceFile = { path: string; content: string };
 
@@ -273,9 +273,9 @@ export async function measurePage(page: Page) {
       if (!visible(el)) return [];
       const style = getComputedStyle(el);
       const axes: ("x" | "y")[] = [];
-      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(style.overflowX))
+      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/u.test(style.overflowX))
         axes.push("x");
-      if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/.test(style.overflowY))
+      if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/u.test(style.overflowY))
         axes.push("y");
       return axes.map((axis) => ({
         el,
@@ -303,7 +303,7 @@ export async function measurePage(page: Page) {
         const s = getComputedStyle(parent);
         const a = el.getBoundingClientRect();
         const b = parent.getBoundingClientRect();
-        if (/hidden|clip/.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
+        if (/hidden|clip/u.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
           findings.push({
             kind: "possible-clipping",
             description: `${label(el)} extends beyond a clipped ancestor.`,
@@ -447,7 +447,7 @@ export async function measureStyles(
         .send("CSS.getStyleSheetText", { styleSheetId })
         .then((result: { text: string }) => result.text)
         .catch(() => "");
-      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//.exec(css)?.[1];
+      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
       const url = header?.sourceMapURL || declared;
@@ -457,7 +457,7 @@ export async function measureStyles(
           const comma = url.indexOf(",");
           if (comma !== -1) {
             const body = url.slice(comma + 1);
-            text = /;base64/i.test(url.slice(0, comma))
+            text = /;base64/iu.test(url.slice(0, comma))
               ? Buffer.from(body, "base64").toString("utf8")
               : decodeURIComponent(body);
           }
@@ -520,12 +520,12 @@ export async function measureStyles(
             const relevant = prop.includes("color")
               ? name.startsWith("--color-")
               : prop.includes("font") || prop.includes("line") || prop.includes("letter")
-                ? /--(font|text|leading|tracking)/.test(name)
+                ? /--(font|text|leading|tracking)/u.test(name)
                 : prop.includes("radius")
                   ? name.includes("radius")
                   : prop.includes("shadow")
                     ? name.includes("shadow")
-                    : /spacing|space|radius|border/.test(name);
+                    : /spacing|space|radius|border/u.test(name);
             if (!relevant) continue;
             el.style.removeProperty(prop);
             el.style.setProperty(prop, `var(${name})`);
@@ -616,7 +616,7 @@ export async function measureStyles(
             m.rule.origin !== "user-agent" &&
             !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
         );
-        const inherited = /^(font-|line-height|letter-spacing|color$)/.test(property)
+        const inherited = /^(font-|line-height|letter-spacing|color$)/u.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
               (i.matchedCSSRules ?? []).filter((m) => m.rule.origin !== "user-agent"),
             )
@@ -775,7 +775,7 @@ export async function measureStyles(
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
-            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1] in tokens)),
+            [...v.matchAll(/var\((--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
         )
           classification = "unassessed";

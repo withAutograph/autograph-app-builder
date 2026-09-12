@@ -92,11 +92,11 @@ export class BearerAuthorizationError extends Error {
 
 // RFC 6750 b64token: one or more token characters followed only by optional
 // padding. In particular, embedded padding and combined header values fail.
-const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/;
+const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/u;
 
 export function parseStrictBearerAuthorization(authorization: string | null): string {
   if (authorization === null) throw new BearerAuthorizationError();
-  const match = /^Bearer ([^ ]+)$/i.exec(authorization);
+  const match = /^Bearer ([^ ]+)$/iu.exec(authorization);
   if (match === null || !bearerTokenPattern.test(match[1]) || match[1].includes(",")) {
     throw new BearerAuthorizationError();
   }
@@ -108,7 +108,7 @@ export interface HostedAccessTokenVerifier {
 }
 
 const oauthScopeTokenPattern =
-  /^[\u0021\u0023-\u005B\u005D-\u007E]+(?: [\u0021\u0023-\u005B\u005D-\u007E]+)*$/;
+  /^[\u0021\u0023-\u005B\u005D-\u007E]+(?: [\u0021\u0023-\u005B\u005D-\u007E]+)*$/u;
 
 /**
  * Exact remote-JWKS verifier. Redirects are rejected and the configured URL,

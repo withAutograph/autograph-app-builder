@@ -43,7 +43,7 @@ export const SelectScope: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Git Scope"));
-    await userEvent.click(canvas.getByRole("option", { name: /jasonmorganson/ }));
+    await userEvent.click(canvas.getByRole("option", { name: /jasonmorganson/u }));
     await expect(args.onGitScopeChange).toHaveBeenCalledWith("202");
   },
 };

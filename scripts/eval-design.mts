@@ -49,7 +49,7 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
     if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
     const path = join(relative, entry.name);
     if (entry.isDirectory()) files.push(...(await sources(root, path)));
-    else if (entry.isFile() && /\.(tsx?|css)$/.test(path))
+    else if (entry.isFile() && /\.(tsx?|css)$/u.test(path))
       files.push({ path, content: await readFile(join(root, path), "utf8") });
   }
   return files;
@@ -73,7 +73,7 @@ async function main() {
     );
   const output = resolve(
     values["output-dir"] ??
-      join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/g, "-")),
+      join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/gu, "-")),
   );
   await mkdir(output, { recursive: true, mode: 0o700 });
   const selectedCase = values.case ? await readDesignCase(values.case) : undefined;
@@ -148,8 +148,8 @@ async function main() {
     sharedClassTokens: sharedFiles ? collectClassTokenEvidence(sharedFiles) : undefined,
     generatedCssRules,
     sharedCssRules,
-    generatedCssSourceFiles: sourceFiles.filter((file) => /\.css$/i.test(file.path)),
-    sharedCssSourceFiles: sharedFiles?.filter((file) => /\.css$/i.test(file.path)),
+    generatedCssSourceFiles: sourceFiles.filter((file) => /\.css$/iu.test(file.path)),
+    sharedCssSourceFiles: sharedFiles?.filter((file) => /\.css$/iu.test(file.path)),
     additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));

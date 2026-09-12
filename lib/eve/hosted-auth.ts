@@ -4,7 +4,7 @@ export const hostedIdentifierSchema = z
   .string()
   .min(1)
   .max(200)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/);
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/u);
 
 /**
  * Closed projection produced only after an adapter has verified the token's
