@@ -281,6 +281,8 @@ async function invokeHostedOperation(
       });
     case "cancel":
       return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
+    default:
+      throw new Error(`Unsupported hosted operation: ${operation}`);
   }
 }
 

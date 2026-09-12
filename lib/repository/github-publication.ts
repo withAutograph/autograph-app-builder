@@ -463,6 +463,8 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "none",
         variables: "read",
       };
+    default:
+      throw new Error(`Unsupported GitHub operation: ${operation}`);
   }
 }
 

@@ -303,6 +303,8 @@ export async function executeHostedAdminRequest(input: {
       effects = { ...effects, ...result };
       break;
     }
+    default:
+      throw new Error("Unsupported hosted admin action");
   }
 
   const changed = Object.values(effects).some((count) => count > 0);

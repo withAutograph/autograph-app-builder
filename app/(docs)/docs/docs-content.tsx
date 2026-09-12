@@ -18,5 +18,7 @@ export function DocsContent({ slug }: Pick<DocsDocument, "slug">) {
       return <CreateAnApp />;
     case "troubleshooting":
       return <Troubleshooting />;
+    default:
+      return null;
   }
 }

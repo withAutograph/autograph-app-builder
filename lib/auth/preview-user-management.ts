@@ -106,6 +106,8 @@ function organizationError(cause: unknown) {
         code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
         message: "We couldn’t finish setting up your workspace. Try signing in again.",
       });
+    default:
+      throw new Error(`Unsupported organization provisioning reason: ${cause.reason}`);
   }
 }
 
