@@ -255,7 +255,7 @@ export function createGitHubAppPublicationAdapter(
       const raw = await sanitizedProviderCall(() =>
         provider.inspectFreshRepositoryOutcome(proposal),
       );
-      if (raw === undefined) return undefined;
+      if (raw === undefined) return;
       const snapshot = parseProviderResponse(freshReadBackSchema, raw);
       if (snapshot.initialCommit.parents.length !== 0) {
         throw new Error("GitHub fresh-history read-back has commit parents.");
