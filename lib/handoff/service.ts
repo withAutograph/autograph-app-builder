@@ -129,7 +129,7 @@ export function createBuilderHandoffService(input: {
 
     async findLatestPending(value: { authority: Authority }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      if (!input.store.findLatestPending) return undefined;
+      if (!input.store.findLatestPending) return;
       const stored = await input.store.findLatestPending({ authority });
       return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
