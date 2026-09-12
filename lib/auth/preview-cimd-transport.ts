@@ -8,7 +8,7 @@ import { isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
 const BODY_FORBIDDEN_RESPONSE_STATUSES = new Set([204, 205, 304]);
-const REQUEST_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 5000;
 
 type ResolveHostname = (
   hostname: string,
@@ -55,6 +55,8 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
     family,
   }));
 
+  // Node's dns.lookup contract is callback-based.
+  // oxlint-disable promise/prefer-await-to-callbacks
   return (hostname, options, callback) => {
     const eligible = addressesForOptions(pinnedAddresses, options);
     if (eligible.length === 0) {
@@ -67,6 +69,7 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
     }
     callback(null, eligible[0].address, eligible[0].family);
   };
+  // oxlint-enable promise/prefer-await-to-callbacks
 }
 
 function responseHeaders(headers: IncomingMessage["headers"]): Headers {
@@ -90,15 +93,23 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
       reject(signal.reason);
     };
     signal.addEventListener("abort", onAbort, { once: true });
+    // Resolve and reject the abort-aware wrapper without changing its settlement race.
+    // oxlint-disable promise/prefer-await-to-callbacks
+    // oxlint-disable promise/prefer-await-to-then
+    // oxlint-disable-next-line promise/prefer-await-to-then
     operation
       .then((value) => {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
       })
+      // Promise cleanup is intentionally attached to the operation chain.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       .catch((error: unknown) => {
         signal.removeEventListener("abort", onAbort);
         reject(error);
       });
+    // oxlint-enable promise/prefer-await-to-callbacks
+    // oxlint-enable promise/prefer-await-to-then
   });
 }
 

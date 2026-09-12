@@ -3,7 +3,7 @@ export function createBoundedAuthorizationRefresh(input?: {
   minimumIntervalMs?: number;
 }) {
   const maximumAttempts = input?.maximumAttempts ?? 3;
-  const minimumIntervalMs = input?.minimumIntervalMs ?? 1_000;
+  const minimumIntervalMs = input?.minimumIntervalMs ?? 1000;
   let state = { key: "", attempts: 0, lastAt: 0 };
 
   return {

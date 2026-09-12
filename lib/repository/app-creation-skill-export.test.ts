@@ -32,7 +32,7 @@ describe("app-creation skill export", () => {
       readFileSync(join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf8"),
     ) as { revision: string; skills: Record<string, string> };
     expect(lock.revision).toMatch(/^[0-9a-f]{40}$/u);
-    expect(Object.keys(lock.skills).sort()).toEqual([
+    expect(Object.keys(lock.skills).toSorted()).toEqual([
       "next-cache-components-adoption",
       "next-cache-components-optimizer",
       "next-dev-loop",

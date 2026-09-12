@@ -11,7 +11,7 @@ const gitObject = z.string().regex(/^[a-f0-9]{40}$/u);
 
 function sortedUnique<T extends z.ZodType<string>>(item: T) {
   return z.array(item).superRefine((values, context) => {
-    const sorted = [...values].sort();
+    const sorted = [...values].toSorted();
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
@@ -144,7 +144,7 @@ function importsFrom(content: string): string[] {
     const [, specifier] = match;
     if (specifier !== undefined) imports.add(specifier);
   }
-  return [...imports].sort();
+  return [...imports].toSorted();
 }
 
 function appRelativePath(appId: string, path: string): string | undefined {

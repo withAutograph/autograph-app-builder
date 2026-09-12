@@ -260,6 +260,9 @@ process.stdout.write("preloaded\\n");
   };
 }
 
+// These helpers intentionally expose callback-based setup for synchronous and
+// asynchronous test scopes.
+// oxlint-disable promise/prefer-await-to-callbacks
 function withFakeGhEnvironment(
   fixture: ReturnType<typeof installFakeGhBoundary>,
   callback: () => void,
@@ -307,6 +310,7 @@ async function withFakeGhEnvironmentAsync(
     }
   }
 }
+// oxlint-enable promise/prefer-await-to-callbacks
 
 function seedFakeGhState(fixture: ReturnType<typeof installFakeGhBoundary>): string {
   mkdirSync(join(fixture.state, "gh"), { mode: 0o700 });
@@ -958,7 +962,7 @@ wait
       expect(
         Object.keys(invocations[0]!.environment)
           .filter((key) => key !== "__CF_USER_TEXT_ENCODING")
-          .sort(),
+          .toSorted(),
       ).toEqual(
         [
           "APP_BUILDER_GH_CONFIG_DIGEST",
@@ -977,7 +981,7 @@ wait
           "LANG",
           "NODE_ENV",
           "PATH",
-        ].sort(),
+        ].toSorted(),
       );
       expect(invocations[0]!.environment).toMatchObject({
         APP_BUILDER_GHCR_USERNAME: "withAutograph",
@@ -1408,7 +1412,7 @@ wait
       let output = "";
       const timeout = setTimeout(
         () => reject(new Error("Timed out waiting for lifecycle crash fixture.")),
-        3_000,
+        3000,
       );
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {
@@ -1524,6 +1528,8 @@ wait
       },
     ];
     const indexManifests = [...manifests].toReversed();
+    // Keep raw fixture serializers scoped to this lifecycle scenario.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const indexRaw = (entries: typeof manifests) =>
       JSON.stringify({
         manifests: entries,

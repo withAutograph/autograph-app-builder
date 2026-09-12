@@ -33,7 +33,7 @@ export function testCapabilityEnabled(
   const candidate = injected as Partial<InjectedTestCapability>;
   return (
     Object.isFrozen(candidate) &&
-    Object.keys(candidate).sort().join(",") === "capabilities,id,version" &&
+    Object.keys(candidate).toSorted().join(",") === "capabilities,id,version" &&
     candidate.version === 1 &&
     typeof candidate.id === "string" &&
     /^[0-9a-f]{64}$/u.test(candidate.id) &&

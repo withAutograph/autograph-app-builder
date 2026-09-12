@@ -21,6 +21,8 @@ function runLookup(options: LookupOptions) {
     createPinnedPreviewLookup(publicAddresses)(
       "client.example.com",
       options,
+      // Node's dns.lookup contract is callback-based.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       (error, address, family) => {
         if (error) reject(error);
         else resolve({ address, family });
@@ -35,8 +37,12 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
     (url: URL, options: RequestOptions, responseListener: (response: IncomingMessage) => void) => {
       observed.url = url;
       observed.options = options;
+      // ClientRequest is a Node EventEmitter by contract.
+      // oxlint-disable-next-line unicorn/prefer-event-target
       const request = new EventEmitter() as ClientRequest;
       request.end = () => {
+        // Node's dns.lookup contract is callback-based.
+        // oxlint-disable-next-line promise/prefer-await-to-callbacks
         options.lookup!(url.hostname, input.lookupOptions, (error, address) => {
           if (error) {
             request.emit("error", error);
@@ -138,7 +144,7 @@ describe("Preview CIMD transport", () => {
     timeout.abort(new DOMException("Timed out.", "TimeoutError"));
 
     await rejection;
-    expect(timeoutSignal).toHaveBeenCalledWith(5_000);
+    expect(timeoutSignal).toHaveBeenCalledWith(5000);
     expect(requestHttps).not.toHaveBeenCalled();
   });
 

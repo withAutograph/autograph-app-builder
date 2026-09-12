@@ -31,7 +31,7 @@ const capabilityId = z.string().regex(capabilityIdPattern);
 const publicRoute = z.string().regex(publicRoutePattern);
 const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
   z.array(item).superRefine((values, context) => {
-    const sorted = [...values].sort();
+    const sorted = [...values].toSorted();
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
@@ -84,7 +84,7 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
     ...new Set(
       value.filter((item): item is string => typeof item === "string" && pattern.test(item)),
     ),
-  ].sort();
+  ].toSorted();
 }
 
 /**

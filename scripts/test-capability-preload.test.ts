@@ -124,8 +124,11 @@ describe("test capability preload", () => {
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
     }
+    // Keep process-inspection helpers scoped to this preload fixture.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const activeHandles = () =>
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const isMessagePort = (handle: unknown) =>
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
@@ -255,7 +258,7 @@ describe("test capability preload", () => {
       cwd: repositoryRoot,
       encoding: "utf8",
       env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
-      timeout: 5_000,
+      timeout: 5000,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("null");

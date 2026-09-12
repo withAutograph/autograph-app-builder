@@ -125,6 +125,8 @@ describe("local Development OIDC startup", () => {
     writeFileSync(join(repositoryRoot, ".env.local"), "VERCEL_OIDC_TOKEN=not-a-jwt\n", {
       mode: 0o600,
     });
+    // Keep this command fixture scoped to the test setup.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const runCommand = () => {
       throw new Error("command must not run");
     };
@@ -154,6 +156,8 @@ describe("local Development OIDC startup", () => {
     "rejects ambient %s before running a command",
     (name) => {
       const repositoryRoot = fixture({ expiresAt: NOW + 60 });
+      // Keep this command fixture scoped to the test setup.
+      // oxlint-disable-next-line unicorn/consistent-function-scoping
       const runCommand = () => {
         throw new Error("command must not run");
       };

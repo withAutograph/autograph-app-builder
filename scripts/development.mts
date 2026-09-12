@@ -246,12 +246,17 @@ async function runEveCycle(input: {
       sourceRoot: input.sourceRoot,
       expectedFingerprint: snapshot.fingerprint,
       signal: watchers.signal,
+      // These derived promises are inputs to the shared race below.
+      // oxlint-disable-next-line promise/prefer-await-to-then
     }).then(() => ({ kind: "restart" as const, code: 0 }));
     const runtimeChanged = waitForDevelopmentRuntimeChange({
       repositoryRoot,
       expectedFingerprint: runtimeFingerprint,
       signal: watchers.signal,
+      // oxlint-disable-next-line promise/prefer-await-to-then
     }).then(() => ({ kind: "restart" as const, code: 0 }));
+    // This derived promise is an input to the shared race below.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     const eveExited = developmentChildExit(eve).then((code) => ({
       kind: "eve-exit" as const,
       code,
@@ -357,6 +362,8 @@ try {
       stdio: "inherit",
     },
   );
+  // This derived promise is an input to the shared race below.
+  // oxlint-disable-next-line promise/prefer-await-to-then
   const nextExited = developmentChildExit(next).then((code) => ({
     kind: "next-exit" as const,
     code,

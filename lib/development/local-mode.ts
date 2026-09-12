@@ -64,7 +64,7 @@ function argumentValue(args: readonly string[], index: number, name: string) {
 
 function port(value: string, name: string) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1_024 || parsed > 65_535)
+  if (!Number.isSafeInteger(parsed) || parsed < 1024 || parsed > 65_535)
     throw new Error(`${name} must be an unprivileged TCP port.`);
   return parsed;
 }
@@ -76,7 +76,7 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
     destinationRoot?: string;
     nextPort: number;
     evePort: number;
-  } = { nextPort: 3_000, evePort: 2_000 };
+  } = { nextPort: 3000, evePort: 2000 };
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     if (name === undefined || !name.startsWith("--"))
@@ -466,7 +466,11 @@ export async function createDevelopmentSnapshot(input: {
   }
 }
 
+// Keep filesystem mutation helpers scoped to local development mode.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export async function removeDevelopmentSnapshot(root: string) {
+  // Keep snapshot cleanup helpers local to this operation.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   async function makeWritable(path: string) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) return;

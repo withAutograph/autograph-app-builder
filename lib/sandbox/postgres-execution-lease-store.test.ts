@@ -25,8 +25,8 @@ const lease = {
   epoch: 1,
   state: "active" as const,
   policyDigest: sandboxExecutionPolicyDigest(),
-  acquiredAtEpochMs: 1_000,
-  heartbeatAtEpochMs: 1_000,
+  acquiredAtEpochMs: 1000,
+  heartbeatAtEpochMs: 1000,
   expiresAtEpochMs: 901_000,
 };
 

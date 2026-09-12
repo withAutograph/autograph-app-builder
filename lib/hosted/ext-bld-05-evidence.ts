@@ -63,8 +63,8 @@ export const extBld05EvidenceInputSchema = z
       .strict(),
     sourceValidation: proofReferenceSchema
       .extend({
-        idleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000),
-        maximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1_000),
+        idleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
+        maximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
         expiredSessionDeniedBeforeTransport: z.literal(true),
         expiredSessionsExcludedFromActiveCompute: z.literal(true),
         evePackageVersion: z.literal("0.43.0"),
@@ -95,8 +95,8 @@ export const extBld05EvidenceReceiptSchema = z
         immediateTokenRevocationClaimed: z.literal(false),
         retentionApplied: z.literal(true),
         tenantDeletionAfterDrain: z.literal(true),
-        sessionIdleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000),
-        sessionMaximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1_000),
+        sessionIdleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
+        sessionMaximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
         credentialsDisclosed: z.literal(false),
         continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
         productionReadinessClaimed: z.literal(false),
@@ -111,7 +111,7 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
       .join(",")}}`;
   }
@@ -146,8 +146,8 @@ export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceRe
       immediateTokenRevocationClaimed: false,
       retentionApplied: true,
       tenantDeletionAfterDrain: true,
-      sessionIdleTimeoutSeconds: HOSTED_SESSION_IDLE_TIMEOUT_MS / 1_000,
-      sessionMaximumLifetimeSeconds: HOSTED_SESSION_MAX_LIFETIME_MS / 1_000,
+      sessionIdleTimeoutSeconds: HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000,
+      sessionMaximumLifetimeSeconds: HOSTED_SESSION_MAX_LIFETIME_MS / 1000,
       credentialsDisclosed: false,
       continuationCredential: "not-applicable-canonical-session-id-only",
       productionReadinessClaimed: false,

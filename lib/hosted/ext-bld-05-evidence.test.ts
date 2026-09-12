@@ -45,12 +45,12 @@ const input = {
   disclosureScan: {
     ...reference("5"),
     publicResponsesScanned: 12,
-    providerLogBytesScanned: 4_096,
+    providerLogBytesScanned: 4096,
     findings: 0,
   },
   sourceValidation: {
     ...reference("6"),
-    idleTimeoutSeconds: 1_800,
+    idleTimeoutSeconds: 1800,
     maximumLifetimeSeconds: 86_400,
     expiredSessionDeniedBeforeTransport: true,
     expiredSessionsExcludedFromActiveCompute: true,

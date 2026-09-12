@@ -403,7 +403,9 @@ export function liveTemplateDependencyKey(input: {
       version: 1,
       platform: input.platform,
       dependencyInputs: Object.fromEntries(
-        Object.entries(input.dependencyInputs).sort(([left], [right]) => left.localeCompare(right)),
+        Object.entries(input.dependencyInputs).toSorted(([left], [right]) =>
+          left.localeCompare(right),
+        ),
       ),
       runtime: input.runtime,
       bootstrapVersion: input.bootstrapVersion,
@@ -541,7 +543,7 @@ for (const root of layout.roots) {
 const workspaceLinks = new Map();
 for (const link of layout.workspaceLinks) {
   if (!safeRelative(link.path) || !safeRelative(link.sourcePath) || typeof link.target !== "string" || link.target.length === 0 || link.target.length > 4096) process.exit(1);
-  const owner = [...rootByPath.keys()].filter((rootPath) => link.path.startsWith(rootPath + "/")).sort((left, right) => right.length - left.length)[0];
+  const owner = [...rootByPath.keys()].filter((rootPath) => link.path.startsWith(rootPath + "/")).toSorted((left, right) => right.length - left.length)[0];
   if (!owner || workspaceLinks.has(link.path)) process.exit(1);
   const cachedLink = path.resolve(sourceRoot, link.path);
   if (!contains(sourceRoot, cachedLink) || !fs.lstatSync(cachedLink).isSymbolicLink() || fs.readlinkSync(cachedLink) !== link.target) process.exit(1);
@@ -739,7 +741,7 @@ const isTrackedWorkspacePath = (candidate) => {
   return tracked.has(relative) || [...tracked].some((entry) => entry.startsWith(relative + "/"));
 };
 
-const dependencyRoots = [];
+let dependencyRoots = [];
 const discoverRoots = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
@@ -752,7 +754,7 @@ const discoverRoots = (directory) => {
   }
 };
 discoverRoots(sourceRoot);
-dependencyRoots.sort((left, right) => {
+dependencyRoots = dependencyRoots.toSorted((left, right) => {
   const leftPath = relativeSourcePath(left);
   const rightPath = relativeSourcePath(right);
   if (leftPath === "node_modules") return -1;
@@ -767,7 +769,7 @@ function digestTree(root, allowTrackedWorkspaceLinks) {
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || (rootStat.mode & 0o222) !== 0) process.exit(1);
   const hash = crypto.createHash("sha256");
   const visit = (directory, relativeDirectory = "") => {
-    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+    const entries = fs.readdirSync(directory, { withFileTypes: true }).toSorted((left, right) =>
       left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
     );
     for (const entry of entries) {
@@ -832,7 +834,7 @@ console.log(JSON.stringify({
   platform,
   nodeModulesDigest: workspaceNodeModules[0].digest,
   workspaceNodeModules: workspaceNodeModules.slice(1),
-  workspaceLinks: [...workspaceLinks.values()].sort((left, right) => left.path.localeCompare(right.path)),
+  workspaceLinks: [...workspaceLinks.values()].toSorted((left, right) => left.path.localeCompare(right.path)),
   cargoHomeDigest: digestTree(cargoHomePath, false),
   microfrontendsVersion: packageJson.version,
 }));
@@ -918,7 +920,7 @@ async function inspectLiveTemplateDependencyIdentity(
   const dependencyInputPaths = entries
     .map(({ path }) => path)
     .filter(isLiveTemplateDependencyInputPath)
-    .sort();
+    .toSorted();
   const dependencyInputs = liveTemplateDependencyInputsSchema.parse(
     Object.fromEntries(
       await Promise.all(

@@ -40,6 +40,8 @@ if (workerData?.spawnNested === true) {
   await nested.terminate();
 }
 
+// Node worker_threads MessagePorts do not accept a browser targetOrigin.
+// oxlint-disable unicorn/require-post-message-target-origin
 parentPort?.postMessage({
   capability,
   appRoot: process.env.EVE_DEV_WORKER_APP_ROOT ?? null,
@@ -59,3 +61,4 @@ parentPort?.postMessage({
   nestedWorkflowBodyTimeout,
   nestedWorkflowHeadersTimeout,
 });
+// oxlint-enable unicorn/require-post-message-target-origin

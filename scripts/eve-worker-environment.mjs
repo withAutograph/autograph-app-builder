@@ -37,7 +37,7 @@ function validateBaseUrl(value) {
   )
     fail("base URL");
   const port = Number(url.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) fail("port");
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) fail("port");
   return { baseUrl: url.origin, port: String(port) };
 }
 
@@ -95,7 +95,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   if (
     typeof value !== "object" ||
     value === null ||
-    Object.keys(value).sort().join(",") !==
+    Object.keys(value).toSorted().join(",") !==
       [
         "appRoot",
         "baseUrl",
@@ -107,7 +107,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
         "transportSecret",
         "version",
       ]
-        .sort()
+        .toSorted()
         .join(",") ||
     value.version !== 1 ||
     value.appRoot !== expectedAppRoot

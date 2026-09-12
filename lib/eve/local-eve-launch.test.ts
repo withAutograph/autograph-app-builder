@@ -70,7 +70,11 @@ function fixture() {
 
 describe("closed local Eve launch", () => {
   it("forwards supervisor termination and waits for Eve to exit", async () => {
+    // Node's signal-target contract requires EventEmitter's once/off API.
+    // oxlint-disable-next-line unicorn/prefer-event-target
     const signals = new EventEmitter();
+    // ChildProcess is an EventEmitter in Node, not an EventTarget.
+    // oxlint-disable-next-line unicorn/prefer-event-target
     const child = new EventEmitter() as ChildProcess;
     const forwarded: NodeJS.Signals[] = [];
     Object.defineProperties(child, {

@@ -141,7 +141,7 @@ async function toolNames(response: Response): Promise<string[]> {
   const result = await mcpResult<{
     tools?: { name?: string }[];
   }>(response);
-  return (result.tools ?? []).map((tool) => tool.name ?? "").sort();
+  return (result.tools ?? []).map((tool) => tool.name ?? "").toSorted();
 }
 
 describe("branded public tool mapping", () => {
@@ -419,7 +419,7 @@ describe("branded public tool mapping", () => {
       }[];
     }>(response);
 
-    expect((result.tools ?? []).map(({ name }) => name).sort()).toEqual(exactTools);
+    expect((result.tools ?? []).map(({ name }) => name).toSorted()).toEqual(exactTools);
     expect((result.tools ?? []).every(({ _meta }) => _meta?.ui?.resourceUri === undefined)).toBe(
       true,
     );
@@ -616,7 +616,7 @@ describe("request-scoped MCP service selection", () => {
         };
       }[];
     }>(await handler(mcpRequest({}, "tools/list")));
-    expect(discovery.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    expect(discovery.tools.map(({ name }) => name).toSorted()).toEqual(exactTools);
     for (const tool of discovery.tools) {
       expect(tool._meta?.securitySchemes).toEqual([
         {
@@ -844,7 +844,7 @@ describe("request-scoped MCP service selection", () => {
     ]);
     expect(one.status).toBe(200);
     expect(two.status).toBe(200);
-    expect(seen.sort()).toEqual(["workspace-one", "workspace-two"]);
+    expect(seen.toSorted()).toEqual(["workspace-one", "workspace-two"]);
   });
 
   it("preserves the exact five tools in loopback local and unconfigured modes", async () => {
@@ -891,7 +891,7 @@ describe("request-scoped MCP service selection", () => {
         };
       }[];
     }>(toolResponse);
-    expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
+    expect(toolResult.tools.map(({ name }) => name).toSorted()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(true);
     expect(Object.fromEntries(toolResult.tools.map(({ name, title }) => [name, title]))).toEqual({
       autograph_start: "Start with Autograph App Builder",

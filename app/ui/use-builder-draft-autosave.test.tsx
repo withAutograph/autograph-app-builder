@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+// @vitest-environment jsdom
 
 import { act, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";

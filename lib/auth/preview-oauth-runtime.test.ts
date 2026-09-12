@@ -41,6 +41,8 @@ describe("Preview OAuth runtime configuration", () => {
     expect("/sign-in/social" in hostedRateLimit.customRules).toBe(false);
   });
 
+  // Keep token construction scoped to the runtime fixture.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const idToken = (claims: Record<string, unknown>) =>
     `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 

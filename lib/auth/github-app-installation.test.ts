@@ -142,14 +142,14 @@ function successfulFetch(
         total_count: 1,
         installations: [
           {
-            id: 98765,
-            app_id: 12345,
+            id: 98_765,
+            app_id: 12_345,
             app_slug: "autograph-app-builder",
             target_type: "Organization",
             repository_selection: repositorySelection,
             suspended_at: null,
             account: {
-              id: 149546148,
+              id: 149_546_148,
               login: "withAutograph",
               type: "Organization",
             },
@@ -274,14 +274,14 @@ describe("public GitHub App installation authorization", () => {
         });
       if (url.endsWith("/user")) return Response.json({ id: 321, login: "installer" });
       return Response.json({
-        id: 98765,
-        app_id: 12345,
+        id: 98_765,
+        app_id: 12_345,
         app_slug: "autograph-app-builder",
         target_type: "Organization",
         repository_selection: "selected",
         suspended_at: null,
         account: {
-          id: 149546148,
+          id: 149_546_148,
           login: "withAutograph",
           type: "Organization",
         },
@@ -442,7 +442,7 @@ describe("public GitHub App installation authorization", () => {
     });
     const { authorizeState } = await prepareAuthorization(authorization);
     const callback = new URL(authorizationCallbackUrl(authorizeState));
-    callback.searchParams.set("code", "c".repeat(8_192));
+    callback.searchParams.set("code", "c".repeat(8192));
 
     await expect(authorization.complete(callback.toString(), authority)).resolves.toMatchObject({
       status: "bound",
@@ -755,8 +755,8 @@ describe("public GitHub App installation authorization", () => {
         total_count: 1,
         installations: [
           {
-            id: 98765,
-            app_id: 99999,
+            id: 98_765,
+            app_id: 99_999,
             app_slug: "autograph-app-builder",
             target_type: "User",
             repository_selection: "all",

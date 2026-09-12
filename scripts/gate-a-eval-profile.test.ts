@@ -42,7 +42,7 @@ describe("closed Gate A eval profile", () => {
     expect(environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION).toBe("1");
     expect(environment.APP_BUILDER_BRANCH_WORKTREE_ROOT).toBeUndefined();
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
-    expect(Object.keys(environment).sort()).toEqual([
+    expect(Object.keys(environment).toSorted()).toEqual([
       "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",
       "APP_BUILDER_LOCAL_PUBLICATION",
     ]);

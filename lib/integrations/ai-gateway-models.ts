@@ -12,12 +12,14 @@ const gatewayModelSchema = z
     name: z.string().min(1).max(256),
     owned_by: z.string().min(1).max(128),
     type: z.string().max(64),
+    // Zod's schema fallback API is not a Promise method.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     zdr: z.enum(["all", "some", "none"]).catch("none"),
     tags: z.array(z.string().min(1).max(128)).max(64).default([]),
   })
   .passthrough();
 
-const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1_000) }).passthrough();
+const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).passthrough();
 
 type ModelState = BuilderIntegrationState["models"];
 let cached: { value: ModelState; expiresAt: number } | undefined;
@@ -34,7 +36,7 @@ export async function loadGatewayModels(input?: {
   try {
     const response = await (input?.fetch ?? fetch)(GATEWAY_MODELS_URL, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(8000),
       cache: "no-store",
     });
     if (!response.ok) throw new Error("gateway-models-unavailable");
@@ -50,7 +52,7 @@ export async function loadGatewayModels(input?: {
           zdr: model.zdr,
         }),
       )
-      .sort((left, right) => left.name.localeCompare(right.name));
+      .toSorted((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) throw new Error("gateway-models-empty");
     const defaultModelId = entries.some((entry) => entry.id === activeBuilderModelId)
       ? activeBuilderModelId

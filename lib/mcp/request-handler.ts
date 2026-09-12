@@ -493,7 +493,7 @@ async function hostedServiceForRequest(
   try {
     verifiedClaims = await runtime.verifier.verify({
       token,
-      nowEpochSeconds: Math.floor((runtime.now?.() ?? Date.now()) / 1_000),
+      nowEpochSeconds: Math.floor((runtime.now?.() ?? Date.now()) / 1000),
     });
   } catch {
     return unauthorizedResponse(auth, requiredScopes);

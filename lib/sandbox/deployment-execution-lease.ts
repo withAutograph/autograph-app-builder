@@ -104,6 +104,8 @@ async function stopWithin(
 ): Promise<SandboxCleanupEvidence> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = Promise.resolve(sandbox.stop());
+  // Intentionally observe stop failure without awaiting it before the timeout race.
+  // oxlint-disable-next-line promise/prefer-await-to-then
   stop.catch(() => undefined);
   const timeout = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), timeoutMs);

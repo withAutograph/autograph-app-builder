@@ -270,7 +270,7 @@ export async function withLifecycleLock<T>(
 export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
   const records: string[] = [];
   const walk = (directory: string): void => {
-    for (const name of readdirSync(directory).sort()) {
+    for (const name of readdirSync(directory).toSorted()) {
       const absolute = join(directory, name);
       const relativePath = relative(nodeModulesRoot, absolute);
       const stat = lstatSync(absolute);
@@ -903,8 +903,8 @@ export function ghcrCredentialEnvironment(
 }
 
 export function hasExactKeys(value: object, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const actual = Object.keys(value).toSorted();
+  const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 

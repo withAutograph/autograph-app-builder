@@ -68,7 +68,7 @@ const octal = (value: number, length: number) => `${value.toString(8).padStart(l
 /** Creates a deterministic USTAR archive (sorted files, fixed modes and epoch mtimes). */
 export function deterministicTar(files: ReadonlyMap<string, Uint8Array>) {
   const chunks: Buffer[] = [];
-  for (const [name, content] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [name, content] of [...files].toSorted(([a], [b]) => a.localeCompare(b))) {
     if (Buffer.byteLength(name) > 100) throw new Error(`Archive path too long: ${name}`);
     const header = Buffer.alloc(512);
     write(header, 0, name, 100);

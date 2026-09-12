@@ -173,7 +173,7 @@ export function buildPreviewMcpOAuthOptions(input: {
         throw new Error("Preview OAuth membership is not active.");
       }
       return {
-        nbf: Math.floor(now() / 1_000),
+        nbf: Math.floor(now() / 1000),
         workspace_id: referenceId,
       };
     },

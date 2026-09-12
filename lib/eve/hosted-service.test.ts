@@ -306,7 +306,7 @@ async function started(input?: {
     principal: input?.principal ?? principal,
     store,
     transport: adapter,
-    now: input?.now ?? (() => 1_000),
+    now: input?.now ?? (() => 1000),
     ...(input?.beforeRead === undefined ? {} : { beforeRead: input.beforeRead }),
     ...(input?.sessionTimeoutPolicy === undefined
       ? {}
@@ -614,7 +614,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("keeps user-visible handles readable beyond the compute idle lease", async () => {
-    let now = 1_000;
+    let now = 1000;
     const adapter = transport();
     const first = await started({
       transport: adapter,
@@ -644,7 +644,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("keeps user-visible handles readable beyond the compute maximum lifetime", async () => {
-    let now = 1_000;
+    let now = 1000;
     const adapter = transport();
     const first = await started({
       transport: adapter,
@@ -693,8 +693,8 @@ describe("hosted Eve service core", () => {
       limit: 10,
     });
     expect(
-      [...pageOne.sessions, ...pageTwo.sessions].map(({ sessionId }) => sessionId).sort(),
-    ).toEqual([first.result.sessionId, second.sessionId].sort());
+      [...pageOne.sessions, ...pageTwo.sessions].map(({ sessionId }) => sessionId).toSorted(),
+    ).toEqual([first.result.sessionId, second.sessionId].toSorted());
     expect(JSON.stringify([pageOne, pageTwo])).not.toContain(other.result.sessionId);
   });
 
@@ -708,8 +708,8 @@ describe("hosted Eve service core", () => {
       clientRequestId: "start_legacy",
       requestDigest: `sha256:${"a".repeat(64)}`,
       state: "reserved",
-      createdAtEpochMs: 1_000,
-      updatedAtEpochMs: 1_000,
+      createdAtEpochMs: 1000,
+      updatedAtEpochMs: 1000,
     });
     expect(await store.reserveOperation(principal, candidate)).toMatchObject({
       disposition: "reserved",
@@ -730,16 +730,16 @@ describe("hosted Eve service core", () => {
         principal,
         adapterSessionId: "eve_legacy",
         status: "waiting",
-        createdAtEpochMs: 1_000,
-        updatedAtEpochMs: 1_000,
+        createdAtEpochMs: 1000,
+        updatedAtEpochMs: 1000,
       },
-      nowEpochMs: 1_000,
+      nowEpochMs: 1000,
     });
     const service = createHostedEveSessionService({
       principal,
       store,
       transport: transport(),
-      now: () => 2_000,
+      now: () => 2000,
     });
     await expect(service.list({ cursor: 0, limit: 10 })).resolves.toMatchObject({
       sessions: [
@@ -771,8 +771,8 @@ describe("hosted Eve service core", () => {
       clientRequestId: "start_legacy_terminal",
       requestDigest: `sha256:${"b".repeat(64)}`,
       state: "reserved",
-      createdAtEpochMs: 1_000,
-      updatedAtEpochMs: 1_000,
+      createdAtEpochMs: 1000,
+      updatedAtEpochMs: 1000,
     });
     expect(await store.reserveOperation(principal, candidate)).toMatchObject({
       disposition: "reserved",
@@ -793,10 +793,10 @@ describe("hosted Eve service core", () => {
         principal,
         adapterSessionId: "eve_legacy_terminal",
         status: "completed",
-        createdAtEpochMs: 1_000,
-        updatedAtEpochMs: 1_000,
+        createdAtEpochMs: 1000,
+        updatedAtEpochMs: 1000,
       },
-      nowEpochMs: 1_000,
+      nowEpochMs: 1000,
     });
     const terminalSnapshot: HostedEngineSnapshot = {
       status: "completed",
@@ -813,7 +813,7 @@ describe("hosted Eve service core", () => {
       principal,
       store,
       transport: adapter,
-      now: () => 2_000,
+      now: () => 2000,
     });
 
     const resumed = await service.start({
@@ -932,7 +932,7 @@ describe("hosted Eve service core", () => {
     expect(record.checkpoint?.events.length).toBeLessThanOrEqual(512);
     expect(
       new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
-    ).toBeLessThanOrEqual(512 * 1_024);
+    ).toBeLessThanOrEqual(512 * 1024);
     expect(record.checkpoint?.truncatedBeforeIndex).toBeGreaterThan(0);
   });
 
@@ -954,7 +954,7 @@ describe("hosted Eve service core", () => {
           description: oversized,
           options: Array.from({ length: 8 }, (_, optionIndex) => ({
             id: `${requestId}_option_${optionIndex}`,
-            label: "L".repeat(4_096),
+            label: "L".repeat(4096),
           })),
           allowFreeform: false,
         },
@@ -971,7 +971,7 @@ describe("hosted Eve service core", () => {
         runtime: "nextjs",
         packageName: "@autograph/stock-exceptions",
         projectName: "apps-stock-exceptions",
-        routes: Array.from({ length: 48 }, (_, index) => `/${index}-${"r".repeat(1_024)}`),
+        routes: Array.from({ length: 48 }, (_, index) => `/${index}-${"r".repeat(1024)}`),
         readOnly: true,
       },
     };
@@ -992,7 +992,7 @@ describe("hosted Eve service core", () => {
     if (record?.version !== 2) throw new Error("Expected durable session.");
     expect(
       new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
-    ).toBeLessThanOrEqual(512 * 1_024);
+    ).toBeLessThanOrEqual(512 * 1024);
     expect(record.checkpoint?.prototype).toBeDefined();
     expect(record.checkpoint?.implementationPlan).toBeDefined();
     expect(record.checkpoint?.inputRequests?.map(({ requestId }) => requestId)).toEqual(requestIds);
@@ -1003,7 +1003,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("stops refreshing an abandoned working lease and resumes as a child", async () => {
-    let now = 1_000;
+    let now = 1000;
     const working: HostedEngineSnapshot = {
       status: "working",
       events: [{ type: "status", index: 0, status: "working" }],
@@ -1172,7 +1172,7 @@ describe("hosted Eve service core", () => {
         principal,
         store: retryStore,
         transport: first.adapter,
-        now: () => 1_000,
+        now: () => 1000,
       });
 
       await expect(
@@ -1272,7 +1272,7 @@ describe("hosted Eve service core", () => {
       principal,
       store: new InMemoryHostedEveStore(),
       transport: transport({ start }),
-      now: () => 2_000,
+      now: () => 2000,
     });
     const request = {
       prompt: "Build an app",
@@ -1445,7 +1445,7 @@ describe("hosted Eve service core", () => {
         principal,
         store: maliciousStore,
         transport: adapter,
-        now: () => 4_000,
+        now: () => 4000,
       });
 
       await expect(

@@ -28,7 +28,7 @@ async function mcpRequest(input: {
   fetcher: typeof fetch;
   signal?: AbortSignal;
 }) {
-  const requestTimeout = AbortSignal.timeout(5_000);
+  const requestTimeout = AbortSignal.timeout(5000);
   const signal = input.signal ? AbortSignal.any([input.signal, requestTimeout]) : requestTimeout;
   const response = await input.fetcher(input.endpoint, {
     method: "POST",

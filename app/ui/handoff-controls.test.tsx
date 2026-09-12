@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+// @vitest-environment jsdom
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +78,7 @@ describe("destination adapters", () => {
         clientRequestId: `web-handoff:${id}`,
       });
       expect(prompt).toContain("same Autograph account");
-      expect(url.href.length).toBeLessThan(8_000);
+      expect(url.href.length).toBeLessThan(8000);
     }
     expect(buildAppHandoffPrompt(id, "cursor")).not.toContain("codex plugin");
     expect(buildAppHandoffPrompt(id, "codex")).not.toContain("Cursor");
@@ -177,7 +177,7 @@ describe("durable handoff controls", () => {
     expect(container.querySelector('a[href*="mcp/install"]')).toBeNull();
     expect(container.textContent).not.toContain("codex plugin");
     request.mockImplementation(async () => Response.json({ ...data, cursorInstallReady: true }));
-    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(container.querySelector('a[href*="mcp/install"]')?.textContent).toBe(
       "Add Autograph to Cursor",
     );
@@ -282,7 +282,7 @@ describe("durable handoff controls", () => {
       .mockImplementation(async () => Response.json(initial));
     await render();
     expect(container.textContent).toContain("Status is temporarily unavailable");
-    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(request).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain("Status is temporarily unavailable");
   });

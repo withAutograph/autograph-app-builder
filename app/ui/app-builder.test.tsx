@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+// @vitest-environment jsdom
 
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -612,7 +612,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
-    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
 
     expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
   });
@@ -831,7 +831,7 @@ describe("Vercel-faithful App Builder flow", () => {
       "Customer Feedback Portal",
     );
     expect(repositoryNameFromAppName("Café & Orders")).toBe("cafe-and-orders");
-    expect(appNameFromBrief("x".repeat(8_100))).toHaveLength(120);
+    expect(appNameFromBrief("x".repeat(8100))).toHaveLength(120);
 
     sessionStorage.setItem(
       "autograph-app-brief",

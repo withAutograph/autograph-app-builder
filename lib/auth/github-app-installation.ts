@@ -2,6 +2,12 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 import { z } from "zod";
 
+import {
+  GitHubCallbackParseError,
+  GitHubInstallationAuthorizationError,
+  GitHubStateValidationError,
+} from "./github-app-installation-errors";
+
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   providerConnectionReturnToSchema,
@@ -13,8 +19,9 @@ import type { GitHubUserCredentialStore } from "../provisioning/github-user-cred
 import { createGitHubOAuthApp, createGitHubTokenOctokit } from "../github/octokit";
 
 const GITHUB_ORIGIN = "https://github.com";
-const STATE_LIFETIME_MS = 10 * 60 * 1_000;
+const STATE_LIFETIME_MS = 10 * 60 * 1000;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
+export { GitHubInstallationAuthorizationError } from "./github-app-installation-errors";
 
 export type GitHubInstallationAuthorizationFailureStage =
   | "callback-state-validation"
@@ -36,7 +43,7 @@ export type GitHubOAuthErrorCategory =
 
 export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
-type GitHubCallbackDiagnostic = {
+export type GitHubCallbackDiagnostic = {
   queryKeys: string[];
   keyCounts: Record<string, number>;
   unknownKeyCount: number;
@@ -48,7 +55,7 @@ type GitHubCallbackDiagnostic = {
   error?: GitHubOAuthCallbackError;
 };
 
-type GitHubStateValidationDiagnostic = {
+export type GitHubStateValidationDiagnostic = {
   substage:
     | "authority-parse"
     | "callback-parse"
@@ -60,50 +67,6 @@ type GitHubStateValidationDiagnostic = {
   stateDigest?: string;
   callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
 };
-
-class GitHubCallbackParseError extends Error {
-  readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>;
-
-  constructor(reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>) {
-    super("invalid-callback");
-    this.name = "GitHubCallbackParseError";
-    this.reason = reason;
-  }
-}
-
-class GitHubStateValidationError extends Error {
-  readonly diagnostic: GitHubStateValidationDiagnostic;
-
-  constructor(diagnostic: GitHubStateValidationDiagnostic) {
-    super("invalid-state");
-    this.name = "GitHubStateValidationError";
-    this.diagnostic = diagnostic;
-  }
-}
-
-export class GitHubInstallationAuthorizationError extends Error {
-  readonly stage: GitHubInstallationAuthorizationFailureStage;
-  readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
-  readonly returnState?: ProviderConnectionReturn;
-  readonly callback?: GitHubCallbackDiagnostic;
-  readonly stateValidation?: GitHubStateValidationDiagnostic;
-
-  constructor(
-    stage: GitHubInstallationAuthorizationFailureStage,
-    category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
-    returnState?: ProviderConnectionReturn,
-    callback?: GitHubCallbackDiagnostic,
-    stateValidation?: GitHubStateValidationDiagnostic,
-  ) {
-    super(FAILURE_MESSAGE);
-    this.name = "GitHubInstallationAuthorizationError";
-    this.stage = stage;
-    this.category = category;
-    this.returnState = returnState;
-    this.callback = callback;
-    this.stateValidation = stateValidation;
-  }
-}
 
 export function githubInstallationAuthorizationDiagnostic(error: unknown) {
   if (!(error instanceof GitHubInstallationAuthorizationError)) return undefined;
@@ -291,8 +254,8 @@ function signedState(input: {
       ...(input.returnState.resumeKey === undefined
         ? {}
         : { resumeKey: input.returnState.resumeKey }),
-      issuedAt: Math.floor(input.now / 1_000),
-      expiresAt: Math.floor((input.now + STATE_LIFETIME_MS) / 1_000),
+      issuedAt: Math.floor(input.now / 1000),
+      expiresAt: Math.floor((input.now + STATE_LIFETIME_MS) / 1000),
     }),
   ).toString("base64url");
   const signature = createHmac("sha256", input.stateSecret)
@@ -329,7 +292,7 @@ function verifyState(input: {
   now: number;
 }) {
   const diagnostic = { stateDigest: sha256(input.state) };
-  if (input.state.length > 2_048)
+  if (input.state.length > 2048)
     throw new GitHubStateValidationError({
       substage: "state-format",
       ...diagnostic,
@@ -381,7 +344,7 @@ function verifyState(input: {
       ...diagnostic,
     });
   }
-  const nowSeconds = Math.floor(input.now / 1_000);
+  const nowSeconds = Math.floor(input.now / 1000);
   if (parsed.authorityDigest !== authorityDigest(input.authority))
     throw new GitHubStateValidationError({
       substage: "state-authority-digest",
@@ -390,7 +353,7 @@ function verifyState(input: {
   if (
     parsed.expiresAt <= nowSeconds ||
     parsed.issuedAt > nowSeconds + 30 ||
-    parsed.expiresAt - parsed.issuedAt !== STATE_LIFETIME_MS / 1_000
+    parsed.expiresAt - parsed.issuedAt !== STATE_LIFETIME_MS / 1000
   )
     throw new GitHubStateValidationError({
       substage: "state-time",
@@ -415,7 +378,7 @@ function callbackInput(url: string) {
   const singular = ["code", "error", "installation_id", "setup_action", "state"];
   if (singular.some((key) => query.getAll(key).length > 1))
     throw new GitHubCallbackParseError("duplicate-key");
-  const stateResult = z.string().min(1).max(2_048).safeParse(query.get("state"));
+  const stateResult = z.string().min(1).max(2048).safeParse(query.get("state"));
   if (!stateResult.success) throw new GitHubCallbackParseError("state-format");
   const state = stateResult.data;
   const code = query.get("code");
@@ -490,7 +453,7 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
   const error = query.get("error");
   const unknownKeys = [...new Set([...query.keys()].filter((key) => !known.has(key)))];
   return {
-    queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].sort(),
+    queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].toSorted(),
     keyCounts: Object.fromEntries([...known].map((key) => [key, query.getAll(key).length])),
     unknownKeyCount: unknownKeys.length,
     ...(unknownKeys.length === 0
@@ -616,7 +579,7 @@ async function accessibleInstallation(input: {
       typeof totalCount !== "number" ||
       !Number.isSafeInteger(totalCount) ||
       totalCount < 0 ||
-      totalCount > 1_000 ||
+      totalCount > 1000 ||
       !Array.isArray(installations) ||
       installations.length > 100
     ) {

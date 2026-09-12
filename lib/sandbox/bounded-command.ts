@@ -48,8 +48,12 @@ function timeoutRejection(error: Error, timeoutMs: number) {
   return { promise, clear: () => clearTimeout(timeout) };
 }
 
+// Keep timeout rejection construction private to command execution.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function resettableTimeoutRejection(error: Error, timeoutMs: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  // Keep settlement state local to this timeout promise.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let rejectPromise: (error: Error) => void = () => undefined;
   const promise = new Promise<never>((_resolve, reject) => {
     rejectPromise = reject;
@@ -123,6 +127,8 @@ export async function runBoundedSandboxCommand(
       }),
     );
     process = await Promise.race([spawnPromise, wallTimeout.promise]);
+    // The losing promise is observed to prevent an unhandled rejection.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     spawnPromise.catch(() => undefined);
     const stdoutReader = process.stdout.getReader();
     const stderrReader = process.stderr.getReader();
@@ -135,6 +141,8 @@ export async function runBoundedSandboxCommand(
     const stdoutPromise = collectBounded(stdoutReader, outputState, observed);
     const stderrPromise = collectBounded(stderrReader, outputState, observed);
     const completion = Promise.all([stdoutPromise, stderrPromise, Promise.resolve(process.wait())]);
+    // The losing promise is observed to prevent an unhandled rejection.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     completion.catch(() => undefined);
     const [stdout, stderr, result] = await Promise.race([
       completion,

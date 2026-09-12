@@ -21,6 +21,8 @@ const run = (script: string, args: string[], expected = 0) =>
 
 const temp = await mkdtemp(join(tmpdir(), "autograph-portable-"));
 try {
+  // Keep assertion helpers scoped to this release proof.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const expectRejected = async (action: () => Promise<unknown>, label: string) => {
     try {
       await action();

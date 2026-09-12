@@ -20,7 +20,7 @@ function isLoopbackHostname(hostname: string): boolean {
 export const publicAuthorizationUrlSchema = z
   .string()
   .url()
-  .max(2_048)
+  .max(2048)
   .superRefine((value, context) => {
     const url = new URL(value);
     if (
@@ -46,7 +46,7 @@ export const publicAuthorizationChallengeSchema = z
     url: publicAuthorizationUrlSchema.optional(),
     userCode: z.string().min(1).max(200).optional(),
     expiresAt: z.iso.datetime().optional(),
-    instructions: z.string().min(1).max(2_000).optional(),
+    instructions: z.string().min(1).max(2000).optional(),
     displayName: z.string().min(1).max(200).optional(),
     repositoryAccess: githubRepositoryAccessSchema.optional(),
   })
@@ -114,7 +114,7 @@ const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const publicPrototypePreviewUrlSchema = z
   .string()
   .url()
-  .max(1_024)
+  .max(1024)
   .superRefine((value, context) => {
     const url = new URL(value);
     if (

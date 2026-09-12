@@ -43,7 +43,7 @@ describe("hosted storage read-only readiness", () => {
       hostedStorageExpectedConstraints,
     ]) {
       expect(rows).toEqual(
-        [...rows].sort(([leftTable, leftName], [rightTable, rightName]) => {
+        [...rows].toSorted(([leftTable, leftName], [rightTable, rightName]) => {
           if (leftTable !== rightTable) {
             return leftTable < rightTable ? -1 : 1;
           }

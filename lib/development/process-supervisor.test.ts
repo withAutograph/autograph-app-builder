@@ -13,6 +13,8 @@ import {
 
 describe("development process supervision", () => {
   it("turns SIGTERM into orderly child shutdown and the conventional exit code", async () => {
+    // Node's signal-target contract requires EventEmitter's once/off API.
+    // oxlint-disable-next-line unicorn/prefer-event-target
     const signals = new EventEmitter();
     const shutdown = createDevelopmentShutdown(signals);
     const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
@@ -29,6 +31,8 @@ describe("development process supervision", () => {
   });
 
   it("uses the conventional SIGINT exit code", async () => {
+    // Node's signal-target contract requires EventEmitter's once/off API.
+    // oxlint-disable-next-line unicorn/prefer-event-target
     const signals = new EventEmitter();
     const shutdown = createDevelopmentShutdown(signals);
     const stopping = waitForDevelopmentShutdown(shutdown.signal, shutdown.exitCode);
@@ -58,6 +62,8 @@ describe("development process supervision", () => {
 
   it("signals the Eve wrapper once before forcing its task-owned group", async () => {
     if (process.platform === "win32") return;
+    // ChildProcess is an EventEmitter in Node, not an EventTarget.
+    // oxlint-disable-next-line unicorn/prefer-event-target
     const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
@@ -90,7 +96,7 @@ describe("development process supervision", () => {
 
   it("cleans up a listener when the Eve wrapper exits before its descendant", async () => {
     if (process.platform === "win32") return;
-    const port = 43987;
+    const port = 43_987;
     const child = spawn(
       process.execPath,
       [
@@ -102,12 +108,12 @@ describe("development process supervision", () => {
     await developmentChildExit(child);
 
     await stopDevelopmentChild(child, { processGroup: true });
-    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2000 });
   });
 
   it("allows Eve's nested detached server time to settle after the wrapper exits", async () => {
     if (process.platform === "win32") return;
-    const port = 43988;
+    const port = 43_988;
     const child = spawn(
       process.execPath,
       [
@@ -118,8 +124,8 @@ describe("development process supervision", () => {
     );
     await stopDevelopmentChild(child, {
       processGroup: true,
-      gracefulTimeoutMs: 1_100,
+      gracefulTimeoutMs: 1100,
     });
-    await waitForDevelopmentPortRelease(port, { timeoutMs: 2_000 });
+    await waitForDevelopmentPortRelease(port, { timeoutMs: 2000 });
   });
 });

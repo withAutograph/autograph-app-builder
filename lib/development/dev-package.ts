@@ -26,7 +26,7 @@ async function packageInputDigest(path: string): Promise<string> {
   const entries = await readdir(path, { withFileTypes: true });
   const contents = await Promise.all(
     entries
-      .sort((left, right) => left.name.localeCompare(right.name))
+      .toSorted((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
         const entryPath = join(path, entry.name);
         if (entry.isDirectory()) return [entry.name, await packageInputDigest(entryPath)] as const;

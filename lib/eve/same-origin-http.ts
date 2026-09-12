@@ -82,7 +82,7 @@ export interface HostedWorkloadIdentity {
 function exactToken(value: string): string {
   if (
     value.length === 0 ||
-    value.length > 8_192 ||
+    value.length > 8192 ||
     value !== value.trim() ||
     /[\0\r\n]/u.test(value)
   ) {

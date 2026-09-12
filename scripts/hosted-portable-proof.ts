@@ -61,7 +61,7 @@ export const hostedProofScenarioSchema = z
     ),
     approvalReceipts: z.array(expectedApprovalSchema).length(3),
     maxPolls: z.number().int().min(1).max(120).default(30),
-    pollIntervalMs: z.number().int().min(100).max(10_000).default(1_000),
+    pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
   })
   .strict()
   .superRefine((scenario, context) => {
@@ -121,7 +121,7 @@ function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
       .join(",")}}`;
   const primitive = JSON.stringify(value);
@@ -605,6 +605,8 @@ export interface HostedProofResult {
   sessionEvidenceDigest: string;
 }
 
+// Keep proof helpers scoped to the hosted portable proof boundary.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export async function runHostedProof(input: {
   endpoint: string;
   token: string;
@@ -622,7 +624,7 @@ export async function runHostedProof(input: {
     primary: input.token,
     secondary: input.crossTenantToken,
     scenario: input.scenario,
-    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1_000),
+    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
   });
   const metadata = await verifyProtectedResourceMetadata({
     endpoint: input.endpoint,
@@ -703,7 +705,7 @@ export async function runHostedProof(input: {
   });
   if (iterated.page.status !== "completed")
     throw new Error("Iteration did not reach a successful completed state.");
-  const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].sort();
+  const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].toSorted();
   if (
     JSON.stringify(observedApprovalPhases) !==
     JSON.stringify(["appspec", "change_set", "publication"])
@@ -727,6 +729,8 @@ export async function runHostedProof(input: {
       clientRequestId: `hosted-cancel-${proofId}`,
     }),
   );
+  // Keep proof response construction local to this run.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const denied = async (clientInput: HostedMcpProofClient, sessionId: string) =>
     (
       await clientInput.callTool("autograph_get", {

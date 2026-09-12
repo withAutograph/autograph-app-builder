@@ -11,25 +11,11 @@ import {
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
 import type { EveSessionListResult, EveSessionResult } from "./contracts";
+import { McpProviderUnavailableError, McpToolAuthenticationRequiredError } from "./errors";
+
+export { McpProviderUnavailableError, McpToolAuthenticationRequiredError } from "./errors";
 
 export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
-
-export class McpToolAuthenticationRequiredError extends Error {
-  readonly challenge: string;
-
-  constructor(challenge: string) {
-    super("Authentication is required before calling this tool.");
-    this.challenge = challenge;
-    this.name = "McpToolAuthenticationRequiredError";
-  }
-}
-
-export class McpProviderUnavailableError extends Error {
-  constructor() {
-    super("Provider access is temporarily unavailable.");
-    this.name = "McpProviderUnavailableError";
-  }
-}
 
 export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
   result: Result,

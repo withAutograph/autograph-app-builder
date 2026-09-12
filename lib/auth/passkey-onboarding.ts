@@ -195,7 +195,7 @@ export function verifyPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
   now = new Date(),
 ) {
-  if (!token || token.length > 4_096) return null;
+  if (!token || token.length > 4096) return null;
   const [encodedPayload, signature, extra] = token.split(".");
   if (!encodedPayload || !signature || extra !== undefined) return null;
   const expected = Buffer.from(sign(encodedPayload, config.secret));

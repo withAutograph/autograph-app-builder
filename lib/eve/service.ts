@@ -122,7 +122,7 @@ type LocalEveRuntimeState = {
   metadata: Map<string, { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }>;
 };
 
-const localCancellationTimeoutMs = 5_000;
+const localCancellationTimeoutMs = 5000;
 // Repository apply and validation run inside the Vercel Sandbox.  Their
 // provider command budget is five minutes, so the local Eve watchdog must not
 // interrupt the model turn before that operation can settle.  The previous
@@ -297,6 +297,8 @@ function consumeResponse(
       // boundary. We deliberately do not start another turn here: first wait
       // for the original turn's cancellation boundary to become observable.
       state.recoveryRequired.add(sessionId);
+      // Cancellation cleanup is deliberately fire-and-forget from the timer.
+      // oxlint-disable-next-line promise/prefer-await-to-then
       void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(() => undefined);
     }, modelTurnTimeoutMs);
     modelTurnTimer.unref?.();
@@ -408,6 +410,8 @@ export function createLocalEveSessionService(
         state.modelInterruptions.delete(sessionId);
         state.recoveryRequired.delete(sessionId);
       }
+      // Remove the recovery entry regardless of its terminal outcome.
+      // oxlint-disable-next-line promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
     return recovery;
@@ -451,6 +455,8 @@ export function createLocalEveSessionService(
           setTimeout(resolve, 250);
         });
       }
+      // Remove the tail pump entry regardless of its terminal outcome.
+      // oxlint-disable-next-line promise/prefer-await-to-then
     })().finally(() => state.tailPumps.delete(sessionId));
     state.tailPumps.set(sessionId, pump);
   }

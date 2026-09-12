@@ -214,6 +214,8 @@ function requestId(value: string): string {
   return /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
 }
 
+// Keep provider helpers scoped to the provider factory's contract.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export function createGitHubAppHttpProvider(input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
@@ -494,6 +496,8 @@ export function createGitHubAppHttpProvider(input: {
     };
   }
 
+  // Keep the repository projection local to this provider.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   function publicRepositorySnapshot(snapshot: Awaited<ReturnType<typeof repositoryById>>) {
     return {
       repositoryId: snapshot.repositoryId,

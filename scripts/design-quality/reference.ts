@@ -139,7 +139,7 @@ function literalValues(type: ts.Type): string[] | undefined {
     })
     .filter((value): value is string => value !== undefined);
   return values.length === members.length && members.length
-    ? [...new Set(values)].sort()
+    ? [...new Set(values)].toSorted()
     : undefined;
 }
 
@@ -159,7 +159,7 @@ function primitiveKinds(type: ts.Type): PublicProp["primitiveKinds"] {
     else if (member.flags & ts.TypeFlags.BooleanLike) kinds.add("boolean");
     else return undefined;
   }
-  return [...kinds].sort() as PublicProp["primitiveKinds"];
+  return [...kinds].toSorted() as PublicProp["primitiveKinds"];
 }
 
 function propsForExport(
@@ -604,7 +604,7 @@ export function checkJsxAttributes({
             });
           }
           const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
-            [2531, 2532, 18047, 18048].includes(item.code),
+            [2531, 2532, 18_047, 18_048].includes(item.code),
           );
           const propDiagnostics = attributeDiagnostics.filter((item) =>
             [2322, 2353].includes(item.code),

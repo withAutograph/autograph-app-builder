@@ -51,13 +51,13 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sessionId: "session_1",
       sessionAuth: sessionAuth(),
       sandbox: firstSandbox,
-      nowEpochMs: 1_000,
+      nowEpochMs: 1000,
     });
     expect(first?.epoch).toBe(1);
     await expect(
       assertHostedSandboxCommandAuthority({
         sessionId: "session_1",
-        nowEpochMs: 1_001,
+        nowEpochMs: 1001,
       }),
     ).resolves.toMatchObject({ epoch: 1, state: "active" });
     await expect(
@@ -66,7 +66,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         sessionAuth: sessionAuth(),
         sandbox: firstSandbox,
         reason: "turn-completed",
-        nowEpochMs: 2_000,
+        nowEpochMs: 2000,
       }),
     ).resolves.toMatchObject({ released: true, lease: { state: "released" } });
 
@@ -75,7 +75,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sessionId: "session_1",
       sessionAuth: sessionAuth(),
       sandbox: secondSandbox,
-      nowEpochMs: 3_000,
+      nowEpochMs: 3000,
     });
     expect(second?.epoch).toBe(2);
     await releaseHostedSandboxExecutionLease({
@@ -83,7 +83,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sessionAuth: sessionAuth(),
       sandbox: secondSandbox,
       reason: "turn-cancelled",
-      nowEpochMs: 4_000,
+      nowEpochMs: 4000,
     });
     expect(firstSandbox.stop).toHaveBeenCalledOnce();
     expect(secondSandbox.stop).toHaveBeenCalledOnce();
@@ -97,7 +97,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sessionId: "session_1",
       sessionAuth: sessionAuth(),
       sandbox,
-      nowEpochMs: 1_000,
+      nowEpochMs: 1000,
     });
     clearHostedSandboxExecutionLeaseCacheForTest();
     install(store);
@@ -110,14 +110,14 @@ describe("hosted sandbox turn lease lifecycle", () => {
         sessionAuth: sessionAuth(),
         sandbox,
         reason: "turn-failed",
-        nowEpochMs: 2_000,
+        nowEpochMs: 2000,
       }),
     ).resolves.toMatchObject({ released: true, lease: { epoch: 1 } });
     const reacquired = await acquireHostedSandboxExecutionLease({
       sessionId: "session_1",
       sessionAuth: sessionAuth(),
       sandbox: sandboxFixture(),
-      nowEpochMs: 3_000,
+      nowEpochMs: 3000,
     });
     expect(reacquired?.epoch).toBe(2);
   });

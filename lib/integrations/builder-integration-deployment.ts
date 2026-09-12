@@ -35,6 +35,8 @@ function databaseFor(databaseUrl: string) {
   return database;
 }
 
+// Keep state loading scoped to the integration deployment boundary.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export async function loadBuilderIntegrationState(
   input: BuilderIntegrationRequest,
 ): Promise<BuilderIntegrationState> {
@@ -51,6 +53,8 @@ export async function loadBuilderIntegrationState(
     });
   }
 
+  // Keep the state helper local to the integration boundary.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const unavailable = (reason: "configuration-unavailable") => ({
     status: "unavailable" as const,
     scopes: [],

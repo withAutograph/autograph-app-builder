@@ -23,7 +23,7 @@ export default defineTool({
   inputSchema: z.object({
     path: z.string().regex(prototypeArtifactPathPattern),
     mediaType: z.enum(prototypeArtifactMediaTypes),
-    content: z.string().min(1).max(262144),
+    content: z.string().min(1).max(262_144),
   }),
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();

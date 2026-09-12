@@ -85,9 +85,9 @@ describe("compensation planning example", () => {
     const data = await fixture<CompensationFixture>("compensation-planning");
     let state = initialCompensationState(data);
     expect(calculateCompensation(state.assumptions)).toMatchObject({
-      currentTotal: 204428,
-      proposedBase: 165680,
-      proposedTotal: 219155,
+      currentTotal: 204_428,
+      proposedBase: 165_680,
+      proposedTotal: 219_155,
     });
 
     state = reduceCompensationState(state, {
@@ -101,9 +101,9 @@ describe("compensation planning example", () => {
       value: 0.08,
     });
     expect(calculateCompensation(state.assumptions)).toMatchObject({
-      currentTotal: 204960,
-      proposedBase: 167200,
-      proposedTotal: 221376,
+      currentTotal: 204_960,
+      proposedBase: 167_200,
+      proposedTotal: 221_376,
     });
   });
 

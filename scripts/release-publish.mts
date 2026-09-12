@@ -101,7 +101,11 @@ async function sealPublicationTree(root: string, current = root) {
   if (current === root) await chmod(root, 0o500);
 }
 
+// Keep publication cleanup scoped to the release command.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 async function removePublicationTree(root: string) {
+  // Keep publication cleanup helpers local to this operation.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   async function makeWritable(path: string) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) return;
@@ -190,13 +194,13 @@ try {
       basename(receipt.package.checksums),
       basename(receipt.package.receipt),
       "promotion-receipt.json",
-    ].sort();
+    ].toSorted();
     if (
       metadata.tagName !== `v${receipt.package.version}` ||
       metadata.isPrerelease !== true ||
       metadata.targetCommitish !== receipt.builder.commit ||
       !Array.isArray(metadata.assets) ||
-      JSON.stringify(metadata.assets.map(({ name }) => name).sort()) !==
+      JSON.stringify(metadata.assets.map(({ name }) => name).toSorted()) !==
         JSON.stringify(expectedAssetNames)
     )
       throw new Error("Existing GitHub release did not match the promotion.");

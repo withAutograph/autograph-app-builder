@@ -19,7 +19,7 @@ const acquire = (
   store: InMemorySandboxExecutionLeaseStore,
   ownerUserId: string,
   sessionId: string,
-  nowEpochMs = 1_000,
+  nowEpochMs = 1000,
 ) =>
   store.acquire({
     principal: principal(ownerUserId),
@@ -53,7 +53,7 @@ describe("sandbox execution lease", () => {
       adapterSessionId: acquired.lease.adapterSessionId,
       epoch: acquired.lease.epoch,
       reason: "waiting",
-      nowEpochMs: 2_000,
+      nowEpochMs: 2000,
     });
     expect(released.state).toBe("released");
     expect(
@@ -62,10 +62,10 @@ describe("sandbox execution lease", () => {
         adapterSessionId: acquired.lease.adapterSessionId,
         epoch: acquired.lease.epoch,
         reason: "waiting",
-        nowEpochMs: 2_001,
+        nowEpochMs: 2001,
       }),
     ).toEqual(released);
-    const next = await acquire(store, "user_1", "session_1", 3_000);
+    const next = await acquire(store, "user_1", "session_1", 3000);
     if (next.disposition === "rejected") throw new Error("unexpected");
     expect(next.lease.epoch).toBe(2);
   });

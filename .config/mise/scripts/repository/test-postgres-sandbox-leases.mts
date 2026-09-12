@@ -83,9 +83,9 @@ async function waitForDatabase() {
 }
 
 async function expire(lease: SandboxExecutionLease) {
-  const expiresAtEpochMs = Date.now() - 1_000;
-  const heartbeatAtEpochMs = expiresAtEpochMs - 1_000;
-  const acquiredAtEpochMs = heartbeatAtEpochMs - 1_000;
+  const expiresAtEpochMs = Date.now() - 1000;
+  const heartbeatAtEpochMs = expiresAtEpochMs - 1000;
+  const acquiredAtEpochMs = heartbeatAtEpochMs - 1000;
   const record = {
     ...lease,
     acquiredAtEpochMs,
@@ -110,7 +110,7 @@ try {
     acquire("user_1", "session_1"),
     acquire("user_1", "session_2"),
   ]);
-  assert.deepEqual(sameSubject.map(({ disposition }) => disposition).sort(), [
+  assert.deepEqual(sameSubject.map(({ disposition }) => disposition).toSorted(), [
     "acquired",
     "acquired",
   ]);

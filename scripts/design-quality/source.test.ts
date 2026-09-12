@@ -165,7 +165,7 @@ describe("analyzeSource", () => {
     const labels = report.observations.filter(
       (o) => o.dimension === "api" && o.classification === "prop" && o.summary.includes("label"),
     );
-    expect(labels.map((o) => o.verdict).sort()).toEqual([
+    expect(labels.map((o) => o.verdict).toSorted()).toEqual([
       "conforming",
       "nonconforming",
       "unassessed",

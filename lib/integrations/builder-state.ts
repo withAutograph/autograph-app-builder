@@ -68,7 +68,7 @@ export const builderIntegrationStateSchema = z
     models: z
       .object({
         status: z.enum(["ready", "unavailable"]),
-        entries: z.array(builderModelSchema).max(1_000),
+        entries: z.array(builderModelSchema).max(1000),
         defaultModelId: z.string().min(3).optional(),
         cached: z.boolean(),
       })

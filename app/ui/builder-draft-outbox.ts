@@ -95,7 +95,11 @@ export function createBuilderDraftOutbox<T>(
   let operations = Promise.resolve();
 
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
+    // This queue deliberately composes the next operation without awaiting it here.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     const result = operations.then(operation);
+    // Keep the queue usable after either outcome.
+    // oxlint-disable-next-line promise/prefer-await-to-then
     operations = result.then(
       () => undefined,
       () => undefined,

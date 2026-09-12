@@ -154,7 +154,7 @@ export function createExactImageProvenance(input: ExactProvenanceInput): ImagePr
     throw new Error("Arrusted tree does not match the immutable image target.");
   if (input.dockerfileSha256 !== input.expectedDockerfileSha256)
     throw new Error("Dockerfile digest changed after approval.");
-  const targetFileEntries = Object.entries(input.targetFiles).sort(([a], [b]) =>
+  const targetFileEntries = Object.entries(input.targetFiles).toSorted(([a], [b]) =>
     a.localeCompare(b),
   );
   if (
@@ -388,8 +388,8 @@ const ociConfigMediaType = "application/vnd.oci.image.config.v1+json";
 const ociLayerMediaType = "application/vnd.oci.image.layer.v1.tar+gzip";
 
 function hasExactKeys(value: object, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
+  const actual = Object.keys(value).toSorted();
+  const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 

@@ -131,7 +131,7 @@ function canonical(value: unknown): string {
   if (value instanceof Date) return JSON.stringify(value.toISOString());
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
       .join(",")}}`;
   return JSON.stringify(value);

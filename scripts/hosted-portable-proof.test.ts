@@ -59,7 +59,11 @@ const scenario = hostedProofScenarioSchema.parse({
   pollIntervalMs: 100,
 });
 
+// Keep the fixture token helper scoped to this proof test.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function jwt(subject: string, workspaceId: string) {
+  // Keep JWT encoding local to this fixture.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     iss: scenario.oauth.issuer,
@@ -68,8 +72,8 @@ function jwt(subject: string, workspaceId: string) {
     workspace_id: workspaceId,
     scope:
       "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
-    nbf: 1_900,
-    exp: 2_100,
+    nbf: 1900,
+    exp: 2100,
   })}.signature`;
 }
 const primaryToken = jwt("proof-user-primary", "workspace-primary");
@@ -312,7 +316,7 @@ const proofInput = (fetcher: typeof fetch) => ({
   sourceTree: "0".repeat(40),
   releaseArchiveSha256: "1".repeat(64),
   permitApprovals: true,
-  nowEpochSeconds: 2_000,
+  nowEpochSeconds: 2000,
   fetcher,
 });
 
@@ -426,7 +430,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: primaryToken,
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
@@ -434,7 +438,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: jwt("proof-user-primary", "workspace-secondary"),
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
@@ -442,7 +446,7 @@ describe("hosted portable fresh-client proof", () => {
         primary: primaryToken,
         secondary: jwt("proof-user-secondary", "workspace-primary"),
         scenario,
-        nowEpochSeconds: 2_000,
+        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
   });

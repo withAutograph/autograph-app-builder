@@ -23,7 +23,7 @@ export const repositoryAccessContinuationSchema = z
       })
       .strict(),
     selectedInstallationId: decimal.optional(),
-    callbackUrl: z.string().url().max(4_096),
+    callbackUrl: z.string().url().max(4096),
     createdAt: z.date(),
     expiresAt: z.date(),
     authorizedAt: z.date().optional(),
@@ -87,7 +87,7 @@ export function createRepositoryAccessContinuationService(input: {
 }) {
   const now = input.now ?? (() => new Date());
   const createId = input.createId ?? randomUUID;
-  const lifetimeMs = input.lifetimeMs ?? 10 * 60 * 1_000;
+  const lifetimeMs = input.lifetimeMs ?? 10 * 60 * 1000;
   if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 60_000)
     throw new Error("repository-access-continuation-lifetime-invalid");
 

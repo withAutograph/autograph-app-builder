@@ -6,6 +6,8 @@ export function escapeHtml(value: unknown) {
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
   );
 }
+// Keep report rendering helpers scoped to the report artifact.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export function renderReport(report: {
   createdAt: string;
   source: unknown;
@@ -35,6 +37,8 @@ export function renderReport(report: {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
   const { adherence } = report;
+  // Keep report formatting helpers local to this artifact.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const pct = (n: number | null) => (n === null ? "Not assessed" : `${Math.round(n * 100) / 100}%`);
   const observations = adherence?.observations ?? [];
   const location = (o: Observation, index: number) => {

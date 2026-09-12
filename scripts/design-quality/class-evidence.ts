@@ -53,7 +53,9 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
             attribute.name.text === "className",
         );
         const value = attribute && staticClassName(attribute);
-        const classes = value ? [...new Set(value.trim().split(/\s+/).filter(Boolean))].sort() : [];
+        const classes = value
+          ? [...new Set(value.trim().split(/\s+/).filter(Boolean))].toSorted()
+          : [];
         if (!classes.length) {
           ts.forEachChild(node, visit);
           return;
@@ -123,7 +125,8 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
   return candidates;
 }
 
-const signatureKey = (tag: string, classes: string[]) => `${tag}:${[...classes].sort().join(" ")}`;
+const signatureKey = (tag: string, classes: string[]) =>
+  `${tag}:${[...classes].toSorted().join(" ")}`;
 
 /** Returns a source only for a unique full DOM signature. */
 export function uniqueIntrinsicSignature(

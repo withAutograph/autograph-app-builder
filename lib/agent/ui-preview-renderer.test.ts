@@ -31,9 +31,13 @@ describe("preview runtime initialization", () => {
     expect(entry.includes("import { bootstrapAgCharts }")).toBe(usesCharts);
     const initialized = vi.fn();
     const render = vi.fn();
+    // Keep generated-screen fixtures scoped to this test.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const overview = () => null;
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const details = () => null;
     const location = { hash: "" };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     let navigate: () => void = () => {};
 
     // Supply imports at the execution boundary; exercise the generated entry's
@@ -55,6 +59,8 @@ describe("preview runtime initialization", () => {
       React: { createElement: (component: unknown) => component },
       document: { getElementById: () => ({}) },
       location,
+      // The generated browser entrypoint uses the DOM callback contract.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
       addEventListener: (_event: string, callback: () => void) => {
         navigate = callback;
       },

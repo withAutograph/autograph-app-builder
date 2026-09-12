@@ -186,7 +186,7 @@ describe("builder handoff deployment", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
     const reference = await first.json();
     expect(reference).toEqual(await retry.json());
-    expect(Object.keys(reference).sort()).toEqual(["expiresAt", "handoffId", "version"]);
+    expect(Object.keys(reference).toSorted()).toEqual(["expiresAt", "handoffId", "version"]);
     expect(reference.handoffId).toBe(handoffId);
     expect(rows.size).toBe(1);
     expect(rows.get(handoffId)).toEqual({

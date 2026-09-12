@@ -62,7 +62,7 @@ export function assertBoundGhcrPayload(
     throw new Error("GHCR provider returned malformed output.");
   const record = parsed as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !== "Secret,ServerURL,Username" ||
+    Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
     record.ServerURL !== registry ||
     record.Username !== expectedUsername ||
     typeof record.Secret !== "string" ||
@@ -101,7 +101,7 @@ export function assertVerifiedGhcrLoginPayload(
     throw new Error("GitHub keyring verification returned malformed output.");
   const record = parsed as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !== "Username,identityDigest,provenanceDigest" ||
+    Object.keys(record).toSorted().join(",") !== "Username,identityDigest,provenanceDigest" ||
     record.Username !== expectedUsername ||
     record.provenanceDigest !== expectedProvenanceDigest ||
     record.identityDigest !== expectedIdentityDigest
@@ -149,7 +149,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     throw new Error("GitHub authentication status was malformed.");
   const value = record as Record<string, unknown>;
   if (
-    Object.keys(value).sort().join(",") !==
+    Object.keys(value).toSorted().join(",") !==
       "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
     value.gitProtocol !== "https" ||
@@ -379,11 +379,15 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
   }
 }
 
+// Keep token parsing private to this credential boundary.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function parseExactToken(raw: Buffer): Buffer {
   let end = raw.length;
   if (end > 0 && raw[end - 1] === 0x0a) end -= 1;
   if (end > 0 && raw[end - 1] === 0x0d) end -= 1;
   const token = Buffer.from(raw.subarray(0, end));
+  // Keep token validation local to the parser.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const validByte = (byte: number) =>
     (byte >= 0x30 && byte <= 0x39) ||
     (byte >= 0x41 && byte <= 0x5a) ||

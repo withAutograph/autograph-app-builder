@@ -68,9 +68,15 @@ let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> |
 
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) return undefined;
+  // Preserve the shared lazy promise while clearing it after a failed creation.
+  // oxlint-disable promise/prefer-await-to-callbacks
+  // oxlint-disable-next-line promise/prefer-await-to-callbacks
+  // Preserve the shared lazy promise while clearing it after a failed creation.
+  // oxlint-disable-next-line promise/prefer-await-to-then
   deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
     deploymentReader = undefined;
     throw error;
   });
+  // oxlint-enable promise/prefer-await-to-callbacks
   return (await deploymentReader)(sessionAuth);
 }

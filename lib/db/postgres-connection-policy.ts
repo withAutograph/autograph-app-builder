@@ -8,7 +8,7 @@ export const hostedRuntimePostgresOptions = {
   prepare: false,
   connection: {
     statement_timeout: 30_000,
-    lock_timeout: 5_000,
+    lock_timeout: 5000,
     idle_in_transaction_session_timeout: 30_000,
   },
   onnotice: () => undefined,
@@ -22,7 +22,7 @@ export const hostedTaskPostgresOptions = {
   prepare: false,
   connection: {
     statement_timeout: 15_000,
-    lock_timeout: 5_000,
+    lock_timeout: 5000,
     idle_in_transaction_session_timeout: 15_000,
   },
   onnotice: () => undefined,
@@ -31,7 +31,7 @@ export const hostedTaskPostgresOptions = {
 const databaseUrlSchema = z
   .string()
   .min(1)
-  .max(8_192)
+  .max(8192)
   .refine((value) => !/[\0\r\n]/u.test(value), "Malformed database URL.")
   .transform((value, context) => {
     let url: URL;

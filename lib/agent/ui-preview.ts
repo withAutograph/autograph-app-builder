@@ -29,7 +29,7 @@ export const uiPreviewGapSchema = z.strictObject({
 
 const manifestItem = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  statement: z.string().min(3).max(1_000),
+  statement: z.string().min(3).max(1000),
   routes: z.array(route).min(1).max(16),
 });
 const catalogElement = (source: z.ZodType<string>) =>
@@ -62,7 +62,7 @@ export const uiPreviewManifestSchema = z.strictObject({
     .array(
       z.strictObject({
         visibleElement: z.string().min(3).max(300),
-        productionMeaning: z.string().min(3).max(1_000),
+        productionMeaning: z.string().min(3).max(1000),
         routes: z.array(route).min(1).max(16),
       }),
     )

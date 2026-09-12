@@ -42,7 +42,7 @@ import { providerEmulationFetch } from "../integrations/provider-emulation-fetch
 const databaseUrlSchema = z
   .string()
   .min(1)
-  .max(8_192)
+  .max(8192)
   .refine((value) => !/[\0\r\n]/u.test(value))
   .refine((value) => {
     try {
@@ -59,7 +59,7 @@ const vercelUserInfoSchema = z
     email_verified: z.literal(true),
     name: z.string().min(1).max(512).optional(),
     preferred_username: z.string().min(1).max(512).optional(),
-    picture: z.string().url().max(2_048).nullable().optional(),
+    picture: z.string().url().max(2048).nullable().optional(),
   })
   .passthrough();
 
@@ -72,7 +72,7 @@ const githubProfileSchema = z
     id: z.union([z.string().min(1), z.number().int().positive()]),
     login: z.string().min(1).max(256),
     name: z.string().min(1).max(512).nullable().optional(),
-    avatar_url: z.string().url().max(2_048).nullable().optional(),
+    avatar_url: z.string().url().max(2048).nullable().optional(),
   })
   .passthrough();
 
@@ -134,13 +134,13 @@ export async function fetchVerifiedGitHubUserInfo(
         headers,
         cache: "no-store",
         redirect: "error",
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.timeout(5000),
       }),
       fetchImplementation(githubEmailsEndpoint, {
         headers,
         cache: "no-store",
         redirect: "error",
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.timeout(5000),
       }),
     ]);
   } catch {
@@ -249,7 +249,7 @@ export async function fetchVerifiedVercelUserInfo(
       headers: { Authorization: `Bearer ${tokens.accessToken}` },
       cache: "no-store",
       redirect: "error",
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(5000),
     });
   } catch {
     return null;

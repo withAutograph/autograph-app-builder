@@ -18,7 +18,7 @@ const previewSessionIdSchema = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u);
 const previewDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
-const unprivilegedPortSchema = z.coerce.number().int().min(1_024).max(65_535);
+const unprivilegedPortSchema = z.coerce.number().int().min(1024).max(65_535);
 
 const previewRouteInputSchema = z
   .object({

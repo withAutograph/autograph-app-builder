@@ -345,7 +345,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       const config = JSON.parse(
         Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf8"),
       );
-      expect(Object.keys(config).sort()).toEqual(["auth", "url"]);
+      expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
       expect(Object.keys(config.auth)).toEqual(["CLIENT_ID"]);
       expect(config.auth.CLIENT_ID).toBe(cursorClientId);
@@ -593,10 +593,10 @@ test("large briefs use fixed-size opaque handoff links", async ({ context, page 
   await finishOAuth(page, "GitHub");
   await page.goto("/");
   await waitForBuilderReady(page);
-  await page.locator("#app-brief").fill("x".repeat(8_100));
+  await page.locator("#app-brief").fill("x".repeat(8100));
   await completeHandoff(page);
   await page.getByRole("button", { name: "Open in Codex", exact: true }).click();
   const state = await browserBoundaryState(page);
-  expect(state.opened.at(-1)?.length).toBeLessThan(8_000);
+  expect(state.opened.at(-1)?.length).toBeLessThan(8000);
   expect(decodeURIComponent(state.opened.at(-1) ?? "")).not.toContain("x".repeat(100));
 });

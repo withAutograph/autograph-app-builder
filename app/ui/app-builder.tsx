@@ -1385,6 +1385,10 @@ export function Builder({
   useEffect(() => {
     let disposed = false;
     const recoveryStartVersion = localFormMutationVersion.current;
+    // Recovery updates are intentionally scheduled without blocking the effect.
+    // oxlint-disable promise/prefer-await-to-callbacks
+    // oxlint-disable promise/prefer-await-to-then
+    // oxlint-disable-next-line promise/prefer-await-to-then
     void restorePending()
       .then((entry) => {
         if (disposed || !entry) return;
@@ -1421,9 +1425,13 @@ export function Builder({
         autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
         if (!disposed) void resumePending();
       })
+      // Complete the recovery indicator for both success and failure.
+      // oxlint-disable-next-line promise/prefer-await-to-then
       .finally(() => {
         if (!disposed) setDraftRecoveryComplete(true);
       });
+    // oxlint-enable promise/prefer-await-to-callbacks
+    // oxlint-enable promise/prefer-await-to-then
     return () => {
       disposed = true;
     };
@@ -1511,7 +1519,7 @@ export function Builder({
   ]);
   useEffect(() => {
     if (!draftSyncNotice) return;
-    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4_000);
+    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4000);
     return () => window.clearTimeout(timer);
   }, [draftSyncNotice]);
   useEffect(() => {

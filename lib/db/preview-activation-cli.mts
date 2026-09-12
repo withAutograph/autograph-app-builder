@@ -55,7 +55,7 @@ async function configureLoginRole(
     select format(${template}::text, ${roleName}::text, ${password}::text) as statement
   `;
   const statement = rows[0]?.statement;
-  if (statement === undefined || statement.length > 2_048 || /[\0\r\n]/u.test(statement)) {
+  if (statement === undefined || statement.length > 2048 || /[\0\r\n]/u.test(statement)) {
     throw new Error("Runtime database role statement was invalid.");
   }
   try {

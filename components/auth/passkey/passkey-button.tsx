@@ -21,13 +21,13 @@ import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { cn } from "@/lib/utils";
 
 export type PasskeyButtonProps = {
-  /** @remarks `AuthView` */
+  /** `AuthView` */
   view?: AuthView;
 };
 
 type OnboardingResponse = { context?: unknown };
 
-const passkeyResponseTimeoutMs = 3_000;
+const passkeyResponseTimeoutMs = 3000;
 
 async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;
