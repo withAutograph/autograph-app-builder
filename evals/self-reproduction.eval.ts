@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
+import { evidencePrefix, sanitizeEvidence } from "./support/self-reproduction-evidence";
 
 export default defineEval({
   tags: ["self-reproduction", "sandbox", "live-model"],
@@ -10,6 +11,36 @@ export default defineEval({
   description:
     "The live App Builder model creates an independent App Builder replica from the checked-in product brief.",
   async test(t) {
+    const emit = (record: Record<string, unknown>) =>
+      t.log(
+        `${evidencePrefix}${JSON.stringify(sanitizeEvidence({ at: new Date().toISOString(), ...record }))}`,
+      );
+    const send = async (prompt: string) => {
+      emit({ kind: "prompt", prompt });
+      const started = Date.now();
+      const live = await t.start(prompt);
+      let observed = 0;
+      const checkpoint = () => {
+        for (const event of live.events.slice(observed)) emit({ kind: "event", event });
+        observed = live.events.length;
+      };
+      const timer = setInterval(checkpoint, 1000);
+      try {
+        const turn = await live.result();
+        checkpoint();
+        emit({
+          kind: "turn-completed",
+          status: turn.status,
+          message: turn.message,
+          toolCalls: turn.toolCalls,
+          elapsedMs: Date.now() - started,
+        });
+      } finally {
+        clearInterval(timer);
+        checkpoint();
+      }
+    };
+    emit({ kind: "eval-started" });
     const brief = await readFile(
       resolve(process.cwd(), "evals/self-reproduction/brief.md"),
       "utf-8",
@@ -22,17 +53,17 @@ export default defineEval({
     if (repository === undefined || repository.length === 0)
       throw new Error("The signed self-reproduction source root is missing.");
 
-    await t.send(
+    await send(
       `Inspect the existing repository at ${repository}. Review this exact source before preparing a workspace.`,
     );
     t.succeeded();
     t.calledTool("inspect_source", { count: 1 });
 
-    await t.send("Prepare the reviewed repository workspace.");
+    await send("Prepare the reviewed repository workspace.");
     t.succeeded();
     t.calledTool("prepare_workspace", { count: 1 });
 
-    await t.send(
+    await send(
       `${brief}\n\nFixed benchmark answers (use these without asking product questions):\n${answers}\n\nDesign the replica and accept a build-ready AppSpec. Stop before target planning.`,
     );
     t.succeeded();
@@ -44,25 +75,33 @@ export default defineEval({
       ),
     );
 
-    await t.send("Prepare offline target dependencies.");
+    await send("Prepare offline target dependencies.");
     t.succeeded();
 
-    await t.send("Run target identity and planning.");
+    await send("Run target identity and planning.");
     t.succeeded();
 
-    await t.send("Apply the current creation proposal.");
+    await send("Apply the current creation proposal.");
     t.succeeded();
 
-    await t.send("Validate the applied creation.");
+    await send("Validate the applied creation.");
     t.succeeded();
 
-    await t.send("Inspect the validated change set.");
+    await send("Inspect the validated change set.");
     t.succeeded();
 
-    await t.send("Accept the displayed change set.");
+    await send("Accept the displayed change set.");
     t.succeeded();
 
-    await t.send("Report artifact workflow status.");
+    await send("Report artifact workflow status.");
     t.succeeded();
+    emit({
+      kind: "eval-completed",
+      candidate: {
+        status: "unavailable",
+        reason:
+          "Native Eve reviewed sandbox change set has no local candidate export API wired to this eval.",
+      },
+    });
   },
 });
