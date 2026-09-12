@@ -27,8 +27,12 @@ const authority = {
   ownerUserId: "user-1",
 } satisfies BuilderProvisionAuthority;
 
+// Keep the in-memory journal fixture scoped to these tests.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function memoryStore(): BuilderProvisionJournalStore {
   const rows = new Map<string, BuilderProvisionJournalRow>();
+  // Keep key serialization local to the in-memory store.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const key = (value: BuilderProvisionAuthority, requestId: string) =>
     JSON.stringify([value, requestId]);
   return {

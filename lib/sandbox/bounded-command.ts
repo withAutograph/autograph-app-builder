@@ -48,8 +48,12 @@ function timeoutRejection(error: Error, timeoutMs: number) {
   return { promise, clear: () => clearTimeout(timeout) };
 }
 
+// Keep timeout rejection construction private to command execution.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function resettableTimeoutRejection(error: Error, timeoutMs: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  // Keep settlement state local to this timeout promise.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let rejectPromise: (error: Error) => void = () => undefined;
   const promise = new Promise<never>((_resolve, reject) => {
     rejectPromise = reject;

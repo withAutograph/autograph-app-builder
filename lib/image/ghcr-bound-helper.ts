@@ -379,11 +379,15 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
   }
 }
 
+// Keep token parsing private to this credential boundary.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function parseExactToken(raw: Buffer): Buffer {
   let end = raw.length;
   if (end > 0 && raw[end - 1] === 0x0a) end -= 1;
   if (end > 0 && raw[end - 1] === 0x0d) end -= 1;
   const token = Buffer.from(raw.subarray(0, end));
+  // Keep token validation local to the parser.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const validByte = (byte: number) =>
     (byte >= 0x30 && byte <= 0x39) ||
     (byte >= 0x41 && byte <= 0x5a) ||

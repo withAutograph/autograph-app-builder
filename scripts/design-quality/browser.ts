@@ -243,6 +243,8 @@ export async function measurePage(page: Page) {
   await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
   return page.evaluate(async () => {
+    // Keep DOM measurement helpers together with browser traversal.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const rect = (el: Element) => {
       const r = el.getBoundingClientRect();
       return {
@@ -252,11 +254,13 @@ export async function measurePage(page: Page) {
         height: r.height,
       };
     };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const visible = (el: Element) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const label = (el: Element) =>
       (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
     const findings: {

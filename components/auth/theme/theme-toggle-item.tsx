@@ -12,6 +12,8 @@ import { themePlugin } from "@/lib/auth/theme-plugin";
  * Theme toggle dropdown item used inside `UserButton`. Callers are responsible
  * for ensuring theming is configured before rendering this component.
  */
+// Keep keyboard handling local to the theme toggle.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export function ThemeToggleItem() {
   const { useTheme, localization } = useAuthPlugin(themePlugin);
   const { theme, setTheme, themes = [] } = useTheme();
@@ -29,6 +31,8 @@ export function ThemeToggleItem() {
 
   // Up/Down on a TabsTrigger escapes back to the previous/next sibling
   // menu item so users can keep navigating the menu with the arrow keys.
+  // Keep keyboard handling local to the toggle component.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
 

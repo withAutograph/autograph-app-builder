@@ -665,10 +665,13 @@ test("a session created after Sign Up renders blocks context issuance", async ({
 test("a session created after context issuance blocks registration", async ({ context, page }) => {
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
+  // Keep callback fixtures scoped to this scenario.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let releaseOptionsResponse = () => {};
   const optionsResponseMayContinue = new Promise<void>((resolve) => {
     releaseOptionsResponse = resolve;
   });
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   let markOptionsGenerated = () => {};
   const optionsGenerated = new Promise<void>((resolve) => {
     markOptionsGenerated = resolve;

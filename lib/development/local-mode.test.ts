@@ -28,6 +28,8 @@ const roots: string[] = [];
 
 afterEach(async () => {
   const { rm } = await import("node:fs/promises");
+  // Keep filesystem fixtures scoped to this local-mode test.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
     await chmod(path, 0o700).catch(() => undefined);
     for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {

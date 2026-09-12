@@ -24,7 +24,6 @@ export default defineConfig({
     "promise/avoid-new": "off",
     "typescript/no-non-null-assertion": "off",
     "unicorn/filename-case": "off",
-    "unicorn/consistent-function-scoping": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-useless-undefined": "off",
     "unicorn/text-encoding-identifier-case": "off",

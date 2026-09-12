@@ -1528,6 +1528,8 @@ wait
       },
     ];
     const indexManifests = [...manifests].toReversed();
+    // Keep raw fixture serializers scoped to this lifecycle scenario.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const indexRaw = (entries: typeof manifests) =>
       JSON.stringify({
         manifests: entries,

@@ -605,6 +605,8 @@ export interface HostedProofResult {
   sessionEvidenceDigest: string;
 }
 
+// Keep proof helpers scoped to the hosted portable proof boundary.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export async function runHostedProof(input: {
   endpoint: string;
   token: string;
@@ -727,6 +729,8 @@ export async function runHostedProof(input: {
       clientRequestId: `hosted-cancel-${proofId}`,
     }),
   );
+  // Keep proof response construction local to this run.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const denied = async (clientInput: HostedMcpProofClient, sessionId: string) =>
     (
       await clientInput.callTool("autograph_get", {

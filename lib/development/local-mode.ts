@@ -466,7 +466,11 @@ export async function createDevelopmentSnapshot(input: {
   }
 }
 
+// Keep filesystem mutation helpers scoped to local development mode.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 export async function removeDevelopmentSnapshot(root: string) {
+  // Keep snapshot cleanup helpers local to this operation.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   async function makeWritable(path: string) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) return;

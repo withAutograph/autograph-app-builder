@@ -59,7 +59,11 @@ const scenario = hostedProofScenarioSchema.parse({
   pollIntervalMs: 100,
 });
 
+// Keep the fixture token helper scoped to this proof test.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function jwt(subject: string, workspaceId: string) {
+  // Keep JWT encoding local to this fixture.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     iss: scenario.oauth.issuer,

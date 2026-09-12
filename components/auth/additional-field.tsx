@@ -61,7 +61,9 @@ function toDate(value: unknown): Date | undefined {
 }
 
 /** Format a Date as `HH:mm:ss` for an `<input type="time">`. */
+// Keep this formatter local to the field component.
 function formatTime(date: Date) {
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }

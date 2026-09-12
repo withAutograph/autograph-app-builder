@@ -531,6 +531,8 @@ describe("local Eve acceptance", () => {
       },
       { type: "session.waiting", data: {} },
     ] as unknown as MessageStreamEvent[];
+    // Keep stream response fixtures scoped to this test.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const response = (entries: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
@@ -964,6 +966,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("rebinds follow-up and response streams at the exact buffered raw tail", async () => {
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const stream = (events: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {

@@ -79,6 +79,8 @@ function pendingApprovalEvents(requestId: string) {
   ];
 }
 
+// Keep event fixture construction scoped to this test.
+// oxlint-disable-next-line unicorn/consistent-function-scoping
 function plannedEvents() {
   const callId = "call_plan";
   const appSpecDigest = "a".repeat(64);
@@ -88,6 +90,8 @@ function plannedEvents() {
       content: "export default function Page() { return 'Ready'; }\n",
     },
   ];
+  // Keep fixture hashing local to the planned event factory.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   const target = {
     contract: {

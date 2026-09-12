@@ -69,6 +69,8 @@ describe("bounded sandbox command", () => {
   });
 
   it("kills a command that produces no output before its wall timeout", async () => {
+    // Keep stream fixtures scoped to each timeout test.
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
     const kill = vi.fn(async () => undefined);
     const process = {
@@ -94,6 +96,7 @@ describe("bounded sandbox command", () => {
           controller.enqueue(bytes("progress"));
         },
       });
+    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
     const kill = vi.fn(async () => undefined);
     const process = {
