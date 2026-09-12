@@ -43,10 +43,10 @@ export function AppDetailsSection({
           autoComplete="off"
           spellCheck={false}
           {...(appNameRegistration ?? { value: appName })}
-          onChange={(event) => {
-            appNameRegistration?.onChange(event);
-            onAppNameChange(event.target.value);
-          }}
+          // The builder's atomic updater calls RHF setValue itself. Calling the
+          // registration handler here as well would publish a second, older
+          // watch update that can regenerate the app name during a redirect.
+          onChange={(event) => onAppNameChange(event.target.value)}
           placeholder="support-app"
         />
       </label>
@@ -61,10 +61,7 @@ export function AppDetailsSection({
             aria-label="App Brief"
             autoComplete="off"
             {...(briefRegistration ?? { value: brief })}
-            onChange={(event) => {
-              briefRegistration?.onChange(event);
-              onBriefChange(event.target.value);
-            }}
+            onChange={(event) => onBriefChange(event.target.value)}
             placeholder="Describe the app you want to build…"
           />
           <button type="button" aria-label="Try another app brief example" onClick={onCycleBrief}>
