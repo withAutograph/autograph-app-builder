@@ -24,7 +24,7 @@ import {
   mkdirSync,
   realpathSync,
 } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve as pathResolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
@@ -221,7 +221,7 @@ function publicationRoot(): string {
   const configured = process.env.APP_BUILDER_BRANCH_WORKTREE_ROOT;
   const testRoot =
     configured === undefined && hasTestCapability("simulated-publication")
-      ? resolve(realpathSync(tmpdir()), "autograph-app-builder-branch-publication")
+      ? pathResolve(realpathSync(tmpdir()), "autograph-app-builder-branch-publication")
       : undefined;
   if (testRoot !== undefined) {
     try {
@@ -240,7 +240,7 @@ function publicationRoot(): string {
       "APP_BUILDER_BRANCH_WORKTREE_ROOT must be an absolute builder-owned directory.",
     );
   try {
-    const resolved = resolve(candidate);
+    const resolved = pathResolve(candidate);
     const state = lstatSync(resolved);
     const canonical = realpathSync(resolved);
     const currentUid = process.geteuid?.();
@@ -270,11 +270,11 @@ function within(root: string, candidate: string): boolean {
 }
 
 function worktreePath(identity: string): string {
-  return resolve(publicationRoot(), "worktrees", identity);
+  return pathResolve(publicationRoot(), "worktrees", identity);
 }
 
 function journalPath(identity: string): string {
-  return resolve(publicationRoot(), "journals", `${identity}.json`);
+  return pathResolve(publicationRoot(), "journals", `${identity}.json`);
 }
 
 async function assertContainedNoLinkPath(
@@ -292,7 +292,7 @@ async function assertContainedNoLinkPath(
   const segments = path.split(sep);
   let cursor = root;
   for (let index = 0; index < segments.length; index += 1) {
-    cursor = resolve(cursor, segments[index]);
+    cursor = pathResolve(cursor, segments[index]);
     let state;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -347,7 +347,7 @@ async function assertContainedNoLinkPath(
 async function assertPublicationLayoutSafe(): Promise<void> {
   for (const family of ["journals", "staging", "worktrees"] as const)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertContainedNoLinkPath(resolve(publicationRoot(), family), {
+    await assertContainedNoLinkPath(pathResolve(publicationRoot(), family), {
       leaf: "absent-or-directory",
     });
 }
@@ -374,7 +374,7 @@ async function assertOwnedPublicationFileHandle(
 }
 
 async function acquirePublicationLock(identity: string): Promise<PublicationLock> {
-  const path = resolve(publicationRoot(), "locks", `${identity}.lock`);
+  const path = pathResolve(publicationRoot(), "locks", `${identity}.lock`);
   const directory = dirname(path);
   await durableDirectory(directory);
   await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
@@ -540,7 +540,7 @@ async function durableDirectory(path: string): Promise<void> {
   let cursor = root;
   for (const segment of relative(root, path).split(sep).filter(Boolean)) {
     const parent = cursor;
-    cursor = resolve(cursor, segment);
+    cursor = pathResolve(cursor, segment);
     let created = false;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -731,17 +731,17 @@ async function assertOwnedPartialWorktree(
   const commonGitDirectory = await realpath(
     git(proposal.sourcePath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim(),
   );
-  const worktreeAdminRoot = resolve(commonGitDirectory, "worktrees");
+  const worktreeAdminRoot = pathResolve(commonGitDirectory, "worktrees");
   const exactAdminPaths: string[] = [];
   for (const entry of await readdir(worktreeAdminRoot, {
     withFileTypes: true,
   })) {
     if (!entry.isDirectory()) continue;
-    const adminPath = resolve(worktreeAdminRoot, entry.name);
+    const adminPath = pathResolve(worktreeAdminRoot, entry.name);
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const linkedPath = (await readFile(resolve(adminPath, "gitdir"), "utf-8")).trim();
-      if (resolve(linkedPath) === resolve(proposal.worktreePath, ".git"))
+      const linkedPath = (await readFile(pathResolve(adminPath, "gitdir"), "utf-8")).trim();
+      if (pathResolve(linkedPath) === pathResolve(proposal.worktreePath, ".git"))
         exactAdminPaths.push(adminPath);
     } catch {
       // An unrelated or incomplete registration is not ownership evidence.
@@ -753,7 +753,7 @@ async function assertOwnedPartialWorktree(
   const visit = async (directory: string, prefix: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-      const target = resolve(directory, entry.name);
+      const target = pathResolve(directory, entry.name);
       if (prefix === "" && path === ".git") {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const state = await lstat(target);
@@ -761,7 +761,7 @@ async function assertOwnedPartialWorktree(
           throw new Error("The partial worktree Git link is unsafe.");
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf-8"));
-        if (match === null || !isAbsolute(match[1]) || resolve(match[1]) !== exactAdminPaths[0])
+        if (match === null || !isAbsolute(match[1]) || pathResolve(match[1]) !== exactAdminPaths[0])
           throw new Error("The partial worktree Git link conflicts with intent.");
         exactGitLinkSeen = true;
         continue;
@@ -975,7 +975,7 @@ async function inspectBranchPublicationSource(input: {
     "The source contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const statusEntries = await Promise.all(
-    paths.map(async (path) => ({ path, state: await fileState(resolve(canonicalPath, path)) })),
+    paths.map(async (path) => ({ path, state: await fileState(pathResolve(canonicalPath, path)) })),
   );
   for (const change of input.review.changes) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1133,11 +1133,11 @@ function exactStateMatches(state: FileState, expected: FileState): boolean {
 
 async function safeTarget(root: string, path: string, createParents: boolean): Promise<string> {
   if (!safeSourcePath(path)) throw new Error("The approved path is unsafe.");
-  const target = resolve(root, path);
+  const target = pathResolve(root, path);
   if (!within(root, target)) throw new Error("The approved path escapes the publication worktree.");
   let cursor = root;
   for (const segment of path.split("/").slice(0, -1)) {
-    cursor = resolve(cursor, segment);
+    cursor = pathResolve(cursor, segment);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor);
     if (state.kind === "absent" && createParents) {
@@ -1162,9 +1162,9 @@ async function materializeAtomically(
   bytes: Uint8Array,
   mode: string | "120000",
 ): Promise<void> {
-  const staging = resolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
+  const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
   await durableDirectory(staging);
-  const temporary = resolve(staging, randomUUID());
+  const temporary = pathResolve(staging, randomUUID());
   try {
     if (mode === "120000") {
       await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
@@ -1212,7 +1212,7 @@ async function worktreeFileStates(
       if (!safeSourcePath(path))
         throw new Error("The publication worktree contains an unsafe path.");
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (entry.isDirectory()) await visit(resolve(directory, entry.name), path);
+      if (entry.isDirectory()) await visit(pathResolve(directory, entry.name), path);
       else present.push(path);
     }
   };
@@ -1221,7 +1221,7 @@ async function worktreeFileStates(
   return Promise.all(
     paths.map(async (path) => ({
       path,
-      state: await fileState(resolve(proposal.worktreePath, path)),
+      state: await fileState(pathResolve(proposal.worktreePath, path)),
     })),
   );
 }
