@@ -22,18 +22,20 @@ import {
   exactFreshBootstrapProposalMatch,
   freshBootstrapJournalDigest,
   proposalFromFreshBootstrapJournal,
-  type FreshBootstrapCapability,
-  type FreshBootstrapFailureReceipt,
-  type FreshBootstrapFile,
-  type FreshBootstrapIdentity,
-  type FreshBootstrapJournal,
-  type FreshBootstrapLayout,
-  type FreshBootstrapPendingReceipt,
-  type FreshBootstrapPrestate,
-  type FreshBootstrapProposal,
-  type FreshBootstrapSuccessReceipt,
-  type ExecutableIdentity,
-  type PathIdentity,
+} from "./fresh-bootstrap";
+import type {
+  FreshBootstrapCapability,
+  FreshBootstrapFailureReceipt,
+  FreshBootstrapFile,
+  FreshBootstrapIdentity,
+  FreshBootstrapJournal,
+  FreshBootstrapLayout,
+  FreshBootstrapPendingReceipt,
+  FreshBootstrapPrestate,
+  FreshBootstrapProposal,
+  FreshBootstrapSuccessReceipt,
+  ExecutableIdentity,
+  PathIdentity,
 } from "./fresh-bootstrap";
 import {
   assertExactReviewedChangeSet,
@@ -42,12 +44,8 @@ import {
   stableDigest,
 } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import {
-  inspectSourceReceipt,
-  parseSourceReceipt,
-  SOURCE_RECEIPT_VERSION,
-  type SourceReceipt,
-} from "./source-receipt";
+import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from "./source-receipt";
+import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
 

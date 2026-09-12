@@ -10,8 +10,8 @@ import {
   proveSandboxImage,
   pushImage,
   verifyImageSources,
-  type LifecycleApproval,
 } from "../../../../lib/image/node-lifecycle.ts";
+import type { LifecycleApproval } from "../../../../lib/image/node-lifecycle.ts";
 
 export type ImageLifecycleAction =
   | "verify-sources"

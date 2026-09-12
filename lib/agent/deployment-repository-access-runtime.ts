@@ -2,27 +2,24 @@ import {
   ConnectionAuthorizationFailedError,
   ConnectionAuthorizationRequiredError,
   defineInteractiveAuthorization,
-  type ConnectionPrincipal,
-  type InteractiveAuthorizationDefinition,
 } from "eve/connections";
+import type { ConnectionPrincipal, InteractiveAuthorizationDefinition } from "eve/connections";
 import type { SandboxSession } from "eve/sandbox";
 
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
-import {
-  classifyGitHubRepositoryAccess,
-  type GitHubRepositoryAccessProvider,
-  type ReadyRepositoryAccess,
-  type RepositoryAccessResult,
+import { classifyGitHubRepositoryAccess } from "../integrations/repository-access";
+import type {
+  GitHubRepositoryAccessProvider,
+  ReadyRepositoryAccess,
+  RepositoryAccessResult,
 } from "../integrations/repository-access";
 import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import {
-  createGitHubAppSourceResolutionAdapter,
-  type GitHubAppSourceResolutionProvider,
-} from "../repository/github-app-adapter";
+import { createGitHubAppSourceResolutionAdapter } from "../repository/github-app-adapter";
+import type { GitHubAppSourceResolutionProvider } from "../repository/github-app-adapter";
 import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
@@ -34,25 +31,21 @@ import {
 import {
   assertExactImmutableGitHubSourceReceipt,
   resolveImmutableExistingSource,
-  type ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
+import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import {
   cloneGitHubSource,
   readSandboxGitHubSourceSnapshot,
 } from "../repository/sandbox-github-source";
-import {
-  inspectExistingRepositorySnapshotReceipt,
-  type SourceReceipt,
-} from "../repository/source-receipt";
-import {
-  recordPreparedSandboxWorkspace,
-  type PreparedSandboxWorkspace,
-} from "../repository/supported-template";
+import { inspectExistingRepositorySnapshotReceipt } from "../repository/source-receipt";
+import type { SourceReceipt } from "../repository/source-receipt";
+import { recordPreparedSandboxWorkspace } from "../repository/supported-template";
+import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import {
   assertResolvedSourceMatchesRepositoryAccess,
   recordRepositoryAccessReceipt,
-  type RepositoryAccessReceipt,
 } from "./repository-access-state";
+import type { RepositoryAccessReceipt } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {

@@ -15,7 +15,8 @@ import {
 import { cursorClientId, cursorRedirectUri } from "../auth/cursor-client";
 import { previewOAuthScopes } from "../auth/preview-oauth-contract";
 import { createBuilderHandoffRouteHandler } from "../handoff/deployment";
-import { createBuilderHandoffService, type BuilderHandoffStore } from "../handoff/service";
+import { createBuilderHandoffService } from "../handoff/service";
+import type { BuilderHandoffStore } from "../handoff/service";
 import type { BuilderHandoffRecord } from "../handoff/contracts";
 import { InMemoryHostedEveStore } from "../eve/hosted-store";
 import type { HostedEveTransport } from "../eve/hosted-service";

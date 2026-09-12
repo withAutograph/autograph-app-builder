@@ -6,8 +6,8 @@ import {
   createGitHubAppInstallationAuthorization,
   githubInstallationAuthorizationDiagnostic,
   readGitHubAppInstallationEnvironment,
-  type GitHubInstallationAuthorizationStateStore,
 } from "./github-app-installation";
+import type { GitHubInstallationAuthorizationStateStore } from "./github-app-installation";
 
 const authority = {
   issuer: "https://builder.example/api/auth",

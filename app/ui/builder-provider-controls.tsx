@@ -6,7 +6,8 @@ import { SiBitbucket, SiCloudflare, SiGitlab, SiNetlify, SiVercel } from "react-
 import { ProviderChoiceSection } from "../../components/create-app/provider-choice-section";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
 import type { DeploymentProvider, StorageProvider } from "./builder-types";
-import { SearchCombobox, type ComboOption } from "./search-combobox";
+import { SearchCombobox } from "./search-combobox";
+import type { ComboOption } from "./search-combobox";
 import styles from "./app-builder.module.css";
 
 const storageProviderOptions = [

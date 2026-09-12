@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  APP_BUILDER_WORKFLOW_VERSION,
-  type AppCreationProposal,
-  type AppBuilderWorkflowState,
-  type DependencyPreparationReceipt,
+import { APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
+import type {
+  AppCreationProposal,
+  AppBuilderWorkflowState,
+  DependencyPreparationReceipt,
 } from "./workflow-state";
 import {
   assertProposalExecutionBindings,

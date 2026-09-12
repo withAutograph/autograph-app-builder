@@ -14,10 +14,10 @@ import {
   createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
   createRepositoryObservation,
-  type GitHubDraftPullRequestContent,
-  type FreshRepositoryProposal,
 } from "./github-publication";
-import { createReviewedChangeSetReceipt, type NormalizedChangeSet } from "./reviewed-change-set";
+import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./github-publication";
+import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
+import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

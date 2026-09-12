@@ -4,8 +4,10 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   sha256,
-  type AppBuilderWorkflowState,
-  type DependencyPreparationReceipt,
+} from "@/lib/agent/workflow-state";
+import type {
+  AppBuilderWorkflowState,
+  DependencyPreparationReceipt,
 } from "@/lib/agent/workflow-state";
 
 type DependencyPreparationState = Exclude<

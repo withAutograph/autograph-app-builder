@@ -1,13 +1,12 @@
 "use client";
 
-import {
-  type AdditionalField as AdditionalFieldConfig,
-  resolveInputType,
-} from "@better-auth-ui/core";
+import { resolveInputType } from "@better-auth-ui/core";
+import type { AdditionalField as AdditionalFieldConfig } from "@better-auth-ui/core";
 import { useAuth, useCopyToClipboard } from "@better-auth-ui/react";
 import { format } from "date-fns";
 import { CalendarIcon, Check, ChevronDownIcon, Copy } from "lucide-react";
-import { type ComponentType, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import type { ComponentType } from "react";
 import { toast } from "sonner";
 
 import { buttonVariants } from "@/components/ui/button";

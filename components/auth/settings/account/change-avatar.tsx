@@ -3,7 +3,8 @@
 import { fileToAvatarDataUrl } from "@better-auth-ui/core";
 import { useAuth, useSession, useUpdateUser } from "@better-auth-ui/react";
 import { Trash2, Upload } from "lucide-react";
-import { type ChangeEvent, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/auth/user/user-avatar";
 import { Button, buttonVariants } from "@/components/ui/button";

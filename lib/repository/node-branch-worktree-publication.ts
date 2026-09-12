@@ -34,16 +34,20 @@ import {
   createBranchWorktreePublicationProposal,
   exactBranchWorktreeProposalMatch,
   proposalFromBranchJournal,
-  type BranchWorktreePublicationFailureReceipt,
-  type BranchWorktreePublicationJournal,
-  type BranchWorktreePublicationPendingReceipt,
-  type BranchWorktreePublicationProposal,
-  type BranchWorktreePublicationSuccessReceipt,
+} from "./branch-worktree-publication";
+import type {
+  BranchWorktreePublicationFailureReceipt,
+  BranchWorktreePublicationJournal,
+  BranchWorktreePublicationPendingReceipt,
+  BranchWorktreePublicationProposal,
+  BranchWorktreePublicationSuccessReceipt,
 } from "./branch-worktree-publication";
 import { hasTestCapability } from "../testing/test-capability";
-import { contentDigest, stableDigest, type DestinationSnapshot } from "./local-publication";
+import { contentDigest, stableDigest } from "./local-publication";
+import type { DestinationSnapshot } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { inspectSourceContractDigest, type SourceReceipt } from "./source-receipt";
+import { inspectSourceContractDigest } from "./source-receipt";
+import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import { resolveAllowedRepository, SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";

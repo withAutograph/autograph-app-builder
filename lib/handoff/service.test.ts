@@ -2,17 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { randomUUID } from "node:crypto";
 
-import {
-  builderHandoffIntentSchema,
-  builderHandoffRequestDigest,
-  type BuilderHandoffRecord,
-} from "./contracts";
+import { builderHandoffIntentSchema, builderHandoffRequestDigest } from "./contracts";
+import type { BuilderHandoffRecord } from "./contracts";
 import {
   BuilderHandoffConflictError,
   BuilderHandoffUnavailableError,
   createBuilderHandoffService,
-  type BuilderHandoffStore,
 } from "./service";
+import type { BuilderHandoffStore } from "./service";
 
 const authority = {
   issuer: "https://builder.example/api/auth",

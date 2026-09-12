@@ -6,10 +6,8 @@ import {
   getAuthenticatedBuilderDraftContext,
   readAuthenticatedActiveBuilderDraft,
 } from "@/lib/builder-drafts/deployment";
-import {
-  saveActiveBuilderDraftInputSchema,
-  type SaveActiveBuilderDraftInput,
-} from "@/lib/builder-drafts/contracts";
+import { saveActiveBuilderDraftInputSchema } from "@/lib/builder-drafts/contracts";
+import type { SaveActiveBuilderDraftInput } from "@/lib/builder-drafts/contracts";
 
 async function context() {
   const value = await getAuthenticatedBuilderDraftContext({

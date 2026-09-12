@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { eveSessionResultSchema, type EveSessionResult } from "../lib/mcp/contracts";
+import { eveSessionResultSchema } from "../lib/mcp/contracts";
+import type { EveSessionResult } from "../lib/mcp/contracts";
 import { TOOL_NAMES } from "./portable-release";
 import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 

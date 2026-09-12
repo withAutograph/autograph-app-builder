@@ -1,12 +1,8 @@
 import { createHash } from "node:crypto";
 
 import { deriveBuilderAppId } from "./names";
-import {
-  builderProvisionRequestSchema,
-  builderProvisionResponseSchema,
-  type BuilderProvisionRequest,
-  type BuilderProvisionResponse,
-} from "./contracts-schema";
+import { builderProvisionRequestSchema, builderProvisionResponseSchema } from "./contracts-schema";
+import type { BuilderProvisionRequest, BuilderProvisionResponse } from "./contracts-schema";
 
 export * from "./contracts-schema";
 

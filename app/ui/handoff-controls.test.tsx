@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { act } from "react";
-import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +11,8 @@ import {
   buildAppHandoffUrl,
   buildCursorInstallUrl,
 } from "../../lib/handoff/client";
-import { HandoffControls, type HandoffControlData } from "./handoff-controls";
+import { HandoffControls } from "./handoff-controls";
+import type { HandoffControlData } from "./handoff-controls";
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 const renewal = vi.hoisted(() => ({ action: vi.fn() }));

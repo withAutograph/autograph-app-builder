@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 
-import { ChoiceCard, SectionShell, type CreateAppSectionId } from "./choice-card";
+import { ChoiceCard, SectionShell } from "./choice-card";
+import type { CreateAppSectionId } from "./choice-card";
 
 export type ProviderChoice<Provider extends string> = {
   available: boolean;

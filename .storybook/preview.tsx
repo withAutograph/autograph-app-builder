@@ -1,4 +1,5 @@
-import { authQueryKeys, type SessionData } from "@better-auth-ui/core";
+import { authQueryKeys } from "@better-auth-ui/core";
+import type { SessionData } from "@better-auth-ui/core";
 import type { Preview } from "@storybook/nextjs-vite";
 import { expect } from "storybook/test";
 

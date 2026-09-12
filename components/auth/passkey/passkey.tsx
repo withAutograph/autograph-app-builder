@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/item";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 
-import { DeletePasskeyDialog, type ListedPasskey } from "./delete-passkey-dialog";
+import { DeletePasskeyDialog } from "./delete-passkey-dialog";
+import type { ListedPasskey } from "./delete-passkey-dialog";
 import { RenamePasskeyDialog } from "./rename-passkey-dialog";
 
 export type PasskeyProps = {

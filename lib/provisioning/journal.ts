@@ -5,8 +5,8 @@ import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
   initialBuilderProvisionResponse,
-  type BuilderProvisionRequest,
 } from "./contracts";
+import type { BuilderProvisionRequest } from "./contracts";
 
 const storedRequestSchema = z
   .object({

@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { BuilderDraftRecord, SaveActiveBuilderDraftInput } from "./contracts";
-import {
-  createBuilderDraftService,
-  type BuilderDraftAuthority,
-  type BuilderDraftRow,
-  type BuilderDraftStore,
-} from "./service";
+import { createBuilderDraftService } from "./service";
+import type { BuilderDraftAuthority, BuilderDraftRow, BuilderDraftStore } from "./service";
 
 const authority: BuilderDraftAuthority = {
   issuer: "https://builder.example/api/auth",

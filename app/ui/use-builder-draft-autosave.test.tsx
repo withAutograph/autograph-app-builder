@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { act, StrictMode, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderDraftOutbox, BuilderDraftOutboxEntry } from "./builder-draft-outbox";
-import { type BuilderDraftAutosave, useBuilderDraftAutosave } from "./use-builder-draft-autosave";
+import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
+import type { BuilderDraftAutosave } from "./use-builder-draft-autosave";
 
 type Snapshot = { brief: string };
 

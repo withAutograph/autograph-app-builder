@@ -4,9 +4,8 @@ import {
   executeHostedAdminRequest,
   hostedAdminApplyRequestSchema,
   planHostedAdminRequest,
-  type HostedAdminPlanRequest,
-  type HostedAdminStore,
 } from "./hosted-admin";
+import type { HostedAdminPlanRequest, HostedAdminStore } from "./hosted-admin";
 
 const now = Date.parse("2026-08-26T20:00:00.000Z");
 const authority = {

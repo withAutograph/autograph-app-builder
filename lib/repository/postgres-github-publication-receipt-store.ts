@@ -5,11 +5,8 @@ import { z } from "zod";
 import type * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationJournals } from "../db/schema";
-import {
-  assertCanonicalGitHubMutationReceipt,
-  type GitHubMutationReceipt,
-  type GitHubPublicationReceiptStore,
-} from "./github-publication";
+import { assertCanonicalGitHubMutationReceipt } from "./github-publication";
+import type { GitHubMutationReceipt, GitHubPublicationReceiptStore } from "./github-publication";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

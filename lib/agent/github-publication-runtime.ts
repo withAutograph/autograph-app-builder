@@ -3,19 +3,22 @@ import {
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
-  type DraftPullRequestProposal,
-  type DraftPullRequestSuccessReceipt,
-  type FreshRepositorySuccessReceipt,
-  type GitHubDraftPullRequestContentSource,
-  type GitHubFreshRepositoryContentSource,
-  type GitHubPublicationAdapter,
-  type GitHubPublicationReceiptStore,
-  type ImmutableGitHubSourceReceipt,
+} from "../repository/github-publication";
+import type {
+  DraftPullRequestProposal,
+  DraftPullRequestSuccessReceipt,
+  FreshRepositorySuccessReceipt,
+  GitHubDraftPullRequestContentSource,
+  GitHubFreshRepositoryContentSource,
+  GitHubPublicationAdapter,
+  GitHubPublicationReceiptStore,
+  ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
-import { assertApprovalReceipt, type ApprovalReceipt } from "./approval-receipt";
+import { assertApprovalReceipt } from "./approval-receipt";
+import type { ApprovalReceipt } from "./approval-receipt";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",

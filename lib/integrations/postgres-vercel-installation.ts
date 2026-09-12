@@ -5,13 +5,12 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
 import type * as databaseSchema from "../db/schema";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
-import {
-  encryptVercelToken,
-  decryptVercelToken,
-  type VercelAuthorizationStateStore,
-  type VercelInstallationBinding,
-  type VercelIntegrationConfig,
-  type VercelInstallationStore,
+import { encryptVercelToken, decryptVercelToken } from "./vercel-installation";
+import type {
+  VercelAuthorizationStateStore,
+  VercelInstallationBinding,
+  VercelIntegrationConfig,
+  VercelInstallationStore,
 } from "./vercel-installation";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

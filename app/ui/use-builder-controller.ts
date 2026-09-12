@@ -20,16 +20,15 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type FormEvent,
-  type SetStateAction,
 } from "react";
+import type { FormEvent, SetStateAction } from "react";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-import {
-  builderDraftFormSchema,
-  type BuilderDraftRecord,
-  type BuilderDraftPageData,
-  type SaveActiveBuilderDraftInput,
+import { builderDraftFormSchema } from "@/lib/builder-drafts/contracts";
+import type {
+  BuilderDraftPageData,
+  BuilderDraftRecord,
+  SaveActiveBuilderDraftInput,
 } from "@/lib/builder-drafts/contracts";
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { deriveBuilderAppId } from "../../lib/provisioning/names";
@@ -37,7 +36,8 @@ import type { ProviderConnectionNotice } from "../../lib/integrations/provider-c
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 
-import { comingSoonConnections, type ConnectionFlow } from "./builder-connections";
+import { comingSoonConnections } from "./builder-connections";
+import type { ConnectionFlow } from "./builder-connections";
 import {
   appNameFromBrief,
   defaultBrief,

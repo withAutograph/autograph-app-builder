@@ -8,7 +8,8 @@ import {
 import { AuthPrompts, useAuth, useFetchOptions, useSignInEmail } from "@better-auth-ui/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
-import { type SyntheticEvent, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
+import type { SyntheticEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +34,8 @@ import { resolvePasskeyRedirectTo } from "@/lib/auth/preview-auth-ui";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 import { cn } from "@/lib/utils";
 import { LastUsedBadge } from "./last-login-method/last-used-badge";
-import { ProviderButtons, type SocialLayout } from "./provider-buttons";
+import { ProviderButtons } from "./provider-buttons";
+import type { SocialLayout } from "./provider-buttons";
 
 export type SignInProps = {
   className?: string;

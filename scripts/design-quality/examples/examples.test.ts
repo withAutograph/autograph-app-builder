@@ -8,16 +8,16 @@ import {
   initialCompensationState,
   reduceCompensationState,
   validateCompensation,
-  type CompensationFixture,
 } from "./compensation-state";
+import type { CompensationFixture } from "./compensation-state";
 import { loadDesignQualityExample } from "./input";
 import {
   deriveSpendPreview,
   initialSpendState,
   reduceSpendState,
   spendActionModel,
-  type SpendFixture,
 } from "./spend-import-state";
+import type { SpendFixture } from "./spend-import-state";
 
 async function fixture<T>(id: string): Promise<T> {
   return JSON.parse(

@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  initialBuilderProvisionJournalRecord,
-  updateBuilderProvisionJournal,
-  type BuilderProvisionAuthority,
-  type BuilderProvisionJournalRow,
-  type BuilderProvisionJournalStore,
+import { initialBuilderProvisionJournalRecord, updateBuilderProvisionJournal } from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalRow,
+  BuilderProvisionJournalStore,
 } from "./journal";
 import { builderProvisionRequestDigest, builderProvisionRequestSchema } from "./contracts";
 

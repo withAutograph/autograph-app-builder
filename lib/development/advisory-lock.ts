@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { platform as hostPlatform } from "node:os";
 
 import { developmentChildExit, stopDevelopmentChild } from "./process-supervisor";

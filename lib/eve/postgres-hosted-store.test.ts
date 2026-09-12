@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
+import { hostedEveOperationScopes } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import { parseHostedOperationRow, parseHostedSessionRow } from "./postgres-hosted-store";
 
 const principal: HostedPrincipal = {

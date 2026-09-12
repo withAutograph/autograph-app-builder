@@ -1,4 +1,5 @@
-import { parse, type Declaration } from "postcss";
+import { parse } from "postcss";
+import type { Declaration } from "postcss";
 
 export type CssSourceFile = { path: string; content: string };
 export type CssRuleEvidence = {

@@ -2,7 +2,8 @@ import { ArrowLeft, ArrowRight, BookOpen } from "@geist-ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { docs, docsHref, getAdjacentDocuments, type DocsDocument } from "./docs-registry";
+import { docs, docsHref, getAdjacentDocuments } from "./docs-registry";
+import type { DocsDocument } from "./docs-registry";
 
 import styles from "./docs.module.css";
 

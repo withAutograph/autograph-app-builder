@@ -9,10 +9,8 @@ import type {
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
-import {
-  createHostedGitHubPublicationRuntimeResolver,
-  type HostedGitHubPublicationProviderFactory,
-} from "./hosted-github-publication-runtime";
+import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
+import type { HostedGitHubPublicationProviderFactory } from "./hosted-github-publication-runtime";
 
 const authority = {
   issuer: "https://builder.example.test/api/auth",

@@ -6,7 +6,8 @@ import {
 } from "../repository/postgres-github-installation-store";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { loadGatewayModels } from "./ai-gateway-models";
-import { builderIntegrationStateSchema, type BuilderIntegrationState } from "./builder-state";
+import { builderIntegrationStateSchema } from "./builder-state";
+import type { BuilderIntegrationState } from "./builder-state";
 import { createPostgresVercelInstallationStore } from "./postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "./vercel-installation";
 import { providerEmulationEnvironment } from "./local-provider-emulation";

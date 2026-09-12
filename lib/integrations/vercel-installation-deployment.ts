@@ -13,8 +13,8 @@ import type { ProviderConnectionFailureReason } from "./provider-connection-stat
 import {
   providerConnectionRedirect,
   providerConnectionReturnFromFormData,
-  type ProviderConnectionReturn,
 } from "./provider-connection-return";
+import type { ProviderConnectionReturn } from "./provider-connection-return";
 import {
   createVercelInstallationAuthorization,
   readVercelIntegrationEnvironment,

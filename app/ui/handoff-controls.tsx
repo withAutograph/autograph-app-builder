@@ -11,11 +11,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  renewBuilderHandoff,
-  type HandoffControlData,
-  type HandoffRenewalActionState,
-} from "@/app/actions/handoff-renewal";
+import { renewBuilderHandoff } from "@/app/actions/handoff-renewal";
+import type { HandoffControlData, HandoffRenewalActionState } from "@/app/actions/handoff-renewal";
 import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,

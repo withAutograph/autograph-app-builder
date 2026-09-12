@@ -2,15 +2,15 @@ import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
 import { sessionStatusSchema } from "../mcp/contracts";
-import { hostedPrincipalSchema, type HostedPrincipal } from "./hosted-auth";
+import { hostedPrincipalSchema } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   HostedCancellationUnsettledError,
   HostedAdapterSessionUnavailableError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
-  type HostedEngineSnapshot,
-  type HostedEveTransport,
 } from "./hosted-service";
+import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import {
   deriveInstalledEveStatus,
   latestInstalledImplementationPlan,

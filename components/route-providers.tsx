@@ -1,4 +1,5 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
+import type { ReactNode } from "react";
 
 import { AuthRouteProvider } from "@/components/providers";
 import { passkeysFlag } from "@/lib/feature-flags";

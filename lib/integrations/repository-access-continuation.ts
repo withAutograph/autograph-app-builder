@@ -3,7 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import { parseRepositoryReference, type RepositoryReference } from "./repository-access";
+import { parseRepositoryReference } from "./repository-access";
+import type { RepositoryReference } from "./repository-access";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const continuationIdSchema = z.string().uuid();

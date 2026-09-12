@@ -1,4 +1,5 @@
-import { eveSessionResultSchema, type EveSessionResult } from "../mcp/contracts";
+import { eveSessionResultSchema } from "../mcp/contracts";
+import type { EveSessionResult } from "../mcp/contracts";
 import type { HostedSessionCheckpoint } from "./hosted-store";
 
 export function resultFromHostedCheckpoint(

@@ -12,19 +12,17 @@ import {
   parseCanonicalTemplateSnapshot,
   parseSourceReceipt,
   SOURCE_RECEIPT_VERSION,
-  type SourceReceipt,
 } from "./source-receipt";
+import type { SourceReceipt } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
   readPreparedSandboxWorkspaceRecord,
   recordPreparedSandboxWorkspace,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
-  type PreparedSandboxWorkspace,
 } from "./supported-template";
-import {
-  deploymentArrustedTemplateReader,
-  type ArrustedTemplateReader,
-} from "./arrusted-template-reader";
+import type { PreparedSandboxWorkspace } from "./supported-template";
+import { deploymentArrustedTemplateReader } from "./arrusted-template-reader";
+import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import {
   cloneGitHubSource,
   inspectGitHubSourceSandboxWorkspace,

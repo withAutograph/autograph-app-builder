@@ -8,9 +8,11 @@ import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,
   initialBuilderProvisionJournalRecord,
-  type BuilderProvisionAuthority,
-  type BuilderProvisionJournalRow,
-  type BuilderProvisionJournalStore,
+} from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalRow,
+  BuilderProvisionJournalStore,
 } from "./journal";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

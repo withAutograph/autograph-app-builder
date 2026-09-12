@@ -9,8 +9,8 @@ import {
   assertExactGitHubDraftPullRequestContent,
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
-  type DraftPullRequestProposal,
 } from "./github-publication";
+import type { DraftPullRequestProposal } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 

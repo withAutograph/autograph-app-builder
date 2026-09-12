@@ -7,8 +7,10 @@ import {
   createPreviewUserManagementLifecycle,
   OrganizationProvisioningError,
   previewUserManagementPlugins,
-  type OrganizationProvisioningFailure,
-  type PreviewOrganizationUserAuthority,
+} from "./preview-user-management";
+import type {
+  OrganizationProvisioningFailure,
+  PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
 function createAuthority(input?: { failure?: OrganizationProvisioningFailure }) {

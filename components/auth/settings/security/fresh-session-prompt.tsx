@@ -2,7 +2,8 @@
 
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";

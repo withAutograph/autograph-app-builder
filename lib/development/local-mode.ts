@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
-import { constants, watch, type FSWatcher } from "node:fs";
+import { constants, watch } from "node:fs";
+import type { FSWatcher } from "node:fs";
 import {
   chmod,
   lstat,

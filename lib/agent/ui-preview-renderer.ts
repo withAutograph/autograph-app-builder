@@ -1,6 +1,7 @@
 import type { SandboxSession } from "eve/sandbox";
 
-import { type UiPreviewInput, uiPreviewSourceDigest } from "./ui-preview";
+import { uiPreviewSourceDigest } from "./ui-preview";
+import type { UiPreviewInput } from "./ui-preview";
 
 const chartCompositions = new Set([
   "AgChartsHost",

@@ -2,7 +2,8 @@
 
 import { getViewURL } from "@better-auth-ui/core";
 import { useAuth, useChangeEmail, useSession } from "@better-auth-ui/react";
-import { type SyntheticEvent, useState } from "react";
+import { useState } from "react";
+import type { SyntheticEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

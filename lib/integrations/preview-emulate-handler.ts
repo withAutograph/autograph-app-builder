@@ -3,10 +3,8 @@ import * as github from "@emulators/github";
 import * as vercel from "@emulators/vercel";
 
 import { providerEmulationSeed } from "./provider-emulation-seed";
-import {
-  readPreviewProviderEmulation,
-  type PreviewProviderEmulation,
-} from "./local-provider-emulation";
+import { readPreviewProviderEmulation } from "./local-provider-emulation";
+import type { PreviewProviderEmulation } from "./local-provider-emulation";
 import {
   createPostgresPreviewEmulateStateStore,
   createPreviewEmulatePersistence,

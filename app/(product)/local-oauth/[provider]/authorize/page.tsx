@@ -8,10 +8,8 @@ import {
   parseLocalOAuthAuthorization,
   signFreshLocalOAuthApproval,
 } from "@/lib/auth/local-oauth-approval";
-import {
-  readProviderEmulation,
-  type ProviderEmulation,
-} from "@/lib/integrations/local-provider-emulation";
+import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
+import type { ProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
 type Props = {
   params: Promise<{ provider: string }>;

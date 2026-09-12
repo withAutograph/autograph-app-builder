@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { parseSourceReceiptEvidence, type SourceReceiptEvidence } from "./source-receipt";
+import { parseSourceReceiptEvidence } from "./source-receipt";
+import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 

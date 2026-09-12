@@ -13,8 +13,8 @@ import {
   publicSessionStageSchema,
   publicSessionSummarySchema,
   sessionStatusSchema,
-  type PublicSessionSummary,
 } from "../mcp/contracts";
+import type { PublicSessionSummary } from "../mcp/contracts";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;

@@ -7,8 +7,8 @@ import {
   inspectBuilderOwnedSupportedRepository,
   SUPPORTED_TEMPLATE_ADAPTER,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
-  type SupportedTemplateSnapshot,
 } from "./supported-template";
+import type { SupportedTemplateSnapshot } from "./supported-template";
 
 export type SourceKind = "existing-repository" | "fresh-template";
 

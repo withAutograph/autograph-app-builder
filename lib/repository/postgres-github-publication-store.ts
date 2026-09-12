@@ -8,9 +8,11 @@ import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
-  type DraftPullRequestProposal,
-  type FreshRepositoryProposal,
-  type GitHubPublicationReceiptStore,
+} from "./github-publication";
+import type {
+  DraftPullRequestProposal,
+  FreshRepositoryProposal,
+  GitHubPublicationReceiptStore,
 } from "./github-publication";
 import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";

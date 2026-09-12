@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "playwright/test";
+import { expect, test } from "playwright/test";
+import type { Page } from "playwright/test";
 
 const authenticatedStory = "/iframe.html?id=create-app-flow-page--default&viewMode=story";
 const anonymousStory = "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";

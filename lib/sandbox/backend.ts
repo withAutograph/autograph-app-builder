@@ -1,7 +1,5 @@
-import {
-  readHostedDeploymentEnvironment,
-  type HostedDeploymentEnvironment,
-} from "../hosted/deployment-environment";
+import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
+import type { HostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
 export type SandboxBackendKind =
   | "fixture-just-bash"

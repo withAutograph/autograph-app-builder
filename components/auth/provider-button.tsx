@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  type AuthSocialProvider,
-  type AuthView,
-  authMutationKeys,
-  getProviderId,
-  getProviderName,
-  type OAuthPopupAuthClient,
-} from "@better-auth-ui/core";
+import { authMutationKeys, getProviderId, getProviderName } from "@better-auth-ui/core";
+import type { AuthSocialProvider, AuthView, OAuthPopupAuthClient } from "@better-auth-ui/core";
 import {
   renderProviderIcon,
   useAuth,

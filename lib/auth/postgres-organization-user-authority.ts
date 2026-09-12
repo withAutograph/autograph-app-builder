@@ -5,10 +5,10 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import type * as databaseSchema from "../db/schema";
 import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
-import {
-  OrganizationProvisioningError,
-  type EnsuredOrganization,
-  type PreviewOrganizationUserAuthority,
+import { OrganizationProvisioningError } from "./preview-user-management";
+import type {
+  EnsuredOrganization,
+  PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

@@ -13,8 +13,8 @@ import {
   developmentVercelDependencyRepairCommand,
   developmentVercelProviderTemplateKey,
   developmentVercelRevalidationKey,
-  type DevelopmentVercelBootstrapInput,
 } from "./development-toolchain";
+import type { DevelopmentVercelBootstrapInput } from "./development-toolchain";
 
 function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
   const sourceArchive = Buffer.from("source");

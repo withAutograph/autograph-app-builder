@@ -2,10 +2,8 @@ import { z } from "zod";
 
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
-import {
-  parseRepositoryReference,
-  type RepositoryAccessResult,
-} from "../integrations/repository-access";
+import { parseRepositoryReference } from "../integrations/repository-access";
+import type { RepositoryAccessResult } from "../integrations/repository-access";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import type { RepositoryAccessToolInput } from "./repository-access-tool";

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, type ComponentProps, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { act } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults";

@@ -2,12 +2,8 @@ import type { z } from "zod";
 
 import type { EveSessionService } from "./service";
 import { canonical, digest, stableId } from "./hosted-operation-identifiers";
-import {
-  hostedPrincipalSchema,
-  requireHostedOperationScope,
-  tenantKeyFor,
-  type HostedPrincipal,
-} from "./hosted-auth";
+import { hostedPrincipalSchema, requireHostedOperationScope, tenantKeyFor } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   hostedOperationRecordSchema,
   DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
@@ -22,25 +18,27 @@ import {
   hostedSessionTimeoutPolicySchema,
   reserveOperationResultSchema,
   toDurableHostedSessionRecord,
-  type HostedEveStore,
-  type HostedOperationKind,
-  type HostedOperationRecord,
-  type HostedSessionCheckpoint,
-  type HostedSessionTimeoutPolicy,
 } from "./hosted-store";
-import {
-  outstandingInternalEveRequests,
-  toPublicEvent,
-  type InternalEveEvent,
-} from "./public-events";
-import { projectHostedSnapshot, type HostedEngineSnapshot } from "./hosted-projection";
+import type {
+  HostedEveStore,
+  HostedOperationKind,
+  HostedOperationRecord,
+  HostedSessionCheckpoint,
+  HostedSessionTimeoutPolicy,
+} from "./hosted-store";
+import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
+import { projectHostedSnapshot } from "./hosted-projection";
+import type { HostedEngineSnapshot } from "./hosted-projection";
 import {
   eveSessionResultSchema,
   publicInputRequestSchema,
   publicEveEventSchema,
-  type publicSessionStageSchema,
-  type EveSessionResult,
-  type PublicInputRequest,
+} from "../mcp/contracts";
+import type {
+  publicSessionStageSchema,
+  EveSessionResult,
+  PublicInputRequest,
 } from "../mcp/contracts";
 import {
   HostedAdapterSessionUnavailableError,

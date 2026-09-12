@@ -1,12 +1,11 @@
 import { createMcpHandler } from "mcp-handler";
 
-import {
-  authorizeHostedPrincipal,
-  HostedAuthorizationError,
-  type HostedPrincipal,
-} from "../eve/hosted-auth";
-import { createHostedEveSessionService, type HostedEveTransport } from "../eve/hosted-service";
-import { createEveSessionService, type EveSessionService } from "../eve/service";
+import { authorizeHostedPrincipal, HostedAuthorizationError } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
+import { createHostedEveSessionService } from "../eve/hosted-service";
+import type { HostedEveTransport } from "../eve/hosted-service";
+import { createEveSessionService } from "../eve/service";
+import type { EveSessionService } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
 import { attachPrototypePreviewUrl, prototypePreviewRequestUrl } from "./browser-preview";
 import {
@@ -17,9 +16,8 @@ import {
   eveSendInputSchema,
   eveSessionResultSchema,
   eveStartInputSchema,
-  type EveSessionListResult,
-  type EveSessionResult,
 } from "./contracts";
+import type { EveSessionListResult, EveSessionResult } from "./contracts";
 import {
   forbiddenResponse,
   hostedMcpAuthConfigSchema,
@@ -27,9 +25,8 @@ import {
   parseStrictBearerAuthorization,
   unauthorizedResponse,
   unavailableResponse,
-  type HostedAccessTokenVerifier,
-  type HostedMcpAuthConfig,
 } from "./request-auth";
+import type { HostedAccessTokenVerifier, HostedMcpAuthConfig } from "./request-auth";
 import {
   McpToolAuthenticationRequiredError,
   McpProviderUnavailableError,

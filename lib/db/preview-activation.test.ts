@@ -7,8 +7,8 @@ import {
   executePreviewActivation,
   planPreviewActivation,
   previewActivationApplyRequestSchema,
-  type PreviewActivationStore,
 } from "./preview-activation";
+import type { PreviewActivationStore } from "./preview-activation";
 
 const now = Date.parse("2026-08-27T12:00:00.000Z");
 

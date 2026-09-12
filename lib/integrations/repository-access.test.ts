@@ -4,11 +4,8 @@ import type {
   HostedGitHubInstallationBinding,
   HostedGitHubInstallationStore,
 } from "../repository/postgres-github-installation-store";
-import {
-  classifyGitHubRepositoryAccess,
-  parseRepositoryReference,
-  type GitHubRepositoryAccessProvider,
-} from "./repository-access";
+import { classifyGitHubRepositoryAccess, parseRepositoryReference } from "./repository-access";
+import type { GitHubRepositoryAccessProvider } from "./repository-access";
 
 const authority = {
   issuer: "https://builder.example/api/auth",

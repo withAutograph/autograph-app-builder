@@ -8,10 +8,10 @@ import type {
   GitHubRepositoryAccessProvider,
   GitHubRepositoryAccessProviderFactory,
 } from "../integrations/repository-access";
-import {
-  createRepositoryAccessContinuationService,
-  type RepositoryAccessContinuation,
-  type RepositoryAccessContinuationStore,
+import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
+import type {
+  RepositoryAccessContinuation,
+  RepositoryAccessContinuationStore,
 } from "../integrations/repository-access-continuation";
 import { createRepositoryAccessRuntime } from "./deployment-repository-access-runtime";
 import type { BuilderHandoffIntent } from "../handoff/contracts";

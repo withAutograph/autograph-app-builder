@@ -2,7 +2,8 @@ import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { isHostedVercelRuntime } from "../sandbox/backend";
-import { inspectSourceReceipt, type SourceKind, type SourceReceipt } from "./source-receipt";
+import { inspectSourceReceipt } from "./source-receipt";
+import type { SourceKind, SourceReceipt } from "./source-receipt";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 

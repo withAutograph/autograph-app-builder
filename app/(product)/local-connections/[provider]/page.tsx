@@ -1,11 +1,8 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import {
-  EmulationApproval,
-  emulationApprovalStyles,
-  type EmulatedProvider,
-} from "@/app/ui/emulation-approval";
+import { EmulationApproval, emulationApprovalStyles } from "@/app/ui/emulation-approval";
+import type { EmulatedProvider } from "@/app/ui/emulation-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 import {

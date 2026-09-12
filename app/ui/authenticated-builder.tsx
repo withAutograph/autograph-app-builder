@@ -1,4 +1,5 @@
-import { BuilderContinuation, type AuthenticatedBuilderProps } from "./builder-continuation";
+import { BuilderContinuation } from "./builder-continuation";
+import type { AuthenticatedBuilderProps } from "./builder-continuation";
 import { BuilderFormContent } from "./builder-form-content";
 import { BuilderDraftStatus } from "./builder-form-islands";
 

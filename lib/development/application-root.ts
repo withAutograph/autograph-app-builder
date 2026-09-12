@@ -11,11 +11,8 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  createDevelopmentSnapshot,
-  removeDevelopmentSnapshot,
-  type DevelopmentSnapshot,
-} from "./local-mode";
+import { createDevelopmentSnapshot, removeDevelopmentSnapshot } from "./local-mode";
+import type { DevelopmentSnapshot } from "./local-mode";
 
 /**
  * A development snapshot records an immutable baseline commit/tree/fingerprint

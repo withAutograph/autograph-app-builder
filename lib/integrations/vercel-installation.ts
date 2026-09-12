@@ -9,7 +9,8 @@ import {
 
 import { z } from "zod";
 
-import { hostedTenantAuthoritySchema, type HostedAdminPlanRequest } from "../db/hosted-admin";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { HostedAdminPlanRequest } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
 import type { ProviderEmulation } from "./local-provider-emulation";
 

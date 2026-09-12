@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
-import { compareOverlayPaths, type OverlayChange } from "./target-apply";
+import { compareOverlayPaths } from "./target-apply";
+import type { OverlayChange } from "./target-apply";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";

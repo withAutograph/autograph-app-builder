@@ -3,7 +3,8 @@ import { posix } from "node:path";
 import ts from "typescript";
 
 import type { Observation } from "./evidence";
-import { checkJsxAttributes, type Reference } from "./reference";
+import { checkJsxAttributes } from "./reference";
+import type { Reference } from "./reference";
 
 export type SourceFile = { path: string; content: string };
 

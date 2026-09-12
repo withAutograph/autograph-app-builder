@@ -9,8 +9,10 @@ import {
   encryptGitHubUserTokens,
   githubCredentialAssociatedData,
   githubUserTokenSetSchema,
-  type GitHubUserCredentialConfig,
-  type GitHubUserCredentialStore,
+} from "./github-user-credential";
+import type {
+  GitHubUserCredentialConfig,
+  GitHubUserCredentialStore,
 } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
 

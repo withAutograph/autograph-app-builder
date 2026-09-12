@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  hostedEveOperationScopes,
-  HostedAuthorizationError,
-  type HostedPrincipal,
-} from "./hosted-auth";
+import { hostedEveOperationScopes, HostedAuthorizationError } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   createHostedEveSessionService,
   hostedEveProjectionForTesting,
@@ -16,16 +13,14 @@ import {
   HostedRejectedOperationError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
-  type HostedEngineSnapshot,
-  type HostedEveTransport,
 } from "./hosted-service";
-import {
-  hostedOperationRecordSchema,
-  InMemoryHostedEveStore,
-  type HostedEveStore,
-  type HostedOperationRecord,
-  type ReserveOperationResult,
-  type HostedSessionTimeoutPolicy,
+import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
+import { hostedOperationRecordSchema, InMemoryHostedEveStore } from "./hosted-store";
+import type {
+  HostedEveStore,
+  HostedOperationRecord,
+  ReserveOperationResult,
+  HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import type { EveSessionService } from "./service";
 

@@ -8,11 +8,8 @@ import { hasTestCapability } from "../testing/test-capability";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 
-import {
-  dependencyCacheReceiptDigest,
-  planningOverlayRoot,
-  type ObservedDependencyCache,
-} from "./dependency-cache";
+import { dependencyCacheReceiptDigest, planningOverlayRoot } from "./dependency-cache";
+import type { ObservedDependencyCache } from "./dependency-cache";
 import { configuredToolchainImage } from "../sandbox/toolchain";
 import { isHostedVercelSandboxBackend, sandboxBackendPlan } from "../sandbox/backend";
 import { developmentExecutionArtifactDigest } from "../sandbox/development-toolchain";

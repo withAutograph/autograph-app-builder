@@ -20,20 +20,23 @@ import {
   readExactGitHubFreshRepositoryContent,
   readExactGitHubPublicationContent,
   resolveImmutableExistingSource,
-  type DraftPublicationReadBack,
-  type DraftPullRequestProposal,
-  type FreshRepositoryProposal,
-  type FreshRepositoryReadBack,
-  type GitHubInstallationIdentity,
-  type GitHubMutationAcknowledgement,
-  type GitHubMutationReceipt,
-  type GitHubOperation,
-  type GitHubPublicationAdapter,
-  type GitHubDraftPullRequestContent,
-  type GitHubFreshRepositoryContent,
-  type GitHubRepositoryObservation,
 } from "./github-publication";
-import { createReviewedChangeSetReceipt, type NormalizedChangeSet } from "./reviewed-change-set";
+import type {
+  DraftPublicationReadBack,
+  DraftPullRequestProposal,
+  FreshRepositoryProposal,
+  FreshRepositoryReadBack,
+  GitHubInstallationIdentity,
+  GitHubMutationAcknowledgement,
+  GitHubMutationReceipt,
+  GitHubOperation,
+  GitHubPublicationAdapter,
+  GitHubDraftPullRequestContent,
+  GitHubFreshRepositoryContent,
+  GitHubRepositoryObservation,
+} from "./github-publication";
+import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
+import type { NormalizedChangeSet } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 import { compareOverlayPaths } from "./target-apply";
