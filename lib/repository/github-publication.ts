@@ -408,7 +408,7 @@ function safeBranch(value: unknown): value is string {
     !value.includes("..") &&
     !value.includes("@{") &&
     !/[~^:?*[\\\s]/u.test(value) &&
-    !Array.from(value).some((character) => {
+    ![...value].some((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     }) &&
@@ -748,7 +748,7 @@ export async function readExactGitHubFreshRepositoryContent(input: {
     ...observed,
     files: observed.files.map((file) => ({
       ...file,
-      bytes: file.bytes.slice(),
+      bytes: new Uint8Array(file.bytes),
     })),
   };
   assertExactGitHubFreshRepositoryContent({
@@ -786,7 +786,7 @@ export async function readExactGitHubPublicationContent(input: {
     }
     if (observed === null)
       throw new Error(`The approved publication postimage is missing for ${change.path}.`);
-    const bytes = observed.bytes.slice();
+    const bytes = new Uint8Array(observed.bytes);
     if (
       observed.mode !== change.after.mode ||
       observed.digest !== change.after.digest ||
@@ -1178,7 +1178,7 @@ function safeTitle(value: string): boolean {
     value === value.trim() &&
     value.length > 0 &&
     value.length <= 120 &&
-    !Array.from(value).some((character) => {
+    ![...value].some((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     })

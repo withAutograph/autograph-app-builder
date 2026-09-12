@@ -39,9 +39,9 @@ export function ThemeToggleItem() {
     const content = wrapper?.closest<HTMLElement>('[data-slot="dropdown-menu-content"]');
     if (!wrapper || !content) return;
 
-    const items = Array.from(
-      content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
-    );
+    const items = [
+      ...content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
+    ];
     const currentIndex = items.indexOf(wrapper);
     const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
     const next = items[nextIndex];

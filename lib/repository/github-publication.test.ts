@@ -637,7 +637,7 @@ describe("closed GitHub publication contract", () => {
   it("constructs a closed content bundle without retaining mutable source bytes", async () => {
     const adapter = new Adapter();
     const proposal = draftProposal(adapter);
-    const sourceBytes = reviewedBytes.slice();
+    const sourceBytes = new Uint8Array(reviewedBytes);
     const content = await readExactGitHubPublicationContent({
       proposal,
       review: review(),
@@ -659,7 +659,7 @@ describe("closed GitHub publication contract", () => {
   it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
     const adapter = new Adapter();
     const proposal = freshProposal(adapter);
-    const mutable = templateBytes.slice();
+    const mutable = new Uint8Array(templateBytes);
     const content = await readExactGitHubFreshRepositoryContent({
       proposal,
       source: {
