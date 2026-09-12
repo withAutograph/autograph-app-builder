@@ -119,18 +119,16 @@ export default defineTool({
     updateExactWorkflow({
       expected: current,
       operation: "AppSpec acceptance",
-      transition: () => {
-        return {
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          phase: "app_spec_accepted",
-          workspace: current.workspace,
-          sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-          preparedByCallId: current.preparedByCallId,
-          artifacts: current.artifacts,
-          appSpec: accepted,
-        };
-      },
+      transition: () => ({
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        phase: "app_spec_accepted",
+        workspace: current.workspace,
+        sourceReceipt: current.sourceReceipt,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        preparedByCallId: current.preparedByCallId,
+        artifacts: current.artifacts,
+        appSpec: accepted,
+      }),
     });
     await planAcceptedAppSpec(ctx, existingAppChanges);
     return { ...accepted, reused: false };

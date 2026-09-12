@@ -953,9 +953,7 @@ async function inspectBranchPublicationSource(input: {
     "The source contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const statusEntries = await Promise.all(
-    paths.map(async (path) => {
-      return { path, state: await fileState(resolve(canonicalPath, path)) };
-    }),
+    paths.map(async (path) => ({ path, state: await fileState(resolve(canonicalPath, path)) })),
   );
   for (const change of input.review.changes) {
     const target = await safeTarget(canonicalPath, change.path, false);
