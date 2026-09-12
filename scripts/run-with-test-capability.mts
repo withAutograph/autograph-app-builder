@@ -213,8 +213,7 @@ export async function runWithTestCapability(options: {
     options.command !== process.execPath ||
     options.args[0] !== expectedEntry ||
     (options.profile === "vitest" && options.capabilities.length !== 3) ||
-    (options.profile === "eve" &&
-      ![1, 3].includes(options.capabilities.length)) ||
+    (options.profile === "eve" && ![0, 1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   )
     throw new Error("The structural test wrapper profile was invalid.");
