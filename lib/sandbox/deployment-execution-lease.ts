@@ -150,7 +150,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
     const evidence = await stopWithin(input.sandbox);
     throw errorWithCleanupEvidence(error, evidence);
   }
-  if (!enabled) return undefined;
+  if (!enabled) return;
   try {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
     if (
