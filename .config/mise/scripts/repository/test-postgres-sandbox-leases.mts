@@ -283,7 +283,7 @@ try {
   assert.equal((await acquire("user_failed", "batch_failed")).disposition, "acquired");
 
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       databaseClock: true,
       expiry: true,
       heartbeat: true,
@@ -294,7 +294,7 @@ try {
       stopFailureAdmission: true,
       stopFailureBatch: true,
       workspaceCap: true,
-    }) + "\n",
+    })}\n`,
   );
 } finally {
   await client.end({ timeout: 2 });

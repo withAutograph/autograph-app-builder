@@ -45,7 +45,7 @@ report.archive = {
   archivedAt: new Date().toISOString(),
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
-await writeFile(join(destination, "report.json"), JSON.stringify(report, null, 2) + "\n");
+await writeFile(join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
   String(v).replace(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
@@ -82,7 +82,7 @@ if (report.adherence) {
         assessed: number;
         percent: number | null;
       };
-      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : Math.round(d.percent) + "%"} (${d.conforming}/${d.assessed}) |`;
+      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : `${Math.round(d.percent)}%`} (${d.conforming}/${d.assessed}) |`;
     }),
     "",
     "Scores from different evaluator versions or captured states are not directly comparable.",
@@ -134,7 +134,7 @@ for (const capture of report.captures)
 lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
 for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
-await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
+await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
 const rows: Array<{
   path: string;
   name: string;

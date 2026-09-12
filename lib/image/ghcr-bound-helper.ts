@@ -471,11 +471,11 @@ async function writeVerifiedLogin(
 ): Promise<void> {
   assertExpectedGithubState();
   const payload = Buffer.from(
-    JSON.stringify({
+    `${JSON.stringify({
       Username: username,
       identityDigest,
       provenanceDigest,
-    }) + "\n",
+    })}\n`,
     "utf8",
   );
   try {
