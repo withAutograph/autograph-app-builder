@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 
-import { continueBuilderHandoff } from "@/app/actions/builder";
+import {
+  continueBuilderHandoff,
+  type BuilderHandoffContinuationInput,
+  type BuilderHandoffContinuationState,
+} from "@/app/actions/builder";
 import type {
   BuilderDraftPageData,
   SaveActiveBuilderDraftInput,
@@ -61,8 +65,20 @@ export function AuthenticatedBuilder({
     | undefined
   >(undefined);
   const completedHandoff = useRef<string | undefined>(undefined);
+  const savedContinuation = useRef<BuilderHandoffContinuationInput | undefined>(undefined);
   const [continuation, dispatchContinuation, continuationPending] = useActionState(
-    continueBuilderHandoff,
+    async (
+      previous: BuilderHandoffContinuationState | undefined,
+      input: BuilderHandoffContinuationInput,
+    ): Promise<BuilderHandoffContinuationState> => {
+      try {
+        return await continueBuilderHandoff(previous, input);
+      } catch {
+        // A dropped response can follow a successful durable commit. Keep the
+        // acknowledged checkpoint available for an idempotent action retry.
+        return { status: "error" };
+      }
+    },
     undefined,
   );
 
@@ -118,15 +134,14 @@ export function AuthenticatedBuilder({
               creationRequestId: crypto.randomUUID(),
             };
           }
-          startTransition(() =>
-            dispatchContinuation({
-              version: 1,
-              requestId: continuationRequest.current!.requestId,
-              creationRequestId: continuationRequest.current!.creationRequestId,
-              provisioningEnabled,
-              draftCheckpoint,
-            }),
-          );
+          savedContinuation.current = {
+            version: 1,
+            requestId: continuationRequest.current!.requestId,
+            creationRequestId: continuationRequest.current!.creationRequestId,
+            provisioningEnabled,
+            draftCheckpoint,
+          };
+          startTransition(() => dispatchContinuation(savedContinuation.current!));
         }}
       />
       {continuationPending ? (
@@ -135,7 +150,18 @@ export function AuthenticatedBuilder({
         </p>
       ) : null}
       {continuation?.status === "error" && !continuationPending ? (
-        <p role="alert">We couldn’t prepare your handoff. Your saved draft is still available.</p>
+        <div role="alert">
+          <p>We couldn’t confirm your handoff. Your saved app is still available.</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (savedContinuation.current)
+                startTransition(() => dispatchContinuation(savedContinuation.current!));
+            }}
+          >
+            Retry saved handoff
+          </button>
+        </div>
       ) : null}
     </>
   );

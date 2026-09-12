@@ -1054,6 +1054,31 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
   });
 
+  it("recovers a lost handoff response without resaving its archived draft", async () => {
+    builderActions.continueBuilderHandoff.mockRejectedValueOnce(new Error("response interrupted"));
+    const view = await render(<AppBuilder authenticated />);
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "Already saved before the response was lost.");
+    await click(
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Create App")!,
+    );
+    expect(view.querySelector("#app-brief")).toBe(brief);
+    expect(view.textContent).toContain("Retry saved handoff");
+    const saves = builderActions.saveActiveBuilderDraft.mock.calls.length;
+    const checkpoint = builderActions.continueBuilderHandoff.mock.calls[0][1];
+    builderActions.saveActiveBuilderDraft.mockRejectedValueOnce(
+      new Error("builder-draft-archived"),
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Retry saved handoff",
+      )!,
+    );
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledTimes(saves);
+    expect(builderActions.continueBuilderHandoff.mock.calls[1][1]).toEqual(checkpoint);
+    expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
+  });
+
   it("renders the Better Auth account trigger without the legacy menu", async () => {
     const view = await render(
       <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
