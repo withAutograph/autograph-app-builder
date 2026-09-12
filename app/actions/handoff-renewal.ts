@@ -86,9 +86,7 @@ export async function renewBuilderHandoff(
   try {
     const response = await getBuilderHandoffRenewDeploymentHandler(process.env)(
       new Request(
-        requestUrl(
-          `/api/builder/handoffs/${encodeURIComponent(input.handoffId)}/renew`,
-        ),
+        requestUrl(`/api/builder/handoffs/${encodeURIComponent(input.handoffId)}/renew`),
         {
           method: "POST",
           headers: await sameOriginHeaders(),
@@ -98,8 +96,7 @@ export async function renewBuilderHandoff(
       input.handoffId,
     );
     if (response.status === 401) return { status: "sign-in" };
-    if (response.status === 403 || response.status === 404)
-      return { status: "unavailable" };
+    if (response.status === 403 || response.status === 404) return { status: "unavailable" };
     if (!response.ok) return { status: "error" };
 
     const renewed = renewedHandoffSchema.safeParse(await response.json());

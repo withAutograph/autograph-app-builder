@@ -41,13 +41,15 @@ function handoff(overrides: Partial<{ handoffId: string; status: "prepared" | "c
 
 describe("renewBuilderHandoff", () => {
   it("uses the authenticated deployment renewal boundary and returns a fresh typed handoff", async () => {
-    const handler = vi.fn(async () =>
-      Response.json({
+    let receivedRequest: Request | undefined;
+    const handler = vi.fn(async (request: Request) => {
+      receivedRequest = request;
+      return Response.json({
         version: 1,
         handoffId: renewedId,
         expiresAt: "2031-01-01T00:00:00.000Z",
-      }),
-    );
+      });
+    });
     deployment.renew.mockReturnValue(handler);
     deployment.pageData.mockResolvedValue(handoff({ handoffId: renewedId, status: "continued" }));
 
@@ -68,7 +70,8 @@ describe("renewBuilderHandoff", () => {
         mcpUrl: "https://builder.example/mcp",
       },
     });
-    const request = handler.mock.calls[0]?.[0] as Request;
+    expect(receivedRequest).toBeDefined();
+    const request = receivedRequest!;
     expect(request.method).toBe("POST");
     expect(request.headers.get("origin")).toBe("https://builder.example");
     await expect(request.json()).resolves.toEqual({

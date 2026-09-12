@@ -182,15 +182,15 @@ describe("durable handoff controls", () => {
       "Add Autograph to Cursor",
     );
   });
-  it("renews with a stable request ID after a lost response and never provisions or launches", async () => {
+  it("retries a rejected renewal transport with the same request ID and never provisions or launches", async () => {
     const data = { ...initial, status: "expired" as const };
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(data));
-    renewal.action
-      .mockResolvedValueOnce({ status: "error" })
-      .mockResolvedValueOnce({
-        status: "renewed",
-        handoff: { ...data, handoffId: renewedId },
-      });
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json(data));
+    renewal.action.mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce({
+      status: "renewed",
+      handoff: { ...data, handoffId: renewedId },
+    });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     await render(data);
     expect(
@@ -217,10 +217,17 @@ describe("durable handoff controls", () => {
     "reconciles a same-ID renewal immediately to %s without requiring a browser read",
     async (status) => {
       const expired = { ...initial, status: "expired" as const };
-      const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(expired));
-      renewal.action.mockResolvedValue({
-        status: "renewed",
-        handoff: { ...initial, status, expiresAt: "2031-01-01T00:00:00.000Z" },
+      const renewed = { ...initial, status, expiresAt: "2031-01-01T00:00:00.000Z" };
+      let persisted = false;
+      const request = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () => Response.json(persisted ? renewed : expired));
+      renewal.action.mockImplementation(async () => {
+        persisted = true;
+        return {
+          status: "renewed",
+          handoff: renewed,
+        };
       });
       await render(expired);
       await click("Renew handoff");

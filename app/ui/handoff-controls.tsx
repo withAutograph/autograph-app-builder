@@ -1,18 +1,18 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   renewBuilderHandoff,
   type HandoffControlData,
+  type HandoffRenewalActionState,
 } from "@/app/actions/handoff-renewal";
 import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,
   buildCursorInstallUrl,
   codexInstallCommand,
-  type HandoffDestination,
 } from "../../lib/handoff/client";
 import styles from "./app-builder.module.css";
 import handoffStyles from "./handoff.module.css";
@@ -52,10 +52,22 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [copyNotice, setCopyNotice] = useState("");
   const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
   const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
-  const [renewal, dispatchRenewal, renewalPending] = useActionState(
-    renewBuilderHandoff,
-    undefined,
+  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
+  const runRenewalAction = useCallback(
+    async (
+      previous: HandoffRenewalActionState | undefined,
+      input: Parameters<typeof renewBuilderHandoff>[1],
+    ): Promise<HandoffRenewalActionState> => {
+      try {
+        return await renewBuilderHandoff(previous, input);
+      } catch {
+        // Server Action transport failures belong in the same retryable UI as typed failures.
+        return { status: "error" };
+      }
+    },
+    [],
   );
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
@@ -130,7 +142,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   }, [access, data.handoffId, data.status, renewalPending]);
 
   useEffect(() => {
-    if (!renewal || renewalPending) return;
+    if (!renewal || renewalPending || reconciledRenewal.current === renewal) return;
+    reconciledRenewal.current = renewal;
     if (renewal.status === "sign-in") {
       setAccess("sign-in");
       return;
