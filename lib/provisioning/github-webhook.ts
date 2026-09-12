@@ -9,7 +9,7 @@ import {
   hostedGitHubInstallations,
   hostedGitHubUserCredentials,
 } from "../db/schema";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 

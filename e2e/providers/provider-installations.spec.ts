@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import { expect, test } from "playwright/test";
+import { expect, test, type Page } from "playwright/test";
 
 import {
   advanceProviderConnectionToApproval,
@@ -28,10 +28,7 @@ type GitHubCallbackFixture =
   | "duplicate-installation-id"
   | "duplicate-setup-action";
 
-async function setGitHubCallbackFixture(
-  page: import("playwright/test").Page,
-  fixture: GitHubCallbackFixture,
-) {
+async function setGitHubCallbackFixture(page: Page, fixture: GitHubCallbackFixture) {
   await page.context().addCookies([
     {
       name: "autograph-e2e-github-callback",
@@ -43,27 +40,23 @@ async function setGitHubCallbackFixture(
   ]);
 }
 
-async function completeGitHubConnection(page: import("playwright/test").Page) {
+async function completeGitHubConnection(page: Page) {
   await expect(page).toHaveURL(/\/github\/installations/u);
   await advanceProviderConnectionToApproval(page, "GitHub");
   await selectProviderIdentity(page, "GitHub");
 }
 
-async function startGitHubConnection(page: import("playwright/test").Page) {
+async function startGitHubConnection(page: Page) {
   await openProviderConnection(page, "GitHub");
   await completeGitHubConnection(page);
 }
 
-async function openBuilderPage(page: import("playwright/test").Page) {
+async function openBuilderPage(page: Page) {
   await page.goto("/");
   await waitForBuilderReady(page);
 }
 
-async function expectProviderCheckpoint(
-  page: import("playwright/test").Page,
-  appName: string,
-  brief: string,
-) {
+async function expectProviderCheckpoint(page: Page, appName: string, brief: string) {
   const draftId = new URL(page.url()).searchParams.get("resume");
   expect(draftId).toBeTruthy();
   const sql = postgres(databaseUrl, { max: 1 });
@@ -81,10 +74,7 @@ async function expectProviderCheckpoint(
   }
 }
 
-function expectGitHubControlAndNoOAuthLeak(
-  page: import("playwright/test").Page,
-  rawValues: readonly string[],
-) {
+function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly string[]) {
   const messages: string[] = [];
   page.on("console", (message) => messages.push(message.text()));
   return async () => {

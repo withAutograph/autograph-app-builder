@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import type { EveSessionService } from "./service";
 import { canonical, digest, stableId } from "./hosted-operation-identifiers";
@@ -38,7 +38,7 @@ import {
   eveSessionResultSchema,
   publicInputRequestSchema,
   publicEveEventSchema,
-  publicSessionStageSchema,
+  type publicSessionStageSchema,
   type EveSessionResult,
   type PublicInputRequest,
 } from "../mcp/contracts";

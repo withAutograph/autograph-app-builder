@@ -2,7 +2,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { githubInstallationAuthorizationStates } from "../db/schema";
 import type { GitHubInstallationAuthorizationStateStore } from "./github-app-installation";
 

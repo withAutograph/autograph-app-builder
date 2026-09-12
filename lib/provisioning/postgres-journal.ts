@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,

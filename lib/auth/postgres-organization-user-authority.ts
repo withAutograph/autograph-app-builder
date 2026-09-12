@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
 import {
   OrganizationProvisioningError,

@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { githubRepositoryAccessContinuations } from "../db/schema";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import {

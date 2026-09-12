@@ -13,7 +13,7 @@ import {
   hostedWorkspaceMemberships,
   vercelInstallationAuthorizationStates,
 } from "./schema";
-import * as databaseSchema from "./schema";
+import type * as databaseSchema from "./schema";
 import type { HostedAdminStore } from "./hosted-admin";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

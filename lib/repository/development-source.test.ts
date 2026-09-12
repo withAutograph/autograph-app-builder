@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canAutoSelectDevelopmentSource, developmentSourceReceipt } from "./development-source";
 import type { SourceKind } from "./source-receipt";
+import type * as SourceReceipt from "./source-receipt";
 
 const inspectSourceReceipt = vi.hoisted(() => vi.fn());
 
 vi.mock("./source-receipt", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./source-receipt")>()),
+  ...(await importOriginal<typeof SourceReceipt>()),
   inspectSourceReceipt,
 }));
 

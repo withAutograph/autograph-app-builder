@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it } from "vitest";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 
 const secret = "github-webhook-secret-that-is-long-enough";

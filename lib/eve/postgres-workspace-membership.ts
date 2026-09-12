@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as databaseSchema from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";

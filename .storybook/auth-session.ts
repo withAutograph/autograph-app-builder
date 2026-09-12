@@ -1,6 +1,6 @@
 import type { SessionData } from "@better-auth-ui/core";
 
-import { authClient } from "../lib/auth-client";
+import type { authClient } from "../lib/auth-client";
 
 const fixtureDate = new Date("2026-01-01T00:00:00.000Z");
 

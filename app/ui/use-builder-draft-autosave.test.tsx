@@ -4,7 +4,7 @@ import { act, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { BuilderDraftOutbox } from "./builder-draft-outbox";
+import type { BuilderDraftOutbox, BuilderDraftOutboxEntry } from "./builder-draft-outbox";
 import { type BuilderDraftAutosave, useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 
 type Snapshot = { brief: string };
@@ -162,7 +162,7 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("clears only the exact acknowledged outbox snapshot", async () => {
-    let entry: import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot> | undefined;
+    let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       read: vi.fn(async () => entry),
       write: vi.fn(async (next) => {
@@ -203,7 +203,7 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("discards queued recovery work superseded by a remote revision", async () => {
-    let entry: import("./builder-draft-outbox").BuilderDraftOutboxEntry<Snapshot> | undefined;
+    let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       read: vi.fn(async () => entry),
       write: vi.fn(async (next) => {
