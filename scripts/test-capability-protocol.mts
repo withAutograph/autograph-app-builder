@@ -34,6 +34,10 @@ export async function relayBoundedFrames(options: {
         return fail(new Error("Protocol relay ended before its exact frames."));
       options.target.end();
     };
+    const resumeAfterDrain = () => {
+      waitingForDrain = false;
+      processBuffered();
+    };
     const processBuffered = () => {
       while (true) {
         const newline = buffered.indexOf(0x0a);
@@ -53,10 +57,7 @@ export async function relayBoundedFrames(options: {
           return fail(new Error("Protocol relay received trailing frames."));
         if (!options.target.write(frame)) {
           waitingForDrain = true;
-          options.target.once("drain", () => {
-            waitingForDrain = false;
-            processBuffered();
-          });
+          options.target.once("drain", resumeAfterDrain);
           return;
         }
         if (frames === options.expectedFrames && buffered.byteLength > 0)
