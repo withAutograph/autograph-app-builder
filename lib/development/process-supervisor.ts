@@ -37,8 +37,8 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
 
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
   if (signal.aborted) return Promise.resolve({ kind: "stop" as const, code: exitCode() });
-  return new Promise<{ kind: "stop"; code: number }>((resolveStop) => {
-    signal.addEventListener("abort", () => resolveStop({ kind: "stop", code: exitCode() }), {
+  return new Promise<{ kind: "stop"; code: number }>((resolve) => {
+    signal.addEventListener("abort", () => resolve({ kind: "stop", code: exitCode() }), {
       once: true,
     });
   });
@@ -47,9 +47,9 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
 export function developmentChildExit(child: ChildProcess) {
   if (child.exitCode !== null) return Promise.resolve(child.exitCode);
   if (child.signalCode !== null) return Promise.resolve(1);
-  return new Promise<number>((resolveExit, reject) => {
+  return new Promise<number>((resolve, reject) => {
     child.once("error", reject);
-    child.once("exit", (code, signal) => resolveExit(code ?? (signal ? 1 : 0)));
+    child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
   });
 }
 
@@ -91,8 +91,8 @@ export async function stopDevelopmentChild(
     // detached listener on port 2000 even after the wrapper is gone. The group
     // still belongs solely to this development cycle, so force it only after
     // a window longer than Eve's own backstop.
-    await new Promise<void>((resolveWait) => {
-      setTimeout(() => resolveWait(), gracefulTimeoutMs);
+    await new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), gracefulTimeoutMs);
     });
     signalProcessGroup("SIGKILL");
     if (!childExited) await exited;
@@ -102,8 +102,8 @@ export async function stopDevelopmentChild(
   if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
-    new Promise<false>((resolveWait) => {
-      setTimeout(() => resolveWait(false), gracefulTimeoutMs);
+    new Promise<false>((resolve) => {
+      setTimeout(() => resolve(false), gracefulTimeoutMs);
     }),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
@@ -120,18 +120,18 @@ export async function waitForDevelopmentPortRelease(
   const pollMs = options.pollMs ?? 50;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const occupied = await new Promise<boolean>((resolveOccupied) => {
+    const occupied = await new Promise<boolean>((resolve) => {
       const socket = createConnection({ host: "127.0.0.1", port });
       const finish = (value: boolean) => {
         socket.destroy();
-        resolveOccupied(value);
+        resolve(value);
       };
       socket.once("connect", () => finish(true));
       socket.once("error", () => finish(false));
     });
     if (!occupied) return;
-    await new Promise((resolveWait) => {
-      setTimeout(resolveWait, pollMs);
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollMs);
     });
   }
   throw new Error(`Development Eve port ${port} was not released after shutdown.`);

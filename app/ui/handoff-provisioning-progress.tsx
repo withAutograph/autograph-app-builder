@@ -101,16 +101,16 @@ export function HandoffProvisioningProgress({
       };
       source.addEventListener("snapshot", receive);
       source.addEventListener("end", receive);
-      source.onopen = () => {
+      source.addEventListener("open", () => {
         if (!closed) setConnection("connected");
-      };
-      source.onerror = () => {
+      });
+      source.addEventListener("error", () => {
         if (closed) return;
         setConnection("reconnecting");
         // Keep this EventSource alive: its native reconnect sends the most
         // recent SSE event id as Last-Event-ID. Replacing it here would lose
         // that cursor and turn a transient disconnect into a full replay.
-      };
+      });
     };
     connect();
     return () => {

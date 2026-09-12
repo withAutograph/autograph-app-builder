@@ -1,1 +1,3 @@
-setInterval(() => {}, 1_000);
+setInterval(() => {
+  // Keep the worker alive for the timeout test.
+}, 1_000);

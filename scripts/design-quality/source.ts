@@ -1,4 +1,4 @@
-import postcss from "postcss";
+import { parse } from "postcss";
 import { posix } from "node:path";
 import ts from "typescript";
 
@@ -8,12 +8,12 @@ import { checkJsxAttributes, type Reference } from "./reference";
 export type SourceFile = { path: string; content: string };
 
 export type SourceAnalysis = {
-  imports: Array<{
+  imports: {
     path: string;
     source: string;
     name: string;
     localName: string;
-  }>;
+  }[];
   tokenRefs: string[];
   semanticVarRefs: string[];
   undefinedTokens: string[];
@@ -21,13 +21,13 @@ export type SourceAnalysis = {
   matchingLiterals: string[];
   unknownLiterals: string[];
   observations: Observation[];
-  implementationDiagnostics: Array<{
+  implementationDiagnostics: {
     path: string;
     line: number;
     column: number;
     code: number;
     message: string;
-  }>;
+  }[];
   limitations: string[];
 };
 
@@ -43,13 +43,13 @@ function unique(values: Iterable<string>): string[] {
 }
 
 function normalise(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+  return value.trim().replaceAll(/\s+/g, " ").toLowerCase();
 }
 
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */
 export function parseTokens(css: string): Record<string, string> {
   const declared: Record<string, string> = {};
-  postcss.parse(css).walkDecls(/^--/, (declaration) => {
+  parse(css).walkDecls(/^--/, (declaration) => {
     declared[declaration.prop] = declaration.value.trim();
   });
 
@@ -119,7 +119,7 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
 }
 
 function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
-  postcss.parse(content).walkDecls((declaration) => {
+  parse(content).walkDecls((declaration) => {
     collectVarReferences(declaration.value, tokenRefs);
     collectCssLiterals(declaration.value, literals);
   });
@@ -307,7 +307,7 @@ export function analyzeSource({
         continue;
       }
       collectCssFile(file.content, tokenRefs, literals);
-      const css = postcss.parse(file.content, { from: file.path });
+      const css = parse(file.content, { from: file.path });
       css.walkDecls((declaration) => {
         const selector =
           declaration.parent?.type === "rule" ? declaration.parent.selector : undefined;
@@ -645,32 +645,32 @@ export function analyzeSource({
                   "api",
                   typed
                     ? typed.verdict
-                    : value === undefined || !kind
+                    : value === undefined
                       ? "unassessed"
-                      : allowed
-                        ? allowed.includes(value)
-                          ? "conforming"
-                          : "nonconforming"
-                        : acceptedPrimitives
-                          ? acceptedPrimitives.includes(kind)
+                      : kind
+                        ? allowed
+                          ? allowed.includes(value)
                             ? "conforming"
                             : "nonconforming"
-                          : "unassessed",
+                          : acceptedPrimitives
+                            ? acceptedPrimitives.includes(kind)
+                              ? "conforming"
+                              : "nonconforming"
+                            : "unassessed"
+                        : "unassessed",
                   typed
                     ? typed.reason
                     : value === undefined
                       ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
-                      : !kind
-                        ? `${item.name}.${name} is not a static primitive literal.`
-                        : !allowed && !acceptedPrimitives
-                          ? `${item.name}.${name}'s primitive type cannot be resolved.`
-                          : !allowed && acceptedPrimitives?.includes(kind)
+                      : kind
+                        ? allowed
+                          ? allowed.includes(value)
+                            ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
+                            : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`
+                          : acceptedPrimitives?.includes(kind)
                             ? `${item.name}.${name} accepts static ${kind} values.`
-                            : !allowed
-                              ? `${item.name}.${name} does not accept static ${kind} values.`
-                              : allowed.includes(value)
-                                ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
-                                : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
+                            : `${item.name}.${name}'s primitive type cannot be resolved.`
+                        : `${item.name}.${name} is not a static primitive literal.`,
                   position(source, attribute),
                   "prop",
                 ),

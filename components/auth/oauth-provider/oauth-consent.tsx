@@ -39,7 +39,9 @@ export type OAuthConsentProps = {
 const interpolateClient = (template: string, clientName: string) =>
   template.replace("{{client}}", clientName);
 
-const subscribeToLocation = () => () => {};
+const subscribeToLocation = () => () => {
+  // The location snapshot does not need a subscription in this flow.
+};
 const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 

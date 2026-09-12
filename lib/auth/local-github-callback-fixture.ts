@@ -19,7 +19,7 @@ const fixtures = {
     ["setup_action", "install"],
     ["setup_action", "install"],
   ],
-} as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
+} as const satisfies Record<string, readonly (readonly [string, string])[]>;
 
 export type LocalGitHubCallbackFixture = keyof typeof fixtures;
 

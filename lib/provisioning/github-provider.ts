@@ -343,23 +343,22 @@ export async function provisionGitHubRepository(input: {
 
   async function writeStarter(name: string) {
     const blobs = new Map<string, string>();
+    const writeBlob = async (file: (typeof input.source.files)[number]) => {
+      const response = await github({
+        method: "POST",
+        path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/blobs`,
+        token,
+        body: {
+          content: Buffer.from(file.bytes).toString("base64"),
+          encoding: "base64",
+        },
+        expected: [201],
+      });
+      return [file.path, objectId.parse(stringProperty(response.body, "sha"))] as const;
+    };
     for (let offset = 0; offset < input.source.files.length; offset += 12) {
       const page = input.source.files.slice(offset, offset + 12);
-      const values = await Promise.all(
-        page.map(async (file) => {
-          const response = await github({
-            method: "POST",
-            path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/blobs`,
-            token,
-            body: {
-              content: Buffer.from(file.bytes).toString("base64"),
-              encoding: "base64",
-            },
-            expected: [201],
-          });
-          return [file.path, objectId.parse(stringProperty(response.body, "sha"))] as const;
-        }),
-      );
+      const values = await Promise.all(page.map(writeBlob));
       for (const [path, sha] of values) blobs.set(path, sha);
     }
     const tree = await github({

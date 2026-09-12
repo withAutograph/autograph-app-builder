@@ -4,11 +4,11 @@ import {
   clearLocalGitHubCallbackFixtureCookie,
 } from "@/lib/auth/local-github-callback-fixture";
 
-const callback = createGitHubAppInstallationDeploymentHandler("callback", process.env);
+const handler = createGitHubAppInstallationDeploymentHandler("callback", process.env);
 
 export async function GET(request: Request) {
   const fixture = applyLocalGitHubCallbackFixture(request, process.env);
-  const response = await callback(fixture.request);
+  const response = await handler(fixture.request);
   if (fixture.applied)
     response.headers.append("set-cookie", clearLocalGitHubCallbackFixtureCookie());
   return response;

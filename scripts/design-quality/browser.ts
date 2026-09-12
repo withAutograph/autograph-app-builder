@@ -116,7 +116,7 @@ type BrowserStyleObservation = Observation & {
 };
 
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
-  const index = node.attributes?.findIndex((value) => value === "class") ?? -1;
+  const index = node.attributes?.indexOf("class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
   return value && node.nodeName
     ? {
@@ -128,7 +128,7 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
 
 function matchedSelector(match: {
   matchingSelectors?: number[];
-  rule: { selectorList?: { selectors?: Array<{ text?: string }> } };
+  rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
   if (!selectors?.length) return undefined;
@@ -147,9 +147,9 @@ function singleGapValue(value: string): string | undefined {
   if (!candidate) return undefined;
   let depth = 0;
   for (const character of candidate) {
-    if (character === "(") depth++;
+    if (character === "(") depth += 1;
     else if (character === ")") {
-      depth--;
+      depth -= 1;
       if (depth < 0) return undefined;
     } else if (depth === 0 && /\s/.test(character)) return undefined;
   }
@@ -168,9 +168,9 @@ export const sourcePath = (value: string | undefined) => {
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
   if (!path) return false;
-  const clean = path.replace(/\\/g, "/");
+  const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
-    const expected = sourcePath(candidate)?.replace(/\\/g, "/");
+    const expected = sourcePath(candidate)?.replaceAll("\\", "/");
     return Boolean(
       expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
     );
@@ -180,7 +180,7 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
 // A stylesheet URL alone is not provenance. The only shared source family we
 // recognise in browser evidence is the checked-in Arrusted design-system tree.
 export const arrustedSharedSource = (path: string | undefined) =>
-  Boolean(path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
+  Boolean(path?.replaceAll("\\", "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
 
 type CssSourceFile = { path: string; content: string };
 
@@ -253,22 +253,22 @@ export async function measurePage(page: Page) {
       };
     };
     const visible = (el: Element) => {
-      const r = el.getBoundingClientRect(),
-        s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
     const label = (el: Element) =>
       (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
-    const findings: Array<{
+    const findings: {
       kind: string;
       description: string;
       region: ReturnType<typeof rect>;
       reviewRequired: boolean;
-    }> = [];
+    }[] = [];
     const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
       if (!visible(el)) return [];
       const style = getComputedStyle(el);
-      const axes: Array<"x" | "y"> = [];
+      const axes: ("x" | "y")[] = [];
       if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(style.overflowX))
         axes.push("x");
       if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/.test(style.overflowY))
@@ -296,9 +296,9 @@ export async function measurePage(page: Page) {
     for (const el of controls) {
       let parent = el.parentElement;
       while (parent) {
-        const s = getComputedStyle(parent),
-          a = el.getBoundingClientRect(),
-          b = parent.getBoundingClientRect();
+        const s = getComputedStyle(parent);
+        const a = el.getBoundingClientRect();
+        const b = parent.getBoundingClientRect();
         if (/hidden|clip/.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
           findings.push({
             kind: "possible-clipping",
@@ -320,7 +320,7 @@ export async function measurePage(page: Page) {
         ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(visible)
         : [];
       if (headers.length === cells.length)
-        headers.forEach((h, i) => {
+        for (const [i, h] of headers.entries()) {
           if (Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4)
             findings.push({
               kind: "possible-column-misalignment",
@@ -328,16 +328,16 @@ export async function measurePage(page: Page) {
               region: rect(h),
               reviewRequired: true,
             });
-        });
+        }
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
-    for (let i = 0; i < Math.min(controls.length, 150); i++)
-      for (let j = i + 1; j < Math.min(controls.length, 150); j++) {
-        const a = controls[i]!,
-          b = controls[j]!;
+    for (let i = 0; i < Math.min(controls.length, 150); i += 1)
+      for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
+        const a = controls[i]!;
+        const b = controls[j]!;
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
-        const x = a.getBoundingClientRect(),
-          y = b.getBoundingClientRect();
+        const x = a.getBoundingClientRect();
+        const y = b.getBoundingClientRect();
         if (
           Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
           Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
@@ -353,12 +353,12 @@ export async function measurePage(page: Page) {
       window as unknown as {
         axe: {
           run: () => Promise<{
-            violations: Array<{
+            violations: {
               id: string;
               impact: string;
               help: string;
-              nodes: Array<{ target: string[]; failureSummary: string }>;
-            }>;
+              nodes: { target: string[]; failureSummary: string }[];
+            }[];
             incomplete: unknown[];
           }>;
         };
@@ -411,7 +411,7 @@ export async function measureStyles(
   sharedClassSignatures?: IntrinsicClassSignature[],
   generatedCssRules: CssRuleEvidence[] = [],
   sharedCssRules: CssRuleEvidence[] = [],
-  generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
+  generatedCssSourceFiles: { path: string; content: string }[] = [],
   sharedCssSourceFiles: CssSourceFile[] = [],
   generatedClassTokens: ClassTokenEvidence[] = [],
   sharedClassTokens?: ClassTokenEvidence[],
@@ -451,7 +451,7 @@ export async function measureStyles(
       if (url?.startsWith("data:application/json")) {
         try {
           const comma = url.indexOf(",");
-          if (comma >= 0) {
+          if (comma !== -1) {
             const body = url.slice(comma + 1);
             text = /;base64/i.test(url.slice(0, comma))
               ? Buffer.from(body, "base64").toString("utf8")
@@ -508,7 +508,7 @@ export async function measureStyles(
       ({ tokens, properties }) => {
         const el = document.createElement("span");
         el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
-        document.body.appendChild(el);
+        document.body.append(el);
         const result: Record<string, string[]> = {};
         for (const prop of Object.keys(properties)) {
           result[prop] = [];
@@ -536,12 +536,12 @@ export async function measureStyles(
     );
     // CSS.enable normally emits existing headers, but source location is optional
     // in CDP. Missing headers deliberately remain unknown.
-    const candidates: Array<{
+    const candidates: {
       nodeId: number;
       model: { width: number; height: number; content: number[] };
       region: "top" | "middle" | "bottom";
       interactive: boolean;
-    }> = [];
+    }[] = [];
     for (const nodeId of nodeIds) {
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
@@ -771,7 +771,7 @@ export async function measureStyles(
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
-            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1]! in tokens)),
+            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1] in tokens)),
           )
         )
           classification = "unassessed";
@@ -956,7 +956,7 @@ export async function capturePreview(input: {
   sharedClassTokens?: ClassTokenEvidence[];
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
-  generatedCssSourceFiles?: Array<{ path: string; content: string }>;
+  generatedCssSourceFiles?: { path: string; content: string }[];
   sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
 }) {
@@ -976,7 +976,7 @@ export async function capturePreview(input: {
       const response = await page.goto(input.url, { waitUntil: "load" });
       if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
       await page.evaluate(() => document.fonts.ready);
-      for (let index = 0; index <= input.scenarios.length; index++) {
+      for (let index = 0; index <= input.scenarios.length; index += 1) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
         let interaction: { status: string; expectedText?: string } = {
           status: "not-run",
@@ -1032,10 +1032,10 @@ export async function capturePreview(input: {
               )
             : undefined;
         if (styles)
-          styles.observations.forEach((observation) => {
+          for (const observation of styles.observations) {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
-          });
+          }
         const path = join(input.output, `${name}.png`);
         await settleFiniteMotion(page);
         await page.screenshot({ path, fullPage: true });

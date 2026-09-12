@@ -66,7 +66,12 @@ export const themePlugin = createAuthPlugin(
     // No-op `setTheme` baseline keeps core's required option satisfied on the
     // hook branch (where the consumer doesn't pass a setter); on the static
     // branch the spread overrides it with the consumer's real setter.
-    const base = coreThemePlugin({ setTheme: () => {}, ...rest });
+    const base = coreThemePlugin({
+      setTheme: () => {
+        // The consumer-provided setter replaces this placeholder below.
+      },
+      ...rest,
+    });
     return {
       ...base,
       // Slot components always call `plugin.useTheme()` — invoking the hook

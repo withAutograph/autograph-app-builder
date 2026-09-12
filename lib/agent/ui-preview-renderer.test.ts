@@ -38,7 +38,7 @@ describe("preview runtime initialization", () => {
 
     // Supply imports at the execution boundary; exercise the generated entry's
     // initialization and routing, without mounting a DOM or calling providers.
-    runInNewContext(entry.replace(/^import .*;\n/gmu, ""), {
+    runInNewContext(entry.replaceAll(/^import .*;\n/gmu, ""), {
       Screen0: overview,
       Screen1: details,
       bootstrapAgCharts: initialized,
@@ -87,7 +87,7 @@ describe("preview stylesheet provenance", () => {
     )?.[1];
     expect(sourceMap).toBeDefined();
     const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf8")) as {
-      sourcesContent?: Array<string | null>;
+      sourcesContent?: (string | null)[];
     };
     expect(map.sourcesContent).toContain(themeCss);
     expect(map.sourcesContent).not.toContain(`${themeCss}\n@source ".builder-preview";`);
@@ -111,6 +111,6 @@ describe("preview stylesheet provenance", () => {
     expect(renderer).not.toContain('themeCss + "\\n@source "');
     expect(renderer).toContain("const themeStyle = css.css.replace");
     expect(renderer).toContain("const bundledStyle = bundledCss.join");
-    expect(renderer).toContain("</style><style>" + "' + bundledStyle");
+    expect(renderer).toContain("</style><style>' + bundledStyle");
   });
 });

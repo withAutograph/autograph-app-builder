@@ -128,13 +128,7 @@ export async function executeBuilderProvisioning(input: {
       (binding) =>
         binding.installationId === request.providers.githubInstallationId && binding.active,
     );
-    if (!installation) {
-      result = {
-        status: "failed",
-        code: "installation_inactive",
-        retryable: true,
-      };
-    } else {
+    if (installation) {
       try {
         const source = await (input.dependencies.loadStarterSource ?? cloneStarterSource)();
         const current = await input.dependencies.journal.read({
@@ -168,6 +162,12 @@ export async function executeBuilderProvisioning(input: {
           retryable: true,
         };
       }
+    } else {
+      result = {
+        status: "failed",
+        code: "installation_inactive",
+        retryable: true,
+      };
     }
   } else {
     const current = await input.dependencies.journal.read({
@@ -179,13 +179,7 @@ export async function executeBuilderProvisioning(input: {
       authority: input.authority,
       installationId: request.providers.vercelInstallationId!,
     });
-    if (!credential?.binding.active) {
-      result = {
-        status: "failed",
-        code: "installation_inactive",
-        retryable: true,
-      };
-    } else {
+    if (credential?.binding.active) {
       result = await provisionVercelProject({
         installation: credential.binding,
         token: credential.token,
@@ -204,6 +198,12 @@ export async function executeBuilderProvisioning(input: {
           new Date(now()),
         );
       }
+    } else {
+      result = {
+        status: "failed",
+        code: "installation_inactive",
+        retryable: true,
+      };
     }
   }
 

@@ -190,17 +190,17 @@ export async function inspectTargetExecutionReadiness(input: {
   });
   const image = resolvedExecutionEnvironment.imageDigest;
   const { backend } = resolvedExecutionEnvironment;
-  const required = (
-    Object.keys(requiredToolVersions) as Array<keyof typeof requiredToolVersions>
-  ).map((command) => {
-    const observedTool = tools.find((tool) => tool.command === command);
-    return {
-      command,
-      expected: requiredToolVersions[command].source,
-      version: observedTool?.version ?? "",
-      available: observedTool?.available === true,
-    };
-  });
+  const required = (Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]).map(
+    (command) => {
+      const observedTool = tools.find((tool) => tool.command === command);
+      return {
+        command,
+        expected: requiredToolVersions[command].source,
+        version: observedTool?.version ?? "",
+        available: observedTool?.available === true,
+      };
+    },
+  );
   const toolchainReady =
     backend.blockers.length === 0 &&
     image !== undefined &&

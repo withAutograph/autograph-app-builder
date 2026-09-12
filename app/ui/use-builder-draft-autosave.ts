@@ -35,7 +35,7 @@ export type BuilderDraftAutosaveOptions<T> = {
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
   onVisibilityFlush?: (reason: "visibilitychange" | "pagehide") => void;
   /** Acknowledgements advance local revision knowledge but never reset the form. */
-  onAcknowledged?(acknowledgement: BuilderDraftSaveAcknowledgement): void;
+  onAcknowledged?: (acknowledgement: BuilderDraftSaveAcknowledgement) => void;
 };
 
 export type BuilderDraftAutosave<T> = {
@@ -56,7 +56,7 @@ export type BuilderDraftAutosave<T> = {
    * its form to newer server state. A mutation already in flight is allowed to
    * settle; the next poll remains authoritative.
    */
-  discardSupersededByRemoteRevision(revision: number): Promise<boolean>;
+  discardSupersededByRemoteRevision: (revision: number) => Promise<boolean>;
 };
 
 type Pending<T> = BuilderDraftOutboxEntry<T>;
@@ -145,19 +145,19 @@ export function useBuilderDraftAutosave<T>(
               acknowledgedRevision.current,
               acknowledgement.revision,
             );
-            if (options.outbox.clearIfAcknowledged)
-              await options.outbox.clearIfAcknowledged({
-                mutationId: current.mutationId,
-                revision: acknowledgement.revision,
-              });
-            else await options.outbox.clearIfMutationId(current.mutationId);
+            await (options.outbox.clearIfAcknowledged
+              ? options.outbox.clearIfAcknowledged({
+                  mutationId: current.mutationId,
+                  revision: acknowledgement.revision,
+                })
+              : options.outbox.clearIfMutationId(current.mutationId));
             onAcknowledged.current?.(acknowledgement);
             if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
-          } catch (caught) {
+          } catch (error) {
             if (!queued.current) queued.current = current;
             updateStatus(
               online() ? "error" : "offline",
-              caught instanceof Error ? caught : new Error("builder-draft-save-failed"),
+              error instanceof Error ? error : new Error("builder-draft-save-failed"),
             );
             return false;
           }
@@ -251,7 +251,9 @@ export function useBuilderDraftAutosave<T>(
   );
 
   useEffect(() => {
-    const retryWhenOnline = () => void flush("flush");
+    const retryWhenOnline = () => {
+      flush("flush");
+    };
     window.addEventListener("online", retryWhenOnline);
     return () => window.removeEventListener("online", retryWhenOnline);
   }, [flush]);

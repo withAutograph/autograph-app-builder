@@ -17,7 +17,7 @@ export type SignOutProps = {
  */
 export function SignOut({ className }: SignOutProps) {
   const { authClient, basePaths, viewPaths } = useAuth();
-  const signInHref = basePaths.auth + "/" + viewPaths.auth.signIn;
+  const signInHref = `${basePaths.auth}/${viewPaths.auth.signIn}`;
 
   const { mutate: signOut } = useSignOut(authClient, {
     onError: () => window.location.replace(signInHref),

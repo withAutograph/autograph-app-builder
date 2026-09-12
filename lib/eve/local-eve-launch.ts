@@ -250,7 +250,7 @@ export function waitForForwardedEveChild(
   child: ChildProcess,
   signalTarget: SignalTarget = process,
 ) {
-  return new Promise<number>((resolveExit, reject) => {
+  return new Promise<number>((resolve, reject) => {
     const forwardInterrupt = () => child.kill("SIGINT");
     const forwardTerminate = () => child.kill("SIGTERM");
     const dispose = () => {
@@ -263,7 +263,7 @@ export function waitForForwardedEveChild(
     });
     child.once("exit", (code, signal) => {
       dispose();
-      resolveExit(code ?? (signal ? 1 : 0));
+      resolve(code ?? (signal ? 1 : 0));
     });
     signalTarget.once("SIGINT", forwardInterrupt);
     signalTarget.once("SIGTERM", forwardTerminate);

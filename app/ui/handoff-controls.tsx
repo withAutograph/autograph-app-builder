@@ -124,7 +124,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           !complete &&
           document.visibilityState === "visible"
         )
-          timer = setTimeout(() => void refresh(), 5_000);
+          timer = setTimeout(() => {
+            refresh();
+          }, 5_000);
       }
     };
     const visibilityChanged = () => {
@@ -171,12 +173,16 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       let saved: string | null = null;
       try {
         saved = sessionStorage.getItem(storageKey);
-      } catch {}
+      } catch {
+        // Session storage is optional.
+      }
       const id = saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
       renewalRequest.current = { handoffId: data.handoffId, id };
       try {
         sessionStorage.setItem(storageKey, id);
-      } catch {}
+      } catch {
+        // Session storage is optional.
+      }
     }
     setRenewalNotice("");
     startTransition(() =>
@@ -200,7 +206,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 ? "This handoff has expired. Renew it to continue with your saved brief and resources."
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
-      {access !== "ready" ? <a href={signInUrl}>Sign in with the same account</a> : null}
+      {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
       <fieldset disabled={renewalPending}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (

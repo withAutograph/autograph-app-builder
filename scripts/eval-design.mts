@@ -41,10 +41,7 @@ if (values.help) {
   );
   process.exit(0);
 }
-async function sources(
-  root: string,
-  relative = "",
-): Promise<Array<{ path: string; content: string }>> {
+async function sources(root: string, relative = ""): Promise<{ path: string; content: string }[]> {
   const files = [];
   for (const entry of await readdir(join(root, relative), {
     withFileTypes: true,
@@ -76,7 +73,7 @@ async function main() {
     );
   const output = resolve(
     values["output-dir"] ??
-      join(".artifacts/design-quality", new Date().toISOString().replace(/[:.]/g, "-")),
+      join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/g, "-")),
   );
   await mkdir(output, { recursive: true, mode: 0o700 });
   const selectedCase = values.case ? await readDesignCase(values.case) : undefined;

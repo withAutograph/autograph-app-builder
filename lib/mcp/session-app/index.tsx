@@ -17,7 +17,7 @@ const resultListeners = new Set<() => void>();
 
 function publishResult(result?: EveSessionResult) {
   latestResult = result;
-  resultListeners.forEach((listener) => listener());
+  for (const listener of resultListeners) listener();
 }
 
 app.ontoolresult = ({ structuredContent }) => {
@@ -103,7 +103,7 @@ function SessionAppContainer() {
   );
 }
 
-const root = document.getElementById("root");
+const root = document.querySelector("#root");
 if (!root) throw new Error("Missing MCP App root.");
 createRoot(root).render(<SessionAppContainer />);
 void app.connect();

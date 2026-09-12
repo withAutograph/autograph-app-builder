@@ -79,7 +79,7 @@ export function waitForDevelopmentRuntimeChange(input: {
   debounceMs?: number;
   auditMs?: number;
 }) {
-  return new Promise<boolean>((resolveChanged) => {
+  return new Promise<boolean>((resolve) => {
     let watcher: FSWatcher | undefined;
     let checking = false;
     let pending = false;
@@ -96,7 +96,7 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
       watcher?.close();
       input.signal?.removeEventListener("abort", aborted);
-      resolveChanged(changed);
+      resolve(changed);
     };
     const aborted = () => finish(false);
     const check = async () => {
@@ -126,7 +126,9 @@ export function waitForDevelopmentRuntimeChange(input: {
     const schedule = () => {
       if (settled) return;
       if (debounce !== undefined) clearTimeout(debounce);
-      debounce = setTimeout(() => void check(), input.debounceMs ?? 150);
+      debounce = setTimeout(() => {
+        check();
+      }, input.debounceMs ?? 150);
     };
     if (input.signal?.aborted) {
       finish(false);

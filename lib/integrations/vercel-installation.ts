@@ -67,11 +67,14 @@ export type VercelAuthorizationStateStore = {
 };
 
 export class VercelInstallationAuthorizationError extends Error {
-  constructor(
-    readonly reason: string,
-    readonly returnState?: ProviderConnectionReturn,
-  ) {
+  readonly reason: string;
+  readonly returnState?: ProviderConnectionReturn;
+
+  constructor(reason: string, returnState?: ProviderConnectionReturn) {
     super(reason);
+    this.name = "VercelInstallationAuthorizationError";
+    this.reason = reason;
+    this.returnState = returnState;
   }
 }
 
@@ -175,11 +178,12 @@ export function createVercelInstallationAuthorization(input: {
   const request = input.fetch ?? fetch;
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
+  const defaultReturnState: ProviderConnectionReturn = { returnTo: "/" };
 
   return {
     async begin(
       authorityInput: Authority,
-      returnState: ProviderConnectionReturn = { returnTo: "/" },
+      returnState: ProviderConnectionReturn = defaultReturnState,
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority)))

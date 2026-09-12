@@ -468,9 +468,7 @@ async function assertContainedStatePath(
     try {
       value = await lstat(cursor);
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        if (leaf !== "directory") return;
-      }
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && leaf !== "directory") return;
       throw error;
     }
     const isLeaf = index === segments.length - 1;
@@ -683,20 +681,20 @@ async function acquireLease(
       );
     resolveExit();
   });
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
-      rejectReady(new Error("Lease timeout."));
+      reject(new Error("Lease timeout."));
     }, 5_000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
-      if (chunk === "READY\n") resolveReady();
-      else rejectReady(new Error("Lease handshake failed."));
+      if (chunk === "READY\n") resolve();
+      else reject(new Error("Lease handshake failed."));
     });
     void exited.then(() => {
       clearTimeout(timeout);
-      rejectReady(terminal ?? new Error("Fresh bootstrap is already leased."));
+      reject(terminal ?? new Error("Fresh bootstrap is already leased."));
     });
   });
   let released = false;
@@ -778,20 +776,20 @@ async function quiesceAbandonedLease(
     resolveExit = resolve;
   });
   holder.once("exit", resolveExit);
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill("SIGKILL");
-      rejectReady(new Error("Lease quiescence timeout."));
+      reject(new Error("Lease quiescence timeout."));
     }, 5_000);
     holder.stdout.setEncoding("utf8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
-      if (chunk === "READY\n") resolveReady();
-      else rejectReady(new Error("Lease quiescence handshake failed."));
+      if (chunk === "READY\n") resolve();
+      else reject(new Error("Lease quiescence handshake failed."));
     });
     void exited.then(() => {
       clearTimeout(timeout);
-      rejectReady(
+      reject(
         new Error(`Lease quiescence failed${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`),
       );
     });
@@ -1636,8 +1634,9 @@ async function atomicPublish(
   const parent = await open(parentPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const parentState = await parent.stat();
+    const increment = 1;
     const expectedParentNlink = String(
-      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(1),
+      BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(increment),
     );
     const approvedEmpty =
       proposal.destinationPrestate.kind === "empty-directory"
@@ -2023,7 +2022,11 @@ async function executeBootstrap(input: {
       } catch {
         verification = undefined;
       }
-      if (verification !== undefined) {
+      if (verification === undefined) {
+        if (input.proposal.destinationPrestate.kind !== "empty-directory")
+          throw new Error("The destination conflicts with recovery state.");
+        await assertPrestate(capability, input.proposal);
+      } else {
         destinationPublished = true;
         await removeVerifiedSwappedEmptyDirectory(capability, input.proposal);
         const success = successReceipt({
@@ -2041,10 +2044,6 @@ async function executeBootstrap(input: {
         });
         await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
         return { ok: true, receipt: success };
-      } else {
-        if (input.proposal.destinationPrestate.kind !== "empty-directory")
-          throw new Error("The destination conflicts with recovery state.");
-        await assertPrestate(capability, input.proposal);
       }
     }
     if (!stageCreated) {
@@ -2299,15 +2298,14 @@ export async function verifyFreshBootstrap(input: {
     proposalFromFreshBootstrapJournal(input.receipt),
     input.receipt.destinationPath,
   );
-  if (input.receipt.swappedOldIdentity !== undefined) {
-    if (
-      (await pathState(input.receipt.stagingPath)) !== "directory" ||
+  if (
+    input.receipt.swappedOldIdentity !== undefined &&
+    ((await pathState(input.receipt.stagingPath)) !== "directory" ||
       JSON.stringify(await identity(input.receipt.stagingPath)) !==
         JSON.stringify(input.receipt.swappedOldIdentity) ||
-      (await readdir(input.receipt.stagingPath)).length !== 0
-    )
-      throw new Error("The swapped-out empty tombstone changed after receipt.");
-  }
+      (await readdir(input.receipt.stagingPath)).length !== 0)
+  )
+    throw new Error("The swapped-out empty tombstone changed after receipt.");
   if (
     JSON.stringify(verification.destinationIdentity) !==
       JSON.stringify(input.receipt.destinationIdentity) ||

@@ -166,7 +166,7 @@ export function SearchCombobox({
               ) : null}
             </button>
           ))}
-          {!shown.length ? <p className={styles.noResults}>No results found.</p> : null}
+          {shown.length ? null : <p className={styles.noResults}>No results found.</p>}
         </div>
         {menuFooter ? (
           <button

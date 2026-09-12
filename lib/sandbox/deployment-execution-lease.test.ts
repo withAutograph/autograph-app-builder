@@ -123,12 +123,12 @@ describe("hosted sandbox turn lease lifecycle", () => {
   });
 
   it("stops compute on authority, membership, database, and acquire failures", async () => {
-    const cases: Array<{
+    const cases: {
       auth: unknown;
       member: boolean;
       store: () => InMemorySandboxExecutionLeaseStore;
       message: string;
-    }> = [
+    }[] = [
       {
         auth: {},
         member: true,

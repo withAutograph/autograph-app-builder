@@ -85,8 +85,12 @@ describe("Vercel project provisioning", () => {
         githubSelected: true,
         persistedCandidates: [],
         persistedAbsentCandidates: [],
-        persistCandidate: async (value) => void candidates.push(value),
-        persistAbsent: async (value) => void absent.push(value),
+        persistCandidate: async (value) => {
+          candidates.push(value);
+        },
+        persistAbsent: async (value) => {
+          absent.push(value);
+        },
         fetch: request,
         generateSuffix: () => "a1b2c3",
       });
@@ -192,8 +196,12 @@ describe("Vercel project provisioning", () => {
       githubSelected: false,
       persistedCandidates: [],
       persistedAbsentCandidates: [],
-      persistCandidate: async (value) => void candidates.push(value),
-      persistAbsent: async (value) => void absent.push(value),
+      persistCandidate: async (value) => {
+        candidates.push(value);
+      },
+      persistAbsent: async (value) => {
+        absent.push(value);
+      },
       fetch: request,
       generateSuffix: () => "a1b2c3",
     });

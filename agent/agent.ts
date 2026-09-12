@@ -553,7 +553,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("retry target planning")) {
     const planResults = toolResults.filter(({ name }) => name === "plan_app_creation");
     const requiredResults = 2;
-    const statusResult = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const statusResult = [...toolResults]
+      .toReversed()
+      .find(({ name }) => name === "workspace_status");
     if (
       statusResult === undefined ||
       (planResults.length < requiredResults && toolResults.at(-1)?.name === "plan_app_creation")
@@ -583,7 +585,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   }
   if (message.includes("prepare offline target dependencies")) {
     const lostResponse = message.includes("lost response");
-    const statusResult = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const statusResult = [...toolResults]
+      .toReversed()
+      .find(({ name }) => name === "workspace_status");
     const observedPhase = (statusResult?.output as { phase?: string } | undefined)?.phase;
     if (
       statusResult === undefined ||
@@ -623,7 +627,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : "Checkout-backed dependency metadata was recorded for planning.";
   }
   if (message.includes("run target identity and planning")) {
-    const statusResult = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const statusResult = [...toolResults]
+      .toReversed()
+      .find(({ name }) => name === "workspace_status");
     if (
       statusResult === undefined ||
       ((statusResult.output as { phase?: string } | undefined)?.phase !== "dependencies_prepared" &&
@@ -640,7 +646,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const planResult = latestResult?.name === "plan_app_creation" ? latestResult : undefined;
     if (planResult === undefined) {
       const existing = [...toolResults]
-        .reverse()
+        .toReversed()
         .find(({ name }) => name === "inspect_existing_app")?.output as
         | { files?: readonly { path: string; content: string }[] }
         | undefined;
@@ -656,11 +662,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             name: "plan_app_creation",
-            input: {
-              ...(existingAppChanges === undefined || existingAppChanges.length === 0
+            input:
+              existingAppChanges === undefined || existingAppChanges.length === 0
                 ? {}
-                : { existingAppChanges }),
-            },
+                : { existingAppChanges },
           },
         ],
       };
@@ -839,7 +844,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const retry = message.includes("retry change-set acceptance");
     const accepted = toolResults.filter(({ name }) => name === "accept_change_set");
     const requiredAccepts = stale ? 3 : retry ? 2 : 1;
-    const status = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     const latestStatus = status?.output as
       | { phase?: string; validation?: { digest?: string } }
       | undefined;
@@ -848,7 +853,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       (latestStatus?.phase !== "validated" && latestStatus?.phase !== "reviewed")
     )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    const proposal = [...toolResults].reverse().find(({ name }) => name === "change_set_status");
+    const proposal = [...toolResults].toReversed().find(({ name }) => name === "change_set_status");
     if (proposal === undefined)
       return {
         toolCalls: [
@@ -900,7 +905,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     )?.[1];
     if (destinationPath === undefined) return "The fresh repository destination is missing.";
     const review = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name, isError }) => name === "accept_change_set" && !isError)?.output as
       | { digest?: string }
       | undefined;
@@ -968,7 +973,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (message.includes("lost response") && latestRecoveryIndex > latestStatusIndex)
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
     const status = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name }) => name === "artifact_workflow_status");
     if (status === undefined)
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
@@ -1013,7 +1018,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale branch preconditions");
     const recover = message.includes("recover branch worktree publication");
     const status = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name }) => name === "artifact_workflow_status");
     if (status === undefined)
       return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
@@ -1025,7 +1030,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ({ name }) => name === "branch_worktree_publication_status",
     );
     const latestMutation = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(
         ({ name }) =>
           name === "publish_reviewed_change_set_to_branch_worktree" ||
@@ -1083,7 +1088,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       "worktreeStatusDigest",
       "postconditionDigest",
     ])
-      delete proposal[key];
+      Reflect.deleteProperty(proposal, key);
     if (recover) {
       if (output.status === "succeeded")
         return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
@@ -1147,7 +1152,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale");
     const retry = message.includes("retry");
     const afterCancellation = message.includes("after cancellation");
-    const status = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     const workflow = status?.output as { phase?: string; review?: { digest?: string } } | undefined;
     const latestPublicationIndex = toolResults.findLastIndex(
       ({ name }) => name === "publish_reviewed_change_set",
@@ -1162,7 +1167,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       )
     )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
-    const source = [...toolResults].reverse().find(({ name }) => name === "inspect_source");
+    const source = [...toolResults].toReversed().find(({ name }) => name === "inspect_source");
     const destinationPath = (source?.output as { sourcePath?: string } | undefined)?.sourcePath;
     if (destinationPath === undefined || workflow.review?.digest === undefined)
       return "An exact reviewed receipt and explicitly inspected local checkout are required before local publication.";
@@ -1207,7 +1212,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           },
         ],
       };
-    const proposal = [...publicationStatuses].reverse().at(0);
+    const proposal = [...publicationStatuses].toReversed().at(0);
     if (proposal === undefined)
       return {
         toolCalls: [
@@ -1329,11 +1334,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("read recorded prototype artifact")) {
     const stale = message.includes("stale digest");
     const recorded = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name, isError }) => name === "record_prototype_artifact" && !isError);
     if (recorded === undefined && !stale) return "Record a prototype artifact before reading it.";
     const artifact = recorded?.output as { path?: string; digest?: string } | undefined;
-    const read = [...toolResults].reverse().find(({ name }) => name === "get_prototype_artifact");
+    const read = [...toolResults]
+      .toReversed()
+      .find(({ name }) => name === "get_prototype_artifact");
     if (read !== undefined && !(stale && !read.isError)) {
       if (read.isError) return "The prototype artifact digest was rejected as stale.";
       const output = read.output as
@@ -1358,18 +1365,20 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     };
   }
   if (message.includes("assess workspace readiness before planning")) {
-    const status = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     if (status === undefined || (status.output as { phase?: string }).phase === "empty")
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const readiness = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name }) => name === "workspace_readiness_status");
     if (readiness === undefined)
       return { toolCalls: [{ name: "workspace_readiness_status", input: {} }] };
     return "The workspace readiness receipt is not ready for target execution, and no target command was run.";
   }
   if (message.includes("assess target command readiness")) {
-    const statusResult = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const statusResult = [...toolResults]
+      .toReversed()
+      .find(({ name }) => name === "workspace_status");
     if (statusResult === undefined) return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const status = statusResult.output as
       | { phase?: string; proposal?: { digest?: string } }
@@ -1384,7 +1393,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     )
       return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const readinessResult = [...toolResults]
-      .reverse()
+      .toReversed()
       .find(({ name }) => name === "target_execution_status");
     const staleRequest = message.includes("stale proposal digest");
     if (readinessResult === undefined || (staleRequest && !readinessResult.isError)) {
@@ -1418,7 +1427,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       : `Sandbox toolchain receipt: ${JSON.stringify(result.output)}`;
   }
   if (message.includes("attempt appspec mutation after publication")) {
-    const status = [...toolResults].reverse().find(({ name }) => name === "workspace_status");
+    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     if (status === undefined) return { toolCalls: [{ name: "workspace_status", input: {} }] };
     const workflow = status.output as
       | {
@@ -1480,7 +1489,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const acceptanceResult = toolResults.find(({ name }) => name === "accept_app_spec");
     if (acceptanceResult === undefined) {
       const artifactResult = [...toolResults]
-        .reverse()
+        .toReversed()
         .find(({ name }) => name === "record_prototype_artifact");
       if (artifactResult === undefined)
         return {
@@ -1626,8 +1635,9 @@ export default defineAgent({
     externalDependencies: ["@emulators/adapter-next", "@emulators/github", "@emulators/vercel"],
   },
   model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
-  ...(!hasTestCapability("mock-model")
-    ? {
+  ...(hasTestCapability("mock-model")
+    ? {}
+    : {
         modelOptions: {
           providerOptions: {
             gateway: {
@@ -1636,8 +1646,7 @@ export default defineAgent({
             },
           },
         },
-      }
-    : {}),
+      }),
   modelContextWindowTokens: 128_000,
   reasoning: localDevelopmentAgent ? "low" : "high",
 });

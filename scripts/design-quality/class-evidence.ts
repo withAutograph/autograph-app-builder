@@ -181,13 +181,13 @@ export function escapedTailwindClassToken(selector: string | undefined) {
   if (!selector?.startsWith(".")) return undefined;
   let token = "";
   let index = 1;
-  for (; index < selector.length; index++) {
+  for (; index < selector.length; index += 1) {
     const character = selector[index]!;
     if (character === "\\") {
       const escaped = selector[index + 1];
       if (!escaped) return undefined;
       token += escaped;
-      index++;
+      index += 1;
     } else if (character === "[") break;
     else if (/[A-Za-z0-9_-]/.test(character)) token += character;
     else return undefined;
@@ -195,14 +195,14 @@ export function escapedTailwindClassToken(selector: string | undefined) {
   if (!token) return undefined;
   while (index < selector.length) {
     if (selector[index] !== "[") return undefined;
-    index++;
+    index += 1;
     let quote: string | undefined;
     let closed = false;
-    for (; index < selector.length; index++) {
+    for (; index < selector.length; index += 1) {
       const character = selector[index]!;
       if (character === "\\") {
         if (index + 1 >= selector.length) return undefined;
-        index++;
+        index += 1;
         continue;
       }
       if (quote) {
@@ -215,7 +215,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
       }
       if (character === "]") {
         closed = true;
-        index++;
+        index += 1;
         break;
       }
       if (character === "[") return undefined;

@@ -42,9 +42,9 @@ async function runInstall(script: string, failure: "none" | "checksum" | "releas
   await writeStub(
     bin,
     "gh",
-    'case "${2:-}" in download) exit 0 ;; verify) exit "${GH_VERIFY_EXIT:-0}" ;; verify-asset) exit 0 ;; *) exit 2 ;; esac',
+    `case "\${2:-}" in download) exit 0 ;; verify) exit "\${GH_VERIFY_EXIT:-0}" ;; verify-asset) exit 0 ;; *) exit 2 ;; esac`,
   );
-  await writeStub(bin, "shasum", 'exit "${SHASUM_EXIT:-0}"');
+  await writeStub(bin, "shasum", `exit "\${SHASUM_EXIT:-0}"`);
   await writeStub(bin, "tar", 'printf "tar %s\\n" "$*" >> "$AUDIT_LOG"');
   await writeStub(bin, "codex", 'printf "codex %s\\n" "$*" >> "$AUDIT_LOG"');
 
@@ -59,8 +59,7 @@ async function runInstall(script: string, failure: "none" | "checksum" | "releas
     },
   });
   try {
-    if (failure === "none") await execution;
-    else await expect(execution).rejects.toThrow();
+    await (failure === "none" ? execution : expect(execution).rejects.toThrow());
     return await readAuditLog(auditLog);
   } finally {
     await rm(root, { recursive: true, force: true });

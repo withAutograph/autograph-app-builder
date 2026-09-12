@@ -797,7 +797,7 @@ function tupleColumns(rows: HostedStorageReadBack["columns"]) {
   return rows.map((row) => [row.table, row.column, row.type, row.notNull]);
 }
 
-function tupleObjects(rows: Array<{ table: string; name: string }>) {
+function tupleObjects(rows: { table: string; name: string }[]) {
   return rows.map((row) => [row.table, row.name]);
 }
 
@@ -809,7 +809,7 @@ export async function verifyHostedStorageReadBack(input: {
   const readBack = hostedStorageReadBackSchema.parse(input.readBack);
   const contract = await loadHostedStorageContract(input.repositoryRoot);
   if (!Number.isFinite(input.observedAt.getTime())) {
-    throw new Error("Hosted storage observation time is invalid.");
+    throw new TypeError("Hosted storage observation time is invalid.");
   }
   if (
     JSON.stringify(readBack.migrations) !==

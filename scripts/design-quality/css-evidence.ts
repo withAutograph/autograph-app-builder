@@ -1,4 +1,4 @@
-import postcss from "postcss";
+import { parse, type Declaration } from "postcss";
 
 export type CssSourceFile = { path: string; content: string };
 export type CssRuleEvidence = {
@@ -19,7 +19,7 @@ function canonicalSelector(value: string) {
   let output = "";
   let pendingSpace = false;
   let quote: string | undefined;
-  for (let index = 0; index < value.length; index++) {
+  for (let index = 0; index < value.length; index += 1) {
     const char = value[index]!;
     if (quote) {
       output += char;
@@ -49,7 +49,7 @@ function canonicalSelector(value: string) {
 
 function ruleSignature(
   selector: string,
-  declarations: Array<{ prop: string; value: string; important?: boolean }>,
+  declarations: { prop: string; value: string; important?: boolean }[],
 ): string | undefined {
   const properties = declarations.map((declaration) => declaration.prop);
   if (
@@ -76,13 +76,13 @@ function ruleSignature(
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((file) => /\.css$/i.test(file.path))) {
-    const css = postcss.parse(file.content, { from: file.path });
+    const css = parse(file.content, { from: file.path });
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP
       // backend, so it deliberately stays unassessed.
       if (rule.parent?.type !== "root") return;
       const declarations =
-        rule.nodes?.filter((node): node is postcss.Declaration => node.type === "decl") ?? [];
+        rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
       if (!signature) return;
       for (const declaration of declarations) {
@@ -107,7 +107,7 @@ export function generatedCssRule(
   selector: string | undefined,
   property: string,
   value: string | undefined,
-  declarations: Array<{ name: string; value: string; important?: boolean }>,
+  declarations: { name: string; value: string; important?: boolean }[],
 ) {
   if (!selector || value === undefined) return undefined;
   const tuple = key(selector, property, value);

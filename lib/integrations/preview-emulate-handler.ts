@@ -64,8 +64,13 @@ export function createPreviewEmulateHandler(input: {
     },
   });
   const durableHandler = {} as Handler;
-  for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"] as const) {
-    durableHandler[method] = async (request, context) => {
+  const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+  const createDurableHandler =
+    (method: (typeof methods)[number]) =>
+    async (
+      request: Parameters<Handler[(typeof methods)[number]]>[0],
+      context: Parameters<Handler[(typeof methods)[number]]>[1],
+    ) => {
       const response = await handler[method](request, context);
       // adapter-next queues persistence after producing the response. Await its
       // save before returning so a serverless invocation cannot freeze with an
@@ -81,6 +86,8 @@ export function createPreviewEmulateHandler(input: {
       }
       return response;
     };
+  for (const method of methods) {
+    durableHandler[method] = createDurableHandler(method);
   }
   return durableHandler;
 }

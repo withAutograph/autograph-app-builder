@@ -23,9 +23,7 @@ describe("deployment Browser preview route", () => {
         revision: "b".repeat(64),
       },
     }));
-    const serviceForRequest = vi.fn(async () =>
-      Promise.resolve({ get } as unknown as EveSessionService),
-    );
+    const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       workloadIdentity: {

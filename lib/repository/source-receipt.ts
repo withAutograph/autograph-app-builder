@@ -136,12 +136,12 @@ export type SourceReceipt = SourceReceiptEvidence & {
 export type CanonicalTemplateSnapshot = Omit<SupportedTemplateSnapshot, "sourceSha"> & {
   sourceSha: string;
   sourceTree: string;
-  contract: Array<{
+  contract: {
     path: string;
     mode: string;
     objectId: string;
     sha256: string;
-  }>;
+  }[];
 };
 
 export function parseCanonicalTemplateSnapshot(value: unknown): CanonicalTemplateSnapshot {

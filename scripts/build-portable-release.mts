@@ -14,7 +14,7 @@ import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index < 0) return undefined;
+  if (index === -1) return undefined;
   const value = process.argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;

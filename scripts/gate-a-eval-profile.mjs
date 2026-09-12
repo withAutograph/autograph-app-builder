@@ -52,7 +52,7 @@ function observeRoot(path, repositoryRoot) {
       !state.isDirectory() ||
       state.isSymbolicLink() ||
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
-      (state.mode & BigInt(0o777)) !== BigInt(0o700) ||
+      (state.mode & 0o777n) !== 0o700n ||
       within(repositoryRoot, canonical) ||
       within(canonical, repositoryRoot)
     )
@@ -62,7 +62,7 @@ function observeRoot(path, repositoryRoot) {
       device: String(state.dev),
       inode: String(state.ino),
       uid: String(state.uid),
-      mode: (state.mode & BigInt(0o777)).toString(8),
+      mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
     });
   } catch {
@@ -82,7 +82,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
       !state.isDirectory() ||
       state.isSymbolicLink() ||
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
-      (state.mode & BigInt(0o022)) !== BigInt(0) ||
+      (state.mode & 0o022n) !== 0n ||
       within(repositoryRoot, canonical) ||
       within(canonical, repositoryRoot)
     )
@@ -92,7 +92,7 @@ function observeReadOnlyRoot(path, repositoryRoot) {
       device: String(state.dev),
       inode: String(state.ino),
       uid: String(state.uid),
-      mode: (state.mode & BigInt(0o777)).toString(8),
+      mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
     });
   } catch {
@@ -212,7 +212,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
 
 export function installGateAEvalProfile(environment, value, repositoryRoot) {
   const profile = validateGateAEvalProfile(value, repositoryRoot);
-  for (const field of gateAEnvironmentFields) delete environment[field];
+  for (const field of gateAEnvironmentFields) Reflect.deleteProperty(environment, field);
   if (profile.profile === "general") {
     environment.APP_BUILDER_LOCAL_PUBLICATION = profile.localPublication;
     environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION = "1";

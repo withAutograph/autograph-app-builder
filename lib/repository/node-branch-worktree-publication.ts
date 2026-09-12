@@ -456,14 +456,14 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
   holder.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
-  await new Promise<void>((resolveReady, rejectReady) => {
+  await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       holder.kill();
-      rejectReady(new Error("The OS publication lock did not become ready."));
+      reject(new Error("The OS publication lock did not become ready."));
     }, 5_000);
     void terminalPromise.then((outcome) => {
       clearTimeout(timeout);
-      rejectReady(
+      reject(
         outcome.kind === "error"
           ? outcome.error
           : new Error(
@@ -476,10 +476,10 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
       clearTimeout(timeout);
       if (chunk !== "READY\n") {
         holder.kill();
-        rejectReady(new Error("The OS publication lock handshake failed."));
+        reject(new Error("The OS publication lock handshake failed."));
         return;
       }
-      resolveReady();
+      resolve();
     });
   });
   const lockLostError = () => {
@@ -859,7 +859,7 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
     if (match === null) throw new Error("The source tree contains an unsupported entry.");
     if (match[1] === "160000" || match[2] !== "blob")
       throw new Error("Branch-worktree publication does not materialize Git submodules.");
-    const [, , , , path] = match;
+    const { 4: path } = match;
     if (!safeSourcePath(path)) throw new Error("The source tree contains an unsafe path.");
     const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
     if (match[1] === "120000") {
@@ -953,9 +953,7 @@ async function inspectBranchPublicationSource(input: {
     "The source contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const statusEntries = await Promise.all(
-    paths.map(async (path) => {
-      return { path, state: await fileState(resolve(canonicalPath, path)) };
-    }),
+    paths.map(async (path) => ({ path, state: await fileState(resolve(canonicalPath, path)) })),
   );
   for (const change of input.review.changes) {
     const target = await safeTarget(canonicalPath, change.path, false);

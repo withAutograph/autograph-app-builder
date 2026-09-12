@@ -644,7 +644,8 @@ export function assertNoSecretMaterial(value: unknown, path = "receipt"): void {
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => assertNoSecretMaterial(entry, `${path}[${index}]`));
+    for (const [index, entry] of value.entries())
+      assertNoSecretMaterial(entry, `${path}[${index}]`);
     return;
   }
   if (typeof value !== "object" || value === null) return;

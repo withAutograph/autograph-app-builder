@@ -223,7 +223,7 @@ export function proposalFromBranchJournal(
     "reason",
     "failureMessage",
   ])
-    delete proposalOnly[key];
+    Reflect.deleteProperty(proposalOnly, key);
   return {
     ...(proposalOnly as Omit<BranchWorktreePublicationProposal, "digest">),
     digest: proposalDigest,

@@ -8,15 +8,23 @@ import type { DocsDocument } from "./docs-registry";
 
 export function DocsContent({ slug }: Pick<DocsDocument, "slug">) {
   switch (slug) {
-    case "overview":
+    case "overview": {
       return <Overview />;
-    case "install-autograph":
+    }
+    case "install-autograph": {
       return <InstallAutograph />;
-    case "connect-access":
+    }
+    case "connect-access": {
       return <ConnectAccess />;
-    case "create-an-app":
+    }
+    case "create-an-app": {
       return <CreateAnApp />;
-    case "troubleshooting":
+    }
+    case "troubleshooting": {
       return <Troubleshooting />;
+    }
+    default: {
+      return null;
+    }
   }
 }

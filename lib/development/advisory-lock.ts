@@ -59,7 +59,9 @@ export async function runWithDevelopmentLock(input: {
   );
   const signals = ["SIGINT", "SIGTERM"] as const;
   const handlers = signals.map((signal) => {
-    const handler = () => void stopDevelopmentChild(child);
+    const handler = () => {
+      stopDevelopmentChild(child);
+    };
     process.once(signal, handler);
     return { signal, handler };
   });

@@ -98,7 +98,7 @@ export function createPostgresGitHubPublicationReceiptStore(
       }
       const timestamp = now();
       if (!Number.isFinite(timestamp.getTime())) {
-        throw new Error("GitHub journal timestamp is invalid.");
+        throw new TypeError("GitHub journal timestamp is invalid.");
       }
       const values = journalValues(receipt, timestamp);
       if (expectedDigest === undefined) {

@@ -249,7 +249,7 @@ allowed-tools: "autograph_start autograph_get"
     ["credential-bearing HTTP field names", { "X-Api-Key": "public" }, "not demonstrably public"],
     [
       "secret-like HTTP field values",
-      { "X-Client": "${CLIENT_SECRET}" },
+      { "X-Client": `\${CLIENT_SECRET}` },
       "not demonstrably public",
     ],
     ["invalid HTTP field values", { "X-Client": "line one\nline two" }, "invalid value"],

@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
+import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
 const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
 const actions = vi.hoisted(() => ({
@@ -15,8 +16,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/app/actions/builder", () => ({
   continueHandoffProvisioning: actions.continue,
 }));
-
-import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
@@ -43,11 +42,11 @@ function projection(
 class TestEventSource {
   static instances: TestEventSource[] = [];
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
+  readonly url: string;
   closed = false;
-  onerror: (() => void) | null = null;
-  onopen: (() => void) | null = null;
 
-  constructor(readonly url: string) {
+  constructor(url: string) {
+    this.url = url;
     TestEventSource.instances.push(this);
   }
 
@@ -61,7 +60,7 @@ class TestEventSource {
     this.closed = true;
   }
 
-  emit(name: "snapshot" | "end", value: unknown) {
+  emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     for (const listener of this.listeners.get(name) ?? []) listener(event);
   }
@@ -159,10 +158,10 @@ describe("HandoffProvisioningProgress", () => {
     await render();
     const stream = TestEventSource.instances[0]!;
 
-    await act(async () => stream.onerror?.());
+    await act(async () => stream.emit("error"));
     expect(TestEventSource.instances).toHaveLength(1);
     expect(container?.textContent).toContain("Reconnecting… Your handoff is saved.");
-    await act(async () => stream.onopen?.());
+    await act(async () => stream.emit("open"));
     expect(container?.textContent).not.toContain("Reconnecting");
 
     await act(async () => root?.unmount());
@@ -175,7 +174,7 @@ describe("HandoffProvisioningProgress", () => {
     await render();
     const oldStream = TestEventSource.instances[0]!;
     await act(async () => oldStream.emit("snapshot", projection(7)));
-    await act(async () => oldStream.onerror?.());
+    await act(async () => oldStream.emit("error"));
     await act(async () => container?.querySelector<HTMLButtonElement>("button")?.click());
     expect(oldStream.closed).toBe(true);
     expect(TestEventSource.instances).toHaveLength(2);

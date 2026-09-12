@@ -5,22 +5,20 @@ import { previewOAuthRateLimit } from "./preview-oauth-runtime";
 import { cursorClientId, cursorRedirectUri } from "./cursor-client";
 import { previewOAuthScopes } from "./preview-oauth-contract";
 import {
+  authorizationUrl,
+  clientId,
+  codexClientId,
+  codexClientMetadata,
+  codexRedirectUris,
   grantRealOAuth,
+  issuer,
+  origin,
   refreshRealOAuth,
   registerTestCursorClient,
-} from "./real-oauth-test-harness";
-import {
-  createRealOAuthHarness as setup,
-  authorizationUrl,
-  origin,
-  issuer,
-  resource,
-  clientId,
   redirectUri,
   requestedScope,
-  codexClientId,
-  codexRedirectUris,
-  codexClientMetadata,
+  resource,
+  createRealOAuthHarness as setup,
 } from "./real-oauth-test-harness";
 
 describe("real Better Auth Preview OAuth handler", () => {
@@ -127,7 +125,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     expect(jwksResponse.status).toBe(200);
     const jwks = (await jwksResponse.json()) as {
-      keys: Array<Record<string, unknown>>;
+      keys: Record<string, unknown>[];
     };
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({

@@ -4,7 +4,9 @@ export function createAuthorizedSandboxSession(input: {
   session: SandboxSession;
   authorize?: () => Promise<unknown>;
 }): SandboxSession {
-  const authorize = async () => void (await input.authorize?.());
+  const authorize = async () => {
+    await input.authorize?.();
+  };
   return {
     id: input.session.id,
     resolvePath: (path) => input.session.resolvePath(path),

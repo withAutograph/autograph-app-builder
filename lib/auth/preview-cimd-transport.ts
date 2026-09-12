@@ -90,24 +90,25 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
       reject(signal.reason);
     };
     signal.addEventListener("abort", onAbort, { once: true });
-    operation.then(
-      (value) => {
+    operation
+      .then((value) => {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
-      },
-      (error: unknown) => {
+      })
+      .catch((error: unknown) => {
         signal.removeEventListener("abort", onAbort);
         reject(error);
-      },
-    );
+      });
   });
 }
 
+const DEFAULT_PREVIEW_CIMD_DEPENDENCIES: PreviewCimdTransportDependencies = {
+  resolveHostname,
+  requestHttps,
+};
+
 export function createPreviewCimdTransport(
-  dependencies: PreviewCimdTransportDependencies = {
-    resolveHostname,
-    requestHttps,
-  },
+  dependencies: PreviewCimdTransportDependencies = DEFAULT_PREVIEW_CIMD_DEPENDENCIES,
 ): ClientMetadataResourceFetch {
   return async (input, init) => {
     const webRequest = new Request(input, init);
@@ -147,7 +148,8 @@ export function createPreviewCimdTransport(
           headers,
           lookup: createPinnedPreviewLookup(addresses),
           method: webRequest.method,
-          servername: isIP(url.hostname.replace(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
+          servername:
+            isIP(url.hostname.replaceAll(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
           signal,
         },
         (response) => {

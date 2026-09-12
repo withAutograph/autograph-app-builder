@@ -79,7 +79,7 @@ function fixedGitEnvironment(): NodeJS.ProcessEnv {
     "GIT_CONFIG_KEY_0",
     "GIT_CONFIG_VALUE_0",
   ])
-    delete environment[name];
+    Reflect.deleteProperty(environment, name);
   return environment;
 }
 
@@ -219,7 +219,7 @@ function statusMetadata(record: string): {
   indexObjectId?: string;
 } {
   const fields = record.split(" ");
-  const [, , , , indexMode, , , indexObjectId] = fields;
+  const { 4: indexMode, 7: indexObjectId } = fields;
   return indexMode !== undefined && indexObjectId !== undefined ? { indexMode, indexObjectId } : {};
 }
 
@@ -746,8 +746,8 @@ export async function publishReviewedChangeSet(input: {
       throw new Error("Repository filesystem identity changed before Git apply.");
     fixedGitApply(snapshot.canonicalPath, patch, { check: true });
     mutationDispatched = true;
-    if (input.hooks?.dispatchGitApply !== undefined) await input.hooks.dispatchGitApply();
-    else fixedGitApply(snapshot.canonicalPath, patch);
+    if (input.hooks?.dispatchGitApply === undefined) fixedGitApply(snapshot.canonicalPath, patch);
+    else await input.hooks.dispatchGitApply();
     mutationCallReturned = true;
     appliedPaths = [...input.proposal.executionPaths];
     pending = { ...pending, appliedPaths, digest: "" };
@@ -817,8 +817,8 @@ export async function publishReviewedChangeSet(input: {
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
           const observed = await fileState(target);
           if (assertFileMatches(observed, change.after)) observedPost.push(path);
-          else if (!assertFileMatches(observed, change.before))
-            if (!mutationCallReturned) uncertainPaths.push(path);
+          else if (!assertFileMatches(observed, change.before) && !mutationCallReturned)
+            uncertainPaths.push(path);
         } catch {
           if (!mutationCallReturned) uncertainPaths.push(path);
         }

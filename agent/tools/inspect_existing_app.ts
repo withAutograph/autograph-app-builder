@@ -12,8 +12,8 @@ const maximumTotalBytes = 1_048_576;
 
 export default defineDynamic({
   events: {
-    "step.started": () => {
-      return defineTool({
+    "step.started": () =>
+      defineTool({
         description:
           "Read regular text files from one existing application. A fresh canonical-source flow prepares itself automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         inputSchema: z.strictObject({
@@ -99,7 +99,6 @@ export default defineDynamic({
             ...(omittedPaths.length === 0 ? {} : { omittedPaths }),
           };
         },
-      });
-    },
+      }),
   },
 });

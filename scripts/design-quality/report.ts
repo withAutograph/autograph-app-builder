@@ -1,7 +1,7 @@
 import type { Adherence, Observation } from "./evidence";
 
 export function escapeHtml(value: unknown) {
-  return String(value).replace(
+  return String(value).replaceAll(
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
   );
@@ -10,19 +10,19 @@ export function renderReport(report: {
   createdAt: string;
   source: unknown;
   adherence?: Adherence;
-  sourceFiles?: Array<{ path: string; content: string }>;
+  sourceFiles?: { path: string; content: string }[];
   reference?: unknown;
   evaluationNotes?: string[];
   case?: {
     id: string;
     title: string;
     notes: string;
-    evidence: Array<{ repo: string; path: string; status: string }>;
+    evidence: { repo: string; path: string; status: string }[];
     reviewQuestions: string[];
     outcomes: string[];
   };
   judge: unknown;
-  captures: Array<{
+  captures: {
     name: string;
     state: string;
     measurements: unknown;
@@ -30,7 +30,7 @@ export function renderReport(report: {
     interaction: unknown;
     width?: number;
     height?: number;
-  }>;
+  }[];
 }) {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
@@ -74,13 +74,13 @@ export function renderReport(report: {
   const implementationDiagnostics =
     (
       report.source as {
-        implementationDiagnostics?: Array<{
+        implementationDiagnostics?: {
           path: string;
           line: number;
           column: number;
           code: number;
           message: string;
-        }>;
+        }[];
       }
     )?.implementationDiagnostics ?? [];
   const implementationFindings = implementationDiagnostics.length
@@ -150,13 +150,13 @@ export function renderReport(report: {
     reason?: string;
     ratings?: Record<string, { score: number; reason: string }>;
     strengths?: string[];
-    findings?: Array<{
+    findings?: {
       image: string;
       severity: string;
       region: { x: number; y: number; width: number; height: number };
       explanation: string;
       improvement: string;
-    }>;
+    }[];
     limitations?: string[];
   };
   const summary = `<p><strong>${judge.status === "complete" ? `Subjective design score: ${judge.subjectiveScore}/100` : escapeHtml(judge.reason ?? "AI scoring not run")}</strong></p><p>One model assessment; not an objective rating. Token adherence is reported separately below.</p>${

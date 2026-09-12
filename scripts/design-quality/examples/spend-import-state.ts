@@ -10,20 +10,20 @@ export type SpendFixture = {
   import: { batchId: string; rows: number };
   fieldMapping: Record<string, string>;
   preview: { creates: number; needsReview: number };
-  representativeRows: Array<{
+  representativeRows: {
     id: string;
     source: Record<string, string | number>;
     issue?: string;
-  }>;
-  uncertainMatches: Array<{
+  }[];
+  uncertainMatches: {
     id: string;
     vendorRaw: string;
     amount: number;
     currency: string;
     transactionDate: string;
     sourceRef: string;
-    candidates: Array<{ id: string; label: string }>;
-  }>;
+    candidates: { id: string; label: string }[];
+  }[];
 };
 
 export type SpendMapping = Record<string, SpendTarget>;

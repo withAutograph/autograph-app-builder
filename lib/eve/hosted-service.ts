@@ -97,7 +97,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
-    responses: Array<{
+    responses: {
       requestId: string;
       response:
         | {
@@ -111,7 +111,7 @@ export interface HostedEveTransport {
             value: string;
             optionId?: string;
           };
-    }>;
+    }[];
     sourceHandoffId?: string;
   }) => Promise<HostedEngineSnapshot>;
   cancel: (input: {
@@ -265,7 +265,7 @@ function checkpointForSnapshot(
   snapshot: HostedEngineSnapshot,
   capturedAtEpochMs: number,
 ): HostedSessionCheckpoint {
-  const ring = new Array<z.infer<typeof publicEveEventSchema>>(512);
+  const ring = Array.from<z.infer<typeof publicEveEventSchema>>({ length: 512 });
   let publicEventCount = 0;
   for (const candidate of snapshot.events) {
     if (candidate === null || typeof candidate !== "object") continue;
@@ -520,10 +520,12 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     }
     switch (reservation.disposition) {
-      case "conflict":
+      case "conflict": {
         throw new HostedIdempotencyConflictError();
-      case "rejected":
+      }
+      case "rejected": {
         throw new HostedSessionBusyError();
+      }
       case "reserved": {
         const operation = requireOwnedOperation(reservation.operation, {
           operationId,
@@ -556,17 +558,20 @@ export function createHostedEveSessionService(input: {
             return result;
           }
           case "submission_unknown":
-          case "reserved":
+          case "reserved": {
             throw new HostedSubmissionUnknownError();
-          case "rejected":
+          }
+          case "rejected": {
             throw new HostedRejectedOperationError(operation.safeErrorCode);
-          default:
+          }
+          default: {
             return assertNever(operation);
+          }
         }
-        break;
       }
-      default:
+      default: {
         return assertNever(reservation);
+      }
     }
 
     let dispatched: {

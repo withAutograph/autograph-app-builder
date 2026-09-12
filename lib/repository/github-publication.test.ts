@@ -241,9 +241,8 @@ function draftReadBack(
           idempotencyKey: proposal.idempotencyKey,
         } as const);
   const pullRequest =
-    state !== "complete"
-      ? ({ status: "absent" } as const)
-      : ({
+    state === "complete"
+      ? ({
           status: "present",
           pullRequestId: "400",
           pullRequestNumber: 7,
@@ -256,7 +255,8 @@ function draftReadBack(
           baseSha: proposal.baseSha,
           changeSetDigest: proposal.changeSetDigest,
           idempotencyKey: proposal.idempotencyKey,
-        } as const);
+        } as const)
+      : ({ status: "absent" } as const);
   const unsigned = {
     version: GITHUB_PUBLICATION_VERSION,
     idempotencyKey: proposal.idempotencyKey,
@@ -398,7 +398,7 @@ describe("closed GitHub publication contract", () => {
         after: { mode: "644", digest: reviewedBytesDigest },
       },
       {
-        path: "apps/demo/\u{e000}.tsx",
+        path: "apps/demo/\u{E000}.tsx",
         kind: "added",
         after: { mode: "644", digest: reviewedBytesDigest },
       },
@@ -420,7 +420,7 @@ describe("closed GitHub publication contract", () => {
     expect(proposal.approvedPaths).toEqual([
       ".codex/skills/example/SKILL.md",
       ".codex/skills/example/agents/openai.yaml",
-      "apps/demo/\u{e000}.tsx",
+      "apps/demo/\u{E000}.tsx",
       "apps/demo/\u{10000}.tsx",
     ]);
     expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();
@@ -637,7 +637,7 @@ describe("closed GitHub publication contract", () => {
   it("constructs a closed content bundle without retaining mutable source bytes", async () => {
     const adapter = new Adapter();
     const proposal = draftProposal(adapter);
-    const sourceBytes = reviewedBytes.slice();
+    const sourceBytes = new Uint8Array(reviewedBytes);
     const content = await readExactGitHubPublicationContent({
       proposal,
       review: review(),
@@ -659,7 +659,7 @@ describe("closed GitHub publication contract", () => {
   it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
     const adapter = new Adapter();
     const proposal = freshProposal(adapter);
-    const mutable = templateBytes.slice();
+    const mutable = new Uint8Array(templateBytes);
     const content = await readExactGitHubFreshRepositoryContent({
       proposal,
       source: {
@@ -945,7 +945,7 @@ describe("closed GitHub publication contract", () => {
   });
 
   it("refuses stale, overlapping, and branch-collision read-back before mutation", async () => {
-    const mutations: Array<(adapter: Adapter, proposal: DraftPullRequestProposal) => void> = [
+    const mutations: ((adapter: Adapter, proposal: DraftPullRequestProposal) => void)[] = [
       (adapter, proposal) => {
         const value = draftReadBack(proposal, adapter.publishRepo);
         const unsigned = { ...value, changedPathsSinceBase: ["apps/demo"] };
