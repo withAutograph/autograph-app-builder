@@ -16,7 +16,6 @@ jobs:
     environment: self-reproduction
     env:
       SELF_REPRODUCTION_ARRUSTED_ROOT: ${{ vars.ARRUSTED_ROOT }}
-      SELF_REPRODUCTION_OUTPUT_DIR: ${{ runner.temp }}/app-builder-self-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -30,10 +29,12 @@ jobs:
       - run: mise run dependencies:install
       - run: mise run test:unit -- evals/support/self-reproduction.test.ts evals/support/self-reproduction-evidence.test.ts scripts/eval-self-reproduction.test.ts
       - name: Run live self-reproduction eval
+        env:
+          SELF_REPRODUCTION_OUTPUT_DIR: ${{ runner.temp }}/app-builder-self-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
         run: mise run eval:self-reproduction
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: app-builder-self-reproduction-${{ github.sha }}
-          path: ${{ env.SELF_REPRODUCTION_OUTPUT_DIR }}
+          path: ${{ runner.temp }}/app-builder-self-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
