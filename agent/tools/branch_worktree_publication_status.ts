@@ -27,6 +27,7 @@ function branchWorkflow() {
   return workflow;
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function exactBranchWorktreePublicationProposal(input: {
   expectedReviewDigest: string;
 }) {

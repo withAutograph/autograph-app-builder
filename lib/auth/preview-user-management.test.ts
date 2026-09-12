@@ -15,6 +15,7 @@ import type {
 
 function createAuthority(input?: { failure?: OrganizationProvisioningFailure }) {
   const authority: PreviewOrganizationUserAuthority = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     ensureOrganizationForVerifiedUser: vi.fn(async () => {
       if (input?.failure) {
         throw new OrganizationProvisioningError(input.failure);

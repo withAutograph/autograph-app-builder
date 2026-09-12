@@ -111,6 +111,7 @@ export function createPostgresSandboxExecutionLeaseStore(
   database: Database,
 ): SandboxExecutionLeaseStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async acquire(input): Promise<AcquireSandboxLeaseResult> {
       const principal = hostedPrincipalSchema.parse(input.principal);
       const policyDigest = sandboxExecutionPolicyDigest(input.policy);
@@ -164,6 +165,7 @@ export function createPostgresSandboxExecutionLeaseStore(
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async assertCurrent(input) {
       return database.transaction(async (transaction) => {
         const nowEpochMs = await postgresNowEpochMs(transaction);

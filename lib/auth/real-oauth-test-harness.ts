@@ -71,12 +71,14 @@ export function authorizationUrl(
   return url;
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function createRealOAuthHarness(
   activeWorkspaces: string[] = ["workspace_1"],
   clientMetadata: Record<string, unknown> = DEFAULT_CLIENT_METADATA,
   rateLimit: BetterAuthOptions["rateLimit"] = DEFAULT_RATE_LIMIT,
 ) {
   const membershipState = { activeWorkspaces };
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>
     Response.json({
       ...clientMetadata,
@@ -86,11 +88,13 @@ export async function createRealOAuthHarness(
   const options = buildPreviewMcpOAuthOptions({
     config: { issuer, resource },
     membership: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       activeWorkspaceForUser: vi.fn(async () =>
         membershipState.activeWorkspaces.length === 1
           ? membershipState.activeWorkspaces[0]
           : undefined,
       ),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       isActiveMember: vi.fn(async ({ workspaceId }) =>
         membershipState.activeWorkspaces.includes(workspaceId),
       ),

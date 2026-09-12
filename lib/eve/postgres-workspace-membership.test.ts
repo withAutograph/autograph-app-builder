@@ -19,6 +19,7 @@ const principal: HostedPrincipal = {
 };
 
 function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
   const joined = { innerJoin: undefined as unknown, where };

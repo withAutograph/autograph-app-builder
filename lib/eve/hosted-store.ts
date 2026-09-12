@@ -489,6 +489,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly operations = new Map<string, HostedOperationRecord>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -534,6 +535,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return { disposition: "reserved", operation: structuredClone(parsed) };
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
@@ -581,6 +583,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(settled);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async settleUnsuccessful(
     input: Parameters<HostedEveStore["settleUnsuccessful"]>[0],
   ): Promise<HostedOperationRecord> {
@@ -598,6 +601,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(settled);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async getSession(
     principal: z.infer<typeof hostedPrincipalSchema>,
     sessionId: string,
@@ -606,6 +610,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return session === undefined ? null : structuredClone(session);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async listSessions(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     cursor: number;
@@ -623,6 +628,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return { sessions, cursor: input.cursor + sessions.length };
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async observeSession(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
@@ -655,6 +661,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(observed);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async replaceSessionAdapter(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;

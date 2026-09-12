@@ -34,6 +34,7 @@ function harness(input?: {
   const states = new Map<string, { consumed: boolean; authorityDigest: string }>();
   const events: string[] = [];
   const stateStore: GitHubInstallationAuthorizationStateStore = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async create(value) {
       events.push("state:create");
       states.set(value.stateDigest, {
@@ -41,6 +42,7 @@ function harness(input?: {
         authorityDigest: value.authorityDigest,
       });
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(value) {
       events.push("state:consume");
       const state = states.get(value.stateDigest);
@@ -55,16 +57,19 @@ function harness(input?: {
       return true;
     },
   };
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const bind = vi.fn<HostedGitHubInstallationStore["bind"]>(async (value) => {
     events.push("installation:bind");
     return { ...value.binding, active: true, updatedAt: value.now };
   });
   const installationStore: HostedGitHubInstallationStore = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read() {
       return undefined;
     },
     bind,
   };
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const membership = vi.fn(async () => {
     events.push("membership");
     return input?.membership?.() ?? true;
@@ -124,6 +129,7 @@ function successfulFetch(
   seen: { url: string; init?: RequestInit }[],
   repositorySelection: "all" | "selected" = "selected",
 ) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return vi.fn<typeof fetch>(async (resource, init) => {
     const url = String(resource);
     seen.push({ url, init });
@@ -263,6 +269,7 @@ describe("public GitHub App installation authorization", () => {
       branch: "branch",
     };
     const requests: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = String(resource);
       requests.push(url);
@@ -669,6 +676,7 @@ describe("public GitHub App installation authorization", () => {
   it("tolerates future OAuth token response extension fields", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const fallback = successfulFetch(requests);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource, init) => {
       if (String(resource).includes("access_token")) {
         requests.push({ url: String(resource), init });
@@ -690,6 +698,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("classifies a token exchange failure without retaining provider data", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async () =>
       Response.json(
         {
@@ -718,6 +727,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("classifies a 2xx OAuth error response without retaining provider data", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async () =>
       Response.json({
         error: "redirect_uri_mismatch",
@@ -742,6 +752,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("requires selected, active, exact-app installation identity", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = String(resource);
       if (url.includes("access_token"))

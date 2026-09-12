@@ -180,6 +180,7 @@ function providerFetch(input?: {
   repositoryPages?: (number | string)[][];
 }) {
   const calls: { url: string; init: RequestInit; body: unknown }[] = [];
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     let body: unknown = undefined;
@@ -445,6 +446,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
 
   it("round-trips UTF-8 ordered draft material through the HTTP provider", async () => {
     const calls: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       calls.push(url);

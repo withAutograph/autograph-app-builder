@@ -84,6 +84,7 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("GitHub return preserves edits made while its checkpoint is in flight", async ({ page }) => {

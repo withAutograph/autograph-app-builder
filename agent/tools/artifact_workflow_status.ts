@@ -38,6 +38,7 @@ export default defineTool({
   description:
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
   inputSchema: z.object({}),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty")

@@ -1563,6 +1563,7 @@ async function withPublicationLock<T>(input: {
   }
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function publishReviewedChangeSetToBranchWorktree(input: {
   proposal: BranchWorktreePublicationProposal;
   sourceReceipt: SourceReceipt;
@@ -1603,6 +1604,7 @@ export async function publishReviewedChangeSetToBranchWorktree(input: {
   });
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function recoverBranchWorktreePublication(input: {
   proposal: BranchWorktreePublicationProposal;
   sourceReceipt: SourceReceipt;

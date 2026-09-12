@@ -65,6 +65,7 @@ const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
   store: (environment) =>
     createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async isMember({ principal, workspaceId, environment }) {
     return createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
       principal,

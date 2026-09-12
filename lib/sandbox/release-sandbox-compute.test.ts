@@ -70,13 +70,16 @@ describe("Eve durable turn execution envelope", () => {
       const store = vi.fn(() => {
         throw new Error("database must remain unopened");
       });
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const isMember = vi.fn(async () => true);
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled,
         store,
         isMember,
       });
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const stop = vi.fn(async () => undefined);
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const getSandbox = vi.fn(async () => ({
         id: "provider_session_1",
         stop,

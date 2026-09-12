@@ -33,6 +33,7 @@ test.use({ trace: "off", screenshot: "off", video: "off" });
 // Record sanitized outcomes only; never attach cookies, tokens, callback URLs,
 // or raw status responses. No native-client acceptance is claimed by this suite.
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 async function completeHandoff(page: Page) {

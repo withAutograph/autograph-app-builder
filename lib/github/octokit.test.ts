@@ -4,6 +4,7 @@ import { createGuardedGitHubFetch } from "./octokit";
 
 describe("guarded Octokit GitHub transport", () => {
   it("allows only fixed GitHub origins and forces redirects off", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async () => Response.json({ ok: true }));
     const guarded = createGuardedGitHubFetch(request);
 
@@ -15,6 +16,7 @@ describe("guarded Octokit GitHub transport", () => {
 
   it("rejects declared and streamed responses above the shared bound", async () => {
     const declared = createGuardedGitHubFetch(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       vi.fn<typeof fetch>(async () =>
         Response.json(
           { private: "provider-body" },
@@ -28,6 +30,7 @@ describe("guarded Octokit GitHub transport", () => {
 
     const streamed = createGuardedGitHubFetch(
       vi.fn<typeof fetch>(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () =>
           new Response(
             new ReadableStream({

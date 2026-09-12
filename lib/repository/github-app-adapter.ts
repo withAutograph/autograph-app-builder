@@ -234,6 +234,7 @@ export function createGitHubAppPublicationAdapter(
 
   return {
     inspectInstallation,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectRepository(input) {
       const { operation, repositoryId, ref } = input;
       return observationFor(operation, () => provider.inspectRepository({ repositoryId, ref }));

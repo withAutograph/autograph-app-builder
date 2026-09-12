@@ -11,6 +11,7 @@ import {
 
 describe("Preview OAuth deployment handlers", () => {
   it("enables self-service signup only for the gated local emulator", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const managedAuthority = vi.fn(async () => false);
 
     await expect(selfServiceSignupAuthority("local", managedAuthority)()).resolves.toBe(true);
@@ -20,6 +21,7 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("provisions and activates a workspace for an existing signed-in user", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const getSession = vi.fn(async () => ({
       session: { activeOrganizationId: null },
       user: {
@@ -28,9 +30,11 @@ describe("Preview OAuth deployment handlers", () => {
         name: "Person",
       },
     }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const setActiveOrganization = vi.fn(async () => ({
       id: "organization_one",
     }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const ensureOrganizationForVerifiedUser = vi.fn(async () => ({
       organizationId: "organization_one",
       workspaceId: "workspace_one",
@@ -64,6 +68,7 @@ describe("Preview OAuth deployment handlers", () => {
 
   it("rechecks membership without rewriting an already active organization", async () => {
     const setActiveOrganization = vi.fn();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const ensureOrganizationForVerifiedUser = vi.fn(async () => ({
       organizationId: "organization_one",
       workspaceId: "workspace_one",
@@ -72,6 +77,7 @@ describe("Preview OAuth deployment handlers", () => {
     await ensurePreviewSessionOrganization({
       auth: {
         api: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           getSession: vi.fn(async () => ({
             session: { activeOrganizationId: "organization_one" },
             user: {
@@ -99,6 +105,7 @@ describe("Preview OAuth deployment handlers", () => {
       ensurePreviewSessionOrganization({
         auth: {
           api: {
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             getSession: vi.fn(async () => null),
             setActiveOrganization,
           },
@@ -112,6 +119,7 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("mounts the Better Auth handler without eager runtime construction", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const handler = vi.fn(async (request: Request) =>
       Response.json({ path: new URL(request.url).pathname }),
     );
@@ -129,6 +137,7 @@ describe("Preview OAuth deployment handlers", () => {
   });
 
   it("maps OAuth AS discovery to the mounted Better Auth endpoint", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const handler = vi.fn(async (request: Request) =>
       Response.json({ path: new URL(request.url).pathname }),
     );

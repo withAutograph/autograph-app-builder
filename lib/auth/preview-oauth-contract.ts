@@ -120,7 +120,9 @@ export function buildPreviewMcpOAuthOptions(input: {
     clientRegistrationAllowedScopes: previewOAuthScopes.slice(1),
     clientRegistrationRequirePKCE: true,
     allowPublicClientPrelogin: true,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     clientPrivileges: async () => false,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     resourcePrivileges: async () => false,
     // Preview clients are resolved through CIMD. Dynamic registration remains
     // disabled, but activating CIMD can still persist discovery-owned client

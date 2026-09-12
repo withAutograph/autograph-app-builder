@@ -391,6 +391,7 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async function recoverDurableTail(sessionId: string) {
     if (!state.recoveryRequired.has(sessionId)) return;
     const existing = state.recoveries.get(sessionId);
@@ -536,6 +537,7 @@ export function createLocalEveSessionService(
       consumeSessionResponse(sessionId, response);
       return acceptedResult(sessionId, localSessionEvents.get(sessionId));
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async list({ cursor, limit }) {
       const sessions = [...state.metadata.entries()]
         .toSorted(
@@ -669,6 +671,7 @@ export function createLocalEveSessionService(
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 const notConfigured = async (): Promise<never> => {
   throw new AdapterNotConfiguredError();
 };

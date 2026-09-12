@@ -56,6 +56,7 @@ const config = {
 function credentialStore(): GitHubUserCredentialStore {
   return {
     bind: vi.fn(),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => ({
       providerUserId: "77",
       providerLogin: "octocat",
@@ -65,6 +66,7 @@ function credentialStore(): GitHubUserCredentialStore {
       updatedAt: new Date(),
     })),
     rotate: vi.fn(),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     deactivate: vi.fn(async () => 1),
   };
 }
@@ -114,6 +116,7 @@ describe("GitHub starter repository provisioning", () => {
       const owner = accountType === "User" ? "octocat" : "withAutograph";
       const credentials = credentialStore();
       if (accountType === "User") {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         credentials.read = vi.fn(async () => ({
           providerUserId: "77",
           providerLogin: "octocat",
@@ -127,6 +130,7 @@ describe("GitHub starter repository provisioning", () => {
           active: true,
           updatedAt: new Date(),
         }));
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         credentials.rotate = vi.fn(async () => ({
           providerUserId: "77",
           providerLogin: "octocat",
@@ -143,6 +147,7 @@ describe("GitHub starter repository provisioning", () => {
       }
       let created = false;
       const methods: { path: string; method: string; body?: unknown }[] = [];
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
@@ -291,6 +296,7 @@ describe("GitHub starter repository provisioning", () => {
       persistedAbsentCandidates: [],
       persistCandidate: vi.fn(),
       persistAbsent: vi.fn(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetch: vi.fn<typeof fetch>(async (url) => {
         const path = new URL(String(url)).pathname;
         if (path === "/app/installations/101")
@@ -320,6 +326,7 @@ describe("GitHub starter repository provisioning", () => {
     let main = false;
     let loseCreateResponse = true;
     const resolved = "vendor-portal-a1b2c3";
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
       const path = new URL(String(url)).pathname;
       if (path === "/app/installations/101")
@@ -409,9 +416,11 @@ describe("GitHub starter repository provisioning", () => {
       requestedName: "vendor-portal",
       private: true,
       source,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistCandidate: async (value: string) => {
         candidates.push(value);
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistAbsent: async (value: string) => {
         absent.push(value);
       },

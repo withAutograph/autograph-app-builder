@@ -7,18 +7,22 @@ function unavailable(): never {
   throw new Error("Builder server actions are unavailable in Storybook.");
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 export async function provisionBuilderProvider(): Promise<never> {
   return unavailable();
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 export async function reserveBuilderProvider(): Promise<never> {
   return unavailable();
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 export async function createBuilderHandoff(): Promise<never> {
   return unavailable();
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 export async function continueBuilderHandoff(): Promise<never> {
   return unavailable();
 }

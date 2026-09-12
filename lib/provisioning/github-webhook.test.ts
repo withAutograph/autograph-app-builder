@@ -36,9 +36,11 @@ function database() {
     update(table: unknown) {
       updates.push(table);
       return {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         set: () => ({ where: async () => undefined }),
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
       return operation(value);
     },

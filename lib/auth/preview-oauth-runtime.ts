@@ -732,6 +732,7 @@ export function createPreviewOAuthServer(input: {
     plugins: [
       ...previewUserManagementPlugins(
         input.userManagement ?? {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async ensureOrganizationForVerifiedUser() {
             throw new Error("Preview organization authority is unavailable.");
           },

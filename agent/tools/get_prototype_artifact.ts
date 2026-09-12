@@ -12,6 +12,7 @@ export default defineTool({
     path: z.string().regex(prototypeArtifactPathPattern),
     digest: z.string().regex(/^[0-9a-f]{64}$/u),
   }),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute({ path, digest }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty") throw new Error("No prototype artifact is available.");

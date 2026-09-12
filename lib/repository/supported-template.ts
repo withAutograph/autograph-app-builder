@@ -512,6 +512,7 @@ function within(root: string, candidate: string): boolean {
 
 export async function resolveAllowedRepository(input: string): Promise<string> {
   const candidate = await realpath(resolve(input));
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const roots = await Promise.all(allowedRoots().map(async (root) => realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
@@ -535,6 +536,7 @@ export async function inspectBuilderOwnedSupportedRepository(
   return inspectSupportedRepositoryAtPath(await realpath(resolve(input)));
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function inspectSupportedRepositoryAtPath(sourcePath: string): Promise<EligibilityResult> {
   const failures: string[] = [];
   let sourceSha: string | undefined;
@@ -1430,6 +1432,7 @@ export async function prepareDevelopmentSandboxWorkspace(
 }
 
 /** Materializes a source only after the canonical clone transport has proven it. */
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function prepareBuilderOwnedSupportedSandboxWorkspace(
   sourcePathInput: string,
   expectedSha: string,

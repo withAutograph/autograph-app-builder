@@ -957,10 +957,12 @@ export function createHostedEveSessionService(input: {
         sessions: listed.sessions.map(hostedSessionSummary),
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async recoverStart(request) {
       requireHostedOperationScope(principal, "start");
       return readSession(request);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
       return readSession({ sessionId, cursor, limit });

@@ -24,6 +24,7 @@ export function selfServiceSignupAuthority(
   managedAuthority: () => Promise<boolean> = selfServiceSignupFlag,
   emulated = false,
 ) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return environment === "local" || emulated ? async () => true : managedAuthority;
 }
 

@@ -14,7 +14,9 @@ const config = {
 
 function membership(active = true) {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     activeWorkspaceForUser: vi.fn(async () => (active ? "workspace_1" : undefined)),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     isActiveMember: vi.fn(async () => active),
   };
 }
@@ -182,6 +184,7 @@ describe("Preview OAuth activation contract", () => {
   });
 
   it("pins CIMD to public clients through the application-owned transport", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const fetchClientMetadataResource = vi.fn(async () =>
       Response.json({
         client_name: "Codex",
@@ -198,6 +201,7 @@ describe("Preview OAuth activation contract", () => {
   });
 
   it("preserves the native Codex refresh capability", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const fetchClientMetadataResource = vi.fn(async () =>
       Response.json({
         client_id: "https://chatgpt.com/oauth/codex/4-bzS8rt42zJ/client.json",
@@ -230,6 +234,7 @@ describe("Preview OAuth activation contract", () => {
     });
 
     const unsupported = buildPreviewCimdOptions({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       fetchClientMetadataResource: vi.fn(async () =>
         Response.json({
           client_name: "Expanded client",
@@ -252,6 +257,7 @@ describe("Preview OAuth activation contract", () => {
     await Promise.all(
       [undefined, "private_key_jwt"].map(async (tokenEndpointAuthMethod) => {
         const options = buildPreviewCimdOptions({
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           fetchClientMetadataResource: vi.fn(async () =>
             Response.json({
               client_name: "Privileged client",

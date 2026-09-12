@@ -122,6 +122,7 @@ export function sandboxLeaseReceiptDigest(lease: SandboxExecutionLease): string 
 export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLeaseStore {
   private readonly leases = new Map<string, SandboxExecutionLease>();
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async acquire(
     input: Parameters<SandboxExecutionLeaseStore["acquire"]>[0],
   ): Promise<AcquireSandboxLeaseResult> {
@@ -159,6 +160,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return { disposition: "acquired", lease: structuredClone(lease) };
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async assertCurrent(
     input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
   ): Promise<SandboxExecutionLease> {
@@ -194,6 +196,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return structuredClone(lease);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async release(
     input: Parameters<SandboxExecutionLeaseStore["release"]>[0],
   ): Promise<SandboxExecutionLease> {
@@ -213,6 +216,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return structuredClone(lease);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async releaseCurrent(
     input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
   ): Promise<SandboxExecutionLease | null> {
@@ -233,6 +237,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     });
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async claimExpired(
     input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
   ): Promise<readonly SandboxExecutionLease[]> {
@@ -255,6 +260,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return claimed;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async settleRecovery(
     input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0],
   ): Promise<SandboxExecutionLease | null> {

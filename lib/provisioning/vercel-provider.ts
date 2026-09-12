@@ -89,6 +89,7 @@ export async function provisionVercelProject(input: {
     return { status: response.status, body };
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async function inspect(name: string) {
     return vercel({
       path: `/v9/projects/${encodeURIComponent(name)}`,

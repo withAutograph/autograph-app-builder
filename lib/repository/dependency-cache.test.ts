@@ -176,6 +176,7 @@ function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
   const stored = new Map<string, string>();
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const setNetworkPolicy = vi.fn(async () => undefined);
   const observation = (tampered: "cargo" | "node" | undefined = undefined) =>
     JSON.stringify({
@@ -186,6 +187,7 @@ function liveTemplateCacheFixture() {
       cargoHomeDigest: tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
       microfrontendsVersion: "2.4.0",
     });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async ({ command }: { command: string }) => {
     if (command.includes("uname -s")) return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
     if (command.includes("bun install")) return { exitCode: 0, stdout: observation(), stderr: "" };
@@ -205,15 +207,18 @@ function liveTemplateCacheFixture() {
     }
     return { exitCode: 0, stdout: "", stderr: "" };
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
     stored.set(path, content);
   });
   const sandbox = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async ({ path }: { path: string }) =>
       path === ".app-builder/source-files.json"
         ? JSON.stringify(source.sourceFiles)
         : (stored.get(path) ?? null),
     ),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
       const content = source.contents.get(path.replace(/^repository\//u, ""));
       return content === undefined ? null : Buffer.from(content);
@@ -256,10 +261,12 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
   run.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async () => undefined);
   const sandbox = {
     run,
     writeTextFile,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
   } as unknown as SandboxSession;
   return { run, sandbox, writeTextFile };
@@ -732,6 +739,7 @@ describe("offline dependency cache", () => {
   it("reports a typed live-template miss without falling through to another cache", async () => {
     const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
     const source = liveDependencySourceFixture();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const run = vi.fn(async () => ({
       exitCode: 0,
       stdout: "linux/x86_64\n",
@@ -739,9 +747,11 @@ describe("offline dependency cache", () => {
     }));
     const sandbox = {
       run,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readTextFile: vi.fn(async ({ path }: { path: string }) =>
         path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
       ),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
         return content === undefined ? null : Buffer.from(content);

@@ -14,11 +14,13 @@ const now = Date.parse("2026-08-27T12:00:00.000Z");
 
 function store(): PreviewActivationStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     provisionInvitedUser: vi.fn(async () => ({
       userRowsAffected: 1,
       accountRowsAffected: 1,
       membershipRowsAffected: 1,
     })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     configureRuntimeRole: vi.fn(async () => ({
       runtimeRoleCreated: true,
       runtimeRoleLogin: true,
@@ -30,6 +32,7 @@ function store(): PreviewActivationStore {
       runtimeRoleAttributesExact: true,
       runtimeRoleMembershipCount: 0 as const,
     })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     initializeOAuth: vi.fn(async () => ({
       resourceRowsBefore: 0,
       resourceRowsAfter: 1,

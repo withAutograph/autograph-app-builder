@@ -28,6 +28,7 @@ function readerFetch(input?: {
   status?: number;
 }) {
   const calls: { url: string; init: RequestInit }[] = [];
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     calls.push({ url, init });

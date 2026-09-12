@@ -162,6 +162,7 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     throw new Error("The structural test launcher argv was invalid.");
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
 export async function runWithTestCapability(options: {
   profile: "eve" | "vitest";
   command: string;

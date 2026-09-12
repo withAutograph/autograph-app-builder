@@ -46,18 +46,23 @@ function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims
 }
 
 const transport: HostedEveTransport = {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async start() {
     throw new Error("Transport must not run while listing tools.");
   },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async get() {
     throw new Error("Transport must not run while listing tools.");
   },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async send() {
     throw new Error("Transport must not run while listing tools.");
   },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async respond() {
     throw new Error("Transport must not run while listing tools.");
   },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async cancel() {
     throw new Error("Transport must not run while listing tools.");
   },
@@ -73,12 +78,14 @@ function runtime(
   return {
     auth,
     verifier: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async verify() {
         if (input.verifierError !== undefined) throw input.verifierError;
         return input.verifiedClaims ?? claims();
       },
     },
     membership: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async isMember({ workspaceId }) {
         return input.membership?.(workspaceId) ?? true;
       },
@@ -154,32 +161,40 @@ describe("branded public tool mapping", () => {
       events: [],
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async start(input: Parameters<EveSessionService["start"]>[0]) {
         calls.push({ operation: "start", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get(input: Parameters<EveSessionService["get"]>[0]) {
         calls.push({ operation: "get", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async recoverStart(input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0]) {
         calls.push({ operation: "recoverStart", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list() {
         return { kind: "session_list" as const, cursor: 0, sessions: [] };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
       },
     } satisfies EveSessionService;
     let redeemed = false;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const bindSession = vi.fn(async () => {
       redeemed = true;
     });
@@ -193,6 +208,7 @@ describe("branded public tool mapping", () => {
         scopes: claims().scopes,
       },
       handoffs: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve({ authority, handoffId }) {
           expect(authority).toEqual({
             issuer: auth.issuer,
@@ -220,6 +236,7 @@ describe("branded public tool mapping", () => {
               };
         },
         bindSession,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async recheckRepositoryAccess({ principal, repository }) {
           calls.push({
             operation: "recheckRepositoryAccess",
@@ -278,18 +295,23 @@ describe("branded public tool mapping", () => {
     };
     const service = {
       start,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list() {
         return { kind: "session_list" as const, cursor: 0, sessions: [] };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
       },
@@ -304,6 +326,7 @@ describe("branded public tool mapping", () => {
         scopes: claims().scopes,
       },
       handoffs: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve() {
           return {
             status: "unredeemed" as const,
@@ -321,6 +344,7 @@ describe("branded public tool mapping", () => {
           };
         },
         bindSession,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async recheckRepositoryAccess() {
           return { status: "provider-unavailable" };
         },
@@ -344,25 +368,32 @@ describe("branded public tool mapping", () => {
       cursor: 1,
       events: [],
     };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => result);
     const bindSession = vi.fn();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const recheckRepositoryAccess = vi.fn(async () => ({
       status: "ready" as const,
     }));
     const service = {
       start,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list() {
         return { kind: "session_list" as const, cursor: 0, sessions: [] };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
       },
@@ -377,6 +408,7 @@ describe("branded public tool mapping", () => {
         scopes: claims().scopes,
       },
       handoffs: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve() {
           return {
             status: "unredeemed" as const,
@@ -437,26 +469,32 @@ describe("branded public tool mapping", () => {
       events: [],
     };
     const service: EveSessionService = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async start(input) {
         calls.push({ operation: "start", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list(input) {
         calls.push({ operation: "list", input });
         return { kind: "session_list", cursor: 0, sessions: [] };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get(input) {
         calls.push({ operation: "get", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async send(input) {
         calls.push({ operation: "send", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond(input) {
         calls.push({ operation: "respond", input });
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel(input) {
         calls.push({ operation: "cancel", input });
         return result;
@@ -531,11 +569,17 @@ describe("branded public tool mapping", () => {
       ],
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => sessionResult),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       list: vi.fn(async () => listed),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => sessionResult),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => sessionResult),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => sessionResult),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => sessionResult),
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service);
@@ -563,15 +607,21 @@ describe("branded public tool mapping", () => {
       },
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => result),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       list: vi.fn(async () => ({
         kind: "session_list" as const,
         cursor: 0,
         sessions: [],
       })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => result),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => result),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => result),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => result),
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service, {
@@ -600,7 +650,9 @@ describe("branded public tool mapping", () => {
 
 describe("request-scoped MCP service selection", () => {
   it("allows public tool discovery before OAuth but protects tool calls", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const verifier = vi.fn(async () => claims());
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const membership = vi.fn(async () => true);
     const hostedRuntime = runtime();
     hostedRuntime.verifier = { verify: verifier };
@@ -687,6 +739,7 @@ describe("request-scoped MCP service selection", () => {
   });
 
   it("returns the same tool-level auth challenge for missing and malformed credentials", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const verifier = vi.fn(async () => claims());
     const hostedRuntime = runtime();
     hostedRuntime.verifier = { verify: verifier };
@@ -779,6 +832,7 @@ describe("request-scoped MCP service selection", () => {
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: runtime({
           verifiedClaims: claims({ workspaceId: "workspace-two" }),
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           membership: async () => false,
         }),
       }),
@@ -786,6 +840,7 @@ describe("request-scoped MCP service selection", () => {
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: runtime({
           verifiedClaims: claims({ workspaceId: "workspace-two" }),
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           membership: async () => {
             throw new Error("store unavailable");
           },
@@ -814,12 +869,14 @@ describe("request-scoped MCP service selection", () => {
   it("binds each protected hosted request to its own principal and membership check", async () => {
     const seen: string[] = [];
     const hostedRuntime = runtime({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       membership: async (workspaceId) => {
         seen.push(workspaceId);
         return true;
       },
     });
     hostedRuntime.verifier = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async verify({ token }) {
         return claims({
           subject: `user-${token}`,

@@ -46,6 +46,7 @@ it("allows the emulated browser suite to raise only the onboarding-context limit
   expect(emulatedPlugin.rateLimit?.[0]).toMatchObject({ window: 60, max: 600 });
 });
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 async function setupOnboarding(now: () => Date = () => fixedNow) {
   return getTestInstance(
     {
@@ -87,6 +88,7 @@ async function insertOnboardingContext(
   });
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 async function requestOnboardingContext(
   fetchImplementation: Awaited<ReturnType<typeof setupOnboarding>>["customFetchImpl"],
   headers?: Headers,
@@ -101,6 +103,7 @@ async function requestOnboardingContext(
   });
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 async function requestRegistrationVerification(
   fetchImplementation: Awaited<ReturnType<typeof setupOnboarding>>["customFetchImpl"],
   headers: Headers,

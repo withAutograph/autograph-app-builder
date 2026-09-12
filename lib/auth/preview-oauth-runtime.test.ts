@@ -47,6 +47,7 @@ describe("Preview OAuth runtime configuration", () => {
     `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
   it("binds Vercel's verified UserInfo email to the verified ID-token identity", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn(async () =>
       Response.json({
         sub: "vercel-user-1",
@@ -84,6 +85,7 @@ describe("Preview OAuth runtime configuration", () => {
   });
 
   it("uses GitHub's verified primary email when the public profile omits email", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn(async (url: string | URL) => {
       if (String(url) === "https://api.github.com/user") {
         return Response.json({
@@ -124,6 +126,7 @@ describe("Preview OAuth runtime configuration", () => {
   });
 
   it("rejects GitHub identities without a verified email", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn(async (url: string | URL) =>
       String(url) === "https://api.github.com/user"
         ? Response.json({ id: 123, login: "autograph-user" })
@@ -173,6 +176,7 @@ describe("Preview OAuth runtime configuration", () => {
             email: "user@example.com",
           }),
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () => Response.json(profile),
       ),
     ).resolves.toBeNull();
@@ -189,6 +193,7 @@ describe("Preview OAuth runtime configuration", () => {
             email: "user@example.com",
           }),
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () => new Response(null, { status: 503 }),
       ),
     ).resolves.toBeNull();
@@ -201,6 +206,7 @@ describe("Preview OAuth runtime configuration", () => {
             email: "user@example.com",
           }),
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () => new Response("{}", { headers: { "content-length": "16385" } }),
       ),
     ).resolves.toBeNull();

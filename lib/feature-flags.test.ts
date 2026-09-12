@@ -54,6 +54,7 @@ describe("Vercel feature flags", () => {
   it("waits to create the Vercel adapter until a server SDK key is available", async () => {
     vi.stubEnv("FLAGS", "");
     vi.resetModules();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const decide = vi.fn(async () => true);
     const createVercelAdapter = vi.fn(() => () => ({ decide }));
     vi.doMock("@flags-sdk/vercel", () => ({ createVercelAdapter }));

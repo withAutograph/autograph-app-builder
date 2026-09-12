@@ -43,9 +43,11 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
   const records: RepositoryAccessContinuation[] = [];
   return {
     records,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async create(record) {
       records.push(record);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
       const record = records.find(
         (candidate) =>
@@ -58,6 +60,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
       record.authorizedAt ??= input.now;
       return record;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(input) {
       const record = records.find(
         (candidate) =>
@@ -75,6 +78,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
       record.consumedAt = input.now;
       return record;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
       return records.filter(
         (candidate) =>
@@ -101,7 +105,9 @@ function installationStore(
   bindings: HostedGitHubInstallationBinding[],
 ): HostedGitHubInstallationStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => undefined),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     bind: vi.fn(),
   };
@@ -109,6 +115,7 @@ function installationStore(
 
 function mutableProvider(input: { repositoryAvailable: () => boolean }) {
   const provider: GitHubRepositoryAccessProvider = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectInstallation({ requestedPermissions }) {
       return {
         installationId: installation.installationId,
@@ -120,6 +127,7 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
         grantedPermissions: requestedPermissions,
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectRepositoryByName() {
       return input.repositoryAvailable()
         ? {
@@ -136,6 +144,7 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
         : undefined;
     },
   };
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return vi.fn<GitHubRepositoryAccessProviderFactory>(async () => provider);
 }
 
@@ -230,12 +239,14 @@ describe("deployment repository access authorization", () => {
       installations: installationStore([installation]),
       continuations: runtimeFixture().continuations,
       providerFactory: () => ({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         inspectInstallation: async () => {
           throw Object.assign(new Error("installation inspection failed"), {
             status,
             response: { headers },
           });
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         inspectRepositoryByName: async () => undefined,
       }),
     });
@@ -330,6 +341,7 @@ describe("deployment repository access authorization", () => {
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const fetchImplementation = vi.fn(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async (resource: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         void resource;
         void init;

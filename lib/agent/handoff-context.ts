@@ -54,6 +54,7 @@ async function createDeploymentPreparedHandoffReader() {
     read: createPostgresBuilderHandoffStore(database).read,
     isActiveMember: (value) => membership.isActiveMember(value),
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (sessionAuth: unknown) => {
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (authority.issuer !== config.issuer || authority.audience !== config.resource)

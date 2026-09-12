@@ -55,16 +55,19 @@ function databaseFixture(input: {
   inserted?: unknown[];
   updated?: unknown[];
 }) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => input.selected ?? []);
   const whereSelect = vi.fn(() => ({ limit }));
   const from = vi.fn(() => ({ where: whereSelect }));
   const select = vi.fn(() => ({ from }));
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const returningInsert = vi.fn(async () => input.inserted ?? []);
   const onConflictDoNothing = vi.fn(() => ({ returning: returningInsert }));
   const values = vi.fn(() => ({ onConflictDoNothing }));
   const insert = vi.fn(() => ({ values }));
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const returningUpdate = vi.fn(async () => input.updated ?? []);
   const whereUpdate = vi.fn(() => ({ returning: returningUpdate }));
   const set = vi.fn(() => ({ where: whereUpdate }));

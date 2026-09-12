@@ -10,6 +10,7 @@ const digest = createHash("sha256").update(content).digest("hex");
 
 describe("deployment Browser preview route", () => {
   it("serves the exact artifact selected by the request-scoped service", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const get = vi.fn(async () => ({
       sessionId: "session-one",
       status: "completed" as const,
@@ -23,10 +24,12 @@ describe("deployment Browser preview route", () => {
         revision: "b".repeat(64),
       },
     }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       workloadIdentity: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async token() {
           throw new Error("Hosted workload identity must not be requested.");
         },
@@ -53,6 +56,7 @@ describe("deployment Browser preview route", () => {
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       workloadIdentity: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async token() {
           throw new Error("Hosted workload identity must not be requested.");
         },

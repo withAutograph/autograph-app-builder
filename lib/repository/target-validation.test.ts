@@ -63,12 +63,14 @@ const apply: TargetApplyReceipt = {
 };
 
 function sandboxFixture() {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
   return {
     run,
     sandbox: {
       id: "sandbox",
       run,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => undefined),
     } as unknown as SandboxSession,
   };
@@ -82,6 +84,7 @@ describe("target validation", () => {
       apply,
       appId: "example",
       attempt: createTargetValidationAttempt(apply, "missing-script"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
         stdout: "",
@@ -100,6 +103,7 @@ describe("target validation", () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };
     const attempt = createTargetValidationAttempt(currentApply, "validation-call");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const execute = vi.fn(async () => ({
       exitCode: 0,
       stdout: "passed",
@@ -130,6 +134,7 @@ describe("target validation", () => {
 
     const result = await executeProposalBoundValidation({
       sandbox,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
         stdout: "",

@@ -211,6 +211,7 @@ function lifecycleLockPort(stateRoot: string, attempt = 0): number {
   return 32_768 + ((value + attempt) % 24_000);
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function portIsOurLock(port: number, identity: string): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ host: "127.0.0.1", port });

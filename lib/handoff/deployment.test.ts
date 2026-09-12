@@ -28,6 +28,7 @@ function route(input: { authenticated?: boolean } = {}) {
     now: () => clock.now,
     createId: () => (rows.size === 0 ? handoffId : randomUUID()),
     store: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async reserve(record) {
         const existing = [...rows.values()].find(
           (candidate) => candidate.creationRequestId === record.creationRequestId,
@@ -36,13 +37,16 @@ function route(input: { authenticated?: boolean } = {}) {
         rows.set(record.handoffId, record);
         return { disposition: "created", record };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async read({ handoffId: requested, authority: owner }) {
         const row = rows.get(requested);
         return row && JSON.stringify(row.authority) === JSON.stringify(owner) ? row : undefined;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async bindSession() {
         return undefined;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async renewExpired(renewalInput) {
         const record = rows.get(renewalInput.handoffId);
         if (
@@ -60,6 +64,7 @@ function route(input: { authenticated?: boolean } = {}) {
     },
   });
   const journal = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => undefined),
     reserve: vi.fn(),
     compareAndSet: vi.fn(),
@@ -72,6 +77,7 @@ function route(input: { authenticated?: boolean } = {}) {
     renew: createBuilderHandoffRenewRouteHandler({
       origin,
       handoffs,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async authorityForRequest() {
         return input.authenticated === false ? undefined : authority;
       },
@@ -80,6 +86,7 @@ function route(input: { authenticated?: boolean } = {}) {
       origin,
       journal,
       handoffs,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async authorityForRequest() {
         return input.authenticated === false ? undefined : authority;
       },

@@ -56,17 +56,20 @@ export interface BuilderDraftStore {
 export function createBuilderDraftService(input: { store: BuilderDraftStore; now?: () => Date }) {
   const now = input.now ?? (() => new Date());
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async readActive(authorityInput: BuilderDraftAuthority) {
       return input.store.readActive({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
       });
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async read(authorityInput: BuilderDraftAuthority, draftId: string) {
       return input.store.read({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
         draftId: saveActiveBuilderDraftInputSchema.shape.draftId.parse(draftId),
       });
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async saveActive(
       authorityInput: BuilderDraftAuthority,
       saveInput: SaveActiveBuilderDraftInput,
@@ -82,6 +85,7 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
         now: now(),
       });
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async archive(
       authorityInput: BuilderDraftAuthority,
       draftId: string,
@@ -100,6 +104,7 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
       });
     },
     /** Invoke only from scheduled maintenance; request paths must never purge drafts. */
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async deleteInactiveSince(maxAgeMs?: number) {
       return input.store.deleteInactiveSince({ now: now(), maxAgeMs });
     },

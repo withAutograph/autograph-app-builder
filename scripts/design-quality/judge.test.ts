@@ -47,9 +47,11 @@ describe("design judgment", () => {
     const r = await judgeDesign(
       { brief: "test", images: [image], evidence: {} },
       {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         getToken: async () => {
           throw new Error("secret-token");
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         generate: async () => valid,
       },
     );
@@ -61,7 +63,9 @@ describe("design judgment", () => {
     const r = await judgeDesign(
       { brief: "test", images: [image], evidence: {} },
       {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         getToken: async () => "mock-oidc",
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         generate: async () => ({ ratings: {} }),
       },
     );
@@ -71,6 +75,7 @@ describe("design judgment", () => {
   it("returns mocked validated scores without a provider", async () => {
     const r = await judgeDesign(
       { brief: "test", images: [image], evidence: {} },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       { getToken: async () => "mock-oidc", generate: async () => valid },
     );
     expect(r.status).toBe("complete");

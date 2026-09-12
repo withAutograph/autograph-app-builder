@@ -25,6 +25,7 @@ const forwarded = () => ({
 });
 const sessionAuth = () => ({ current: forwarded(), initiator: forwarded() });
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 function sandboxFixture(stop = vi.fn(async () => undefined)) {
   return {
     id: "provider_session_1",
@@ -36,6 +37,7 @@ function install(store: InMemorySandboxExecutionLeaseStore, member = true) {
   setHostedSandboxExecutionLeaseDependenciesForTest({
     enabled: () => true,
     store: () => store,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     isMember: async () => member,
   });
 }
@@ -154,6 +156,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         member: true,
         store: () =>
           ({
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             acquire: async () => {
               throw new Error("acquire failed");
             },
@@ -162,10 +165,12 @@ describe("hosted sandbox turn lease lifecycle", () => {
       },
     ];
     for (const candidate of cases) {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const stop = vi.fn(async () => undefined);
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled: () => true,
         store: candidate.store,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         isMember: async () => candidate.member,
       });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -192,8 +197,10 @@ describe("hosted sandbox turn lease lifecycle", () => {
       store: () => {
         throw original;
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       isMember: async () => true,
     });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stop = vi.fn(async () => {
       throw new Error("provider unavailable");
     });

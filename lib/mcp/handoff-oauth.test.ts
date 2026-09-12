@@ -30,6 +30,7 @@ import {
 
 function handoffStore(): BuilderHandoffStore {
   const records = new Map<string, BuilderHandoffRecord>();
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const read: BuilderHandoffStore["read"] = async ({ authority, handoffId }) => {
     const record = records.get(handoffId);
     return record &&
@@ -41,6 +42,7 @@ function handoffStore(): BuilderHandoffStore {
   };
   return {
     read,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserve(record) {
       const existing = [...records.values()].find(
         (candidate) =>
@@ -129,12 +131,14 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       const providers = preparedProviderFixture({
         authority,
         handoffs: durableHandoffs,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         isActiveMember: async (owner) =>
           owner.ownerUserId === authority.ownerUserId &&
           auth.membershipState.activeWorkspaces.includes(owner.workspaceId),
       });
       const readPrepared = providers.createReader();
       const journalRead = vi.fn(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async (value: { authority: typeof authority; requestId: string }) => {
           if (
             value.requestId !== provisioningRequestId ||
@@ -237,6 +241,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         jwksUrl: `${issuer}/jwks`,
         algorithm: "ES256" as const,
       };
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const jwksFetch = vi.fn<typeof fetch>(async (url, init) => {
         expect(String(url)).toBe(config.jwksUrl);
         return auth.customFetchImpl(url, init);
@@ -250,12 +255,14 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             fetchImplementation: jwksFetch,
           }),
           membership: {
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             isMember: async ({ workspaceId }) =>
               auth.membershipState.activeWorkspaces.includes(workspaceId),
           },
           store,
           transport: {
             start,
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             get: async () => snapshot,
             send: vi.fn(),
             respond: vi.fn(),

@@ -50,6 +50,7 @@ const installation = {
 };
 
 const proposals: GitHubPublicationProposalStore = {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async read() {
     return undefined;
   },
@@ -57,9 +58,11 @@ const proposals: GitHubPublicationProposalStore = {
 };
 
 const receipts: GitHubPublicationReceiptStore = {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async read() {
     return undefined;
   },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async compareAndSet() {
     return true;
   },
@@ -72,9 +75,11 @@ function dependencies(input?: {
   boundInstallation?: typeof installation | null;
 }) {
   const membership = vi.fn(() => ({
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     isMember: vi.fn(async () => input?.activeMember ?? true),
   }));
   const installationStore: HostedGitHubInstallationStore = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () =>
       input !== undefined && "boundInstallation" in input
         ? (input.boundInstallation ?? undefined)
@@ -89,6 +94,7 @@ function dependencies(input?: {
       membership,
       installations,
       publicationStores,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readPreparedHandoff: vi.fn(async () => undefined),
     },
     installationStore,
@@ -106,9 +112,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       accountLogin: "prepared-account",
     };
     const injected = dependencies();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const list = vi.fn(async () => [installation, selected]);
     injected.installationStore.list = list;
     const readPreparedHandoff = vi.fn(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async () =>
         ({
           providers: { githubInstallationId: "789" },
@@ -116,9 +124,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           providers: { githubInstallationId: string };
         },
     );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: { ...injected.dependencies, readPreparedHandoff },
@@ -142,18 +152,22 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     "does not fall back to last-connected when the prepared installation is %s",
     async (state) => {
       const injected = dependencies();
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       injected.installationStore.list = vi.fn(async () =>
         state === "missing"
           ? [installation]
           : [installation, { ...installation, installationId: "789", active: false }],
       );
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const providerFactory = vi.fn(async () => adapter);
       const resolver = createHostedGitHubPublicationRuntimeResolver({
         enabled: true,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         openDatabase: async () => ({}) as never,
         providerFactory,
         dependencies: {
           ...injected.dependencies,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readPreparedHandoff: async () =>
             ({
               providers: { githubInstallationId: "789" },
@@ -172,13 +186,16 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("reads the selected installation from an older provisioning result and supports legacy-only storage", async () => {
     const injected = dependencies();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: {
         ...injected.dependencies,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         readPreparedHandoff: async () =>
           ({
             provisioning: {
@@ -193,7 +210,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("fails before pool, stores, or provider construction if the prepared handoff is unavailable", async () => {
     const injected = dependencies();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
@@ -201,6 +220,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       providerFactory,
       dependencies: {
         ...injected.dependencies,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         readPreparedHandoff: async () => {
           throw new Error("Handoff unavailable");
         },
@@ -229,7 +249,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("composes a fresh tenant runtime while caching only the database pool", async () => {
     const database = {} as never;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const openDatabase = vi.fn(async () => database);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn<HostedGitHubPublicationProviderFactory>(async () => adapter);
     const injected = dependencies();
     const resolver = createHostedGitHubPublicationRuntimeResolver({
@@ -258,6 +280,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("accepts the live forwarded-by shape and independently validates both scope sets", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies();
     const auth = {
@@ -272,6 +295,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     };
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: injected.dependencies,
@@ -332,7 +356,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects %s authority before opening the pool", async (_name, auth) => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
@@ -375,7 +401,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects current and initiator %s drift before opening the pool", async (_name, current) => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const openDatabase = vi.fn(async () => ({}) as never);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const auth = {
       ...sessionAuth(),
@@ -395,10 +423,12 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("requires live membership before reading an installation", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies({ activeMember: false });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: injected.dependencies,
@@ -411,12 +441,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("requires an active tenant installation before store or provider composition", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies({
       boundInstallation: { ...installation, active: false },
     });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: injected.dependencies,
@@ -431,10 +463,12 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("normalizes a missing tenant installation to the unavailable boundary", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => adapter);
     const injected = dependencies({ boundInstallation: null });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       openDatabase: async () => ({}) as never,
       providerFactory,
       dependencies: injected.dependencies,

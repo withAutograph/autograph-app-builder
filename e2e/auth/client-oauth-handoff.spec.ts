@@ -24,6 +24,7 @@ import {
 
 // Authorization codes, browser cookies, and tokens must not enter artifacts.
 test.use({ trace: "off", screenshot: "off", video: "off" });
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 let callbackServer: Server | undefined;
 test.afterEach(async () => {

@@ -4,6 +4,7 @@ import { createVercelWorkloadIdentity } from "./vercel-workload-identity";
 
 describe("Vercel workload identity", () => {
   it("acquires nothing until a request-context token is needed", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const getToken = vi.fn(async () => "source-token");
     const identity = createVercelWorkloadIdentity({ getToken });
 
@@ -17,6 +18,7 @@ describe("Vercel workload identity", () => {
     "rejects malformed source credentials",
     async (token) => {
       const identity = createVercelWorkloadIdentity({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         getToken: async () => token,
       });
 

@@ -22,6 +22,7 @@ const environment = {
 };
 
 const workloadIdentity: HostedWorkloadIdentity = {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async token() {
     throw new Error("Workload identity must not run before authorization.");
   },

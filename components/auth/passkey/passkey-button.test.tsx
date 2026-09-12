@@ -30,6 +30,7 @@ vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
 let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   if (root) await act(async () => root?.unmount());
   root = undefined;
   container?.remove();
@@ -46,6 +47,7 @@ it.each(["signIn", "signUp"] as const)(
     expect(button.disabled).toBe(true);
     button.click();
     expect(auth.signIn).not.toHaveBeenCalled();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       root = hydrateRoot(container, <PasskeyButton view={view} />);
     });
@@ -59,9 +61,11 @@ it("shows an inline retry after a hydrated verification transport failure", asyn
   container = document.createElement("div");
   container.innerHTML = renderToString(<PasskeyButton view="signIn" />);
   document.body.append(container);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {
     root = hydrateRoot(container, <PasskeyButton view="signIn" />);
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => container.querySelector("button")!.click());
   expect(auth.signIn).toHaveBeenCalledOnce();
   expect(container.querySelector("button")?.textContent).toContain("Passkey failed (try again)");

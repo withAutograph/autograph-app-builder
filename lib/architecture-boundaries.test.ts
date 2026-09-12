@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     entries.map(async (entry) => {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) return sourceFiles(path);

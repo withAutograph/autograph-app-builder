@@ -117,18 +117,23 @@ const unavailable = (): never => {
 
 function disabledRuntime(): GitHubPublicationRuntime {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async status() {
       return runtimeStatus(false);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource() {
       return unavailable();
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async sealDraftPullRequestProposal() {
       return unavailable();
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async createFreshRepository() {
       return unavailable();
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async publishDraftPullRequest() {
       return unavailable();
     },
@@ -161,9 +166,11 @@ export function composeGitHubPublicationRuntime(input: {
   const { proposals } = input;
   const { receipts } = input;
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async status() {
       return runtimeStatus(true);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource(request) {
       return resolveImmutableExistingSource({
         adapter,

@@ -74,6 +74,7 @@ const preview: Preview = {
     },
   },
   loaders: [
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
     async ({ parameters }) => {
       storybookQueryClient.setQueryData(
         authQueryKeys.session,

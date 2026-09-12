@@ -40,6 +40,7 @@ async function render(data = initial) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => root?.render(<HandoffControls initial={data} />));
   return container;
 }
@@ -48,6 +49,7 @@ async function click(text: string) {
     (element) => element.textContent === text,
   );
   expect(button).toBeDefined();
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => button!.click());
 }
 function visibility(value: "visible" | "hidden") {
@@ -58,6 +60,7 @@ function visibility(value: "visible" | "hidden") {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 afterEach(async () => {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   if (root) await act(async () => root?.unmount());
   root = undefined;
   container?.remove();
@@ -114,7 +117,9 @@ describe("durable handoff controls", () => {
     "keeps %s browser actions disabled until their handlers hydrate",
     async (status) => {
       let persisted: HandoffControlData = { ...initial, status };
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch mock
       vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(persisted));
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning action mock
       renewal.action.mockImplementation(async () => {
         persisted = initial;
         return { status: "renewed", handoff: initial };
@@ -133,6 +138,7 @@ describe("durable handoff controls", () => {
       button.click();
       expect(renewal.action).not.toHaveBeenCalled();
       expect(open).not.toHaveBeenCalled();
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
       await act(async () => {
         root = hydrateRoot(container, <HandoffControls initial={data} />);
       });
@@ -150,6 +156,7 @@ describe("durable handoff controls", () => {
 
   it("identifies the canonical endpoint required for the Codex plugin connection", async () => {
     const data = { ...initial, mcpUrl: "https://preview.builder.example/mcp" };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(data));
     await render(data);
     expect(container.textContent).toContain("Required App Builder connection endpoint:");
@@ -165,29 +172,38 @@ describe("durable handoff controls", () => {
     vi.useFakeTimers();
     const request = vi
       .spyOn(globalThis, "fetch")
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () => Response.json(initial));
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     visibility("hidden");
     await render();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(request).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => visibility("visible"));
     expect(request).toHaveBeenCalledOnce();
     await click("Open in Codex");
     expect(open).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Launch requested");
     expect(container.textContent).not.toContain("Continued in your app");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => visibility("hidden"));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(request).toHaveBeenCalledOnce();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...initial, status: "continued" }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => visibility("visible"));
     expect(container.textContent).toContain("Continued in your app");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(20_000));
     expect(request).toHaveBeenCalledTimes(2);
   });
   it("keeps manual copy and retry usable after blocked launch and clipboard failure", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(initial));
     vi.spyOn(window, "open").mockImplementation(() => {
       throw new Error("blocked");
@@ -213,11 +229,14 @@ describe("durable handoff controls", () => {
     };
     const request = vi
       .spyOn(globalThis, "fetch")
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () => Response.json(data));
     await render(data);
     expect(container.querySelector('a[href*="mcp/install"]')).toBeNull();
     expect(container.textContent).not.toContain("codex plugin");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...data, cursorInstallReady: true }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(container.querySelector('a[href*="mcp/install"]')?.textContent).toBe(
       "Add Autograph to Cursor",
@@ -227,6 +246,7 @@ describe("durable handoff controls", () => {
     const data = { ...initial, status: "expired" as const };
     const request = vi
       .spyOn(globalThis, "fetch")
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () => Response.json(data));
     renewal.action.mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce({
       status: "renewed",
@@ -241,6 +261,7 @@ describe("durable handoff controls", () => {
     ).toBe(true);
     await click("Renew handoff");
     expect(container.textContent).toContain("We couldn’t renew this handoff");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.unmount());
     container.remove();
     await render(data);
@@ -262,7 +283,9 @@ describe("durable handoff controls", () => {
       let persisted = false;
       const request = vi
         .spyOn(globalThis, "fetch")
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         .mockImplementation(async () => Response.json(persisted ? renewed : expired));
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       renewal.action.mockImplementation(async () => {
         persisted = true;
         return {
@@ -286,6 +309,7 @@ describe("durable handoff controls", () => {
   );
   it("shows the same-account recovery UI when the renewal action loses authorization", async () => {
     const expired = { ...initial, status: "expired" as const };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(expired));
     renewal.action.mockResolvedValue({ status: "sign-in" });
 
@@ -320,9 +344,11 @@ describe("durable handoff controls", () => {
     const request = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () => Response.json(initial));
     await render();
     expect(container.textContent).toContain("Status is temporarily unavailable");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(request).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain("Status is temporarily unavailable");

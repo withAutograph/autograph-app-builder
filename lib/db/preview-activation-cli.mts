@@ -68,6 +68,7 @@ async function configureLoginRole(
 
 function createStore(sql: Sql): PreviewActivationStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async provisionInvitedUser(input) {
       return sql.begin(async (transaction) => {
         const users = await transaction<
@@ -290,9 +291,11 @@ function createStore(sql: Sql): PreviewActivationStore {
           transaction: true,
         }),
         membership: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async activeWorkspaceForUser() {
             return undefined;
           },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async isActiveMember() {
             return false;
           },

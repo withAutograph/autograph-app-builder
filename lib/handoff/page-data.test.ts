@@ -86,15 +86,14 @@ describe("owner-only handoff browser data", () => {
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
     mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
-    mocks.read
-      .mockReset()
-      .mockImplementation(
-        async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
-          JSON.stringify(input.authority) === JSON.stringify(authority) &&
-          input.handoffId === handoffId
-            ? prepared
-            : undefined,
-      );
+    mocks.read.mockReset().mockImplementation(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
+        JSON.stringify(input.authority) === JSON.stringify(authority) &&
+        input.handoffId === handoffId
+          ? prepared
+          : undefined,
+    );
   });
 
   it("returns only public fields and uses the exact web session authority", async () => {

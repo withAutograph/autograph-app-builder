@@ -9,6 +9,7 @@ import {
   waitForAnonymousBuilderReady,
 } from "../support/harness";
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("anonymous brief continues through passkey signup into the builder", async ({

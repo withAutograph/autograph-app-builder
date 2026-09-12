@@ -199,6 +199,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
       return database.transaction((transaction) => deleteExpired(transaction, input));
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async deleteTenant({ authority, membershipRevokedBefore }) {
       return database.transaction(async (transaction) => {
         const inactiveMembership = await transaction

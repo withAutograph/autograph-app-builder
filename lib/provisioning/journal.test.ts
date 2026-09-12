@@ -35,6 +35,7 @@ function memoryStore(): BuilderProvisionJournalStore {
   const key = (value: BuilderProvisionAuthority, requestId: string) =>
     JSON.stringify([value, requestId]);
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserve(input) {
       const id = key(input.authority, input.request.requestId);
       const digest = builderProvisionRequestDigest(input.request);
@@ -56,10 +57,12 @@ function memoryStore(): BuilderProvisionJournalStore {
       rows.set(id, row);
       return structuredClone(row);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(input) {
       const row = rows.get(key(input.authority, input.requestId));
       return row ? structuredClone(row) : undefined;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async compareAndSet(input) {
       const id = key(input.authority, input.requestId);
       const current = rows.get(id);

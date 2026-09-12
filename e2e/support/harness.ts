@@ -270,6 +270,7 @@ export async function installBrowserBoundaries(
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         writeText: async (value: string) => {
           if (boundaryMode === "blocked") throw new Error("Clipboard blocked");
           state.clipboard.push(value);
@@ -298,6 +299,7 @@ export async function installBrowserBoundaries(
   }, mode);
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 export async function browserBoundaryState(page: Page) {
   return page.evaluate(() => {
     const state = (

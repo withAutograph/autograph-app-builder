@@ -117,6 +117,7 @@ export const SubmittingAndDuplicateProtection: Story = {
 export const ActionableFailure: Story = {
   args: {
     result: sessionResult([choiceRequest]),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     onRespond: fn(async () => {
       throw new Error("rejected");
     }),

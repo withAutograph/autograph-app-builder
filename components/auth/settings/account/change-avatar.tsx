@@ -62,6 +62,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(false);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async function handleDelete() {
     const currentImage = session?.user.image;
 

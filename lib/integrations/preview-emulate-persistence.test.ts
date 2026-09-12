@@ -9,12 +9,15 @@ function memoryStore(): PreviewEmulateStateStore & {
   const states = new Map<string, string>();
   return {
     states,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(namespace) {
       return states.get(namespace);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async write(namespace, state) {
       states.set(namespace, state);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reset(namespace) {
       return states.delete(namespace) ? 1 : 0;
     },

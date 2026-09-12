@@ -242,6 +242,7 @@ function unavailableProvisioning(
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,

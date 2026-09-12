@@ -119,6 +119,7 @@ function organizationError(cause: unknown) {
 
 export function createPreviewUserManagementLifecycle(authority: PreviewOrganizationUserAuthority) {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async beforeUserCreate(
       user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,

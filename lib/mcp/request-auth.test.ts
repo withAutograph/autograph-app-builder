@@ -80,6 +80,7 @@ describe("hosted MCP request authentication", () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
     const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
     const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation: typeof fetch = async (url, options) => {
       fetchCalls.push([url, options]);
       return Response.json({ keys: [jwk] });
@@ -137,6 +138,7 @@ describe("hosted MCP request authentication", () => {
     const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
     const verifier = createRemoteJwksAccessTokenVerifier({
       config,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: async () => Response.json({ keys: [jwk] }),
     });
     const now = 2_000_000_000;
@@ -163,6 +165,7 @@ describe("hosted MCP request authentication", () => {
     const { privateKey } = await generateKeyPair("ES256");
     const verifier = createRemoteJwksAccessTokenVerifier({
       config,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: async () =>
         new Response(null, {
           status: 302,
