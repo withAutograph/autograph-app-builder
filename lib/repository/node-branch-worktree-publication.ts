@@ -859,7 +859,7 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
     if (match === null) throw new Error("The source tree contains an unsupported entry.");
     if (match[1] === "160000" || match[2] !== "blob")
       throw new Error("Branch-worktree publication does not materialize Git submodules.");
-    const [, , , , path] = match;
+    const { 4: path } = match;
     if (!safeSourcePath(path)) throw new Error("The source tree contains an unsafe path.");
     const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
     if (match[1] === "120000") {

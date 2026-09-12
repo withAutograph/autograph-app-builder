@@ -490,7 +490,7 @@ async function writeVerifiedLogin(
 }
 
 async function run(): Promise<void> {
-  const [, , mode] = process.argv;
+  const { 2: mode } = process.argv;
   if (process.argv.length !== 3 || (mode !== "get" && mode !== "verify-login"))
     throw new Error("Only the closed GHCR credential protocols are supported.");
   if (mode === "get") {
