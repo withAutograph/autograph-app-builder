@@ -282,6 +282,7 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
   }
 
   let result = { exitCode: 1, stdout: "", stderr: "" };
+  let cloneError: unknown;
   try {
     await input.sandbox.writeTextFile({
       path: SANDBOX_CLONE_INSPECTOR,
@@ -328,13 +329,15 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
       );
       throw new Error("The canonical Arrusted workspace clone could not be prepared.");
     }
-  } finally {
-    const cleanup = await Promise.allSettled(
-      [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ path, force: true })),
-    );
-    const failures = cleanup.filter((result) => result.status === "rejected");
-    if (failures.length > 0) throw new AggregateError(failures, "Sandbox clone cleanup failed.");
+  } catch (error) {
+    cloneError = error;
   }
+  const cleanup = await Promise.allSettled(
+    [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ path, force: true })),
+  );
+  const failures = cleanup.filter((result) => result.status === "rejected");
+  if (failures.length > 0) throw new AggregateError(failures, "Sandbox clone cleanup failed.");
+  if (cloneError !== undefined) throw cloneError;
   let observation: {
     sourceSha?: unknown;
     sourceTree?: unknown;
