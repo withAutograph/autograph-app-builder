@@ -61,7 +61,7 @@ async function sameOriginHeaders() {
 function toControlData(
   value: Awaited<ReturnType<typeof getBuilderHandoffPageData>>,
 ): HandoffControlData | undefined {
-  if (!value) return undefined;
+  if (!value) return;
   return {
     version: 1 as const,
     handoffId: value.handoffId,
