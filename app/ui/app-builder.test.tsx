@@ -113,6 +113,7 @@ import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
+import * as draftOutbox from "./builder-draft-outbox";
 import styles from "./app-builder.module.css";
 const integrationState = {
   vercel: {
@@ -636,8 +637,10 @@ describe("Vercel-faithful App Builder flow", () => {
     await fill(brief, "This local edit will be replaced.");
     builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
       draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
-      revision: 2,
-      updatedAt: "2030-01-01T00:00:02.000Z",
+      // Hiding the document also checkpoints this device's edit at revision 2.
+      // The other device's completed snapshot must have a newer revision.
+      revision: 3,
+      updatedAt: "2030-01-01T00:00:03.000Z",
       record: {
         version: 1,
         draft: {
@@ -682,6 +685,59 @@ describe("Vercel-faithful App Builder flow", () => {
 
     expect(brief.value).toBe("Saved on another device.");
     expect(view.textContent).toContain("Updated from another device");
+  });
+
+  it("does not apply an older remote revision after a newer revision settles", async () => {
+    const delayedRead = Promise.withResolvers<undefined>();
+    const read = vi.fn(async () => undefined);
+    vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
+      read,
+      write: async () => undefined,
+      clear: async () => undefined,
+      clearIfMutationId: async () => true,
+    });
+    const draft = {
+      version: 1 as const,
+      form: {
+        appName: "Initial",
+        repository: "initial",
+        brief: "Initial brief",
+        privateRepository: true,
+        buildDestination: "codex" as const,
+        connections: [],
+        modelId: "openai/gpt-5.6-sol",
+      },
+      team: "",
+      gitScope: "",
+      model: "openai/gpt-5.6-sol",
+      zdrOnly: false,
+      showMoreConnections: false,
+      search: "",
+      connectedConnections: [],
+      storageProvider: null,
+      deploymentProvider: null,
+      appNameEditedByUser: true,
+      repositoryEditedByUser: false,
+    };
+    const page = (revision: number) => (
+      <AppBuilder
+        authenticated
+        durableDraftId="d1210e56-ded0-436d-a6b8-ae96ddec17e0"
+        durableDraftRevision={revision}
+        durableDraftUpdatedAt={`2030-01-01T00:00:0${revision}.000Z`}
+        initialDurableDraft={{
+          ...draft,
+          form: { ...draft.form, appName: `Revision ${revision}` },
+        }}
+      />
+    );
+    const view = await render(page(1));
+    read.mockImplementationOnce(() => delayedRead.promise);
+    await act(async () => root?.render(page(2)));
+    await act(async () => root?.render(page(3)));
+    expect(view.querySelector<HTMLInputElement>("#app-name")!.value).toBe("Revision 3");
+    await act(async () => delayedRead.resolve(undefined));
+    expect(view.querySelector<HTMLInputElement>("#app-name")!.value).toBe("Revision 3");
   });
 
   it("does not replace newer edits with its own in-flight autosave", async () => {

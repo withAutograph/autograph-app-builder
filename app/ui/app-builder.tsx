@@ -1225,6 +1225,9 @@ export function Builder({
         return;
       if (remote.revision <= draftRevision.current) return;
       await discardSupersededByRemoteRevision(remote.revision);
+      // A newer server snapshot or save acknowledgement can settle while
+      // device outbox I/O is pending. Never move the applied revision backward.
+      if (remote.revision <= draftRevision.current) return;
       if (
         expectedLocalMutationVersion !== undefined &&
         localFormMutationVersion.current !== expectedLocalMutationVersion
