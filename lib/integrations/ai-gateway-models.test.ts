@@ -84,6 +84,7 @@ describe("AI Gateway model catalog", () => {
     const request = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error("offline"))
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () =>
         Response.json({
           data: [

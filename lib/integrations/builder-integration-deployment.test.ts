@@ -39,6 +39,7 @@ const request = {
   organizationId: "org",
   workspaceId: "workspace",
 };
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 const models = async () => ({ status: "unavailable" as const, entries: [], cached: false });
 
 beforeEach(() => {
