@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 
-const caseId = z.string().regex(/^[a-z0-9][a-z0-9-]*$/);
+const caseId = z.string().regex(/^[a-z0-9][a-z0-9-]*$/u);
 const designCaseSchema = z.object({
   id: caseId,
   title: z.string().min(1),

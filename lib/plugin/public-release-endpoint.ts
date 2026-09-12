@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 
-const normalizedHostname = (hostname: string) => hostname.toLowerCase().replaceAll(/^\[|\]$/g, "");
+const normalizedHostname = (hostname: string) => hostname.toLowerCase().replaceAll(/^\[|\]$/gu, "");
 
 const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
   const octets = host.split(".").map(Number);

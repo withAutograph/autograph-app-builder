@@ -31,25 +31,25 @@ export type SourceAnalysis = {
   limitations: string[];
 };
 
-const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/g;
+const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/gu;
 const cssLiteral =
-  /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/g;
+  /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/gu;
 const structuralLiteral =
-  /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/i;
-const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
+  /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/iu;
+const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/u;
 
 function unique(values: Iterable<string>): string[] {
   return [...new Set(values)].toSorted((left, right) => left.localeCompare(right));
 }
 
 function normalise(value: string): string {
-  return value.trim().replaceAll(/\s+/g, " ").toLowerCase();
+  return value.trim().replaceAll(/\s+/gu, " ").toLowerCase();
 }
 
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */
 export function parseTokens(css: string): Record<string, string> {
   const declared: Record<string, string> = {};
-  parse(css).walkDecls(/^--/, (declaration) => {
+  parse(css).walkDecls(/^--/u, (declaration) => {
     declared[declaration.prop] = declaration.value.trim();
   });
 
@@ -69,7 +69,7 @@ export function parseTokens(css: string): Record<string, string> {
 }
 
 function isSemanticToken(name: string): boolean {
-  return /^(?:--color-(?:bg|text|action|border|status|chart)-|--(?:space|radius|shadow|size|text|leading|tracking)-)/.test(
+  return /^(?:--color-(?:bg|text|action|border|status|chart)-|--(?:space|radius|shadow|size|text|leading|tracking)-)/u.test(
     name,
   );
 }
@@ -222,7 +222,7 @@ function observation(
 }
 
 function isStructuralProperty(name: string): boolean {
-  return /^(?:width|max-?width|min-?width|height|max-?height|min-?height|grid-?template-?columns|grid-?template-?rows)$/i.test(
+  return /^(?:width|max-?width|min-?width|height|max-?height|min-?height|grid-?template-?columns|grid-?template-?rows)$/iu.test(
     name,
   );
 }
@@ -231,7 +231,7 @@ function containsNativeControl(node: ts.Node): boolean {
   if (
     (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
     ts.isIdentifier(node.tagName) &&
-    /^(button|input|select|textarea)$/.test(node.tagName.text)
+    /^(button|input|select|textarea)$/u.test(node.tagName.text)
   )
     return true;
   return ts.forEachChild(node, containsNativeControl) ?? false;
@@ -273,7 +273,7 @@ export function analyzeSource({
   ];
   const reachableCss = new Set<string>();
   const referencedClasses = new Set<string>();
-  for (const file of files.filter((candidate) => !/\.css$/i.test(candidate.path))) {
+  for (const file of files.filter((candidate) => !/\.css$/iu.test(candidate.path))) {
     const source = ts.createSourceFile(
       file.path,
       file.content,
@@ -282,14 +282,14 @@ export function analyzeSource({
       ts.ScriptKind.TSX,
     );
     if (!exportedEntries(source).length) continue;
-    for (const match of file.content.matchAll(/className\s*=\s*["']([^"']+)["']/g))
-      for (const name of match[1].split(/\s+/))
+    for (const match of file.content.matchAll(/className\s*=\s*["']([^"']+)["']/gu))
+      for (const name of match[1].split(/\s+/u))
         if (name && !name.includes("[")) referencedClasses.add(name);
     for (const statement of source.statements)
       if (
         ts.isImportDeclaration(statement) &&
         ts.isStringLiteral(statement.moduleSpecifier) &&
-        /\.css$/i.test(statement.moduleSpecifier.text)
+        /\.css$/iu.test(statement.moduleSpecifier.text)
       )
         reachableCss.add(
           posix.normalize(posix.join(posix.dirname(file.path), statement.moduleSpecifier.text)),
@@ -297,7 +297,7 @@ export function analyzeSource({
   }
 
   for (const file of files) {
-    if (/\.css$/i.test(file.path)) {
+    if (/\.css$/iu.test(file.path)) {
       if (!reachableCss.has(posix.normalize(file.path))) {
         // Preserve the legacy inventory, but do not turn dead CSS into scored evidence.
         collectCssFile(file.content, tokenRefs, literals);
@@ -487,9 +487,9 @@ export function analyzeSource({
           const name = attribute.name.getText(source);
           const text = jsxAttributeText(attribute);
           if (name === "className" && text) {
-            for (const bracketed of text.matchAll(/\[([^\]]+)\]/g)) {
-              const prefix = text.slice(0, bracketed.index).split(/\s/).at(-1) ?? "";
-              if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/.test(prefix)) continue;
+            for (const bracketed of text.matchAll(/\[([^\]]+)\]/gu)) {
+              const prefix = text.slice(0, bracketed.index).split(/\s/u).at(-1) ?? "";
+              if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/u.test(prefix)) continue;
               collectCssLiterals(bracketed[1], literals);
               const refs: string[] = [];
               collectVarReferences(bracketed[1], refs);
@@ -498,12 +498,16 @@ export function analyzeSource({
                   observation(
                     `styling:class-var:${file.path}:${attribute.getStart(source)}:${ref}`,
                     "styling",
-                    item && /(?:^|:)(?:bg|text|border)-$/.test(prefix) && ref.startsWith("--color-")
+                    item &&
+                      /(?:^|:)(?:bg|text|border)-$/u.test(prefix) &&
+                      ref.startsWith("--color-")
                       ? "nonconforming"
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? "conforming"
                         : "unassessed",
-                    item && /(?:^|:)(?:bg|text|border)-$/.test(prefix) && ref.startsWith("--color-")
+                    item &&
+                      /(?:^|:)(?:bg|text|border)-$/u.test(prefix) &&
+                      ref.startsWith("--color-")
                       ? `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? `className uses declared semantic token ${ref}.`
@@ -568,12 +572,12 @@ export function analyzeSource({
                   observation(
                     `styling:style-var:${file.path}:${property.getStart(source)}:${ref}`,
                     "styling",
-                    item && /^(?:color|background|border)/i.test(property.name.getText(source))
+                    item && /^(?:color|background|border)/iu.test(property.name.getText(source))
                       ? "nonconforming"
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? "conforming"
                         : "unassessed",
-                    item && /^(?:color|background|border)/i.test(property.name.getText(source))
+                    item && /^(?:color|background|border)/iu.test(property.name.getText(source))
                       ? `Public ${item.name} receives a generated color treatment override.`
                       : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
                         ? `style uses declared semantic token ${ref}.`
@@ -691,7 +695,11 @@ export function analyzeSource({
               "public-component",
             ),
           );
-        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text) && localDeclarations.has(tag.text))
+        else if (
+          ts.isIdentifier(tag) &&
+          /^[A-Z]/u.test(tag.text) &&
+          localDeclarations.has(tag.text)
+        )
           observations.push(
             observation(
               `component:local:${file.path}:${node.getStart(source)}`,
@@ -702,7 +710,11 @@ export function analyzeSource({
               "local-control",
             ),
           );
-        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text) && unresolvedImports.has(tag.text))
+        else if (
+          ts.isIdentifier(tag) &&
+          /^[A-Z]/u.test(tag.text) &&
+          unresolvedImports.has(tag.text)
+        )
           observations.push(
             observation(
               `component:unresolved:${file.path}:${node.getStart(source)}`,
@@ -713,7 +725,7 @@ export function analyzeSource({
               "unresolved-component",
             ),
           );
-        else if (ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text))
+        else if (ts.isIdentifier(tag) && /^[A-Z]/u.test(tag.text))
           observations.push(
             observation(
               `component:unknown:${file.path}:${node.getStart(source)}`,
@@ -724,7 +736,7 @@ export function analyzeSource({
               "unresolved-component",
             ),
           );
-        else if (ts.isIdentifier(tag) && /^(button|input|select|textarea)$/.test(tag.text))
+        else if (ts.isIdentifier(tag) && /^(button|input|select|textarea)$/u.test(tag.text))
           observations.push(
             observation(
               `component:native:${file.path}:${node.getStart(source)}`,

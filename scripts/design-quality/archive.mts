@@ -21,13 +21,13 @@ if (values.help) {
   console.log("mise run eval:design-archive -- --report-dir PATH --name stock-exceptions");
   process.exit(0);
 }
-if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(values.name))
+if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name))
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
 const timestamp = new Date(report.createdAt).toISOString();
 const date = timestamp.slice(0, 10);
-const time = timestamp.slice(11, 23).replaceAll(/[:.]/g, "");
+const time = timestamp.slice(11, 23).replaceAll(/[:.]/gu, "");
 const archiveRoot = resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
 const destination = join(archiveRoot, relative);
@@ -48,7 +48,7 @@ report.archive = {
 await writeFile(join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replaceAll(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
+  String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
 const lines = [
   `# ${values.name} — ${timestamp}`,
   "",
@@ -142,7 +142,7 @@ const rows: {
   score: unknown;
 }[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
-  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(day.name)) continue;
+  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) continue;
   for (const run of await readdir(join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {

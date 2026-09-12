@@ -12,6 +12,6 @@ describe("BuilderLoadingShell", () => {
     expect(html).toContain("What should this app do?");
     expect(html).toContain("Where should we prepare it?");
     expect(html).toContain('aria-label="Builder form loading"');
-    expect(html).not.toMatch(/<(?:input|textarea|select|label)\b/);
+    expect(html).not.toMatch(/<(?:input|textarea|select|label)\b/u);
   });
 });

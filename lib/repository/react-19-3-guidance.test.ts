@@ -25,7 +25,7 @@ describe("React 19.3 generated-app guidance", () => {
       expect(page).not.toContain('"use client"');
       expect(page).toContain('import { Suspense, ViewTransition } from "react"');
       expect(page).toMatch(
-        /<Suspense[\s\S]*?<ViewTransition update="none">[\s\S]*?<\/ViewTransition>[\s\S]*?<\/Suspense>/,
+        /<Suspense[\s\S]*?<ViewTransition update="none">[\s\S]*?<\/ViewTransition>[\s\S]*?<\/Suspense>/u,
       );
     }
   });

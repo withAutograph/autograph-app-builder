@@ -80,7 +80,7 @@ export function originalCssSource(
       if (typeof path !== "string" || !path) return undefined;
       return {
         path: map.sourceRoot
-          ? `${map.sourceRoot.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
+          ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
           : path,
         line: candidate.originalLine + 1,
         column: candidate.originalColumn + 1,

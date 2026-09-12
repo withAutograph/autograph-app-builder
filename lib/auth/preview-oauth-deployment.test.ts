@@ -269,8 +269,8 @@ describe("Preview OAuth deployment handlers", () => {
     expect(layout).toContain(
       'const showLocalAuthProviders = process.env.NODE_ENV === "development"',
     );
-    expect(layout.match(/showLocalAuthProviders \|\|/g)).toHaveLength(2);
-    expect(layout.match(/showPreviewEmulatedAuthProviders \|\|/g)).toHaveLength(2);
+    expect(layout.match(/showLocalAuthProviders \|\|/gu)).toHaveLength(2);
+    expect(layout.match(/showPreviewEmulatedAuthProviders \|\|/gu)).toHaveLength(2);
     expect(layout).toContain('process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === "1"');
     expect(layout).toContain("process.env.GITHUB_CLIENT_ID");
     expect(layout).toContain("process.env.VERCEL_AUTH_CLIENT_ID");

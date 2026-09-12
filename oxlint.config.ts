@@ -19,7 +19,6 @@ export default defineConfig({
     "eslint/prefer-named-capture-group": "off",
     "eslint/require-await": "off",
     "eslint/complexity": "off",
-    "eslint/require-unicode-regexp": "off",
     "eslint/sort-keys": "off",
     "promise/avoid-new": "off",
     "typescript/no-non-null-assertion": "off",
