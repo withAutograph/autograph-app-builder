@@ -80,10 +80,13 @@ describe("prepared handoff session continuity", () => {
     const store = new InMemoryHostedEveStore();
     let starts = 0;
     const adapter = transport({
-      start: vi.fn(async () => ({
-        adapterSessionId: `eve_${++starts}`,
-        snapshot: { status: "completed" as const, events: [] },
-      })),
+      start: vi.fn(async () => {
+        starts += 1;
+        return {
+          adapterSessionId: `eve_${starts}`,
+          snapshot: { status: "completed" as const, events: [] },
+        };
+      }),
     });
     const createService = () =>
       createHostedEveSessionService({ principal, store, transport: adapter });
@@ -145,10 +148,13 @@ describe("prepared handoff session continuity", () => {
     let missing = false;
     let starts = 0;
     const adapter = transport({
-      start: vi.fn(async () => ({
-        adapterSessionId: `eve_${++starts}`,
-        snapshot,
-      })),
+      start: vi.fn(async () => {
+        starts += 1;
+        return {
+          adapterSessionId: `eve_${starts}`,
+          snapshot,
+        };
+      }),
       get: vi.fn(async () => {
         if (missing) throw new HostedAdapterSessionUnavailableError();
         return snapshot;

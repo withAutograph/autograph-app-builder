@@ -19,7 +19,7 @@ function canonicalSelector(value: string) {
   let output = "";
   let pendingSpace = false;
   let quote: string | undefined;
-  for (let index = 0; index < value.length; index++) {
+  for (let index = 0; index < value.length; index += 1) {
     const char = value[index]!;
     if (quote) {
       output += char;

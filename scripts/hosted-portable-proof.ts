@@ -298,9 +298,10 @@ export class HostedMcpProofClient {
     if (options.authenticate !== false && this.token !== undefined)
       headers.set("authorization", `Bearer ${this.token}`);
     if (this.sessionId !== undefined) headers.set("mcp-session-id", this.sessionId);
+    if (!options.notification) this.requestId += 1;
     const body = {
       jsonrpc: "2.0",
-      ...(options.notification ? {} : { id: ++this.requestId }),
+      ...(options.notification ? {} : { id: this.requestId }),
       method,
       params,
     };

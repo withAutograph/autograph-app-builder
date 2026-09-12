@@ -147,9 +147,9 @@ function singleGapValue(value: string): string | undefined {
   if (!candidate) return undefined;
   let depth = 0;
   for (const character of candidate) {
-    if (character === "(") depth++;
+    if (character === "(") depth += 1;
     else if (character === ")") {
-      depth--;
+      depth -= 1;
       if (depth < 0) return undefined;
     } else if (depth === 0 && /\s/.test(character)) return undefined;
   }
@@ -331,8 +331,8 @@ export async function measurePage(page: Page) {
         });
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
-    for (let i = 0; i < Math.min(controls.length, 150); i++)
-      for (let j = i + 1; j < Math.min(controls.length, 150); j++) {
+    for (let i = 0; i < Math.min(controls.length, 150); i += 1)
+      for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
         const a = controls[i]!,
           b = controls[j]!;
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
@@ -976,7 +976,7 @@ export async function capturePreview(input: {
       const response = await page.goto(input.url, { waitUntil: "load" });
       if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
       await page.evaluate(() => document.fonts.ready);
-      for (let index = 0; index <= input.scenarios.length; index++) {
+      for (let index = 0; index <= input.scenarios.length; index += 1) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
         let interaction: { status: string; expectedText?: string } = {
           status: "not-run",

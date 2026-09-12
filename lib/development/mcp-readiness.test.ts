@@ -44,7 +44,9 @@ describe("development MCP readiness", () => {
         id?: number;
         method: string;
       };
-      if (request.method === "initialize" && attempt++ === 0)
+      const firstAttempt = attempt === 0;
+      attempt += 1;
+      if (request.method === "initialize" && firstAttempt)
         return response({ error: "starting" }, 503);
       if (request.method === "initialize")
         return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-2");

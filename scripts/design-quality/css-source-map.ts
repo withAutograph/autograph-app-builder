@@ -15,7 +15,7 @@ function decodeVlq(value: string, start: number) {
   while (index < value.length) {
     const digit = base64.indexOf(value[index]!);
     if (digit < 0) return undefined;
-    index++;
+    index += 1;
     result += (digit & 31) << shift;
     shift += 5;
     if (!(digit & 32)) return { value: result & 1 ? -(result >> 1) : result >> 1, index };
@@ -46,7 +46,7 @@ export function originalCssSource(
   let originalLine = 0;
   let originalColumn = 0;
   const lines = map.mappings.split(";");
-  for (let line = 0; line <= generatedLine; line++) {
+  for (let line = 0; line <= generatedLine; line += 1) {
     let generated = 0;
     const segments = lines[line]?.split(",") ?? [];
     let candidate: { source: number; originalLine: number; originalColumn: number } | undefined;

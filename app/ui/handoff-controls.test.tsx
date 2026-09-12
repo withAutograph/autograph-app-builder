@@ -182,7 +182,8 @@ describe("durable handoff controls", () => {
     let attempts = 0;
     const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
       if (options?.method !== "POST") return Response.json(data);
-      if (++attempts === 1) throw new Error("response lost");
+      attempts += 1;
+      if (attempts === 1) throw new Error("response lost");
       return Response.json({
         version: 1,
         handoffId: renewedId,
