@@ -6,8 +6,8 @@ import { renderReport } from "./report";
 // Explicit retry of only the judge after credentials become available; no
 // repeated browser capture, regeneration, dependency preparation or Sandbox.
 const directory = resolve(process.argv[2] ?? "");
-const brief = await readFile(process.argv[3], "utf8");
-const report = JSON.parse(await readFile(join(directory, "report.json"), "utf8"));
+const brief = await readFile(process.argv[3], "utf-8");
+const report = JSON.parse(await readFile(join(directory, "report.json"), "utf-8"));
 report.judge = await judgeDesign({
   brief,
   evidence: report.captures.map(

@@ -16,7 +16,7 @@ if (!releaseValue || !installValue)
   throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");
 const releaseRoot = resolve(releaseValue);
 const installRoot = resolve(installValue);
-const receipt = JSON.parse(await readFile(join(releaseRoot, "release-receipt.json"), "utf8"));
+const receipt = JSON.parse(await readFile(join(releaseRoot, "release-receipt.json"), "utf-8"));
 if (
   receipt.format !== "autograph-portable-plugin-release-v3" ||
   receipt.specification !== "1.0.0" ||
@@ -32,7 +32,7 @@ if (sha256(archive) !== receipt.archive.sha256)
 const marketplaceArchive = await readFile(join(releaseRoot, receipt.codexMarketplaceArchive.name));
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
   throw new Error("Codex marketplace digest did not match its receipt.");
-const discovery = JSON.parse(await readFile(join(releaseRoot, "mock/tools-list.json"), "utf8"));
+const discovery = JSON.parse(await readFile(join(releaseRoot, "mock/tools-list.json"), "utf-8"));
 const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
   throw new Error("Offline MCP discovery did not return the exact five tools.");
@@ -60,8 +60,8 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  const harness = JSON.parse(await readFile(join(root, "client-harness.json"), "utf8"));
-  const installation = JSON.parse(await readFile(join(root, "installation-receipt.json"), "utf8"));
+  const harness = JSON.parse(await readFile(join(root, "client-harness.json"), "utf-8"));
+  const installation = JSON.parse(await readFile(join(root, "installation-receipt.json"), "utf-8"));
   if (
     harness.format !== "agent-plugins-client-harness-v2" ||
     harness.client !== client ||

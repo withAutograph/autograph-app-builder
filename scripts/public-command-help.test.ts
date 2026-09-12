@@ -25,7 +25,7 @@ describe("public command help", () => {
   for (const command of commands) {
     it(`documents ${command.task}`, () => {
       const result = spawnSync(resolve(command.task), ["--help"], {
-        encoding: "utf8",
+        encoding: "utf-8",
         env: { LANG: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       });
 

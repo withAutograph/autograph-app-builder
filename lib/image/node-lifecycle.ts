@@ -128,10 +128,10 @@ const githubCliVersion = "2.98.0";
 const ghcrDockerConfigName = "config.json";
 const ghcrBoundHelperName = "docker-credential-ghcr-bound";
 const githubStateRootName = "github-cli-state";
-const ghcrDockerConfigBytes = Buffer.from('{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n', "utf8");
+const ghcrDockerConfigBytes = Buffer.from('{"credHelpers":{"ghcr.io":"ghcr-bound"}}\n', "utf-8");
 const ghcrBoundHelperBytes = Buffer.from(
   '#!/bin/sh\nexec "$APP_BUILDER_IMAGE_NODE_BIN" --experimental-strip-types "$APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE" "$@"\n',
-  "utf8",
+  "utf-8",
 );
 
 type GhcrCredentialBinding = Readonly<{
@@ -177,7 +177,7 @@ const sanitizedEnvironment = (extra: Readonly<Record<string, string>> = {}): Nod
 
 const git = (root: string, args: readonly string[]) =>
   execFileSync(fixedGit, ["-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: 32 * 1024 * 1024,
     env: sanitizedEnvironment(),
   }).trim();
@@ -216,7 +216,7 @@ async function portIsOurLock(port: number, identity: string): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ host: "127.0.0.1", port });
     let data = "";
-    socket.setEncoding("utf8");
+    socket.setEncoding("utf-8");
     socket.setTimeout(100);
     socket.on("data", (chunk) => (data += chunk));
     socket.once("close", () => resolve(data === identity));
@@ -471,7 +471,7 @@ function writeReceipt(
     return existing;
   }
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+  const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf-8");
   let descriptor: number | undefined;
   try {
     descriptor = openSync(
@@ -516,7 +516,7 @@ function readReceipt(
     stat.uid !== uid
   )
     throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as ReceiptEnvelope;
+  const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
   if (
     parsed.version !== 1 ||
     parsed.kind !== kind ||
@@ -606,7 +606,7 @@ export function observeImageProvenance(
   assertStandaloneGitMetadata(lstatSync(dotGit).isDirectory(), "Arrusted");
   const dockerfileAbsolute = join(builderRoot, dockerfilePath);
   ensureNoLinkPath(dockerfileAbsolute, "Sandbox Dockerfile");
-  const dockerfile = readFileSync(dockerfileAbsolute, "utf8");
+  const dockerfile = readFileSync(dockerfileAbsolute, "utf-8");
   if (exactDockerArgument(dockerfile, "TARGET_SHA") !== ARRUSTED_IMAGE_TARGET_SHA)
     throw new Error("Dockerfile target commit does not match lifecycle policy.");
   if (exactDockerArgument(dockerfile, "TARGET_TREE") !== ARRUSTED_IMAGE_TARGET_TREE)
@@ -685,7 +685,7 @@ function exactGithubCli(): string {
   if (!stat.isFile() || stat.isSymbolicLink())
     throw new Error("GitHub CLI does not resolve to a regular file.");
   const version = spawnSync(binary, ["version"], {
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: maximumCommandOutputBytes,
     timeout: 10_000,
     env: sanitizedEnvironment(),
@@ -1057,7 +1057,7 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
     });
     if (failed || timedOut || status !== 0)
       throw new Error("GitHub keyring verification failed without recording credential output.");
-    return Buffer.concat(stdout).toString("utf8");
+    return Buffer.concat(stdout).toString("utf-8");
   } finally {
     clearTimeout(timeout);
     for (const chunk of stdout) chunk.fill(0);
@@ -1076,7 +1076,7 @@ function execute(
     const versionInvocation = imageToolInvocation(versionTool, versionCommand.args);
     const version = spawnSync(versionInvocation.program, [...versionInvocation.args], {
       cwd,
-      encoding: "utf8",
+      encoding: "utf-8",
       maxBuffer: maximumCommandOutputBytes,
       env: sanitizedEnvironment(),
       timeout: 10_000,
@@ -1112,7 +1112,7 @@ function execute(
         })();
   const result = spawnSync(invocation.program, [...invocation.args], {
     cwd,
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: maximumCommandOutputBytes,
     env: sanitizedEnvironment({
       ...command.environment,

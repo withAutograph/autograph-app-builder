@@ -237,7 +237,7 @@ function git(
   input?: Uint8Array,
 ): string {
   return execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     env: minimalEnvironment(identity),
     input,
     maxBuffer: 16 * 1024 * 1024,
@@ -576,7 +576,7 @@ const fd = fs.openSync(path, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
 const s = fs.fstatSync(fd);
 if (!s.isFile() || s.nlink !== 1 || String(s.dev) !== dev || String(s.ino) !== ino || String(s.uid) !== uid || String(s.mode & 0o777) !== mode) process.exit(74);
 const priorBytes = Buffer.alloc(s.size); fs.readSync(fd, priorBytes, 0, priorBytes.length, 0);
-const prior = priorBytes.toString("utf8");
+const prior = priorBytes.toString("utf-8");
 if (prior.startsWith("APP_BUILDER_FRESH_BOOTSTRAP_LEASE_ACTIVE_V1:")) process.exit(73);
 if (prior.startsWith("APP_BUILDER_FRESH_BOOTSTRAP_LEASE_QUIESCED_V1:")) {
   const digest = crypto.createHash("sha256").update(prior).digest("hex");
@@ -586,9 +586,9 @@ fs.ftruncateSync(fd, 0); const leaseBytes = Buffer.from(lease); let offset = 0;
 while (offset < leaseBytes.length) offset += fs.writeSync(fd, leaseBytes, offset, leaseBytes.length - offset, offset);
 fs.fsyncSync(fd);
 const check = Buffer.alloc(leaseBytes.length); fs.readSync(fd, check, 0, check.length, 0);
-if (check.toString("utf8") !== lease) process.exit(75);
+if (check.toString("utf-8") !== lease) process.exit(75);
 process.stdout.write("READY\n");
-let command = ""; process.stdin.setEncoding("utf8");
+let command = ""; process.stdin.setEncoding("utf-8");
 process.stdin.on("data", chunk => command += chunk);
 process.stdin.on("end", () => { if (command === "RELEASE\n") { fs.ftruncateSync(fd, 0); fs.fsyncSync(fd); } fs.closeSync(fd); });
 process.stdin.resume();
@@ -662,7 +662,7 @@ async function acquireLease(
   let terminal: Error | undefined;
   let releasing = false;
   let helperError = "";
-  holder.stderr.setEncoding("utf8");
+  holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => {
     helperError = `${helperError}${chunk}`.slice(-2000);
   });
@@ -686,7 +686,7 @@ async function acquireLease(
       holder.kill("SIGKILL");
       reject(new Error("Lease timeout."));
     }, 5000);
-    holder.stdout.setEncoding("utf8");
+    holder.stdout.setEncoding("utf-8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
       if (chunk === "READY\n") resolve();
@@ -725,13 +725,13 @@ const fd = fs.openSync(path, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
 const s = fs.fstatSync(fd);
 if (!s.isFile() || s.nlink !== 1 || String(s.dev) !== dev || String(s.ino) !== ino || String(s.uid) !== uid || String(s.mode & 0o777) !== mode) process.exit(74);
 const priorBytes = Buffer.alloc(s.size); fs.readSync(fd, priorBytes, 0, priorBytes.length, 0);
-const prior = priorBytes.toString("utf8");
+const prior = priorBytes.toString("utf-8");
 if (!prior.startsWith("APP_BUILDER_FRESH_BOOTSTRAP_LEASE_ACTIVE_V1:") || crypto.createHash("sha256").update(prior).digest("hex") !== expectedActiveDigest) process.exit(73);
 fs.ftruncateSync(fd, 0); const bytes = Buffer.from(quiesced); let offset = 0;
 while (offset < bytes.length) offset += fs.writeSync(fd, bytes, offset, bytes.length - offset, offset);
 fs.fsyncSync(fd);
 const check = Buffer.alloc(bytes.length); fs.readSync(fd, check, 0, check.length, 0);
-if (check.toString("utf8") !== quiesced) process.exit(75);
+if (check.toString("utf-8") !== quiesced) process.exit(75);
 process.stdout.write("READY\n");
 process.stdin.resume(); process.stdin.on("end", () => fs.closeSync(fd));
 `;
@@ -769,7 +769,7 @@ async function quiesceAbandonedLease(
   );
   if (holder.pid === undefined) throw new Error("The quiescence helper did not start.");
   let stderr = "";
-  holder.stderr.setEncoding("utf8");
+  holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   let resolveExit!: () => void;
   const exited = new Promise<void>((resolve) => {
@@ -781,7 +781,7 @@ async function quiesceAbandonedLease(
       holder.kill("SIGKILL");
       reject(new Error("Lease quiescence timeout."));
     }, 5000);
-    holder.stdout.setEncoding("utf8");
+    holder.stdout.setEncoding("utf-8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
       if (chunk === "READY\n") resolve();
@@ -826,7 +826,7 @@ function exactSourceTree(
     sourceSha,
   ]);
   const files: ExactFile[] = [];
-  for (const record of output.toString("utf8").split("\0").filter(Boolean)) {
+  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
     const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40})\t(.+)$/u.exec(
       record,
     );
@@ -1294,7 +1294,7 @@ async function materializeFile(
       {
         env: minimalEnvironment(),
         input: file.bytes,
-        encoding: "utf8",
+        encoding: "utf-8",
         maxBuffer: Math.max(1024 * 1024, file.bytes.length + 64 * 1024),
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe", stage.fd],
@@ -1435,8 +1435,8 @@ async function assertRawGitAuthority(
     (gitState.mode & 0o022) !== 0 ||
     (await realpath(root)) !== root ||
     (await realpath(gitDirectory)) !== gitDirectory ||
-    (await readFile(resolve(gitDirectory, "config"), "utf8")) !== exactGitConfig ||
-    (await readFile(resolve(gitDirectory, "HEAD"), "utf8")) !==
+    (await readFile(resolve(gitDirectory, "config"), "utf-8")) !== exactGitConfig ||
+    (await readFile(resolve(gitDirectory, "HEAD"), "utf-8")) !==
       `ref: refs/heads/${proposal.repositoryIdentity.initialBranch}\n`
   )
     throw new Error("The fresh repository Git authority is not local and exact.");
@@ -1550,7 +1550,7 @@ async function assertExactRepository(
   const parents = git(capability, root, ["rev-list", "--parents", "--max-count=1", "HEAD"]).trim();
   const paths = gitBuffer(capability, root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
   const observed = paths
-    .toString("utf8")
+    .toString("utf-8")
     .split("\0")
     .filter(Boolean)
     .map((record) => {
@@ -1700,7 +1700,7 @@ async function atomicPublish(
       ],
       {
         env: minimalEnvironment(),
-        encoding: "utf8",
+        encoding: "utf-8",
         timeout: 30_000,
         stdio: ["ignore", "pipe", "pipe", parent.fd],
       },
@@ -1876,7 +1876,7 @@ export async function readFreshBootstrapJournal(input: {
   await assertContainedStatePath(capability, input.proposal.journalPath, "absent-or-file");
   let bytes;
   try {
-    bytes = await readFile(input.proposal.journalPath, "utf8");
+    bytes = await readFile(input.proposal.journalPath, "utf-8");
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;

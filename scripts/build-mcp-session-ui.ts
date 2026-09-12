@@ -27,8 +27,8 @@ async function main() {
       },
     });
     const [javascript, css] = await Promise.all([
-      readFile(join(temporaryDirectory, "app.js"), "utf8"),
-      readFile(join(temporaryDirectory, "style.css"), "utf8"),
+      readFile(join(temporaryDirectory, "app.js"), "utf-8"),
+      readFile(join(temporaryDirectory, "style.css"), "utf-8"),
     ]);
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autograph App Builder</title><style>${css}</style></head><body><div id="root"></div><script>${javascript}</script></body></html>`;
     const source = await formatWithOxfmt(

@@ -69,7 +69,7 @@ async function ownerToken(path: string) {
     (info.mode & 0o077) !== 0
   )
     throw new Error("Release OAuth token must be a canonical owner-only file.");
-  const token = (await readFile(canonical, "utf8")).trim();
+  const token = (await readFile(canonical, "utf-8")).trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
     throw new Error("Release OAuth token was malformed.");
   return token;
@@ -170,7 +170,7 @@ try {
           "--json",
           "tagName,isPrerelease,targetCommitish,assets",
         ],
-        { cwd: publicationRoot, env: process.env, encoding: "utf8" },
+        { cwd: publicationRoot, env: process.env, encoding: "utf-8" },
       );
       metadataRaw = result.stdout;
     } catch (error) {
@@ -229,7 +229,7 @@ try {
           "--dir",
           downloadRoot,
         ],
-        { cwd: publicationRoot, env: process.env, encoding: "utf8" },
+        { cwd: publicationRoot, env: process.env, encoding: "utf-8" },
       );
       for (const [path, expected] of assets) {
         const downloaded = join(downloadRoot, basename(path));
@@ -255,7 +255,7 @@ try {
     const result = await execFileAsync(executables[command.tool], command.args, {
       cwd: "cwd" in command ? join(publicationRoot, command.cwd) : publicationRoot,
       env: process.env,
-      encoding: "utf8",
+      encoding: "utf-8",
       maxBuffer: 16 * 1024 * 1024,
     });
     if (result.stdout.trim() !== "") process.stdout.write(result.stdout);
@@ -280,7 +280,7 @@ try {
     {
       cwd: publicationRoot,
       env: process.env,
-      encoding: "utf8",
+      encoding: "utf-8",
       maxBuffer: 4 * 1024 * 1024,
     },
   );
@@ -293,12 +293,12 @@ try {
     execFileAsync(executables.vercel, ["inspect", deploymentUrl, "--wait", "--json"], {
       cwd: join(publicationRoot, receipt.deployment.root),
       env: process.env,
-      encoding: "utf8",
+      encoding: "utf-8",
     }),
     execFileAsync(executables.vercel, ["inspect", endpointOrigin, "--wait", "--json"], {
       cwd: join(publicationRoot, receipt.deployment.root),
       env: process.env,
-      encoding: "utf8",
+      encoding: "utf-8",
     }),
   ]);
   const deployment = deploymentIdentity(deploymentReadback.stdout);
@@ -311,7 +311,7 @@ try {
   });
   if (!metadataResponse.ok) throw new Error("Deployed OAuth resource metadata was unavailable.");
   const metadataBytes = Buffer.from(await metadataResponse.arrayBuffer());
-  const metadata = JSON.parse(metadataBytes.toString("utf8")) as {
+  const metadata = JSON.parse(metadataBytes.toString("utf-8")) as {
     resource?: unknown;
     authorization_servers?: unknown;
   };

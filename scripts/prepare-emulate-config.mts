@@ -23,7 +23,7 @@ if (appOrigin.hostname !== "localhost" || (appOrigin.protocol !== "https:" && !c
 await mkdir(stateDirectory, { recursive: true });
 let privateKey: string;
 try {
-  privateKey = await readFile(keyPath, "utf8");
+  privateKey = await readFile(keyPath, "utf-8");
 } catch {
   privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
     .privateKey.export({ type: "pkcs1", format: "pem" })
@@ -31,14 +31,14 @@ try {
   await writeFile(keyPath, privateKey, { mode: 0o600 });
 }
 try {
-  await readFile(relayPath, "utf8");
+  await readFile(relayPath, "utf-8");
 } catch {
   await writeFile(relayPath, randomBytes(32).toString("base64url"), {
     mode: 0o600,
   });
 }
 try {
-  await readFile(flagsSecretPath, "utf8");
+  await readFile(flagsSecretPath, "utf-8");
 } catch {
   await writeFile(flagsSecretPath, randomBytes(32).toString("base64url"), {
     mode: 0o600,
@@ -46,7 +46,7 @@ try {
 }
 let authSecret: string;
 try {
-  authSecret = (await readFile(authSecretPath, "utf8")).trim();
+  authSecret = (await readFile(authSecretPath, "utf-8")).trim();
 } catch {
   authSecret = randomBytes(32).toString("base64url");
   await writeFile(authSecretPath, authSecret, { mode: 0o600 });

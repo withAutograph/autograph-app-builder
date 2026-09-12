@@ -48,7 +48,7 @@ async function runtimePaths(repositoryRoot: string) {
     { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
   );
   return stdout
-    .toString("utf8")
+    .toString("utf-8")
     .split("\0")
     .filter(isDevelopmentRuntimePath)
     .toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right)));

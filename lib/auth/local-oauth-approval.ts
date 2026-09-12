@@ -62,7 +62,7 @@ export function verifyLocalOAuthApproval(value: string, secret: string, now = Da
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
     throw new Error("invalid-approval");
   const result = approvalRelaySchema.parse(
-    JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
+    JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")),
   );
   if (result.expiresAt <= now) throw new Error("expired-approval");
   return result;

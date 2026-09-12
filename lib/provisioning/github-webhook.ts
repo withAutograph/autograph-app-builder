@@ -57,7 +57,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
     const event = request.headers.get("x-github-event");
     let value: unknown;
     try {
-      value = JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(body));
+      value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
     } catch {
       return new Response(null, { status: 400 });
     }

@@ -81,7 +81,7 @@ export async function judgeDesign(
     if (hooks) token = await hooks.getToken();
     else {
       // Official SDK refreshes project OIDC; no static-key fallback is selected.
-      const project = JSON.parse(await readFile(".vercel/project.json", "utf8")) as {
+      const project = JSON.parse(await readFile(".vercel/project.json", "utf-8")) as {
         projectId: string;
         orgId: string;
       };

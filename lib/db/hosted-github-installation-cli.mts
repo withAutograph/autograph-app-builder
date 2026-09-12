@@ -30,7 +30,7 @@ async function readOwnerOnlyRequest(path: string): Promise<unknown> {
     metadata.size > MAX_REQUEST_BYTES
   )
     throw new Error("Request must be an owner-only nonempty regular file.");
-  return JSON.parse(await readFile(path, "utf8"));
+  return JSON.parse(await readFile(path, "utf-8"));
 }
 
 const argv = process.argv.slice(2);

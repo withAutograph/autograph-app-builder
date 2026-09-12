@@ -97,7 +97,7 @@ export function encryptGitHubUserTokens(input: {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(Buffer.from(input.associatedData));
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf-8"), cipher.final()]);
   return {
     encryptedCredential: encrypted.toString("base64"),
     credentialIv: iv.toString("base64"),
@@ -124,7 +124,7 @@ export function decryptGitHubUserTokens(input: {
       Buffer.concat([
         decipher.update(Buffer.from(input.encryptedCredential, "base64")),
         decipher.final(),
-      ]).toString("utf8"),
+      ]).toString("utf-8"),
     ) as unknown,
   );
 }

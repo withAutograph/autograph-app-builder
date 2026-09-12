@@ -39,12 +39,12 @@ await cp(join(source, "app-builder"), join(clientRoot, "app-builder"), {
   recursive: true,
 });
 const harness = JSON.parse(
-  await readFile(join(source, "clients", `${client}.client-harness.json`), "utf8"),
+  await readFile(join(source, "clients", `${client}.client-harness.json`), "utf-8"),
 );
 harness.pluginRoot = "./app-builder";
 harness.mcp = "./app-builder/mcp.json";
 await writeFile(join(clientRoot, "client-harness.json"), `${JSON.stringify(harness, null, 2)}\n`);
-const release = JSON.parse(await readFile(join(source, "release-receipt.json"), "utf8"));
+const release = JSON.parse(await readFile(join(source, "release-receipt.json"), "utf-8"));
 await writeFile(
   join(clientRoot, "installation-receipt.json"),
   `${JSON.stringify(

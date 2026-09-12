@@ -343,7 +343,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       await expect(install).toBeVisible({ timeout: 15_000 });
       const installUrl = new URL((await install.getAttribute("href"))!);
       const config = JSON.parse(
-        Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf8"),
+        Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf-8"),
       );
       expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
@@ -466,7 +466,7 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   await expect(install).toBeVisible();
   const installUrl = new URL((await install.getAttribute("href"))!);
   expect(
-    JSON.parse(Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf8")),
+    JSON.parse(Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf-8")),
   ).toEqual({
     url: `${appOrigin}/mcp`,
     auth: { CLIENT_ID: "autograph-cursor-desktop" },

@@ -43,7 +43,7 @@ export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: strin
     separator === -1 ||
     record.byteLength < separator + 2 ||
     record[record.byteLength - 1] !== 0 ||
-    record.subarray(separator + 1, -1).toString("utf8") !== input.path
+    record.subarray(separator + 1, -1).toString("utf-8") !== input.path
   )
     throw new Error(`Manifest asset was not one exact tracked file: ${input.path}`);
 

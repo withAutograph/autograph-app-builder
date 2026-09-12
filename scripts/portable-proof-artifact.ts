@@ -71,7 +71,7 @@ export function archiveFiles(archive: Uint8Array) {
         throw new Error("Archive contained bytes after its zero terminator.");
       break;
     }
-    const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "");
+    const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
     const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
     const size = Number.parseInt(sizeText, 8);
     const [type] = header.slice(156);
@@ -102,7 +102,7 @@ async function regularFile(path: string) {
 function git(repositoryRoot: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: {
       PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
@@ -128,7 +128,7 @@ export async function verifyPortableProofArtifact(input: {
   const repositoryRoot = await realpath(resolve(input.repositoryRoot));
   const receiptPath = join(releaseRoot, "release-receipt.json");
   const receiptBytes = await regularFile(receiptPath);
-  const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf8")));
+  const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
   if (receipt.endpoint !== `${origin}/mcp`)
     throw new Error("Release endpoint must bind the exact /mcp resource.");
@@ -183,7 +183,7 @@ export async function verifyPortableProofArtifact(input: {
     if (!marketplaceFiles.has(required)) throw new Error(`Codex marketplace omitted ${required}.`);
   const marketplaceAdapterPath = `${marketplacePrefix}.mcp.json`;
   const marketplaceAdapter = JSON.parse(
-    Buffer.from(marketplaceFiles.get(marketplaceAdapterPath)!).toString("utf8"),
+    Buffer.from(marketplaceFiles.get(marketplaceAdapterPath)!).toString("utf-8"),
   );
   if (
     JSON.stringify(marketplaceAdapter) !==
@@ -200,7 +200,7 @@ export async function verifyPortableProofArtifact(input: {
     throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
   const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
   const codexManifest = JSON.parse(
-    Buffer.from(marketplaceFiles.get(codexManifestPath)!).toString("utf8"),
+    Buffer.from(marketplaceFiles.get(codexManifestPath)!).toString("utf-8"),
   );
   if (
     codexManifest.name !== receipt.name ||
@@ -293,7 +293,7 @@ export async function verifyPortableProofArtifact(input: {
       })
       .strict()
       .parse(
-        JSON.parse((await regularFile(join(clientRoot, "client-harness.json"))).toString("utf8")),
+        JSON.parse((await regularFile(join(clientRoot, "client-harness.json"))).toString("utf-8")),
       );
     if (harness.client !== client) throw new Error("Client adapter drifted.");
     const installation = z
@@ -311,7 +311,7 @@ export async function verifyPortableProofArtifact(input: {
       .strict()
       .parse(
         JSON.parse(
-          (await regularFile(join(clientRoot, "installation-receipt.json"))).toString("utf8"),
+          (await regularFile(join(clientRoot, "installation-receipt.json"))).toString("utf-8"),
         ),
       );
     if (installation.client !== client) throw new Error("Installed client receipt drifted.");

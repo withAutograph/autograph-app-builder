@@ -33,8 +33,8 @@ function token(expiresAt = NOW + 3600): string {
     environment: "development",
   };
   return [
-    Buffer.from("{}", "utf8").toString("base64url"),
-    Buffer.from(JSON.stringify(claims), "utf8").toString("base64url"),
+    Buffer.from("{}", "utf-8").toString("base64url"),
+    Buffer.from(JSON.stringify(claims), "utf-8").toString("base64url"),
     "signature",
   ].join(".");
 }

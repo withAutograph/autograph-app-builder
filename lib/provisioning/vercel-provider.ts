@@ -78,7 +78,7 @@ export async function provisionVercelProject(input: {
     let body: unknown;
     try {
       body = bytes.byteLength
-        ? JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes))
+        ? JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
         : undefined;
     } catch {
       throw new Error("invalid-response");

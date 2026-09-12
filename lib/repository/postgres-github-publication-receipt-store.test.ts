@@ -163,8 +163,8 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
 
   it("keeps CAS predicates and the durable migration closed", async () => {
     const [adapter, migration] = await Promise.all([
-      readFile("lib/repository/postgres-github-publication-receipt-store.ts", "utf8"),
-      readFile("drizzle/0006_tenant_github_publication.sql", "utf8"),
+      readFile("lib/repository/postgres-github-publication-receipt-store.ts", "utf-8"),
+      readFile("drizzle/0006_tenant_github_publication.sql", "utf-8"),
     ]);
     expect(adapter).toContain("eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)");
     expect(adapter).toContain("eq(hostedGitHubPublicationJournals.receiptDigest, expectedDigest)");

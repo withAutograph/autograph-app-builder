@@ -28,8 +28,8 @@ afterEach(() => {
 describe("Eve durable turn execution envelope", () => {
   it("acquires before dynamic tools at turn.started and releases only at terminal boundaries", async () => {
     const [hook, sandbox] = await Promise.all([
-      readFile("agent/hooks/release-sandbox-compute.ts", "utf8"),
-      readFile("agent/sandbox.ts", "utf8"),
+      readFile("agent/hooks/release-sandbox-compute.ts", "utf-8"),
+      readFile("agent/sandbox.ts", "utf-8"),
     ]);
     expect(hook).toContain('"turn.started"');
     expect(hook).toContain("acquireHostedSandboxExecutionLease");

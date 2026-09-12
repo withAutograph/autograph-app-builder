@@ -114,7 +114,7 @@ const provenance = () =>
 
 describe("image lifecycle task ownership", () => {
   it("resolves every credential-bound preload executable through mise", () => {
-    const task = readFileSync(".config/mise/tasks/image/preload", "utf8");
+    const task = readFileSync(".config/mise/tasks/image/preload", "utf-8");
     for (const binding of [
       'APP_BUILDER_IMAGE_GH_BIN="$(mise which gh)"',
       'APP_BUILDER_IMAGE_DOCKER_BIN="$(mise which docker)"',
@@ -224,7 +224,7 @@ if (process.argv.length === 3 && process.argv[2] === "--version") {
 const helper = spawnSync(
   join(process.env.DOCKER_CONFIG, "docker-credential-ghcr-bound"),
   ["get"],
-  { encoding: "utf8", env: process.env, input: "ghcr.io\\n" },
+  { encoding: "utf-8", env: process.env, input: "ghcr.io\\n" },
 );
 if (helper.status !== 0) {
   process.stderr.write("credential helper failed\\n");
@@ -352,7 +352,7 @@ function stateArtifactText(root: string): string {
     for (const entry of readdirSync(path, { withFileTypes: true })) {
       const absolute = join(path, entry.name);
       if (entry.isDirectory()) visit(absolute);
-      else if (entry.isFile()) contents.push(readFileSync(absolute, "utf8"));
+      else if (entry.isFile()) contents.push(readFileSync(absolute, "utf-8"));
     }
   };
   visit(root);
@@ -527,7 +527,7 @@ describe("image lifecycle", () => {
           const approved = Buffer.from("github_pat_exact_private_package_token");
           const stateDigest = seedFakeGhState(fixture);
           const helperResult = spawnSync(join(root, "docker-credential-ghcr-bound"), ["get"], {
-            encoding: "utf8",
+            encoding: "utf-8",
             env: {
               NODE_ENV: "test",
               ...ghcrCredentialEnvironment(root, {
@@ -568,7 +568,7 @@ describe("image lifecycle", () => {
     const before = execFileSync(
       "/usr/bin/git",
       ["-C", builder, "status", "--porcelain=v1", "--untracked-files=all"],
-      { encoding: "utf8" },
+      { encoding: "utf-8" },
     );
     const provenanceDigest = "9".repeat(64);
     const stateDigest = seedFakeGhState(fixture);
@@ -584,7 +584,7 @@ describe("image lifecycle", () => {
       withFakeGhEnvironment(fixture, () => {
         const result = spawnSync(join(root, "docker-credential-ghcr-bound"), ["get"], {
           cwd: builder,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: {
             HOME: builder,
             NODE_ENV: "test",
@@ -599,15 +599,15 @@ describe("image lifecycle", () => {
         execFileSync(
           "/usr/bin/git",
           ["-C", builder, "status", "--porcelain=v1", "--untracked-files=all"],
-          { encoding: "utf8" },
+          { encoding: "utf-8" },
         ),
       ).toBe(before);
       expect(existsSync(join(builder, ".local"))).toBe(false);
       expect(existsSync(join(builder, "hostile-state"))).toBe(false);
-      expect(readFileSync(".config/mise/scripts/trusted-node-launcher", "utf8")).not.toContain(
+      expect(readFileSync(".config/mise/scripts/trusted-node-launcher", "utf-8")).not.toContain(
         "APP_BUILDER_GH_STATE_DIR",
       );
-      expect(readFileSync(join(fixture.state, "gh", "device-id"), "utf8")).toBe(
+      expect(readFileSync(join(fixture.state, "gh", "device-id"), "utf-8")).toBe(
         "fixture-device-id\n",
       );
     } finally {
@@ -692,7 +692,7 @@ describe("image lifecycle", () => {
     const credential = JSON.stringify({
       ServerURL: "https://ghcr.io",
       Username: "withAutograph",
-      Secret: token.toString("utf8"),
+      Secret: token.toString("utf-8"),
     });
     const provenanceDigest = "a".repeat(64);
     const identityDigest = ghcrIdentityDigest("withAutograph", provenanceDigest, token);
@@ -761,7 +761,7 @@ describe("image lifecycle", () => {
     const verifierModule = join(process.cwd(), "lib/image/ghcr-bound-helper.ts");
     const invoke = (input: string, mode: "get" | "verify-login" = "get") =>
       spawnSync(process.execPath, ["--experimental-strip-types", verifierModule, mode], {
-        encoding: "utf8",
+        encoding: "utf-8",
         env:
           mode === "get"
             ? { ...environment, APP_BUILDER_GH_STATE_DIGEST: stateDigest }
@@ -785,7 +785,7 @@ describe("image lifecycle", () => {
         identityDigest: environment.APP_BUILDER_GHCR_IDENTITY_DIGEST,
         provenanceDigest,
       });
-      expect(readFileSync(fixture.commandLog, "utf8").trim().split("\n")).toEqual([
+      expect(readFileSync(fixture.commandLog, "utf-8").trim().split("\n")).toEqual([
         "auth status --active --hostname github.com --json hosts",
         "auth token --hostname github.com --user withAutograph",
         "auth status --active --hostname github.com --json hosts",
@@ -832,13 +832,13 @@ describe("image lifecycle", () => {
           join(process.cwd(), "lib/image/ghcr-bound-helper.ts"),
           "get",
         ],
-        { encoding: "utf8", env: environment, input: "ghcr.io\n" },
+        { encoding: "utf-8", env: environment, input: "ghcr.io\n" },
       );
       expect(result.status).not.toBe(0);
       expect(result.stdout).toBe("");
       expect(result.stderr).not.toContain(approved);
       expect(result.stderr).toContain("GitHub state drifted after approval");
-      expect(readFileSync(fixture.commandLog, "utf8").trim().split("\n")).toEqual([
+      expect(readFileSync(fixture.commandLog, "utf-8").trim().split("\n")).toEqual([
         "auth status --active --hostname github.com --json hosts",
         "auth token --hostname github.com --user withAutograph",
       ]);
@@ -895,7 +895,7 @@ wait
       await new Promise<void>((resolve) => {
         child.once("close", () => resolve());
       });
-      const descendantPid = Number(readFileSync(descendant, "utf8").trim());
+      const descendantPid = Number(readFileSync(descendant, "utf-8").trim());
       for (let attempts = 0; attempts < 100; attempts += 1) {
         try {
           process.kill(descendantPid, 0);
@@ -919,7 +919,7 @@ wait
   });
 
   it("checks an exact login receipt before any stdin or provider operation", () => {
-    const source = readFileSync("lib/image/node-lifecycle.ts", "utf8");
+    const source = readFileSync("lib/image/node-lifecycle.ts", "utf-8");
     const start = source.indexOf("async function loginGhcrUnlocked");
     const end = source.indexOf("function inspectRemoteImageUnlocked", start);
     const body = source.slice(start, end);
@@ -946,7 +946,7 @@ wait
         });
       });
 
-      const invocations = readFileSync(scenario.fixture.msbLog, "utf8")
+      const invocations = readFileSync(scenario.fixture.msbLog, "utf-8")
         .trim()
         .split("\n")
         .map(
@@ -992,7 +992,7 @@ wait
         PATH: `${scenario.stateRoot}:/usr/bin:/bin`,
       });
       expect(invocations[0]!.credentialDigest).toBe(hashArtifact(scenario.sentinel));
-      expect(readFileSync(scenario.fixture.msbLog, "utf8")).not.toContain(scenario.sentinel);
+      expect(readFileSync(scenario.fixture.msbLog, "utf-8")).not.toContain(scenario.sentinel);
       expect(stateArtifactText(scenario.stateRoot)).not.toContain(scenario.sentinel);
     } finally {
       rmSync(scenario.root, { force: true, recursive: true });
@@ -1013,7 +1013,7 @@ wait
         let errorText = "";
         await withFakeGhEnvironmentAsync(scenario.fixture, async () => {
           scenario.seedReceipts();
-          const providerCallsBefore = readFileSync(scenario.fixture.commandLog, "utf8")
+          const providerCallsBefore = readFileSync(scenario.fixture.commandLog, "utf-8")
             .split("\n")
             .filter((line) => line.startsWith("auth token ")).length;
           try {
@@ -1025,7 +1025,7 @@ wait
           }
           expect(errorText).toContain(expectedError);
           expect(
-            readFileSync(scenario.fixture.commandLog, "utf8")
+            readFileSync(scenario.fixture.commandLog, "utf-8")
               .split("\n")
               .filter((line) => line.startsWith("auth token ")),
           ).toHaveLength(providerCallsBefore);
@@ -1041,8 +1041,8 @@ wait
   );
 
   it("sends no Builder workspace files through the default build context", () => {
-    expect(readFileSync(".dockerignore", "utf8")).toBe("**\n");
-    const dockerfile = readFileSync("containers/eve-sandbox/Dockerfile", "utf8");
+    expect(readFileSync(".dockerignore", "utf-8")).toBe("**\n");
+    const dockerfile = readFileSync("containers/eve-sandbox/Dockerfile", "utf-8");
     for (const line of dockerfile.split("\n").filter((line) => line.startsWith("COPY ")))
       expect(line).toContain("--from=");
   });
@@ -1112,8 +1112,8 @@ wait
   });
 
   it("pins and validates exact mise-owned tool versions", () => {
-    const miseConfig = readFileSync(".config/mise/config.toml", "utf8");
-    const miseLock = readFileSync(".config/mise/mise.lock", "utf8");
+    const miseConfig = readFileSync(".config/mise/config.toml", "utf-8");
+    const miseLock = readFileSync(".config/mise/mise.lock", "utf-8");
     for (const expected of [
       '"aqua:docker/buildx" = "0.33.0"',
       'docker-cli = "29.4.0"',
@@ -1130,7 +1130,7 @@ wait
     expect(dockerfileDigest).toBe(
       "05e47db175d19c836d95be2e628e36cf7c7a2859dc8fbd92ac5c07573db0ad5b",
     );
-    expect(readFileSync("containers/eve-sandbox/README.md", "utf8")).not.toContain(
+    expect(readFileSync("containers/eve-sandbox/README.md", "utf-8")).not.toContain(
       "4334f7eac9260580ad0c07c8f03b466060062215333752e8d4d625f024401267",
     );
     expect(imageToolVersionCommand("docker-buildx")).toEqual({
@@ -1146,7 +1146,7 @@ wait
       });
       const invocation = imageToolInvocation("msb", ["--version"]);
       const invoked = spawnSync(invocation.program, [...invocation.args], {
-        encoding: "utf8",
+        encoding: "utf-8",
         env: {
           HOME: tmpdir(),
           LANG: "C",
@@ -1285,17 +1285,17 @@ wait
       "fixture",
     ]);
     const commit = execFileSync("git", ["-C", source, "rev-parse", "HEAD"], {
-      encoding: "utf8",
+      encoding: "utf-8",
     }).trim();
     const tree = execFileSync("git", ["-C", source, "rev-parse", "HEAD^{tree}"], {
-      encoding: "utf8",
+      encoding: "utf-8",
     }).trim();
     const context = materializeSanitizedGitTree(source, destination, commit, tree);
     const orderedPaths = ["nested/deeper/payload.txt", "nested/run.sh", "tracked.txt"] as const;
     const modes = ["100644", "100755", "100644"] as const;
     const expectedRecords = orderedPaths.map((path, index) => {
       const objectId = execFileSync("git", ["-C", source, "hash-object", "--", path], {
-        encoding: "utf8",
+        encoding: "utf-8",
       }).trim();
       return `${modes[index]}\0${objectId}\0${path}`;
     });
@@ -1305,16 +1305,18 @@ wait
       entriesDigest: expectedEntriesDigest,
       entryCount: orderedPaths.length,
     });
-    expect(readFileSync(join(destination, "tracked.txt"), "utf8")).toBe("tracked bytes\n");
-    expect(readFileSync(join(destination, "nested", "deeper", "payload.txt"), "utf8")).toBe(
+    expect(readFileSync(join(destination, "tracked.txt"), "utf-8")).toBe("tracked bytes\n");
+    expect(readFileSync(join(destination, "nested", "deeper", "payload.txt"), "utf-8")).toBe(
       "nested bytes\n",
     );
-    expect(readFileSync(join(destination, "nested", "run.sh"), "utf8")).toBe("#!/bin/sh\nexit 0\n");
+    expect(readFileSync(join(destination, "nested", "run.sh"), "utf-8")).toBe(
+      "#!/bin/sh\nexit 0\n",
+    );
     expect(lstatSync(join(destination, "nested", "run.sh")).mode & 0o777).toBe(0o755);
     expect(() => readFileSync(join(destination, ".git", "config"))).toThrow();
     const manifestBytes = readFileSync(
       join(destination, ".app-builder-source-manifest.json"),
-      "utf8",
+      "utf-8",
     );
     expect(JSON.parse(manifestBytes)).toEqual({
       version: 1,
@@ -1414,7 +1416,7 @@ wait
         () => reject(new Error("Timed out waiting for lifecycle crash fixture.")),
         3000,
       );
-      child.stdout.setEncoding("utf8");
+      child.stdout.setEncoding("utf-8");
       child.stdout.on("data", (chunk: string) => {
         output += chunk;
         const [line] = output.split("\n");
@@ -1440,7 +1442,7 @@ wait
     writeFileSync(outside, "keep");
     symlinkSync(outside, join(root, `source-receipt.json.tmp-1-${randomUUID()}`));
     expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted receipt artifact");
-    expect(readFileSync(outside, "utf8")).toBe("keep");
+    expect(readFileSync(outside, "utf-8")).toBe("keep");
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -1458,7 +1460,7 @@ wait
         else linkSync(outside, join(runtime, "current"));
       }
       expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted Buildx state");
-      expect(readFileSync(outside, "utf8")).toBe("keep");
+      expect(readFileSync(outside, "utf-8")).toBe("keep");
       rmSync(root, { recursive: true, force: true });
     }
   });

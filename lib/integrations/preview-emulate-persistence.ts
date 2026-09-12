@@ -17,7 +17,7 @@ function validateState(state: string) {
     throw new Error("Preview emulator state is invalid.");
   }
   if (
-    Buffer.byteLength(state, "utf8") > MAX_STATE_BYTES ||
+    Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES ||
     typeof parsed !== "object" ||
     parsed === null ||
     Array.isArray(parsed)

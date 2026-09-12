@@ -458,7 +458,7 @@ export async function measureStyles(
           if (comma !== -1) {
             const body = url.slice(comma + 1);
             text = /;base64/iu.test(url.slice(0, comma))
-              ? Buffer.from(body, "base64").toString("utf8")
+              ? Buffer.from(body, "base64").toString("utf-8")
               : decodeURIComponent(body);
           }
         } catch {

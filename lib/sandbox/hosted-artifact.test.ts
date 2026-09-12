@@ -21,7 +21,7 @@ describe("hosted Arrusted artifact", () => {
     expect(HOSTED_ARTIFACT_SHA256).toMatch(/^[0-9a-f]{64}$/u);
     expect(existsSync("lib/sandbox/hosted-artifact.generated.ts")).toBe(false);
     expect(existsSync("public/hosted-artifacts")).toBe(false);
-    expect(readFileSync("next.config.ts", "utf8")).not.toContain("artifacts/hosted");
+    expect(readFileSync("next.config.ts", "utf-8")).not.toContain("artifacts/hosted");
     expect(hostedExecutionArtifactDigest()).toBe(
       `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`,
     );
@@ -38,11 +38,11 @@ describe("hosted Arrusted artifact", () => {
       "agent/tools/prepare_workspace.ts",
       "lib/sandbox/hosted-toolchain.ts",
     ]) {
-      const definition = readFileSync(path, "utf8");
+      const definition = readFileSync(path, "utf-8");
       expect(definition).not.toContain("hosted-source");
       expect(definition).not.toContain("source-tree.tar.gz");
     }
-    expect(readFileSync("lib/repository/supported-template.ts", "utf8")).not.toContain(
+    expect(readFileSync("lib/repository/supported-template.ts", "utf-8")).not.toContain(
       "/opt/app-builder/hosted-source",
     );
     expect(existsSync("lib/repository/hosted-source.ts")).toBe(false);

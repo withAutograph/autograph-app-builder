@@ -151,7 +151,7 @@ export function readPasskeyOnboardingConfig(
 }
 
 function encode(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
+  return Buffer.from(value, "utf-8").toString("base64url");
 }
 
 function sign(encodedPayload: string, secret: string) {
@@ -205,7 +205,7 @@ export function verifyPasskeyOnboardingToken(
   }
   try {
     const payload = tokenPayloadSchema.parse(
-      JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")),
+      JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf-8")),
     );
     if (
       payload.expiresAt <= Math.floor(now.getTime() / 1000) ||

@@ -95,7 +95,7 @@ function readFdFrame() {
     const buffer = Buffer.alloc(512);
     const count = readSync(authorizationFd, buffer, 0, buffer.length, null);
     if (count <= 0) throw new Error("Structural test authorization was absent.");
-    source += buffer.subarray(0, count).toString("utf8");
+    source += buffer.subarray(0, count).toString("utf-8");
     const newline = source.indexOf("\n");
     if (
       (newline === -1 && Buffer.byteLength(source) > maxBytes) ||

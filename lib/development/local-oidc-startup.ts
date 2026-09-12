@@ -135,7 +135,7 @@ export function runLocalOidcStartupCommand(invocation: LocalOidcStartupInvocatio
   const result = spawnSync(invocation.executable, [...invocation.args], {
     cwd: invocation.cwd,
     env: invocation.environment,
-    encoding: "utf8",
+    encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 1024 * 1024,
   });

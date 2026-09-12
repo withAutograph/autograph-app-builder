@@ -114,7 +114,7 @@ function fixedGitApply(
   );
   if (result.status !== 0)
     throw new Error(
-      `Fixed git apply failed: ${result.stderr.toString("utf8").trim() || "unknown error"}`,
+      `Fixed git apply failed: ${result.stderr.toString("utf-8").trim() || "unknown error"}`,
     );
 }
 
@@ -185,7 +185,7 @@ async function buildExactGitPatch(input: {
 
 function git(path: string, args: readonly string[]): string {
   return execFileSync("git", ["-C", path, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: 4 * 1024 * 1024,
   });
 }
@@ -520,7 +520,7 @@ export async function readLocalPublicationJournal(
   const root = await resolveAllowedRepository(destinationPath);
   const path = await gitOwnedPath(root, "app-builder/local-publication.json");
   try {
-    const journal = JSON.parse(await readFile(path, "utf8")) as LocalPublicationJournal;
+    const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {

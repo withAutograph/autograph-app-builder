@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const readDocumentation = (path: string) => readFile(resolve(path), "utf8");
+const readDocumentation = (path: string) => readFile(resolve(path), "utf-8");
 const verifiedReleaseInstall = {
   path: "docs/installing.md",
   heading: "## Install before shared marketplace publication",
@@ -27,7 +27,7 @@ async function writeStub(root: string, name: string, body: string) {
 
 async function readAuditLog(path: string) {
   try {
-    return await readFile(path, "utf8");
+    return await readFile(path, "utf-8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
     throw error;

@@ -35,7 +35,7 @@ const sanitizedEnvironment = (): NodeJS.ProcessEnv => ({
 
 const git = (root: string, args: readonly string[]) =>
   execFileSync(fixedGit, ["-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: 32 * 1024 * 1024,
     env: sanitizedEnvironment(),
   }).trim();
@@ -102,7 +102,7 @@ export function materializeSanitizedGitTree(
     fixedGit,
     ["-C", sourceRoot, "ls-tree", "-rz", "-r", "--full-tree", expectedTree],
     { maxBuffer: 128 * 1024 * 1024, env: sanitizedEnvironment() },
-  ).toString("utf8");
+  ).toString("utf-8");
   const records: string[] = [];
   mkdirSync(destinationRoot, { mode: 0o700 });
   try {
@@ -134,7 +134,7 @@ export function materializeSanitizedGitTree(
         env: sanitizedEnvironment(),
       });
       if (mode === "120000") {
-        const target = bytes.toString("utf8");
+        const target = bytes.toString("utf-8");
         if (
           target === "" ||
           target.includes("\0") ||
@@ -159,7 +159,7 @@ export function materializeSanitizedGitTree(
     assertNoSecretMaterial(manifest);
     writeExactFile(
       join(destinationRoot, ".app-builder-source-manifest.json"),
-      Buffer.from(`${JSON.stringify(manifest)}\n`, "utf8"),
+      Buffer.from(`${JSON.stringify(manifest)}\n`, "utf-8"),
       0o444,
     );
     if (

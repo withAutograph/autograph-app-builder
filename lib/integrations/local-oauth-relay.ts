@@ -26,7 +26,7 @@ export function verifyLocalVercelRelay(
   const provided = Buffer.from(signature, "base64url");
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
     throw new Error("invalid-relay");
-  const result = schema.parse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
+  const result = schema.parse(JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")));
   if (result.expiresAt <= now) throw new Error("expired-relay");
   if (expectedOrigin !== undefined && result.origin !== expectedOrigin)
     throw new Error("invalid-relay-origin");

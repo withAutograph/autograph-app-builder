@@ -8,7 +8,7 @@ const homePagePath = resolve(repositoryRoot, "app/(product)/page.tsx");
 const handoffPagePath = resolve(repositoryRoot, "app/(product)/handoff/[id]/page.tsx");
 
 describe("React 19.3 generated-app guidance", () => {
-  const guidance = readFileSync(guidancePath, "utf8");
+  const guidance = readFileSync(guidancePath, "utf-8");
 
   it("keeps View Transitions opt-in and accessible", () => {
     expect(guidance).toContain("Do not apply them globally");
@@ -20,7 +20,7 @@ describe("React 19.3 generated-app guidance", () => {
 
   it("keeps Builder route transitions server-rendered and loading fallbacks immediate", () => {
     for (const pagePath of [homePagePath, handoffPagePath]) {
-      const page = readFileSync(pagePath, "utf8");
+      const page = readFileSync(pagePath, "utf-8");
 
       expect(page).not.toContain('"use client"');
       expect(page).toContain('import { Suspense, ViewTransition } from "react"');

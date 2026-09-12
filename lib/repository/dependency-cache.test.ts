@@ -478,13 +478,13 @@ describe("offline dependency cache", () => {
 
       const cachedPackage = join(fixture.rootModules, "react", "package.json");
       const cachedBefore = {
-        content: await readFile(cachedPackage, "utf8"),
+        content: await readFile(cachedPackage, "utf-8"),
         mode: (await lstat(cachedPackage)).mode,
       };
       const overlayModules = await realpath(join(overlay, "node_modules"));
       await writeFile(join(overlayModules, "overlay-owned.txt"), "owned\n");
       await chmod(overlayModules, 0o700);
-      expect(await readFile(cachedPackage, "utf8")).toBe(cachedBefore.content);
+      expect(await readFile(cachedPackage, "utf-8")).toBe(cachedBefore.content);
       expect((await lstat(cachedPackage)).mode).toBe(cachedBefore.mode);
 
       await chmod(fixture.rootModules, 0o755);
@@ -524,7 +524,7 @@ describe("offline dependency cache", () => {
   it("builds the hosted seed as an execution-complete Linux closure", () => {
     const producer = readFileSync(
       ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
-      "utf8",
+      "utf-8",
     );
     for (const packageName of [
       "@testing-library/react",
@@ -1055,7 +1055,7 @@ describe("offline dependency cache", () => {
   it("keeps the image recipe bound to the exact target and closure", () => {
     const dockerfile = readFileSync(
       new URL("../../containers/eve-sandbox/Dockerfile", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     expect(dockerfile).toContain(`ARG TARGET_SHA=${ARRUSTED_TARGET_SHA}`);
     expect(dockerfile).toContain(`ARG TARGET_TREE=${ARRUSTED_TARGET_TREE}`);

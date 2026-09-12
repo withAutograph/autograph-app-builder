@@ -504,7 +504,7 @@ const path = require("node:path");
 
 const [layoutPath, overlayRootInput, viewRootInput, workspaceRootInput = "/workspace", allowOwnerWriteInput = "0"] = process.argv.slice(2);
 const allowOwnerWrite = allowOwnerWriteInput === "1";
-const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
+const layout = JSON.parse(fs.readFileSync(layoutPath, "utf-8"));
 const requestedWorkspaceRoot = path.resolve(workspaceRootInput);
 const workspaceRoot = fs.realpathSync(workspaceRootInput);
 const safeRelative = (value) =>
@@ -731,7 +731,7 @@ const contains = (root, candidate) => {
   return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
 };
 const relativeSourcePath = (candidate) => path.relative(sourceRoot, candidate).split(path.sep).join("/");
-const manifest = JSON.parse(fs.readFileSync(sourceManifestPath, "utf8"));
+const manifest = JSON.parse(fs.readFileSync(sourceManifestPath, "utf-8"));
 if (!Array.isArray(manifest) || manifest.length === 0) process.exit(1);
 const tracked = new Set(manifest.map((entry) => entry && entry.path));
 if (tracked.size !== manifest.length || [...tracked].some((entry) => typeof entry !== "string")) process.exit(1);
@@ -828,7 +828,7 @@ const workspaceNodeModules = dependencyRoots.map((root) => ({
 }));
 const nodeModulesPath = dependencyRoots[0];
 const packageJson = JSON.parse(
-  fs.readFileSync(path.join(nodeModulesPath, "@vercel/microfrontends/package.json"), "utf8"),
+  fs.readFileSync(path.join(nodeModulesPath, "@vercel/microfrontends/package.json"), "utf-8"),
 );
 console.log(JSON.stringify({
   platform,
@@ -1338,7 +1338,7 @@ export async function materializeOfflineDependencies(input: {
     observed.manifest.scope !== "live-template-execution"
   ) {
     const resolution = await input.sandbox.run({
-      command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
+      command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf-8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
       workingDirectory: `/workspace/${root}/packages/platform-microfrontends`,
       abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     });

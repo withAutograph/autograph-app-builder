@@ -27,7 +27,7 @@ const fullCapabilities = ["mock-model", "simulated-target", "simulated-publicati
 function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", inspectionSource], {
     cwd: repositoryRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: environment,
   });
   expect(result.status, result.stderr).toBe(0);
@@ -174,7 +174,7 @@ describe("test capability preload", () => {
     `;
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: { ...process.env, NODE_OPTIONS: undefined },
     });
     expect(result.status, result.stderr).toBe(0);
@@ -226,8 +226,8 @@ describe("test capability preload", () => {
       );
       let stdout = "";
       let stderr = "";
-      child.stdout?.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));
-      child.stderr?.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
+      child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
+      child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
       const status = await new Promise<number | null>((resolve, reject) => {
         child.once("error", reject);
         child.once("exit", resolve);
@@ -256,7 +256,7 @@ describe("test capability preload", () => {
     `;
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
       timeout: 5000,
     });

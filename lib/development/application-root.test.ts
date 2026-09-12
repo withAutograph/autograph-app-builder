@@ -51,7 +51,7 @@ describe("development Eve application roots", () => {
     });
 
     expect(first.root).not.toBe(second.root);
-    expect(await readFile(join(second.root, "agent.ts"), "utf8")).toContain("live");
+    expect(await readFile(join(second.root, "agent.ts"), "utf-8")).toContain("live");
     await expect(lstat(join(second.root, ".eve"))).rejects.toMatchObject({
       code: "ENOENT",
     });

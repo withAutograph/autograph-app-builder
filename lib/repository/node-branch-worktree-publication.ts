@@ -109,14 +109,14 @@ if (
   process.stderr.write("unsafe publication lock inode\n");
   process.exit(74);
 }
-const existing = fs.readFileSync(fd, "utf8");
+const existing = fs.readFileSync(fd, "utf-8");
 if (existing.startsWith("APP_BUILDER_PUBLICATION_LEASE_V1:")) {
   fs.closeSync(fd);
   process.stderr.write("abandoned publication lease requires explicit recovery/reset\n");
   process.exit(73);
 }
 fs.ftruncateSync(fd, 0);
-const marker = Buffer.from(lease, "utf8");
+const marker = Buffer.from(lease, "utf-8");
 let markerOffset = 0;
 while (markerOffset < marker.length) {
   const written = fs.writeSync(
@@ -155,7 +155,7 @@ if (observedOffset !== marker.length || !observedMarker.equals(marker)) {
 }
 process.stdout.write("READY\n");
 let command = "";
-process.stdin.setEncoding("utf8");
+process.stdin.setEncoding("utf-8");
 process.stdin.on("data", (chunk) => { command += chunk; });
 process.stdin.on("end", () => {
   if (command === "RELEASE\n") {
@@ -189,7 +189,7 @@ function gitArguments(root: string, args: readonly string[]): string[] {
 
 function git(root: string, args: readonly string[]): string {
   return execFileSync(gitExecutable(), gitArguments(root, args), {
-    encoding: "utf8",
+    encoding: "utf-8",
     env: gitEnvironment(),
     maxBuffer: 8 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
@@ -206,7 +206,7 @@ function gitBuffer(root: string, args: readonly string[]): Buffer {
 }
 
 function parseCanonicalPathList(output: Buffer, message: string): string[] {
-  const paths = output.toString("utf8").split("\0").filter(Boolean);
+  const paths = output.toString("utf-8").split("\0").filter(Boolean);
   const canonical = Buffer.from(`${paths.join("\0")}${paths.length === 0 ? "" : "\0"}`);
   if (canonical.compare(output) !== 0 || paths.some((path) => !safeSourcePath(path)))
     throw new Error(message);
@@ -452,7 +452,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
     terminal = { kind: "exit", code, signal };
     resolveTerminal(terminal);
   });
-  holder.stderr.setEncoding("utf8");
+  holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
@@ -471,7 +471,7 @@ async function acquirePublicationLock(identity: string): Promise<PublicationLock
             ),
       );
     });
-    holder.stdout.setEncoding("utf8");
+    holder.stdout.setEncoding("utf-8");
     holder.stdout.once("data", (chunk: string) => {
       clearTimeout(timeout);
       if (chunk !== "READY\n") {
@@ -621,7 +621,7 @@ export async function readBranchWorktreePublicationJournal(
     let contents: string;
     try {
       await assertOwnedPublicationFileHandle(handle);
-      contents = await handle.readFile("utf8");
+      contents = await handle.readFile("utf-8");
     } finally {
       await handle.close();
     }
@@ -671,7 +671,7 @@ function createExactBranch(proposal: BranchWorktreePublicationProposal): void {
       proposal.baseSha,
       "0".repeat(proposal.baseSha.length),
     ]),
-    { env: gitEnvironment(), encoding: "utf8" },
+    { env: gitEnvironment(), encoding: "utf-8" },
   );
   if (result.status !== 0)
     throw new Error(
@@ -727,7 +727,7 @@ async function assertOwnedPartialWorktree(
     if (!entry.isDirectory()) continue;
     const adminPath = resolve(worktreeAdminRoot, entry.name);
     try {
-      const linkedPath = (await readFile(resolve(adminPath, "gitdir"), "utf8")).trim();
+      const linkedPath = (await readFile(resolve(adminPath, "gitdir"), "utf-8")).trim();
       if (resolve(linkedPath) === resolve(proposal.worktreePath, ".git"))
         exactAdminPaths.push(adminPath);
     } catch {
@@ -745,7 +745,7 @@ async function assertOwnedPartialWorktree(
         const state = await lstat(target);
         if (!state.isFile() || state.isSymbolicLink())
           throw new Error("The partial worktree Git link is unsafe.");
-        const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf8"));
+        const match = /^gitdir: (.+)\n?$/u.exec(await readFile(target, "utf-8"));
         if (match === null || !isAbsolute(match[1]) || resolve(match[1]) !== exactAdminPaths[0])
           throw new Error("The partial worktree Git link conflicts with intent.");
         exactGitLinkSeen = true;
@@ -831,7 +831,7 @@ async function createOrRepairExactWorktree(
       proposal.worktreePath,
       proposal.branchName,
     ]),
-    { env: gitEnvironment(), encoding: "utf8" },
+    { env: gitEnvironment(), encoding: "utf-8" },
   );
   if (result.status !== 0)
     throw new Error(
@@ -854,7 +854,7 @@ type TreeEntry = {
 function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
   const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
   const result: TreeEntry[] = [];
-  for (const record of output.toString("utf8").split("\0").filter(Boolean)) {
+  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
     const match = /^(100644|100755|120000|160000) (blob|commit) ([0-9a-f]{40,64})\t(.+)$/u.exec(
       record,
     );
@@ -865,7 +865,7 @@ function exactTreeEntries(sourcePath: string, sourceSha: string): TreeEntry[] {
     if (!safeSourcePath(path)) throw new Error("The source tree contains an unsafe path.");
     const bytes = gitBuffer(sourcePath, ["cat-file", "blob", match[3]]);
     if (match[1] === "120000") {
-      const target = bytes.toString("utf8");
+      const target = bytes.toString("utf-8");
       if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0"))
         throw new Error("The source tree contains an invalid symbolic link.");
       result.push({
@@ -1141,7 +1141,7 @@ async function materializeAtomically(
   const temporary = resolve(staging, randomUUID());
   try {
     if (mode === "120000") {
-      await symlink(Buffer.from(bytes).toString("utf8"), temporary);
+      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
       await syncDirectory(staging, true);
     } else {
       const handle = await open(temporary, "wx", Number.parseInt(mode, 8));

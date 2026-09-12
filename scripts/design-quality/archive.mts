@@ -24,7 +24,7 @@ if (values.help) {
 if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name))
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 const input = resolve(values["report-dir"]);
-const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
+const report = JSON.parse(await readFile(join(input, "report.json"), "utf-8"));
 const timestamp = new Date(report.createdAt).toISOString();
 const date = timestamp.slice(0, 10);
 const time = timestamp.slice(11, 23).replaceAll(/[:.]/gu, "");

@@ -29,7 +29,7 @@ describe("app-creation skill export", () => {
     );
     const repositoryRoot = resolve(import.meta.dirname, "../..");
     const lock = JSON.parse(
-      readFileSync(join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf8"),
+      readFileSync(join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf-8"),
     ) as { revision: string; skills: Record<string, string> };
     expect(lock.revision).toMatch(/^[0-9a-f]{40}$/u);
     expect(Object.keys(lock.skills).toSorted()).toEqual([
@@ -75,7 +75,7 @@ describe("app-creation skill export", () => {
     async (name) => {
       const repositoryRoot = resolve(import.meta.dirname, "../..");
       const reference = `design-app/references/${name}`;
-      const source = readFileSync(join(repositoryRoot, "agent/skills", reference), "utf8");
+      const source = readFileSync(join(repositoryRoot, "agent/skills", reference), "utf-8");
       const outputRoot = join(mkdtempSync(join(tmpdir(), "interaction-skill-export-")), "payload");
       const manifest = await exportAppCreationSkills({
         repositoryRoot,
@@ -83,7 +83,7 @@ describe("app-creation skill export", () => {
       });
 
       expect(manifest.files.some((file) => file.path === reference)).toBe(true);
-      expect(readFileSync(join(outputRoot, reference), "utf8")).toBe(source);
+      expect(readFileSync(join(outputRoot, reference), "utf-8")).toBe(source);
       expect(HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)?.content).toBe(
         source,
       );

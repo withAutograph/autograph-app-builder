@@ -154,7 +154,7 @@ export function sealPromotionReceipt(input: PromotionReceiptUnsigned): Promotion
 
 function git(root: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", ["-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     env: {
       PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
@@ -222,7 +222,7 @@ async function tarEntry(path: string, requested: string) {
 
 export async function inspectOciCandidateArchive(path: string) {
   const indexBytes = await tarEntry(path, "index.json");
-  const index = JSON.parse(indexBytes.toString("utf8")) as {
+  const index = JSON.parse(indexBytes.toString("utf-8")) as {
     schemaVersion?: unknown;
     manifests?: unknown;
   };
@@ -260,7 +260,7 @@ export async function inspectOciCandidateArchive(path: string) {
   );
   if (`sha256:${sha256(manifestBytes)}` !== descriptor.digest)
     throw new Error("Release OCI manifest bytes did not match the index.");
-  const manifest = JSON.parse(manifestBytes.toString("utf8")) as {
+  const manifest = JSON.parse(manifestBytes.toString("utf-8")) as {
     schemaVersion?: unknown;
     config?: { digest?: unknown };
     layers?: unknown;
@@ -356,7 +356,7 @@ export async function verifyPromotionCandidate(input: {
     receiptPath,
     sha256(await readFile(join(root, receiptPath))),
   );
-  const receipt = promotionReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf8")));
+  const receipt = promotionReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const { digest, ...unsigned } = receipt;
   if (sealPromotionReceipt(unsigned).digest !== digest)
     throw new Error("Release promotion receipt digest drifted.");
@@ -366,7 +366,7 @@ export async function verifyPromotionCandidate(input: {
     receipt.package.receiptSha256,
   );
   const packageReceipt = portableReleaseReceiptSchema.parse(
-    JSON.parse(packageReceiptBytes.toString("utf8")),
+    JSON.parse(packageReceiptBytes.toString("utf-8")),
   );
   if (
     packageReceipt.source.sha !== receipt.builder.commit ||

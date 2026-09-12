@@ -95,7 +95,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
   it("keeps the checked-in migration tenant scoped and idempotency bound", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0001_hosted_eve_bridge.sql", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     for (const required of [
       '"issuer" text NOT NULL',
@@ -109,7 +109,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
       expect(migration).toContain(required);
     }
     const journal = JSON.parse(
-      await readFile(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8"),
+      await readFile(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf-8"),
     ) as unknown;
     expect(journal).toEqual({
       version: "7",
@@ -269,7 +269,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
   it("adds bounded durable-session metadata without rewriting legacy rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0018_durable_session_resume.sql", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     for (const required of [
       '"adapter_generation" integer',
@@ -286,7 +286,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
   it("adds opaque handoffs without rewriting existing rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0019_opaque_builder_handoff.sql", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     for (const required of [
       'CREATE TABLE "builder_handoff"',
@@ -301,7 +301,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
   it("adds tenant-scoped durable drafts without rewriting existing rows", async () => {
     const migration = await readFile(
       new URL("../../drizzle/0020_durable_builder_draft.sql", import.meta.url),
-      "utf8",
+      "utf-8",
     );
     for (const required of [
       'CREATE TABLE "builder_draft"',

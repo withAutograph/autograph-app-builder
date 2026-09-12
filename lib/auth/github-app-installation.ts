@@ -328,7 +328,7 @@ function verifyState(input: {
   }
   let decoded: unknown;
   try {
-    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     throw new GitHubStateValidationError({
       substage: "state-schema",

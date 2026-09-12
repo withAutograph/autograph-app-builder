@@ -200,7 +200,7 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
   for (const manifest of manifests) {
     let pkg: PackageJson;
     try {
-      pkg = JSON.parse(await readFile(join(arrustedRoot, manifest), "utf8"));
+      pkg = JSON.parse(await readFile(join(arrustedRoot, manifest), "utf-8"));
     } catch {
       continue;
     }

@@ -88,7 +88,7 @@ async function run(
   const result = await execFileAsync(executable, args, {
     cwd: options.cwd ?? repositoryRoot,
     env: options.environment ?? process.env,
-    encoding: "utf8",
+    encoding: "utf-8",
     maxBuffer: 32 * 1024 * 1024,
   });
   if (!options.capture && result.stdout.trim() !== "") process.stdout.write(result.stdout);

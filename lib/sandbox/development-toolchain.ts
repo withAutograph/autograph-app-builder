@@ -77,7 +77,7 @@ function git(sourceRoot: string, args: readonly string[]) {
   return execFileSync(
     "/usr/bin/git",
     ["-c", "core.hooksPath=/dev/null", "-C", sourceRoot, ...args],
-    { encoding: "utf8", env: gitEnvironment() },
+    { encoding: "utf-8", env: gitEnvironment() },
   ).trim();
 }
 
@@ -408,7 +408,7 @@ const safe = (path, kind) => {
   return !entry.isSymbolicLink() && (kind === "directory" ? entry.isDirectory() : entry.isFile()) && (entry.mode & 0o022) === 0;
 };
 try {
-  const actual = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const actual = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const required = [
     [manifestPath, "file"],
     [dependencies, "directory"],
@@ -438,7 +438,7 @@ cd "$work/source"
 stage='javascript-install'
 bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent
 test -d node_modules && test ! -L node_modules
-node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
+node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf-8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
@@ -515,7 +515,7 @@ cd "$work/source"
 stage='javascript-install'
 bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent
 test -d node_modules && test ! -L node_modules
-node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
+node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(p,"utf-8")).version;if(read("node_modules/path-to-regexp/package.json")!=="8.4.2"||read("node_modules/@vercel/microfrontends/package.json")!=="2.4.0"||read("node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="6.3.0")process.exit(1)'
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE

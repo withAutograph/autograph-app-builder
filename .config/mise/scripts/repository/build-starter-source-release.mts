@@ -36,9 +36,9 @@ function argumentsFrom(values: readonly string[]) {
   return { root: realpathSync(root), output: resolve(output), origin };
 }
 
-function git(root: string, args: readonly string[], encoding: "utf8"): string;
+function git(root: string, args: readonly string[], encoding: "utf-8"): string;
 function git(root: string, args: readonly string[], encoding: "buffer"): Buffer;
-function git(root: string, args: readonly string[], encoding: "utf8" | "buffer") {
+function git(root: string, args: readonly string[], encoding: "utf-8" | "buffer") {
   return execFileSync(
     "/usr/bin/git",
     [
@@ -57,12 +57,12 @@ function git(root: string, args: readonly string[], encoding: "utf8" | "buffer")
 }
 
 const input = argumentsFrom(process.argv.slice(2));
-if (git(input.root, ["rev-parse", "HEAD"], "utf8").trim() !== TARGET_SHA)
+if (git(input.root, ["rev-parse", "HEAD"], "utf-8").trim() !== TARGET_SHA)
   throw new Error("Arrusted source SHA is not the pinned supported commit.");
-if (git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf8").trim() !== TARGET_TREE)
+if (git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf-8").trim() !== TARGET_TREE)
   throw new Error("Arrusted source tree is not the pinned supported tree.");
 
-const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "utf8")
+const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "utf-8")
   .trimEnd()
   .split("\n")
   .map((line) => {

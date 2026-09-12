@@ -24,7 +24,7 @@ export function readLocalEveCycleBinding(path: string) {
     (info.mode & 0o077) !== 0
   )
     throw new Error("The local Eve cycle binding was not owner-only.");
-  const generation = readFileSync(path, "utf8").trim();
+  const generation = readFileSync(path, "utf-8").trim();
   if (!cyclePattern.test(generation)) throw new Error("The local Eve cycle binding was invalid.");
   return generation;
 }
@@ -45,7 +45,7 @@ export async function rotateLocalEveCycleBinding(path: string) {
   const temporary = `${path}.${process.pid}.${generation}.tmp`;
   try {
     await writeFile(temporary, `${generation}\n`, {
-      encoding: "utf8",
+      encoding: "utf-8",
       flag: "wx",
       mode: 0o600,
     });

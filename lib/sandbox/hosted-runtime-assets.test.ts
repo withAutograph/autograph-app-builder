@@ -36,7 +36,7 @@ process.stdout.write(JSON.stringify({ artifactUrl: artifact.HOSTED_ARTIFACT_URL,
       ],
       {
         cwd: runtimeRoot,
-        encoding: "utf8",
+        encoding: "utf-8",
         env: childEnvironment,
       },
     );

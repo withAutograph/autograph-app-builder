@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf8");
-const reviewExperiences = readFileSync("docs/ui-preview-review-experiences.md", "utf8");
+const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf-8");
+const reviewExperiences = readFileSync("docs/ui-preview-review-experiences.md", "utf-8");
 
 describe("high-fidelity design guidance", () => {
   it("inspects public components, compositions, stories, and consumers in order", () => {

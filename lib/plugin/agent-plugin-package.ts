@@ -36,7 +36,7 @@ const SECRET_LIKE_HEADER_VALUE =
 type JsonObject = Record<string, unknown>;
 
 const readJson = async (path: string): Promise<JsonObject> =>
-  JSON.parse(await readFile(path, "utf8")) as JsonObject;
+  JSON.parse(await readFile(path, "utf-8")) as JsonObject;
 
 const isWithin = (root: string, candidate: string) => {
   const path = relative(root, candidate);
@@ -158,7 +158,7 @@ const requireString = ({
 const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
   const skillPath = resolve(skillDirectory, "SKILL.md");
   await assertRegularFile(pluginRoot, skillPath);
-  const contents = await readFile(skillPath, "utf8");
+  const contents = await readFile(skillPath, "utf-8");
   const match = contents.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
   if (!match) throw new Error(`${relative(pluginRoot, skillPath)} has invalid frontmatter.`);
   const document = parseDocument(match[1], {
@@ -301,7 +301,7 @@ export const validateAgentPluginPackage = async ({
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== digest)
       throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
-    schemaDocuments[name] = JSON.parse(bytes.toString("utf8")) as JsonObject;
+    schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 
   const plugin = await readJson(resolve(resolvedPluginRoot, "plugin.json"));

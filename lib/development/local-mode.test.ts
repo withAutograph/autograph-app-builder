@@ -83,7 +83,7 @@ describe("development source snapshots", () => {
     const source = await fixture();
     const { execFileSync } = await import("node:child_process");
     const git = (cwd: string, ...args: string[]) =>
-      execFileSync("/usr/bin/git", args, { cwd, encoding: "utf8" });
+      execFileSync("/usr/bin/git", args, { cwd, encoding: "utf-8" });
     const head = git(source, "rev-parse", "HEAD").trim();
     const submodule = join(source, "plugin");
     git(source, "update-index", "--add", "--cacheinfo", `160000,${head},plugin`);
@@ -105,8 +105,8 @@ describe("development source snapshots", () => {
       sourceRoot: source,
       runRoot,
     });
-    expect(await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf8")).toBe("dirty");
-    expect(await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf8")).toBe(
+    expect(await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf-8")).toBe("dirty");
+    expect(await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf-8")).toBe(
       "not a checkout",
     );
     await expect(stat(join(snapshot.root, "plugin/ignored.txt"))).rejects.toMatchObject({
@@ -128,8 +128,8 @@ describe("development source snapshots", () => {
       runRoot,
     });
 
-    expect(await readFile(join(snapshot.root, "README.md"), "utf8")).toBe("dirty\n");
-    expect(await readFile(join(snapshot.root, "new-file.ts"), "utf8")).toContain("fresh");
+    expect(await readFile(join(snapshot.root, "README.md"), "utf-8")).toBe("dirty\n");
+    expect(await readFile(join(snapshot.root, "new-file.ts"), "utf-8")).toContain("fresh");
     expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
     expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(0o600);
     expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(source));
@@ -161,7 +161,7 @@ describe("development source snapshots", () => {
     });
 
     expect(second.fingerprint).not.toBe(first.fingerprint);
-    expect(await readFile(join(second.root, "README.md"), "utf8")).toBe(
+    expect(await readFile(join(second.root, "README.md"), "utf-8")).toBe(
       "changed after first plan\n",
     );
   });

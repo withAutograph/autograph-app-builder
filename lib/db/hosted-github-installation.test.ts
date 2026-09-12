@@ -62,8 +62,8 @@ describe("hosted GitHub installation binding", () => {
 
   it("keeps the mise apply path owner-only and task-scoped", async () => {
     const [task, cli] = await Promise.all([
-      readFile(".config/mise/tasks/hosted/github-installation-bind", "utf8"),
-      readFile("lib/db/hosted-github-installation-cli.mts", "utf8"),
+      readFile(".config/mise/tasks/hosted/github-installation-bind", "utf-8"),
+      readFile("lib/db/hosted-github-installation-cli.mts", "utf-8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");

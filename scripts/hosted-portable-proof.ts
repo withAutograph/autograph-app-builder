@@ -148,7 +148,7 @@ const tokenClaimsSchema = z
 function tokenClaims(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("OAuth access token must be a JWT.");
-  return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
+  return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")));
 }
 
 export function verifyWorkspaceTokenPair(input: {

@@ -24,7 +24,7 @@ const repositoryRoot = resolve(".");
 const git = (...args: string[]) =>
   execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: {
       PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
@@ -65,7 +65,7 @@ for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
     throw new Error(`Portable source cannot be a symbolic link: ${path}`);
   await cp(source, join(core, path), { recursive: true });
 }
-const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf8"));
+const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));
 mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
 await writeFile(join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
 await validateAgentPluginPackage({
@@ -75,7 +75,7 @@ await validateAgentPluginPackage({
   packageKind: "generated-artifact",
 });
 
-const handlerSource = await readFile(resolve("lib/mcp/request-handler.ts"), "utf8");
+const handlerSource = await readFile(resolve("lib/mcp/request-handler.ts"), "utf-8");
 const tools = registeredAutographToolNames(handlerSource);
 const mockRoot = join(output, "mock");
 await mkdir(mockRoot);
@@ -125,7 +125,7 @@ async function collect(directory: string) {
 }
 await collect(core);
 const archive = deterministicGzip(deterministicTar(files));
-const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf8"));
+const portable = JSON.parse(await readFile(join(core, "plugin.json"), "utf-8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(join(output, archiveName), archive);
 
@@ -136,7 +136,7 @@ await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
   mode: 0o755,
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
-const codexManifest = JSON.parse(await readFile(resolve(".codex-plugin/plugin.json"), "utf8"));
+const codexManifest = JSON.parse(await readFile(resolve(".codex-plugin/plugin.json"), "utf-8"));
 if (codexManifest.name !== portable.name || codexManifest.version !== portable.version)
   throw new Error("The Codex adapter name and version must match the portable manifest.");
 const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];

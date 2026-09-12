@@ -21,7 +21,7 @@ const pinnedNode = process.execPath.includes("/mise/installs/")
   ? process.execPath
   : spawnSync("mise", ["which", "node"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
     }).stdout.trim();
 const [accountHome] = pinnedNode.split("/.local/share/mise/");
 const pinnedPnpm = resolve(accountHome, ".local/share/mise/installs/pnpm/11.7.0/pnpm");
@@ -37,7 +37,7 @@ describe("trusted Node launcher", () => {
   it("rejects data-URL NODE_OPTIONS before the first Node process", () => {
     const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('node-ran')"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: {
         ...process.env,
         NODE_OPTIONS: "--import=data:text/javascript,process.stdout.write('injected')",
@@ -53,14 +53,14 @@ describe("trusted Node launcher", () => {
     delete cleanEnvironment.NODE_OPTIONS;
     const accepted = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('ok')"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: cleanEnvironment,
     });
     expect(accepted.status, accepted.stderr).toBe(0);
     expect(accepted.stdout).toBe("ok");
     const rejected = spawnSync(launcher, ["/bin/echo", "unsafe"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: cleanEnvironment,
     });
     expect(rejected.status).toBe(78);
@@ -72,7 +72,7 @@ describe("trusted Node launcher", () => {
     chmodSync(fakeNode, 0o755);
     const fake = spawnSync(launcher, [fakeNode], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: cleanEnvironment,
     });
     expect(fake.status).toBe(78);
@@ -85,7 +85,7 @@ describe("trusted Node launcher", () => {
     const input = "bounded-stdin-payload\n";
     const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdin.pipe(process.stdout)"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: cleanEnvironment,
       input,
     });
@@ -103,7 +103,7 @@ describe("trusted Node launcher", () => {
         "-e",
         'require("node:child_process").spawnSync("node", ["-p", "process.execPath"], { stdio: "inherit" })',
       ],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim()).toBe(pinnedNode);
@@ -138,7 +138,7 @@ describe("trusted Node launcher", () => {
     const lock = spawnSync(
       launcher,
       [pinnedPnpm, "install", "--lockfile-only", "--ignore-scripts", "--store-dir", store],
-      { cwd: scratch, encoding: "utf8", env: cleanEnvironment },
+      { cwd: scratch, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(lock.status, lock.stderr).toBe(0);
     const installed = spawnSync(
@@ -146,12 +146,12 @@ describe("trusted Node launcher", () => {
       [pinnedPnpm, "install", "--frozen-lockfile", "--offline", "--store-dir", store],
       {
         cwd: scratch,
-        encoding: "utf8",
+        encoding: "utf-8",
         env: { ...cleanEnvironment, PATH: hostile },
       },
     );
     expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
-    const observation = JSON.parse(readFileSync(receipt, "utf8")) as {
+    const observation = JSON.parse(readFileSync(receipt, "utf-8")) as {
       executable: string;
       path: string;
     };
@@ -176,7 +176,7 @@ describe("trusted Node launcher", () => {
     const result = spawnSync(
       launcher,
       [pinnedNode, "--import", "tsx", "--input-type=module", "-e", source],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("false");
@@ -197,7 +197,7 @@ describe("trusted Node launcher", () => {
         "-e",
         "process.stdout.write(JSON.stringify({gh:process.env.APP_BUILDER_IMAGE_GH_BIN, token:process.env.GH_TOKEN ?? null}))",
       ],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ gh, token: null });
@@ -218,7 +218,7 @@ describe("trusted Node launcher", () => {
         "-e",
         "process.stdout.write(JSON.stringify({home:process.env.CODEX_HOME ?? null, scopedHome:process.env.APP_BUILDER_DEV_CODEX_HOME, bin:process.env.APP_BUILDER_DEV_CODEX_BIN}))",
       ],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
@@ -243,7 +243,7 @@ describe("trusted Node launcher", () => {
         "-e",
         "process.stdout.write(JSON.stringify({home:process.env.HOME, scoped:process.env.APP_BUILDER_DEV_RUNTIME_HOME}))",
       ],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
@@ -261,17 +261,17 @@ describe("trusted Node launcher", () => {
     const generic = spawnSync(
       launcher,
       [pinnedNode, "-e", "process.stdout.write(process.env.VERCEL_OIDC_TOKEN ?? 'absent')"],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(generic.status, generic.stderr).toBe(0);
     expect(generic.stdout).toBe("absent");
 
     const localEveLauncher = resolve(repositoryRoot, ".config/mise/scripts/local-eve-launcher");
-    const localEveSource = readFileSync(localEveLauncher, "utf8");
+    const localEveSource = readFileSync(localEveLauncher, "utf-8");
     const arbitrary = spawnSync(
       localEveLauncher,
       [pinnedNode, "-e", "process.stdout.write(process.env.VERCEL_OIDC_TOKEN)"],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(arbitrary.status).toBe(64);
     expect(arbitrary.stdout).toBe("");
@@ -283,7 +283,7 @@ describe("trusted Node launcher", () => {
 
     const localStart = readFileSync(
       resolve(repositoryRoot, ".config/mise/tasks/local/start"),
-      "utf8",
+      "utf-8",
     );
     expect(localStart.match(/local-eve-launcher/gu)).toHaveLength(1);
     expect(localStart).not.toContain("export REPOSITORY_LOCAL_ROOTS");
@@ -291,10 +291,10 @@ describe("trusted Node launcher", () => {
       'REPOSITORY_LOCAL_ROOTS="$source_root" .config/mise/scripts/local-eve-launcher',
     );
     expect(localStart).toContain('"$launcher" "$node_bin" node_modules/next/dist/bin/next dev');
-    expect(readFileSync(launcher, "utf8")).not.toContain("VERCEL_OIDC_TOKEN");
+    expect(readFileSync(launcher, "utf-8")).not.toContain("VERCEL_OIDC_TOKEN");
     for (const path of taskFiles(resolve(repositoryRoot, ".config/mise/tasks"))) {
       if (path.endsWith("/local/start")) continue;
-      expect(readFileSync(path, "utf8"), path).not.toContain("local-eve-launcher");
+      expect(readFileSync(path, "utf-8"), path).not.toContain("local-eve-launcher");
     }
   });
 
@@ -307,7 +307,7 @@ describe("trusted Node launcher", () => {
     delete environment.NODE_OPTIONS;
     const missing = spawnSync(localStart, ["/tmp/state", "/tmp/output"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: environment,
     });
     expect(missing.status).toBe(64);
@@ -316,7 +316,7 @@ describe("trusted Node launcher", () => {
 
     const relative = spawnSync(localStart, ["/tmp/state", "/tmp/output", "relative/source"], {
       cwd: repositoryRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: environment,
     });
     expect(relative.status).toBe(78);
@@ -349,7 +349,7 @@ describe("trusted Node launcher", () => {
       ],
       {
         cwd: repositoryRoot,
-        encoding: "utf8",
+        encoding: "utf-8",
         env: cleanEnvironment,
       },
     );
@@ -359,7 +359,7 @@ describe("trusted Node launcher", () => {
 
   it("routes Node tasks through the launcher except the project-OIDC design judge", () => {
     for (const path of taskFiles(resolve(repositoryRoot, ".config/mise/tasks"))) {
-      const source = readFileSync(path, "utf8");
+      const source = readFileSync(path, "utf-8");
       expect(source, path).toMatch(/^#!\/bin\/sh\n/u);
       if (path === resolve(repositoryRoot, ".config/mise/tasks/eval/design")) {
         // The live judge needs the project environment for Vercel OIDC.
@@ -403,7 +403,7 @@ describe("trusted Node launcher", () => {
         "-e",
         "process.stdout.write(JSON.stringify({path:process.env.PATH,pwd:process.env.PWD,bash:process.env.BASH_ENV,node:process.env.NODE_PATH,npm:process.env.NPM_CONFIG_USERCONFIG,pnpm:process.env.PNPM_HOME,mise:process.env.MISE_CONFIG_FILE,loader:process.env.LD_LIBRARY_PATH,dyld:process.env.DYLD_INSERT_LIBRARIES,tsx:process.env.TSX_TSCONFIG_PATH,vitest:process.env.VITEST_POOL_ID,uv:process.env.UV_THREADPOOL_SIZE,openssl:process.env.OPENSSL_CONF}))",
       ],
-      { cwd: repositoryRoot, encoding: "utf8", env: cleanEnvironment },
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({

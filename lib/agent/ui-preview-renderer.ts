@@ -50,7 +50,7 @@ import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 const root = import.meta.dir;
 const repository = process.cwd();
-const config = JSON.parse(await readFile(path.join(repository, "tsconfig.json"), "utf8"));
+const config = JSON.parse(await readFile(path.join(repository, "tsconfig.json"), "utf-8"));
 const aliases = config.compilerOptions?.paths ?? {};
 const result = await Bun.build({
   entrypoints: [path.join(root, "entry.tsx")],
@@ -65,7 +65,7 @@ const result = await Bun.build({
 });
 if (!result.success) throw new Error(result.logs.map(String).join("\\n"));
 const theme = path.join(repository, "packages/design-systems/core/tokens/theme.css");
-const themeCss = await readFile(theme, "utf8");
+const themeCss = await readFile(theme, "utf-8");
 const css = await postcss([
   {
     postcssPlugin: "preview-sources",

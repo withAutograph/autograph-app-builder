@@ -212,7 +212,7 @@ export function githubConfigDigest(configRoot: string): string {
       throw new Error("GitHub configuration file is unsafe.");
     const bytes = readFileSync(path);
     try {
-      if (/^\s*(?:oauth_token|token)\s*:/imu.test(bytes.toString("utf8")))
+      if (/^\s*(?:oauth_token|token)\s*:/imu.test(bytes.toString("utf-8")))
         throw new Error("Plaintext GitHub credentials are not eligible.");
       records.push(`${name}\0${createHash("sha256").update(bytes).digest("hex")}`);
     } finally {
@@ -415,7 +415,7 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
     "hosts",
   ]);
   try {
-    parseGhAuthStatus(status.toString("utf8"), username);
+    parseGhAuthStatus(status.toString("utf-8"), username);
   } finally {
     status.fill(0);
   }
@@ -437,8 +437,8 @@ async function verifyNamespace(username: string): Promise<void> {
   ]);
   try {
     if (
-      user.toString("utf8").trim() !== username ||
-      membership.toString("utf8").trim() !== `active\tadmin\t${githubOrganization}`
+      user.toString("utf-8").trim() !== username ||
+      membership.toString("utf-8").trim() !== `active\tadmin\t${githubOrganization}`
     )
       throw new Error("GitHub namespace authority did not match approval.");
   } finally {
@@ -451,9 +451,9 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   assertExpectedGithubState();
   const prefix = Buffer.from(
     `{"ServerURL":"${registry}","Username":"${username}","Secret":"`,
-    "utf8",
+    "utf-8",
   );
-  const suffix = Buffer.from('"}\n', "utf8");
+  const suffix = Buffer.from('"}\n', "utf-8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
     await new Promise<void>((resolve, reject) => {
@@ -480,7 +480,7 @@ async function writeVerifiedLogin(
       identityDigest,
       provenanceDigest,
     })}\n`,
-    "utf8",
+    "utf-8",
   );
   try {
     await new Promise<void>((resolve, reject) => {
@@ -499,7 +499,7 @@ async function run(): Promise<void> {
     throw new Error("Only the closed GHCR credential protocols are supported.");
   if (mode === "get") {
     requiredEnvironment("APP_BUILDER_GH_STATE_DIGEST");
-    const request = readBoundedInput(0, 256).toString("utf8").trim();
+    const request = readBoundedInput(0, 256).toString("utf-8").trim();
     if (request !== "ghcr.io" && request !== registry)
       throw new Error("GHCR provider request named an unsupported registry.");
   } else if (process.env.APP_BUILDER_GH_STATE_DIGEST !== undefined) {

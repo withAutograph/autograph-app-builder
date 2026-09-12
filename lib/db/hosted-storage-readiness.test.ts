@@ -159,9 +159,9 @@ describe("hosted storage read-only readiness", () => {
 
   it("keeps verification read-only, secret-blind, and restore-point honest", async () => {
     const [task, cli, contract] = await Promise.all([
-      readFile(".config/mise/tasks/hosted/storage-verify", "utf8"),
-      readFile("lib/db/hosted-storage-readiness-cli.mts", "utf8"),
-      readFile("lib/db/hosted-storage-readiness.ts", "utf8"),
+      readFile(".config/mise/tasks/hosted/storage-verify", "utf-8"),
+      readFile("lib/db/hosted-storage-readiness-cli.mts", "utf-8"),
+      readFile("lib/db/hosted-storage-readiness.ts", "utf-8"),
     ]);
     expect(task).toContain("unset DATABASE_URL");
     expect(task).toContain("--database-url-fd 0");
@@ -176,7 +176,7 @@ describe("hosted storage read-only readiness", () => {
   });
 
   it("fails closed on normalized-email collisions before adding personal workspaces", async () => {
-    const migration = await readFile("drizzle/0011_self_service_onboarding.sql", "utf8");
+    const migration = await readFile("drizzle/0011_self_service_onboarding.sql", "utf-8");
     expect(migration).toContain('GROUP BY lower("email")');
     expect(migration).toContain("case-insensitive Better Auth user email collision");
     expect(migration).toContain('SET "email" = lower("email")');

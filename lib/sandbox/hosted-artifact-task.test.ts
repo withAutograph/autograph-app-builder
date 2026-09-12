@@ -42,7 +42,7 @@ printf '%s\\n' "$@" >> "$MISE_CALLS"
 }
 
 function readCalls(path: string) {
-  return readFileSync(path, "utf8").trim().split("\n");
+  return readFileSync(path, "utf-8").trim().split("\n");
 }
 
 describe("hosted artifact mise task contract", () => {
@@ -62,7 +62,7 @@ describe("hosted artifact mise task contract", () => {
         args,
         {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
         },
       );
@@ -98,7 +98,7 @@ describe("hosted artifact mise task contract", () => {
         ],
         {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
         },
       );
@@ -131,7 +131,7 @@ describe("hosted artifact mise task contract", () => {
       ]) {
         const result = spawnSync(join(repositoryRoot, task), [], {
           cwd: fixture.root,
-          encoding: "utf8",
+          encoding: "utf-8",
           env: fixture.environment,
         });
         expect(result.status).toBe(64);
