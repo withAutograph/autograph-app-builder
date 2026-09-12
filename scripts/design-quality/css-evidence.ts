@@ -117,7 +117,7 @@ export function generatedCssRule(
   value: string | undefined,
   declarations: { name: string; value: string; important?: boolean }[],
 ) {
-  if (!selector || value === undefined) return undefined;
+  if (!selector || value === undefined) return;
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
