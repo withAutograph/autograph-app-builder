@@ -251,7 +251,9 @@ export function useBuilderDraftAutosave<T>(
   );
 
   useEffect(() => {
-    const retryWhenOnline = () => void flush("flush");
+    const retryWhenOnline = () => {
+      flush("flush");
+    };
     window.addEventListener("online", retryWhenOnline);
     return () => window.removeEventListener("online", retryWhenOnline);
   }, [flush]);

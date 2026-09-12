@@ -1450,7 +1450,9 @@ export function Builder({
       // paint; only refresh after this document has actually been backgrounded.
       if (wasHidden) void checkForServerDraft();
     };
-    const timer = setInterval(() => void checkForServerDraft(), 10_000);
+    const timer = setInterval(() => {
+      checkForServerDraft();
+    }, 10_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;

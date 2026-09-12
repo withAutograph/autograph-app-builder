@@ -126,7 +126,9 @@ export function waitForDevelopmentRuntimeChange(input: {
     const schedule = () => {
       if (settled) return;
       if (debounce !== undefined) clearTimeout(debounce);
-      debounce = setTimeout(() => void check(), input.debounceMs ?? 150);
+      debounce = setTimeout(() => {
+        check();
+      }, input.debounceMs ?? 150);
     };
     if (input.signal?.aborted) {
       finish(false);

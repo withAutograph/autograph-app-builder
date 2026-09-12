@@ -114,7 +114,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           !complete &&
           document.visibilityState === "visible"
         )
-          timer = setTimeout(() => void refresh(), 5_000);
+          timer = setTimeout(() => {
+            refresh();
+          }, 5_000);
       }
     };
     const visibilityChanged = () => {
@@ -237,7 +239,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           className={styles.createButton}
           type="button"
           disabled={renewing}
-          onClick={() => void renew()}
+          onClick={() => {
+            renew();
+          }}
         >
           {renewing ? "Renewing…" : "Renew handoff"}
         </button>

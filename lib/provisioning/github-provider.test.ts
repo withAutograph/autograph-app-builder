@@ -409,8 +409,12 @@ describe("GitHub starter repository provisioning", () => {
       requestedName: "vendor-portal",
       private: true,
       source,
-      persistCandidate: async (value: string) => void candidates.push(value),
-      persistAbsent: async (value: string) => void absent.push(value),
+      persistCandidate: async (value: string) => {
+        candidates.push(value);
+      },
+      persistAbsent: async (value: string) => {
+        absent.push(value);
+      },
       fetch: request,
     };
     const suffixes = ["a1b2c3", "b2c3d4", "c3d4e5", "d4e5f6"];

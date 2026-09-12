@@ -349,7 +349,9 @@ export function waitForDevelopmentSourceChange(input: {
     function schedule(delay = 0) {
       if (settled) return;
       if (debounce !== undefined) clearTimeout(debounce);
-      debounce = setTimeout(() => void check(), delay);
+      debounce = setTimeout(() => {
+        check();
+      }, delay);
     }
     if (input.signal?.aborted) {
       finish(false);
