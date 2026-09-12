@@ -7,7 +7,7 @@ import {
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
 import { ARRUSTED_APP_VALIDATION_SHA256, type ExecutionDependencyLayout } from "./dependency-cache";
-import { type ApplyCommandResult, type TargetApplyReceipt } from "./target-apply";
+import type { ApplyCommandResult, TargetApplyReceipt } from "./target-apply";
 
 export type TargetValidationCommand =
   | `mise run app:check-build ${string}`
