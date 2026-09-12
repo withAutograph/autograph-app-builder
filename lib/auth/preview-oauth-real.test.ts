@@ -125,7 +125,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     expect(jwksResponse.status).toBe(200);
     const jwks = (await jwksResponse.json()) as {
-      keys: Array<Record<string, unknown>>;
+      keys: Record<string, unknown>[];
     };
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({

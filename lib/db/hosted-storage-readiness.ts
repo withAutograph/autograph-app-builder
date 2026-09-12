@@ -797,7 +797,7 @@ function tupleColumns(rows: HostedStorageReadBack["columns"]) {
   return rows.map((row) => [row.table, row.column, row.type, row.notNull]);
 }
 
-function tupleObjects(rows: Array<{ table: string; name: string }>) {
+function tupleObjects(rows: { table: string; name: string }[]) {
   return rows.map((row) => [row.table, row.name]);
 }
 

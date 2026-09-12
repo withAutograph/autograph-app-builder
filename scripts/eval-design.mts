@@ -41,10 +41,7 @@ if (values.help) {
   );
   process.exit(0);
 }
-async function sources(
-  root: string,
-  relative = "",
-): Promise<Array<{ path: string; content: string }>> {
+async function sources(root: string, relative = ""): Promise<{ path: string; content: string }[]> {
   const files = [];
   for (const entry of await readdir(join(root, relative), {
     withFileTypes: true,

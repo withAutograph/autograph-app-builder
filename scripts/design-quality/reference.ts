@@ -8,7 +8,7 @@ export type PublicProp = {
   /** Literal values accepted by a union-typed prop, when TypeScript can prove them. */
   values?: string[];
   /** Broad primitive kinds proven by TypeScript; any and unknown are omitted. */
-  primitiveKinds?: Array<"string" | "number" | "boolean">;
+  primitiveKinds?: ("string" | "number" | "boolean")[];
 };
 
 export type PublicExport = {
@@ -70,7 +70,7 @@ function exportTargets(value: unknown): string[] {
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
 }
 
-function packageEntryPoints(pkg: PackageJson): Array<{ suffix: string; target: string }> {
+function packageEntryPoints(pkg: PackageJson): { suffix: string; target: string }[] {
   if (typeof pkg.exports === "string") return [{ suffix: "", target: pkg.exports }];
   if (pkg.exports && typeof pkg.exports === "object") {
     const entries = Object.entries(pkg.exports as Record<string, unknown>)
@@ -513,7 +513,7 @@ export function checkJsxAttributes({
   files,
 }: {
   arrustedRoot: string;
-  files: Array<{ path: string; content: string }>;
+  files: { path: string; content: string }[];
 }): {
   attributes: TypedJsxAttribute[];
   limitations: string[];

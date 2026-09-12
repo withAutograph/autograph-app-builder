@@ -391,16 +391,16 @@ describe("offline dependency cache", () => {
       ]);
       const observation = JSON.parse(inspected.stdout) as {
         nodeModulesDigest: string;
-        workspaceNodeModules: Array<{
+        workspaceNodeModules: {
           path: string;
           nodeModulesPath: string;
           digest: string;
-        }>;
-        workspaceLinks: Array<{
+        }[];
+        workspaceLinks: {
           path: string;
           target: string;
           sourcePath: string;
-        }>;
+        }[];
       };
       expect(observation.workspaceNodeModules).toEqual([
         expect.objectContaining({

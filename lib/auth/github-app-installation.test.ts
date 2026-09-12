@@ -121,7 +121,7 @@ async function prepareAuthorization(
 }
 
 function successfulFetch(
-  seen: Array<{ url: string; init?: RequestInit }>,
+  seen: { url: string; init?: RequestInit }[],
   repositorySelection: "all" | "selected" = "selected",
 ) {
   return vi.fn<typeof fetch>(async (resource, init) => {
@@ -189,7 +189,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("binds only after one-time state consumption and fixed caller verification", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind, events } = harness({
       fetch: successfulFetch(requests),
     });
@@ -338,7 +338,7 @@ describe("public GitHub App installation authorization", () => {
   it.each(["/", "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32"] as const)(
     "preserves %s through signed state and fails replay before another provider request",
     async (returnTo) => {
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: { url: string; init?: RequestInit }[] = [];
       const { authorization, bind } = harness({
         fetch: successfulFetch(requests),
       });
@@ -360,7 +360,7 @@ describe("public GitHub App installation authorization", () => {
   );
 
   it("derives the selected installation after GitHub returns only code and state", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -372,7 +372,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("binds an active all-repositories installation to the same tenant", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind, events } = harness({
       fetch: successfulFetch(requests, "all"),
     });
@@ -389,7 +389,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("rebinds an existing installation after a signed GitHub update callback", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -411,7 +411,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("accepts GitHub's OAuth callback shape with signed installation metadata", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -436,7 +436,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("accepts a provider-owned opaque GitHub OAuth code without a local size bound", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -595,7 +595,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("accepts the live RFC 9207 code, iss, and state callback shape", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -619,7 +619,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("tolerates repeated provider issuer extensions", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -651,7 +651,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("tolerates repeated future provider extension callback fields", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
       fetch: successfulFetch(requests),
     });
@@ -667,7 +667,7 @@ describe("public GitHub App installation authorization", () => {
   });
 
   it("tolerates future OAuth token response extension fields", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: { url: string; init?: RequestInit }[] = [];
     const fallback = successfulFetch(requests);
     const request = vi.fn<typeof fetch>(async (resource, init) => {
       if (String(resource).includes("access_token")) {

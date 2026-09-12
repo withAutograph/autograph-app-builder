@@ -97,7 +97,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
-    responses: Array<{
+    responses: {
       requestId: string;
       response:
         | {
@@ -111,7 +111,7 @@ export interface HostedEveTransport {
             value: string;
             optionId?: string;
           };
-    }>;
+    }[];
     sourceHandoffId?: string;
   }) => Promise<HostedEngineSnapshot>;
   cancel: (input: {

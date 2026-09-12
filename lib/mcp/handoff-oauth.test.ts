@@ -220,7 +220,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         status: "waiting" as const,
         events: [{ type: "assistant.message", index: 0, text: "Ready to continue." }],
       };
-      const observedContexts: Array<Awaited<ReturnType<typeof readPrepared>>> = [];
+      const observedContexts: Awaited<ReturnType<typeof readPrepared>>[] = [];
       const start = vi.fn<HostedEveTransport["start"]>(async (value) => {
         expect(value.sourceHandoffId).toBe(handoffId);
         observedContexts.push(

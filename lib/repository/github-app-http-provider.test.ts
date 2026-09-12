@@ -177,9 +177,9 @@ function providerFetch(input?: {
   extraPermission?: boolean;
   fail?: boolean;
   repositorySelection?: "all" | "selected";
-  repositoryPages?: Array<Array<number | string>>;
+  repositoryPages?: (number | string)[][];
 }) {
-  const calls: Array<{ url: string; init: RequestInit; body: unknown }> = [];
+  const calls: { url: string; init: RequestInit; body: unknown }[] = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     let body: unknown = undefined;

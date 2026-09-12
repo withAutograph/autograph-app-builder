@@ -448,12 +448,12 @@ export function createGitHubAppHttpProvider(input: {
     deletions?: readonly string[];
     baseTree?: string;
   }): Promise<string> {
-    const entries: Array<{
+    const entries: {
       path: string;
       mode: "100644" | "100755";
       type: "blob";
       sha: string;
-    }> = [];
+    }[] = [];
     for (const file of input.files) {
       entries.push({
         path: file.path,

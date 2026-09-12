@@ -196,7 +196,7 @@ function plannedEvents() {
 describe("same-origin canonical Eve transport", () => {
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
-    const bodies: Array<Record<string, unknown>> = [];
+    const bodies: Record<string, unknown>[] = [];
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) return stream();
       bodies.push(JSON.parse(String(init?.body)));

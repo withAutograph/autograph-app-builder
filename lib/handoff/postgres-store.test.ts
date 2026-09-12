@@ -38,8 +38,8 @@ const renewal = {
 };
 
 function store(input: {
-  updated?: Array<typeof builderHandoffs.$inferSelect>;
-  current?: Array<typeof builderHandoffs.$inferSelect>;
+  updated?: (typeof builderHandoffs.$inferSelect)[];
+  current?: (typeof builderHandoffs.$inferSelect)[];
 }) {
   const set = vi.fn();
   const updateWhere = vi.fn();

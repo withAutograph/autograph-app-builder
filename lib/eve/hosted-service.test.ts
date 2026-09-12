@@ -452,7 +452,7 @@ describe("hosted Eve service core", () => {
     ).toThrow();
   });
 
-  it.each(Object.keys(hostedEveOperationScopes) as Array<keyof typeof hostedEveOperationScopes>)(
+  it.each(Object.keys(hostedEveOperationScopes) as (keyof typeof hostedEveOperationScopes)[])(
     "requires the exact %s scope before store access",
     async (operation) => {
       const store = new InMemoryHostedEveStore();

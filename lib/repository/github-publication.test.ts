@@ -945,7 +945,7 @@ describe("closed GitHub publication contract", () => {
   });
 
   it("refuses stale, overlapping, and branch-collision read-back before mutation", async () => {
-    const mutations: Array<(adapter: Adapter, proposal: DraftPullRequestProposal) => void> = [
+    const mutations: ((adapter: Adapter, proposal: DraftPullRequestProposal) => void)[] = [
       (adapter, proposal) => {
         const value = draftReadBack(proposal, adapter.publishRepo);
         const unsigned = { ...value, changedPathsSinceBase: ["apps/demo"] };

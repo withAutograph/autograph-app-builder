@@ -46,7 +46,7 @@ export interface EveSessionService {
   }) => Promise<EveSessionResult>;
   respond: (input: {
     sessionId: string;
-    responses: Array<{
+    responses: {
       requestId: string;
       response:
         | {
@@ -60,7 +60,7 @@ export interface EveSessionService {
             value: string;
             optionId?: string;
           };
-    }>;
+    }[];
     clientRequestId: string;
   }) => Promise<EveSessionResult>;
   cancel: (input: { sessionId: string; turnId?: string }) => Promise<EveSessionResult>;

@@ -118,7 +118,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   try {
     // Better Auth organization IDs and hosted workspace IDs are distinct.
     // Resolve the existing web membership instead of assuming they are equal.
-    const memberships = await sql<Array<{ workspace_id: string }>>`
+    const memberships = await sql<{ workspace_id: string }[]>`
       SELECT o.workspace_id FROM organization o
       JOIN member m ON m.organization_id = o.id
       WHERE o.id = ${organizationId} AND m.user_id = ${ownerUserId}

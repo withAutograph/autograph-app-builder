@@ -49,7 +49,7 @@ function canonicalSelector(value: string) {
 
 function ruleSignature(
   selector: string,
-  declarations: Array<{ prop: string; value: string; important?: boolean }>,
+  declarations: { prop: string; value: string; important?: boolean }[],
 ): string | undefined {
   const properties = declarations.map((declaration) => declaration.prop);
   if (
@@ -107,7 +107,7 @@ export function generatedCssRule(
   selector: string | undefined,
   property: string,
   value: string | undefined,
-  declarations: Array<{ name: string; value: string; important?: boolean }>,
+  declarations: { name: string; value: string; important?: boolean }[],
 ) {
   if (!selector || value === undefined) return undefined;
   const tuple = key(selector, property, value);

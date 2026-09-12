@@ -74,7 +74,7 @@ test("ambiguous and revoked workspace authority show recovery surfaces", async (
   await finishOAuth(page, "GitHub");
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const [{ id: userId }] = await sql<Array<{ id: string }>>`SELECT id FROM "user"`;
+    const [{ id: userId }] = await sql<{ id: string }[]>`SELECT id FROM "user"`;
     await sql`
       INSERT INTO organization
         (id, name, slug, created_at, issuer, audience, workspace_id)

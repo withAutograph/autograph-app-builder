@@ -87,7 +87,7 @@ describe("preview stylesheet provenance", () => {
     )?.[1];
     expect(sourceMap).toBeDefined();
     const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf8")) as {
-      sourcesContent?: Array<string | null>;
+      sourcesContent?: (string | null)[];
     };
     expect(map.sourcesContent).toContain(themeCss);
     expect(map.sourcesContent).not.toContain(`${themeCss}\n@source ".builder-preview";`);

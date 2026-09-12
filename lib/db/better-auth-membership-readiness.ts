@@ -25,7 +25,7 @@ export const betterAuthMembershipReadBackSchema = z
   })
   .strict();
 
-function canonicalRows(rows: Array<z.infer<typeof migrationRowSchema>>) {
+function canonicalRows(rows: z.infer<typeof migrationRowSchema>[]) {
   return [...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 

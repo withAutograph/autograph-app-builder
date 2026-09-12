@@ -142,7 +142,7 @@ describe("GitHub starter repository provisioning", () => {
         }));
       }
       let created = false;
-      const methods: Array<{ path: string; method: string; body?: unknown }> = [];
+      const methods: { path: string; method: string; body?: unknown }[] = [];
       const request = vi.fn<typeof fetch>(async (url, init) => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;

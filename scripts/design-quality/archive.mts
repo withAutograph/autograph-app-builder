@@ -135,12 +135,12 @@ lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
 for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
 await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
-const rows: Array<{
+const rows: {
   path: string;
   name: string;
   date: string;
   score: unknown;
-}> = [];
+}[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
   if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(day.name)) continue;
   for (const run of await readdir(join(archiveRoot, day.name), {

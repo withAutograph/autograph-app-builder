@@ -128,7 +128,7 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
 
 function matchedSelector(match: {
   matchingSelectors?: number[];
-  rule: { selectorList?: { selectors?: Array<{ text?: string }> } };
+  rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
   if (!selectors?.length) return undefined;
@@ -259,16 +259,16 @@ export async function measurePage(page: Page) {
     };
     const label = (el: Element) =>
       (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
-    const findings: Array<{
+    const findings: {
       kind: string;
       description: string;
       region: ReturnType<typeof rect>;
       reviewRequired: boolean;
-    }> = [];
+    }[] = [];
     const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
       if (!visible(el)) return [];
       const style = getComputedStyle(el);
-      const axes: Array<"x" | "y"> = [];
+      const axes: ("x" | "y")[] = [];
       if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(style.overflowX))
         axes.push("x");
       if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/.test(style.overflowY))
@@ -353,12 +353,12 @@ export async function measurePage(page: Page) {
       window as unknown as {
         axe: {
           run: () => Promise<{
-            violations: Array<{
+            violations: {
               id: string;
               impact: string;
               help: string;
-              nodes: Array<{ target: string[]; failureSummary: string }>;
-            }>;
+              nodes: { target: string[]; failureSummary: string }[];
+            }[];
             incomplete: unknown[];
           }>;
         };
@@ -411,7 +411,7 @@ export async function measureStyles(
   sharedClassSignatures?: IntrinsicClassSignature[],
   generatedCssRules: CssRuleEvidence[] = [],
   sharedCssRules: CssRuleEvidence[] = [],
-  generatedCssSourceFiles: Array<{ path: string; content: string }> = [],
+  generatedCssSourceFiles: { path: string; content: string }[] = [],
   sharedCssSourceFiles: CssSourceFile[] = [],
   generatedClassTokens: ClassTokenEvidence[] = [],
   sharedClassTokens?: ClassTokenEvidence[],
@@ -536,12 +536,12 @@ export async function measureStyles(
     );
     // CSS.enable normally emits existing headers, but source location is optional
     // in CDP. Missing headers deliberately remain unknown.
-    const candidates: Array<{
+    const candidates: {
       nodeId: number;
       model: { width: number; height: number; content: number[] };
       region: "top" | "middle" | "bottom";
       interactive: boolean;
-    }> = [];
+    }[] = [];
     for (const nodeId of nodeIds) {
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
@@ -956,7 +956,7 @@ export async function capturePreview(input: {
   sharedClassTokens?: ClassTokenEvidence[];
   generatedCssRules?: CssRuleEvidence[];
   sharedCssRules?: CssRuleEvidence[];
-  generatedCssSourceFiles?: Array<{ path: string; content: string }>;
+  generatedCssSourceFiles?: { path: string; content: string }[];
   sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
 }) {

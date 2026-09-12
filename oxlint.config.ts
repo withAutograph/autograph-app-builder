@@ -1,18 +1,11 @@
 import { defineConfig } from "oxlint";
 import core from "ultracite/oxlint/core";
 
-const deferredRules = Object.fromEntries(
-  ["eslint/max-classes-per-file"].map((rule) => [rule, "off"]),
-);
-
 export default defineConfig({
   extends: [core],
   ignorePatterns: core.ignorePatterns,
   rules: {
-    ...deferredRules,
     "import/consistent-type-specifier-style": "off",
-
-    "typescript/array-type": "off",
     "typescript/consistent-type-definitions": "off",
     "typescript/consistent-type-imports": "off",
     "eslint/curly": "off",
@@ -23,6 +16,7 @@ export default defineConfig({
     "eslint/no-use-before-define": "off",
     "eslint/func-style": "off",
     "eslint/complexity": "off",
+    "eslint/max-classes-per-file": "off",
     "eslint/prefer-named-capture-group": "off",
     "eslint/require-await": "off",
     "eslint/require-unicode-regexp": "off",

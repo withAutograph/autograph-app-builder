@@ -2,7 +2,7 @@ export type CssSourceMap = {
   version: number;
   sourceRoot?: string;
   sources: string[];
-  sourcesContent?: Array<string | null>;
+  sourcesContent?: (string | null)[];
   mappings: string;
 };
 

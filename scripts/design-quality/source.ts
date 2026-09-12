@@ -8,12 +8,12 @@ import { checkJsxAttributes, type Reference } from "./reference";
 export type SourceFile = { path: string; content: string };
 
 export type SourceAnalysis = {
-  imports: Array<{
+  imports: {
     path: string;
     source: string;
     name: string;
     localName: string;
-  }>;
+  }[];
   tokenRefs: string[];
   semanticVarRefs: string[];
   undefinedTokens: string[];
@@ -21,13 +21,13 @@ export type SourceAnalysis = {
   matchingLiterals: string[];
   unknownLiterals: string[];
   observations: Observation[];
-  implementationDiagnostics: Array<{
+  implementationDiagnostics: {
     path: string;
     line: number;
     column: number;
     code: number;
     message: string;
-  }>;
+  }[];
   limitations: string[];
 };
 

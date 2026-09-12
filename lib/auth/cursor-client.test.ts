@@ -13,7 +13,7 @@ const resource = "https://builder.example.test/mcp";
 // Storage-boundary fake: real policy and Drizzle query construction run above
 // this boundary; real OAuth behavior is covered by preview-oauth-real.test.ts.
 function storage() {
-  const rows = new Map<unknown, Array<Record<string, unknown>>>([
+  const rows = new Map<unknown, Record<string, unknown>[]>([
     [schema.oauthClient, []],
     [schema.oauthClientResource, []],
     [

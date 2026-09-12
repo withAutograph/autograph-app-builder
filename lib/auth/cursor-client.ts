@@ -51,7 +51,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .limit(1);
   if (!client) return false;
   const expected = cursorClientRegistration();
-  for (const key of Object.keys(expected) as Array<keyof typeof expected>) {
+  for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
     const actual = client[key];
     const value = expected[key];
     if (Array.isArray(value)) {

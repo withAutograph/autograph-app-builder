@@ -79,7 +79,7 @@ describe("hosted MCP request authentication", () => {
   it("verifies exact issuer, audience, algorithm, kid, time, scope, and workspace claims", async () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
     const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
-    const fetchCalls: Array<[string | URL | Request, RequestInit | undefined]> = [];
+    const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
     const fetchImplementation: typeof fetch = async (url, options) => {
       fetchCalls.push([url, options]);
       return Response.json({ keys: [jwk] });

@@ -82,7 +82,7 @@ export async function applicationCounts() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
     const [counts] = await sql<
-      Array<{
+      {
         users: number;
         passkeys: number;
         organizations: number;
@@ -92,7 +92,7 @@ export async function applicationCounts() {
         passkeyOnboardingContexts: number;
         githubInstallations: number;
         vercelInstallations: number;
-      }>
+      }[]
     >`
       SELECT
         (SELECT count(*)::int FROM "user") AS users,

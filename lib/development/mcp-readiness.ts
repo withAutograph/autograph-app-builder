@@ -17,7 +17,7 @@ function jsonRpcBody(text: string) {
     .find((line) => line.length > 0);
   return JSON.parse(data ?? text) as {
     error?: { message?: string };
-    result?: { tools?: Array<{ name?: string }> };
+    result?: { tools?: { name?: string }[] };
   };
 }
 

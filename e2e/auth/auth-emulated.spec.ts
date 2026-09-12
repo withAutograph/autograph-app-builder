@@ -30,7 +30,7 @@ const emptyAuthCounts = {
 async function onboardingContextIds() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const rows = await sql<Array<{ id: string }>>`
+    const rows = await sql<{ id: string }[]>`
       SELECT id FROM passkey_onboarding ORDER BY id
     `;
     return rows.map(({ id }) => id);
@@ -833,7 +833,7 @@ test("provider account supports multiple passkeys but retains its final passkey"
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
-    const credentials = (await list.json()) as Array<{ id: string }>;
+    const credentials = (await list.json()) as { id: string }[];
     expect(credentials).toHaveLength(2);
     const deletePasskey = (id: string) =>
       page.evaluate(async (passkeyId) => {
