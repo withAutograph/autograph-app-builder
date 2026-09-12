@@ -51,10 +51,8 @@ import {
   remoteIndexCommand,
   remoteManifestCommand,
   sandboxProofCommand,
-  type CommandSpec,
-  type ImageProvenance,
-  type ImageTool,
 } from "./lifecycle.ts";
+import type { CommandSpec, ImageProvenance, ImageTool } from "./lifecycle.ts";
 import {
   assertGithubStateRoot,
   assertVerifiedGhcrLoginPayload,
@@ -64,7 +62,8 @@ import {
   readBoundedInput,
 } from "./ghcr-bound-helper.ts";
 import { hasTestCapability } from "../testing/test-capability.ts";
-import { materializeSanitizedGitTree, type SanitizedGitTree } from "./sanitized-git-tree.ts";
+import { materializeSanitizedGitTree } from "./sanitized-git-tree.ts";
+import type { SanitizedGitTree } from "./sanitized-git-tree.ts";
 
 export { materializeSanitizedGitTree } from "./sanitized-git-tree.ts";
 

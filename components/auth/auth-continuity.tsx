@@ -3,7 +3,8 @@
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 
 import autographIcon from "@/assets/autograph-icon.png";
 

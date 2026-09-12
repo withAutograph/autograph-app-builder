@@ -4,8 +4,8 @@ import { BuilderHandoffUnavailableError } from "../handoff/service";
 import {
   exactForwardedSessionAuthority,
   sourceHandoffIdForSessionAuth,
-  type HostedSessionTenantAuthority,
 } from "../hosted/session-authority";
+import type { HostedSessionTenantAuthority } from "../hosted/session-authority";
 
 export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];

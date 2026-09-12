@@ -8,9 +8,9 @@ import type {
 import type { RepositoryAccessRuntime } from "./deployment-repository-access-runtime";
 import {
   recordRepositoryAccessReceipt,
-  type RepositoryAccessReceipt,
   repositoryAccessReceiptState,
 } from "./repository-access-state";
+import type { RepositoryAccessReceipt } from "./repository-access-state";
 
 export type RepositoryAccessToolInput = {
   repository: string;

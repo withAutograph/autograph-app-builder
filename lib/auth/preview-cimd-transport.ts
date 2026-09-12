@@ -3,8 +3,10 @@ import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import { lookup as resolveHostname } from "node:dns/promises";
 import type { ClientRequest, IncomingMessage } from "node:http";
-import { request as requestHttps, type RequestOptions } from "node:https";
-import { isIP, type LookupFunction } from "node:net";
+import { request as requestHttps } from "node:https";
+import type { RequestOptions } from "node:https";
+import { isIP } from "node:net";
+import type { LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
 const BODY_FORBIDDEN_RESPONSE_STATUSES = new Set([204, 205, 304]);

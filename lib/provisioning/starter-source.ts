@@ -15,10 +15,8 @@ import {
   ARRUSTED_TEMPLATE_REPOSITORY,
 } from "../repository/source-receipt";
 import { templateReadinessAttestationDigest } from "../repository/arrusted-template";
-import {
-  deploymentArrustedTemplateReader,
-  type ArrustedTemplateReader,
-} from "../repository/arrusted-template-reader";
+import { deploymentArrustedTemplateReader } from "../repository/arrusted-template-reader";
+import type { ArrustedTemplateReader } from "../repository/arrusted-template-reader";
 import { safeSourcePath } from "../repository/source-path";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);

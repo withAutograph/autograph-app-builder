@@ -1,4 +1,5 @@
-import { chromium, type Page } from "playwright";
+import { chromium } from "playwright";
+import type { Page } from "playwright";
 import * as axe from "axe-core";
 import { join } from "node:path";
 import { z } from "zod";
@@ -8,11 +9,12 @@ import {
   generatedSignatureSelector,
   signatureAttribution,
   uniqueIntrinsicSignature,
-  type ClassTokenEvidence,
-  type IntrinsicClassSignature,
 } from "./class-evidence";
-import { generatedCssRule, type CssRuleEvidence } from "./css-evidence";
-import { originalCssSource, type CssSourceMap } from "./css-source-map";
+import type { ClassTokenEvidence, IntrinsicClassSignature } from "./class-evidence";
+import { generatedCssRule } from "./css-evidence";
+import type { CssRuleEvidence } from "./css-evidence";
+import { originalCssSource } from "./css-source-map";
+import type { CssSourceMap } from "./css-source-map";
 
 export const viewports = [
   { name: "desktop", width: 1440, height: 900 },

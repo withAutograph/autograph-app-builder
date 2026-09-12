@@ -2,7 +2,8 @@
 
 import { Search } from "@geist-ui/icons";
 import { InfoTooltip } from "./builder-info-tooltip";
-import { SearchCombobox, type ComboOption } from "./search-combobox";
+import { SearchCombobox } from "./search-combobox";
+import type { ComboOption } from "./search-combobox";
 import styles from "./app-builder.module.css";
 
 export function ModelControls({

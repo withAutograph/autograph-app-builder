@@ -13,8 +13,8 @@ import {
   DEFAULT_AUTH_REDIRECT_TO,
   resolvePasskeyRedirectTo,
   serializeAuthPageSearchParams,
-  type AuthPageSearchParams,
 } from "@/lib/auth/preview-auth-ui";
+import type { AuthPageSearchParams } from "@/lib/auth/preview-auth-ui";
 
 async function hasAuthenticatedVisitor() {
   "use cache: private";

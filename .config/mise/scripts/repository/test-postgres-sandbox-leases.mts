@@ -6,10 +6,8 @@ import postgres from "postgres";
 
 import * as databaseSchema from "../../../../lib/db/schema";
 import type { HostedPrincipal } from "../../../../lib/eve/hosted-auth";
-import {
-  reconcileExpiredSandboxLeases,
-  type SandboxExecutionLease,
-} from "../../../../lib/sandbox/execution-lease";
+import { reconcileExpiredSandboxLeases } from "../../../../lib/sandbox/execution-lease";
+import type { SandboxExecutionLease } from "../../../../lib/sandbox/execution-lease";
 import {
   SANDBOX_EXECUTION_POLICY,
   sandboxExecutionPolicyDigest,

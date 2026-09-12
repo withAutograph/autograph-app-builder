@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -15,8 +16,8 @@ import {
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
   waitForDevelopmentSourceChange,
-  type DevelopmentSnapshot,
 } from "../lib/development/local-mode";
+import type { DevelopmentSnapshot } from "../lib/development/local-mode";
 import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
 import {
   createDevelopmentShutdown,

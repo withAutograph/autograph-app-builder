@@ -14,7 +14,8 @@ import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
 import { createBuilderHandoffService } from "../handoff/service";
 import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
-import { createMcpRequestHandler, type HostedBuilderHandoffRuntime } from "./request-handler";
+import { createMcpRequestHandler } from "./request-handler";
+import type { HostedBuilderHandoffRuntime } from "./request-handler";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type ResumeRepositoryAccess = (input: {

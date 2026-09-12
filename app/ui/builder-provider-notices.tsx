@@ -1,8 +1,6 @@
 import { Check, Info } from "@geist-ui/icons";
-import {
-  providerConnectionFailureMessage,
-  type ProviderConnectionNotice,
-} from "@/lib/integrations/provider-connection-status";
+import { providerConnectionFailureMessage } from "@/lib/integrations/provider-connection-status";
+import type { ProviderConnectionNotice } from "@/lib/integrations/provider-connection-status";
 import styles from "./app-builder.module.css";
 
 export function ProviderNotices({ notices }: { notices: ProviderConnectionNotice[] }) {

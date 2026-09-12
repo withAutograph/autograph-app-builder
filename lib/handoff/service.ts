@@ -8,9 +8,8 @@ import {
   builderHandoffIntentSchema,
   builderHandoffRecordSchema,
   builderHandoffRequestDigest,
-  type BuilderHandoffIntent,
-  type BuilderHandoffRecord,
 } from "./contracts";
+import type { BuilderHandoffIntent, BuilderHandoffRecord } from "./contracts";
 import { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./errors";
 
 export { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./errors";

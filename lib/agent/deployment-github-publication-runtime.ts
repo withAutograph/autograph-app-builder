@@ -8,13 +8,13 @@ import { createGitHubAppPublicationAdapter } from "../repository/github-app-adap
 import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
-  type GitHubAppHttpProviderConfig,
 } from "../repository/github-app-http-provider";
+import type { GitHubAppHttpProviderConfig } from "../repository/github-app-http-provider";
 import type { GitHubPublicationAdapter } from "../repository/github-publication";
-import {
-  createHostedGitHubPublicationRuntimeResolver,
-  type HostedGitHubPublicationRuntimeResolver,
-  type HostedGitHubPublicationRuntimeResolverDependencies,
+import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
+import type {
+  HostedGitHubPublicationRuntimeResolver,
+  HostedGitHubPublicationRuntimeResolverDependencies,
 } from "./hosted-github-publication-runtime";
 
 const enabledSchema = z.enum(["0", "1"]);

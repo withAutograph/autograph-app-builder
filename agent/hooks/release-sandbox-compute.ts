@@ -1,4 +1,5 @@
-import { defineHook, type HookContext } from "eve/hooks";
+import { defineHook } from "eve/hooks";
+import type { HookContext } from "eve/hooks";
 
 import {
   acquireHostedSandboxExecutionLease,

@@ -3,14 +3,10 @@
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  continueHandoffProvisioning,
-  type HandoffProvisioningContinuationState,
-} from "@/app/actions/builder";
-import {
-  builderProvisionProjectionSchema,
-  type BuilderProvisionProjection,
-} from "@/lib/provisioning/contracts-schema";
+import { continueHandoffProvisioning } from "@/app/actions/builder";
+import type { HandoffProvisioningContinuationState } from "@/app/actions/builder";
+import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
+import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
 
 function readProjection(value: unknown): BuilderProvisionProjection | undefined {
   const parsed = builderProvisionProjectionSchema.safeParse(value);

@@ -32,19 +32,22 @@ import {
   receiptDigest,
   stableDigest,
   unrelatedProjectionDigest,
-  type DestinationSnapshot,
-  type DirtyPathSnapshot,
-  type LocalPublicationFailureReceipt,
-  type LocalPublicationJournal,
-  type LocalPublicationPendingReceipt,
-  type LocalPublicationProposal,
-  type LocalPublicationResult,
-  type LocalPublicationSuccessReceipt,
-  type PublicationPathEvidence,
+} from "./local-publication";
+import type {
+  DestinationSnapshot,
+  DirtyPathSnapshot,
+  LocalPublicationFailureReceipt,
+  LocalPublicationJournal,
+  LocalPublicationPendingReceipt,
+  LocalPublicationProposal,
+  LocalPublicationResult,
+  LocalPublicationSuccessReceipt,
+  PublicationPathEvidence,
 } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import { resolveAllowedRepository } from "./supported-template";
-import { sourceIdentityDigest, type SourceReceipt } from "./source-receipt";
+import { sourceIdentityDigest } from "./source-receipt";
+import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 

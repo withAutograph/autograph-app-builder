@@ -12,9 +12,9 @@ import {
   releasePublicationCommands,
   sealPromotionReceipt,
   sha256,
-  type PromotionReceiptUnsigned,
   verifyPromotionCandidate,
 } from "./promotion";
+import type { PromotionReceiptUnsigned } from "./promotion";
 import { deterministicTar, TOOL_NAMES } from "../../scripts/portable-release";
 
 const digest = "a".repeat(64);

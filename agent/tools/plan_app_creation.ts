@@ -1,18 +1,16 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import {
-  prepareOrReuseDependencies,
-  type DependencyReadyState,
-} from "@/lib/agent/target-dependency-preparation";
+import { prepareOrReuseDependencies } from "@/lib/agent/target-dependency-preparation";
+import type { DependencyReadyState } from "@/lib/agent/target-dependency-preparation";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   sha256,
-  type TargetIdentityReceipt,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
+import type { TargetIdentityReceipt } from "@/lib/agent/workflow-state";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,

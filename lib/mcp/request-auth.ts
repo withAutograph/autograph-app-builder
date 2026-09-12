@@ -1,7 +1,8 @@
 import { createRemoteJWKSet, customFetch, decodeProtectedHeader, jwtVerify } from "jose";
 import { z } from "zod";
 
-import { verifiedHostedClaimsSchema, type VerifiedHostedClaims } from "../eve/hosted-auth";
+import { verifiedHostedClaimsSchema } from "../eve/hosted-auth";
+import type { VerifiedHostedClaims } from "../eve/hosted-auth";
 
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 

@@ -24,8 +24,8 @@ import type { ProviderConnectionFailureReason } from "../integrations/provider-c
 import {
   providerConnectionRedirect,
   providerConnectionReturnFromFormData,
-  type ProviderConnectionReturn,
 } from "../integrations/provider-connection-return";
+import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 import { signInForWorkspaceRedirect, workspaceOnboardingRedirect } from "./workspace-onboarding";
 
 type Authority = {

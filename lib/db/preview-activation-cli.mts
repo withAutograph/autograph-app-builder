@@ -4,7 +4,8 @@ import { isAbsolute } from "node:path";
 
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres, { type Sql } from "postgres";
+import postgres from "postgres";
+import type { Sql } from "postgres";
 
 import * as databaseSchema from "./schema";
 import {
@@ -13,8 +14,8 @@ import {
   planPreviewActivation,
   previewActivationApplyRequestSchema,
   previewActivationPlanRequestSchema,
-  type PreviewActivationStore,
 } from "./preview-activation";
+import type { PreviewActivationStore } from "./preview-activation";
 import { readPrivateDatabaseUrl } from "./private-database-url";
 import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";

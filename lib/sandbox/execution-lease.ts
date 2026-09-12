@@ -2,17 +2,10 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-import {
-  hostedIdentifierSchema,
-  hostedPrincipalSchema,
-  tenantKeyFor,
-  type HostedPrincipal,
-} from "../eve/hosted-auth";
-import {
-  SANDBOX_EXECUTION_POLICY,
-  sandboxExecutionPolicyDigest,
-  type SandboxExecutionPolicy,
-} from "./execution-policy";
+import { hostedIdentifierSchema, hostedPrincipalSchema, tenantKeyFor } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
+import { SANDBOX_EXECUTION_POLICY, sandboxExecutionPolicyDigest } from "./execution-policy";
+import type { SandboxExecutionPolicy } from "./execution-policy";
 
 const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 

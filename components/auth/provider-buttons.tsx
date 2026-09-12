@@ -1,6 +1,7 @@
 "use client";
 
-import { type AuthView, getProviderId } from "@better-auth-ui/core";
+import { getProviderId } from "@better-auth-ui/core";
+import type { AuthView } from "@better-auth-ui/core";
 import { useAuth } from "@better-auth-ui/react";
 import { useMemo, useSyncExternalStore } from "react";
 

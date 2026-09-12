@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { hostedEveOperationScopes, type HostedPrincipal } from "./hosted-auth";
-import { createSameOriginEveTransport, type HostedWorkloadIdentity } from "./same-origin-http";
+import { hostedEveOperationScopes } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
+import { createSameOriginEveTransport } from "./same-origin-http";
+import type { HostedWorkloadIdentity } from "./same-origin-http";
 import {
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,

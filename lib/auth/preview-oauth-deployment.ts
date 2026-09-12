@@ -2,11 +2,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import * as databaseSchema from "../db/schema";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import {
-  createPreviewOAuthServer,
-  readPreviewOAuthRuntimeConfig,
-  type PreviewOAuthRuntimeConfig,
-} from "./preview-oauth-runtime";
+import { createPreviewOAuthServer, readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
+import type { PreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import { selfServiceSignupFlag } from "../feature-flags";
 import { readProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";

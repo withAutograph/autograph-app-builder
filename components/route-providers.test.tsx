@@ -1,4 +1,5 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RouteProviders } from "./route-providers";

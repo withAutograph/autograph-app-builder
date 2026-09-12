@@ -1,10 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { FreshBootstrapCapability } from "@/lib/repository/fresh-bootstrap";
-import {
-  productionFreshBootstrapCapability,
-  type FreshBootstrapFaultHooks,
-} from "@/lib/repository/node-fresh-bootstrap";
+import { productionFreshBootstrapCapability } from "@/lib/repository/node-fresh-bootstrap";
+import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 type FreshBootstrapTestContext = {

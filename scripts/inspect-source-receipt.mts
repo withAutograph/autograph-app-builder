@@ -1,8 +1,5 @@
-import {
-  inspectSourceReceipt,
-  sourceReceiptEvidence,
-  type SourceKind,
-} from "../lib/repository/source-receipt";
+import { inspectSourceReceipt, sourceReceiptEvidence } from "../lib/repository/source-receipt";
+import type { SourceKind } from "../lib/repository/source-receipt";
 
 function parseArguments(args: readonly string[]): {
   sourceKind: SourceKind;

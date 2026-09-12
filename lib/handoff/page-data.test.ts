@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { builderHandoffRecordSchema, type BuilderHandoffRecord } from "./contracts";
+import { builderHandoffRecordSchema } from "./contracts";
+import type { BuilderHandoffRecord } from "./contracts";
 import { BuilderHandoffUnavailableError } from "./service";
 import {
   findAuthenticatedPendingBuilderHandoff,

@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronDown, Check, Plus } from "@geist-ui/icons";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import styles from "./app-builder.module.css";
 
 export type ComboOption = {

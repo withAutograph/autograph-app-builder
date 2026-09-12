@@ -6,9 +6,8 @@ import {
   eveSessionResultSchema,
   publicPrototypePreviewUrlSchema,
   publicPrototypeSchema,
-  type EveSessionResult,
-  type PublicPrototype,
 } from "./contracts";
+import type { EveSessionResult, PublicPrototype } from "./contracts";
 import type { EveSessionService } from "../eve/service";
 
 const previewSessionIdSchema = z

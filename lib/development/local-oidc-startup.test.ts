@@ -8,8 +8,8 @@ import {
   ensureLocalDevelopmentOidc,
   LocalOidcRefreshFailedError,
   runLocalOidcStartupCommand,
-  type LocalOidcStartupInvocation,
 } from "./local-oidc-startup";
+import type { LocalOidcStartupInvocation } from "./local-oidc-startup";
 
 const NOW = 2_000_000_000;
 const PROJECT = {

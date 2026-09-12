@@ -5,7 +5,8 @@ import { createRoot } from "react-dom/client";
 import packageManifest from "../../../package.json";
 import type { EveSessionResult } from "../contracts";
 import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
-import { SessionAppView, type SessionResponse } from "./view";
+import { SessionAppView } from "./view";
+import type { SessionResponse } from "./view";
 
 const app = new App(
   { name: "Autograph App Builder", version: packageManifest.version },

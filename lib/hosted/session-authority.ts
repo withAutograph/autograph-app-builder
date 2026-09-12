@@ -1,11 +1,8 @@
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  hostedIdentifierSchema,
-  hostedPrincipalSchema,
-  type HostedPrincipal,
-} from "../eve/hosted-auth";
+import { hostedIdentifierSchema, hostedPrincipalSchema } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 
 const forwardedAttributesSchema = z
   .object({

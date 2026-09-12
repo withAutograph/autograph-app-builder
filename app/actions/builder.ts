@@ -11,10 +11,8 @@ import {
   getBuilderHandoffPageData,
 } from "@/lib/handoff/deployment";
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
-import {
-  type BuilderProvisionResponse,
-  builderProvisionRequestSchema,
-} from "@/lib/provisioning/contracts";
+import { builderProvisionRequestSchema } from "@/lib/provisioning/contracts";
+import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
 const resolvedHandoffContinuationInputSchema = z

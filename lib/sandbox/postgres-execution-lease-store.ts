@@ -3,12 +3,13 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import type * as databaseSchema from "../db/schema";
 import { sandboxExecutionLeases } from "../db/schema";
-import { hostedPrincipalSchema, type HostedPrincipal } from "../eve/hosted-auth";
-import {
-  sandboxExecutionLeaseSchema,
-  type AcquireSandboxLeaseResult,
-  type SandboxExecutionLease,
-  type SandboxExecutionLeaseStore,
+import { hostedPrincipalSchema } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
+import { sandboxExecutionLeaseSchema } from "./execution-lease";
+import type {
+  AcquireSandboxLeaseResult,
+  SandboxExecutionLease,
+  SandboxExecutionLeaseStore,
 } from "./execution-lease";
 import { sandboxExecutionPolicyDigest } from "./execution-policy";
 

@@ -7,13 +7,10 @@ import {
   publicPrototypeSchema,
   publicUiPreviewSchema,
   sessionStatusSchema,
-  type EveSessionResult,
 } from "../mcp/contracts";
-import {
-  outstandingInternalEveRequests,
-  toPublicEvent,
-  type InternalEveEvent,
-} from "./public-events";
+import type { EveSessionResult } from "../mcp/contracts";
+import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
   .object({

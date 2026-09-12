@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  mergeHostedGitHubInstallationBindings,
-  type HostedGitHubInstallationBinding,
-  type HostedGitHubInstallationStore,
-  type HostedGitHubTenantAuthority,
+import { mergeHostedGitHubInstallationBindings } from "../repository/postgres-github-installation-store";
+import type {
+  HostedGitHubInstallationBinding,
+  HostedGitHubInstallationStore,
+  HostedGitHubTenantAuthority,
 } from "../repository/postgres-github-installation-store";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);

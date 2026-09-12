@@ -5,7 +5,8 @@ import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
-import { planningOverlayRoot, type ExecutionDependencyLayout } from "./dependency-cache";
+import { planningOverlayRoot } from "./dependency-cache";
+import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);

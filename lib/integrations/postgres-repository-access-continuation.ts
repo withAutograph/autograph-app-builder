@@ -4,10 +4,10 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as databaseSchema from "../db/schema";
 import { githubRepositoryAccessContinuations } from "../db/schema";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
-import {
-  repositoryAccessContinuationSchema,
-  type RepositoryAccessContinuation,
-  type RepositoryAccessContinuationStore,
+import { repositoryAccessContinuationSchema } from "./repository-access-continuation";
+import type {
+  RepositoryAccessContinuation,
+  RepositoryAccessContinuationStore,
 } from "./repository-access-continuation";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

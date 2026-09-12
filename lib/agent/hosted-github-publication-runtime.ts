@@ -15,18 +15,16 @@ import {
   createPostgresHostedGitHubInstallationStore,
   hostedGitHubInstallationBindingSchema,
   mergeHostedGitHubInstallationBindings,
-  type HostedGitHubInstallationBinding,
-  type HostedGitHubInstallationStore,
-  type HostedGitHubTenantAuthority,
 } from "../repository/postgres-github-installation-store";
-import {
-  createPostgresGitHubPublicationStores,
-  type GitHubPublicationProposalStore,
-} from "../repository/postgres-github-publication-store";
-import {
-  composeGitHubPublicationRuntime,
-  type GitHubPublicationRuntime,
-} from "./github-publication-runtime";
+import type {
+  HostedGitHubInstallationBinding,
+  HostedGitHubInstallationStore,
+  HostedGitHubTenantAuthority,
+} from "../repository/postgres-github-installation-store";
+import { createPostgresGitHubPublicationStores } from "../repository/postgres-github-publication-store";
+import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
+import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 

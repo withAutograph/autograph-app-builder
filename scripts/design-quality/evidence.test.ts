@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { scoreAdherence, type Observation } from "./evidence";
+import { scoreAdherence } from "./evidence";
+import type { Observation } from "./evidence";
 
 const row = (
   id: string,

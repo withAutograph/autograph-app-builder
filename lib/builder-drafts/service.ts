@@ -1,10 +1,9 @@
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  builderDraftRecordSchema,
-  saveActiveBuilderDraftInputSchema,
-  type BuilderDraftRecord,
-  type BuilderDraftStatus,
-  type SaveActiveBuilderDraftInput,
+import { builderDraftRecordSchema, saveActiveBuilderDraftInputSchema } from "./contracts";
+import type {
+  BuilderDraftRecord,
+  BuilderDraftStatus,
+  SaveActiveBuilderDraftInput,
 } from "./contracts";
 
 export type BuilderDraftAuthority = ReturnType<typeof hostedTenantAuthoritySchema.parse>;

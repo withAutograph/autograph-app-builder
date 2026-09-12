@@ -2,7 +2,8 @@
 /** @vitest-environment jsdom */
 
 import { act } from "react";
-import { hydrateRoot, type Root } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 

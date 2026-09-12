@@ -5,7 +5,6 @@ export default defineConfig({
   extends: [core],
   ignorePatterns: core.ignorePatterns,
   rules: {
-    "import/consistent-type-specifier-style": "off",
     "unicorn/import-style": "off",
     "typescript/consistent-type-definitions": "off",
     "eslint/curly": "off",

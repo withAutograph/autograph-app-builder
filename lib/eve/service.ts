@@ -1,4 +1,5 @@
-import { Client, type ClientSession, type MessageStreamEvent } from "eve/client";
+import { Client } from "eve/client";
+import type { ClientSession, MessageStreamEvent } from "eve/client";
 
 import type { EveSessionListResult, EveSessionResult } from "@/lib/mcp/contracts";
 import {

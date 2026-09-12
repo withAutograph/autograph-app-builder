@@ -9,7 +9,8 @@ import { createPostgresBuilderProvisionJournalStore } from "../provisioning/post
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 import { activeBuilderModelIdSchema } from "../integrations/active-model";
-import { builderHandoffDestinationSchema, type BuilderHandoffIntent } from "./contracts";
+import { builderHandoffDestinationSchema } from "./contracts";
+import type { BuilderHandoffIntent } from "./contracts";
 import {
   BuilderHandoffConflictError,
   BuilderHandoffUnavailableError,

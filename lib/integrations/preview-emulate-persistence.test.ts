@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createPreviewEmulatePersistence,
-  type PreviewEmulateStateStore,
-} from "./preview-emulate-persistence";
+import { createPreviewEmulatePersistence } from "./preview-emulate-persistence";
+import type { PreviewEmulateStateStore } from "./preview-emulate-persistence";
 
 function memoryStore(): PreviewEmulateStateStore & {
   states: Map<string, string>;

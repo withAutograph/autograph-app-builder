@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { HostedPrincipal } from "./hosted-auth";
-import { createHostedEveSessionService, type HostedEveTransport } from "./hosted-service";
+import { createHostedEveSessionService } from "./hosted-service";
+import type { HostedEveTransport } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
 
 function principal(ownerUserId: string): HostedPrincipal {

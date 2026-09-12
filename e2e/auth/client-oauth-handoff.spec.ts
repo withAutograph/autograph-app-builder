@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
+import type { Server } from "node:http";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createLocalJWKSet, jwtVerify } from "jose";
-import { expect, test, type Page } from "playwright/test";
+import { expect, test } from "playwright/test";
+import type { Page } from "playwright/test";
 import postgres from "postgres";
 
 import { cursorClientId, cursorRedirectUri, setupCursorClient } from "../../lib/auth/cursor-client";

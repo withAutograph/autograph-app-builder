@@ -8,16 +8,18 @@ import {
   createGitHubInstallationIdentity,
   createRepositoryObservation,
   githubPermissionsFor,
-  type DraftPublicationReadBack,
-  type DraftPullRequestProposal,
-  type FreshRepositoryProposal,
-  type GitHubMutationAcknowledgement,
-  type GitHubOperation,
-  type GitHubPublicationAdapter,
-  type GitHubSourceResolutionAdapter,
-  type GitHubDraftPullRequestContent,
-  type GitHubFreshRepositoryContent,
-  type GitHubRepositoryObservation,
+} from "./github-publication";
+import type {
+  DraftPublicationReadBack,
+  DraftPullRequestProposal,
+  FreshRepositoryProposal,
+  GitHubMutationAcknowledgement,
+  GitHubOperation,
+  GitHubPublicationAdapter,
+  GitHubSourceResolutionAdapter,
+  GitHubDraftPullRequestContent,
+  GitHubFreshRepositoryContent,
+  GitHubRepositoryObservation,
 } from "./github-publication";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);

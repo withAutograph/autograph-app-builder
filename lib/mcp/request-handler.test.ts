@@ -9,8 +9,8 @@ import {
   createAutographMcpHandler,
   createMcpRequestHandler,
   withHostedBuilderHandoffs,
-  type HostedMcpRuntime,
 } from "./request-handler";
+import type { HostedMcpRuntime } from "./request-handler";
 
 const auth = {
   issuer: "https://builder.example.test/api/auth",

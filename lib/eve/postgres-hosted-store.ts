@@ -5,7 +5,8 @@ import { z } from "zod";
 import type * as databaseSchema from "../db/schema";
 import { agentOperations, agentSessions } from "../db/schema";
 import { eveSessionResultSchema } from "../mcp/contracts";
-import { hostedPrincipalSchema, tenantKeyFor, type HostedPrincipal } from "./hosted-auth";
+import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   hostedOperationRecordSchema,
   durableHostedSessionRecordSchema,
@@ -14,10 +15,8 @@ import {
   hostedSessionCreationDigest,
   hostedSessionRecordSchema,
   toDurableHostedSessionRecord,
-  type HostedEveStore,
-  type HostedOperationRecord,
-  type HostedSessionRecord,
 } from "./hosted-store";
+import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];

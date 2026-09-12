@@ -1,32 +1,27 @@
 import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth } from "better-auth";
+import type { BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import type { GithubProfile } from "@better-auth/core/social-providers";
-import { genericOAuth, jwt, type GenericOAuthConfig } from "better-auth/plugins";
+import { genericOAuth, jwt } from "better-auth/plugins";
+import type { GenericOAuthConfig } from "better-auth/plugins";
 import { decodeJwt } from "jose";
 import { z } from "zod";
 
-import {
-  buildPreviewCimdOptions,
-  buildPreviewMcpOAuthOptions,
-  type PreviewOAuthMembershipAuthority,
-} from "./preview-oauth-contract";
+import { buildPreviewCimdOptions, buildPreviewMcpOAuthOptions } from "./preview-oauth-contract";
+import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
 import { fetchPreviewClientMetadataResource } from "./preview-cimd-transport";
-import {
-  previewUserManagementPlugins,
-  type PreviewOrganizationUserAuthority,
-} from "./preview-user-management";
-import {
-  resolveBetterAuthInfrastructure,
-  type BetterAuthInfrastructureEnvironment,
-} from "./better-auth-infrastructure";
+import { previewUserManagementPlugins } from "./preview-user-management";
+import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
+import { resolveBetterAuthInfrastructure } from "./better-auth-infrastructure";
+import type { BetterAuthInfrastructureEnvironment } from "./better-auth-infrastructure";
 import {
   createPasskeyOnboardingPlugin,
   createPasskeyPlugin,
   readPasskeyOnboardingConfig,
-  type PasskeyOnboardingConfig,
 } from "./passkey-onboarding";
+import type { PasskeyOnboardingConfig } from "./passkey-onboarding";
 import {
   hostedDeploymentEnvironmentSchema,
   readHostedDeploymentEnvironment,
@@ -35,8 +30,8 @@ import {
   providerEmulationEnvironment,
   readProviderEmulation,
   readVercelPreviewOrigin,
-  type ProviderEmulation,
 } from "../integrations/local-provider-emulation";
+import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
 
 const databaseUrlSchema = z

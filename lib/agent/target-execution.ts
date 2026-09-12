@@ -7,8 +7,8 @@ import {
   dependencyTargetForWorkspace,
   inspectDependencyCache,
   shouldPreferLiveTemplateDependencies,
-  type ObservedDependencyCache,
 } from "../repository/dependency-cache";
+import type { ObservedDependencyCache } from "../repository/dependency-cache";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
 import { targetExecutionBinding, targetProposalSchema } from "../repository/target-planning";
 import { configuredToolchainImage, requiredToolVersions } from "../sandbox/toolchain";

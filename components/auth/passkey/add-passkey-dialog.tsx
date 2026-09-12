@@ -5,7 +5,8 @@ import type { AddPasskeyParams, PasskeyAuthClient } from "@better-auth-ui/core/p
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useAddPasskey } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
-import { type SyntheticEvent, useRef } from "react";
+import { useRef } from "react";
+import type { SyntheticEvent } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,

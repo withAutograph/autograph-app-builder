@@ -1,8 +1,10 @@
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
+import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import axe from "axe-core";
-import { expect, test, type Page } from "playwright/test";
+import { expect, test } from "playwright/test";
+import type { Page } from "playwright/test";
 
 import { vendorOnboardingPrototype } from "../../agent/agent";
 

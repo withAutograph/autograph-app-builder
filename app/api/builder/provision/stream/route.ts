@@ -1,8 +1,6 @@
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
-import {
-  builderProvisionProjectionSchema,
-  type BuilderProvisionProjection,
-} from "@/lib/provisioning/contracts";
+import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts";
+import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
 
 const encoder = new TextEncoder();
 const pollIntervalMs = 250;

@@ -4,11 +4,8 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as databaseSchema from "../db/schema";
 import { builderHandoffs, builderProvisioningJournals } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  builderHandoffIntentSchema,
-  builderHandoffRecordSchema,
-  type BuilderHandoffRecord,
-} from "./contracts";
+import { builderHandoffIntentSchema, builderHandoffRecordSchema } from "./contracts";
+import type { BuilderHandoffRecord } from "./contracts";
 import type { BuilderHandoffStore } from "./service";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;

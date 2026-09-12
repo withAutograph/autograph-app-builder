@@ -7,8 +7,8 @@ import {
   inspectPreparedSandboxWorkspace,
   SUPPORTED_REPOSITORY_CONTRACT,
   SUPPORTED_TEMPLATE_INPUT_PATHS,
-  type PreparedSandboxWorkspace,
 } from "./supported-template";
+import type { PreparedSandboxWorkspace } from "./supported-template";
 import { parseCanonicalTemplateSnapshot } from "./source-receipt";
 import type { ImmutableGitHubSourceReceipt } from "./github-publication";
 

@@ -9,10 +9,8 @@ import {
 } from "./github-app-installation-errors";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import {
-  providerConnectionReturnToSchema,
-  type ProviderConnectionReturn,
-} from "../integrations/provider-connection-return";
+import { providerConnectionReturnToSchema } from "../integrations/provider-connection-return";
+import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { GitHubUserCredentialStore } from "../provisioning/github-user-credential";

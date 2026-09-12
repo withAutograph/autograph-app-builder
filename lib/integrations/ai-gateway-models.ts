@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { builderModelSchema, type BuilderIntegrationState } from "./builder-state";
+import { builderModelSchema } from "./builder-state";
+import type { BuilderIntegrationState } from "./builder-state";
 import { activeBuilderModelId } from "./active-model";
 
 const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";

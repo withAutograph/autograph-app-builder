@@ -1,18 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  SandboxTemplateNotProvisionedError,
-  type SandboxBackendHandle,
-  type SandboxBackendPrewarmInput,
-  type SandboxSeedFile,
-  type SandboxSession,
+import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
+import type {
+  SandboxBackendHandle,
+  SandboxBackendPrewarmInput,
+  SandboxSeedFile,
+  SandboxSession,
 } from "eve/sandbox";
 
-import {
-  createHostedVercelBackend,
-  createProviderFetch,
-  type HostedVercelBackendFactory,
-  type HostedVercelBackendOptions,
-} from "./vercel-backend";
+import { createHostedVercelBackend, createProviderFetch } from "./vercel-backend";
+import type { HostedVercelBackendFactory, HostedVercelBackendOptions } from "./vercel-backend";
 import {
   clearVercelSessionGitSource,
   configureVercelSessionGitSource,

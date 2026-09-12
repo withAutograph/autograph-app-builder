@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createRepositoryAccessContinuationService,
-  type RepositoryAccessContinuation,
-  type RepositoryAccessContinuationStore,
+import { createRepositoryAccessContinuationService } from "./repository-access-continuation";
+import type {
+  RepositoryAccessContinuation,
+  RepositoryAccessContinuationStore,
 } from "./repository-access-continuation";
 
 const authority = {

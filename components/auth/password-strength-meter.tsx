@@ -1,6 +1,7 @@
 "use client";
 
-import { evaluatePasswordStrength, type PasswordStrengthLevel } from "@better-auth-ui/core";
+import { evaluatePasswordStrength } from "@better-auth-ui/core";
+import type { PasswordStrengthLevel } from "@better-auth-ui/core";
 import { useAuth } from "@better-auth-ui/react";
 
 import { cn } from "@/lib/utils";

@@ -1,11 +1,13 @@
 "use client";
 
 import {
-  type OAuthAuthorizationRequest,
-  type OAuthProviderAuthClient,
   parseOAuthAuthorizationRequest,
   resolveOAuthScopeMetadata,
   sanitizeOAuthClientUrl,
+} from "@better-auth-ui/core/plugins/oauth-provider";
+import type {
+  OAuthAuthorizationRequest,
+  OAuthProviderAuthClient,
 } from "@better-auth-ui/core/plugins/oauth-provider";
 import { useAuth, useAuthPlugin, useSession } from "@better-auth-ui/react";
 import {
