@@ -1,10 +1,19 @@
-import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  sign,
+} from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, resolve as pathResolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
+
+import {
+  createEveEvalRuntimeDirectories,
+  waitForEveEvalChild,
+} from "../lib/testing/eve-eval-lifecycle";
 
 const MODE_MASK = 18;
 const ZERO = 0;
@@ -23,6 +32,9 @@ if (
   throw new Error("The structural test package root was not owner-bound.");
 const preload = pathToFileURL(
   pathResolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
+).href;
+const evalFetchPreload = pathToFileURL(
+  pathResolve(repositoryRoot, "scripts/eve-eval-fetch-preload.mjs"),
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = pathResolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
@@ -55,17 +67,22 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return environment as NodeJS.ProcessEnv;
 }
 
-export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
+export function gateAEvalWorkflowBodyTimeout(
+  profile: unknown,
+): string | undefined {
   if (
     typeof profile !== "object" ||
     profile === null ||
     !Object.isFrozen(profile) ||
-    Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
+    Object.keys(profile).sort().join(",") !==
+      "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   )
     return undefined;
   const name = (profile as { profile?: unknown }).profile;
-  return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
+  return name === "sandbox" || name === "hosted-artifact"
+    ? "360000"
+    : undefined;
 }
 
 function canonical(proof: Record<string, unknown>) {
@@ -117,13 +134,20 @@ function exactParentArguments(): readonly string[] {
         env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
       }),
     ) as unknown;
-    if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string"))
+    if (
+      !Array.isArray(observed) ||
+      observed.some((entry) => typeof entry !== "string")
+    )
       throw new Error("The structural test launcher argv was invalid.");
-    const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
-      encoding: "utf-8",
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
-      stdio: ["ignore", "pipe", "ignore"],
-    })
+    const cwd = execFileSync(
+      "/usr/sbin/lsof",
+      ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+      {
+        encoding: "utf-8",
+        env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    )
       .split("\n")
       .find((line) => line.startsWith("n"))
       ?.slice(1);
@@ -143,10 +167,14 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     launcherStat.nlink !== BigInt(ONE) ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO) ||
-    createHash("sha256").update(readFileSync(launcher)).digest("hex") !== launcherDigest
+    createHash("sha256").update(readFileSync(launcher)).digest("hex") !==
+      launcherDigest
   )
     throw new Error("The structural test launcher source was invalid.");
-  const wrapper = profile === "vitest" ? "scripts/run-vitest.mts" : "scripts/run-eve-eval.mts";
+  const wrapper =
+    profile === "vitest"
+      ? "scripts/run-vitest.mts"
+      : "scripts/run-eve-eval.mts";
   const expected = [
     "/bin/sh",
     launcher,
@@ -177,44 +205,65 @@ export async function runWithTestCapability(options: {
     throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
   const expectedEntry = pathResolve(
     repositoryRoot,
-    options.profile === "vitest" ? "node_modules/vitest/vitest.mjs" : "node_modules/eve/bin/eve.js",
+    options.profile === "vitest"
+      ? "node_modules/vitest/vitest.mjs"
+      : "node_modules/eve/bin/eve.js",
   );
   if (
     options.command !== process.execPath ||
     options.args[0] !== expectedEntry ||
     (options.profile === "vitest" && options.capabilities.length !== 3) ||
-    (options.profile === "eve" && ![0, 1, 3].includes(options.capabilities.length)) ||
+    (options.profile === "eve" &&
+      ![1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   )
     throw new Error("The structural test wrapper profile was invalid.");
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const publicKeySource = publicKey.export({ format: "der", type: "spki" }).toString("base64");
-  const privateKeySource = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+  const publicKeySource = publicKey
+    .export({ format: "der", type: "spki" })
+    .toString("base64");
+  const privateKeySource = privateKey
+    .export({ format: "der", type: "pkcs8" })
+    .toString("base64");
+  const evalRuntime =
+    options.profile === "eve" ? createEveEvalRuntimeDirectories() : undefined;
   const child = spawn(options.command, [...options.args], {
     cwd: repositoryRoot,
+    detached: options.profile === "eve" && process.platform !== "win32",
     stdio: ["inherit", "inherit", "inherit", "pipe"],
     env: {
       ...childEnvironment(),
-      EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
-      // Never recover another eval's unfinished queues. Keep the directory
-      // after exit for failure diagnostics; it is not a dependency cache.
+      HOME: evalRuntime?.home ?? process.env.HOME,
+      EVE_DEV_WORKER_APP_ROOT:
+        options.profile === "eve" ? repositoryRoot : undefined,
+      // Never recover another eval's unfinished queues. Failed runs retain
+      // this task-owned directory for diagnostics; successful runs remove it.
       WORKFLOW_LOCAL_DATA_DIR:
+        options.profile === "eve" ? evalRuntime?.workflowData : undefined,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
+        options.gateAEvalProfile,
+      ),
+      NODE_OPTIONS:
         options.profile === "eve"
-          ? mkdtempSync(pathResolve(tmpdir(), "app-builder-eval-workflow-"))
-          : undefined,
-      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
-      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
-      NODE_OPTIONS: `--import=${preload}`,
+          ? `--import=${preload} --import=${evalFetchPreload}`
+          : `--import=${preload}`,
+      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD:
+        options.profile === "eve" ? "1" : undefined,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
     },
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
-  if (authorization === null || authorization === undefined)
+  if (authorization == null)
     throw new Error("The structural test authorization pipe was not created.");
   let buffered = "";
   let answered = false;
-  authorization.write(`${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`);
+  authorization.write(
+    `${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`,
+  );
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
   authorization.setEncoding("utf-8");
@@ -222,9 +271,9 @@ export async function runWithTestCapability(options: {
     if (answered) return;
     buffered += chunk;
     const newline = buffered.indexOf("\n");
-    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
+    if (newline < 0 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
     if (
-      newline === -1 ||
+      newline < 0 ||
       Buffer.byteLength(buffered.slice(0, newline + 1)) > maximumFrameBytes ||
       newline !== buffered.length - 1
     ) {
@@ -238,7 +287,7 @@ export async function runWithTestCapability(options: {
         context?: unknown;
       };
       if (
-        Object.keys(request).toSorted().join(",") !== "context,nonce,version" ||
+        Object.keys(request).sort().join(",") !== "context,nonce,version" ||
         request.version !== 2 ||
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
@@ -250,12 +299,16 @@ export async function runWithTestCapability(options: {
         nonce: request.nonce,
         context: request.context,
         authorization: randomBytes(32).toString("hex"),
-        expiresAt: Date.now() + 5000,
+        expiresAt: Date.now() + 5_000,
         capabilities: options.capabilities,
         publicKey: publicKeySource,
         gateAEvalProfile: options.gateAEvalProfile ?? null,
       };
-      const signature = sign(null, Buffer.from(canonical(proof)), privateKey).toString("base64");
+      const signature = sign(
+        null,
+        Buffer.from(canonical(proof)),
+        privateKey,
+      ).toString("base64");
       answered = true;
       authorization.write(
         `${JSON.stringify({ ...proof, signature, delegationPrivateKey: privateKeySource })}\n`,
@@ -265,12 +318,12 @@ export async function runWithTestCapability(options: {
       child.kill("SIGKILL");
     }
   });
-  return new Promise<number>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      clearTimeout(timeout);
-      authorization.destroy();
-      resolve(code ?? (signal === null ? 1 : 128));
-    });
-  });
+  try {
+    const exitCode = await waitForEveEvalChild({ authorization, child });
+    if (exitCode === ZERO && evalRuntime !== undefined)
+      rmSync(evalRuntime.root, { recursive: true });
+    return exitCode;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
