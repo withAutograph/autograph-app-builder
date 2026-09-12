@@ -41,7 +41,7 @@ if (!values["schema-only"]) {
   const evidencePath = resolve(values.evidence);
   const evidenceRoot = await realpath(dirname(evidencePath));
   const report = await assessParity(
-    JSON.parse(await readFile(evidencePath, "utf8")),
+    JSON.parse(await readFile(evidencePath, "utf-8")),
     async (path) => {
       try {
         const file = await realpath(resolve(evidenceRoot, path));

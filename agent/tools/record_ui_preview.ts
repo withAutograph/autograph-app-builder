@@ -30,13 +30,9 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
     if (current.phase === "empty")
-      throw new Error(
-        "Prepare the Arrusted source before creating a UI preview.",
-      );
+      throw new Error("Prepare the Arrusted source before creating a UI preview.");
     if (current.phase === "validation_pending")
-      throw new Error(
-        "Finish the running build check before revising the preview.",
-      );
+      throw new Error("Finish the running build check before revising the preview.");
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
       prior !== undefined &&
@@ -63,9 +59,7 @@ export default defineTool({
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
       routes: [...input.routes].toSorted(),
-      files: [...input.files].toSorted((left, right) =>
-        left.path.localeCompare(right.path),
-      ),
+      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
       manifest: input.manifest,
       catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
         left.path.localeCompare(right.path),
@@ -82,9 +76,7 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined
-          ? {}
-          : { githubSource: current.githubSource }),
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         artifacts: recorded.artifacts,
         uiPreview,
       }),

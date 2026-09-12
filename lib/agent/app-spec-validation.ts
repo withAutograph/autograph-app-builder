@@ -45,10 +45,7 @@ const capabilityId = z
   .string()
   .regex(capabilityIdPattern)
   .refine(
-    (value) =>
-      !value
-        .split("-")
-        .some((segment) => providerCapabilitySegments.has(segment)),
+    (value) => !value.split("-").some((segment) => providerCapabilitySegments.has(segment)),
     "Use provider-neutral capability identifiers (for example source-control or application-hosting); keep provider names in Integrations and reconciliation prose.",
   );
 const publicRoute = z.string().regex(publicRoutePattern);

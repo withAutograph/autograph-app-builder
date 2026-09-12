@@ -62,12 +62,11 @@ function run(script: string) {
 }
 
 function emit(records: unknown[], verdict = "passed") {
-  return (
-    `${records
-      .map((record) => `console.log(${JSON.stringify(evidencePrefix + JSON.stringify(record))});`)
-      .join("\n") 
-    }console.log(JSON.stringify({results:[{id:"self-reproduction",verdict:${JSON.stringify(verdict)}}]},null,2));`
-  );
+  return `${records
+    .map((record) => `console.log(${JSON.stringify(evidencePrefix + JSON.stringify(record))});`)
+    .join(
+      "\n",
+    )}console.log(JSON.stringify({results:[{id:"self-reproduction",verdict:${JSON.stringify(verdict)}}]},null,2));`;
 }
 
 describe("native self-reproduction report orchestration", () => {
@@ -100,7 +99,7 @@ describe("native self-reproduction report orchestration", () => {
           },
         ],
         "failed",
-      )  }process.exitCode = 1;`,
+      )}process.exitCode = 1;`,
     );
     expect(result.status).toBe(1);
     expect(report.generation.status).toBe("failed");

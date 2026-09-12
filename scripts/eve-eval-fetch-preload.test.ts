@@ -5,12 +5,10 @@ import { isolateAbortSignalPerFetch } from "./eve-eval-fetch-preload.mjs";
 describe("Eve eval fetch signal isolation", () => {
   it("derives one signal per request while retaining cancellation", async () => {
     const observedSignals: AbortSignal[] = [];
-    const fetchImplementation = vi.fn(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.signal != null) observedSignals.push(init.signal);
-        return new Response(null, { status: 204 });
-      },
-    );
+    const fetchImplementation = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.signal !== undefined && init.signal !== null) observedSignals.push(init.signal);
+      return new Response(null, { status: 204 });
+    });
     const fetch = isolateAbortSignalPerFetch(fetchImplementation);
     const evaluation = new AbortController();
 
@@ -27,11 +25,9 @@ describe("Eve eval fetch signal isolation", () => {
 
     const reason = new Error("evaluation interrupted");
     evaluation.abort(reason);
-    expect(
-      observedSignals.every(
-        (signal) => signal.aborted && signal.reason === reason,
-      ),
-    ).toBe(true);
+    expect(observedSignals.every((signal) => signal.aborted && signal.reason === reason)).toBe(
+      true,
+    );
   });
 
   it("leaves requests without an explicit signal unchanged", async () => {
@@ -40,9 +36,6 @@ describe("Eve eval fetch signal isolation", () => {
 
     await fetch("http://127.0.0.1/");
 
-    expect(fetchImplementation).toHaveBeenCalledWith(
-      "http://127.0.0.1/",
-      undefined,
-    );
+    expect(fetchImplementation).toHaveBeenCalledWith("http://127.0.0.1/", undefined);
   });
 });

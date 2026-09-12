@@ -271,7 +271,7 @@ export async function assessParity(
       ];
       if (bundle.output !== "available") {
         status = bundle.output === "missing" ? "failed" : "blocked";
-        reason = bundle.reason;
+        ({ reason } = bundle);
       } else if (observation?.disposition === "missing-functionality") status = "failed";
       else if (observation?.assertions.some((assertion) => !assertion.passed)) status = "failed";
       else if (observation?.disposition === "infrastructure-unavailable") status = "blocked";

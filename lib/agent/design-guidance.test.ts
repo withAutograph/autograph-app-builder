@@ -6,10 +6,7 @@ import { HOSTED_MANAGED_SKILL_CONTENTS } from "../sandbox/hosted-managed-seeds.g
 import { uiPreviewInputSchema, validateUiPreview } from "./ui-preview";
 
 const skill = readFileSync("agent/skills/design-app/SKILL.md", "utf-8");
-const reviewExperiences = readFileSync(
-  "docs/ui-preview-review-experiences.md",
-  "utf-8",
-);
+const reviewExperiences = readFileSync("docs/ui-preview-review-experiences.md", "utf-8");
 
 describe("high-fidelity design guidance", () => {
   it("provides a first-preview example accepted by the unchanged preview contract", () => {
@@ -47,9 +44,7 @@ describe("high-fidelity design guidance", () => {
     "delivers the same preview guidance locally and in the hosted bundle: %s",
     (path) => {
       expect(
-        HOSTED_MANAGED_SKILL_CONTENTS.find(
-          (entry) => entry.path === `design-app/${path}`,
-        )?.content,
+        HOSTED_MANAGED_SKILL_CONTENTS.find((entry) => entry.path === `design-app/${path}`)?.content,
       ).toBe(readFileSync(`agent/skills/design-app/${path}`, "utf-8"));
     },
   );
@@ -62,9 +57,7 @@ describe("high-fidelity design guidance", () => {
       "representative production consumers",
     ].map((value) => skill.indexOf(value));
     expect(evidence.every((index) => index >= 0)).toBe(true);
-    expect(evidence).toEqual(
-      [...evidence].toSorted((left, right) => left - right),
-    );
+    expect(evidence).toEqual([...evidence].toSorted((left, right) => left - right));
   });
 
   it("prefers compositions and records justified catalog gaps", () => {

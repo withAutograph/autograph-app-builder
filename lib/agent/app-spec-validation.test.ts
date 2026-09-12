@@ -26,19 +26,14 @@ describe("build-ready AppSpec validation", () => {
 
   it("ships one complete canonical authoring skeleton that passes on its first attempt", () => {
     const reference = readFileSync(
-      new URL(
-        "../../agent/skills/design-app/references/app-spec.md",
-        import.meta.url,
-      ),
-      "utf8",
+      new URL("../../agent/skills/design-app/references/app-spec.md", import.meta.url),
+      "utf-8",
     );
     const bundled = HOSTED_MANAGED_SKILL_CONTENTS.find(
       (file) => file.path === "design-app/references/app-spec.md",
     );
     expect(bundled?.content).toBe(reference);
-    const templates = [
-      ...reference.matchAll(/````markdown\n([\s\S]*?)\n````/gu),
-    ];
+    const templates = [...reference.matchAll(/````markdown\n([\s\S]*?)\n````/gu)];
     expect(templates).toHaveLength(1);
     const authored = templates[0]![1]!;
     // Test the bytes shown to the model, before acceptance normalization.
@@ -49,18 +44,15 @@ describe("build-ready AppSpec validation", () => {
     expect(authored).toMatch(/\n## Build handoff\n\n```json\n[\s\S]*\n```$/u);
   });
 
-  it.each(REQUIRED_APP_SPEC_HEADINGS)(
-    "still rejects an omitted %s section",
-    (heading) => {
-      const content = completeAppSpec().replace(`## ${heading}\n`, "");
-      expect(validateBuildReadyAppSpec(content)).toMatchObject({
-        valid: false,
-        issues: expect.arrayContaining([
-          expect.objectContaining({ code: "missing_heading", path: heading }),
-        ]),
-      });
-    },
-  );
+  it.each(REQUIRED_APP_SPEC_HEADINGS)("still rejects an omitted %s section", (heading) => {
+    const content = completeAppSpec().replace(`## ${heading}\n`, "");
+    expect(validateBuildReadyAppSpec(content)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "missing_heading", path: heading }),
+      ]),
+    });
+  });
 
   it.each(["integrations", "hostedResources"] as const)(
     "rejects provider-specific %s before planning without silently dropping intent",
@@ -75,11 +67,7 @@ describe("build-ready AppSpec validation", () => {
         "neon",
         "vercel",
       ]) {
-        for (const value of [
-          provider,
-          `${provider}-sync`,
-          `sync-${provider}`,
-        ]) {
+        for (const value of [provider, `${provider}-sync`, `sync-${provider}`]) {
           const content = completeAppSpec({
             ...BUILD_READY_HANDOFF_EXAMPLE,
             optionalCapabilities: {

@@ -11,7 +11,7 @@
  */
 export function isolateAbortSignalPerFetch(fetchImplementation) {
   return function fetchWithIsolatedSignal(input, init) {
-    if (init?.signal == null)
+    if (init?.signal === undefined || init.signal === null)
       return Reflect.apply(fetchImplementation, this, [input, init]);
     return Reflect.apply(fetchImplementation, this, [
       input,

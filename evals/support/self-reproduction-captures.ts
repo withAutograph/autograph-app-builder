@@ -12,10 +12,10 @@ export type CaptureState = (typeof captureStates)[number];
 export type CaptureAdapter = {
   // Seed only isolated test-owned records. Missing generated controls must be
   // returned as missing-functionality, never hidden by fixture HTML or mocks.
-  prepare(
+  prepare: (
     page: Page,
     state: CaptureState,
-  ): Promise<
+  ) => Promise<
     | { ready: true }
     | {
         ready: false;
@@ -26,11 +26,11 @@ export type CaptureAdapter = {
   // Exercise the real UI. The contract specifies each assertion's semantics.
   // Retain the transient state using capture() before releasing its latch or
   // clicking recovery. Only assertion observations belong in the return value.
-  exercise(
+  exercise: (
     page: Page,
     state: CaptureState,
     capture: () => Promise<void>,
-  ): Promise<
+  ) => Promise<
     {
       id: string;
       passed: boolean;
@@ -76,16 +76,7 @@ export async function captureParity(input: {
           const page = await context.newPage();
           interactionStarted = true;
           const prepared = await adapter.prepare(page, state);
-          if (!prepared.ready) {
-            result = {
-              requirementId,
-              disposition: prepared.disposition,
-              reason: prepared.reason,
-              method: "none",
-              artifacts: [],
-              assertions: [],
-            };
-          } else {
+          if (prepared.ready) {
             const assertions = await adapter.exercise(page, state, async () => {
               await mkdir(dirname(join(input.outputRoot, png)), { recursive: true });
               await page.screenshot({ path: join(input.outputRoot, png), fullPage: true });
@@ -100,6 +91,15 @@ export async function captureParity(input: {
                 : "Adapter omitted the state capture.",
               artifacts: captured ? [png, receipt] : [receipt],
               assertions: assertions.map((assertion) => ({ ...assertion, artifacts: [receipt] })),
+            };
+          } else {
+            result = {
+              requirementId,
+              disposition: prepared.disposition,
+              reason: prepared.reason,
+              method: "none",
+              artifacts: [],
+              assertions: [],
             };
           }
         } catch {

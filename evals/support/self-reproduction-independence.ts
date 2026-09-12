@@ -44,14 +44,14 @@ export function independenceAssertions(input: {
           ),
         ]
       : []),
-    ...(input.referenceSourceExposed !== undefined
-      ? [
+    ...(input.referenceSourceExposed === undefined
+      ? []
+      : [
           assertion(
             "no-reference-source",
             !input.referenceSourceExposed,
             "Reviewed evaluator generator-input exposure receipt.",
           ),
-        ]
-      : []),
+        ]),
   ];
 }

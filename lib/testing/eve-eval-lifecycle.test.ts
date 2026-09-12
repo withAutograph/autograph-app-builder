@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/prefer-event-target -- Node ChildProcess lifecycle tests require EventEmitter semantics. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
@@ -23,13 +24,7 @@ import {
 
 function lockFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "eve-eval-locks-")));
-  const backend = join(
-    root,
-    ".eve",
-    "sandbox-cache",
-    "template-locks",
-    "vercel-authorized",
-  );
+  const backend = join(root, ".eve", "sandbox-cache", "template-locks", "vercel-authorized");
   mkdirSync(backend, { recursive: true });
   const addLock = (name: string, owner: unknown) => {
     const lock = join(backend, `${name}.lock`);
@@ -40,6 +35,31 @@ function lockFixture() {
     return lock;
   };
   return { addLock, backend, root };
+}
+
+async function startServer(port: number) {
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      [
+        'const { createServer } = require("node:net");',
+        "const server = createServer();",
+        "server.listen(Number(process.argv[1]), '127.0.0.1', () => process.send(server.address().port));",
+        "process.on('SIGTERM', () => server.close(() => process.exit(143)));",
+      ].join(""),
+      String(port),
+    ],
+    {
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    },
+  );
+  const ready = await new Promise<number>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("message", (message) => resolve(Number(message)));
+  });
+  return { child, port: ready };
 }
 
 describe("Eve eval resource lifecycle", () => {
@@ -83,9 +103,7 @@ describe("Eve eval resource lifecycle", () => {
 
   it("preserves a symlinked lock instead of following it", async () => {
     const fixture = lockFixture();
-    const outside = realpathSync(
-      mkdtempSync(join(tmpdir(), "eve-eval-outside-")),
-    );
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), "eve-eval-outside-")));
     writeFileSync(
       join(outside, "owner.json"),
       `${JSON.stringify({ createdAt: new Date().toISOString(), pid: 1 })}\n`,
@@ -126,31 +144,6 @@ describe("Eve eval resource lifecycle", () => {
   });
 
   it("releases the listener and permits an immediate same-port restart", async () => {
-    const startServer = async (port: number) => {
-      const child = spawn(
-        process.execPath,
-        [
-          "-e",
-          [
-            'const { createServer } = require("node:net");',
-            "const server = createServer();",
-            "server.listen(Number(process.argv[1]), '127.0.0.1', () => process.send(server.address().port));",
-            "process.on('SIGTERM', () => server.close(() => process.exit(143)));",
-          ].join(""),
-          String(port),
-        ],
-        {
-          detached: process.platform !== "win32",
-          stdio: ["ignore", "ignore", "ignore", "ipc"],
-        },
-      );
-      const ready = await new Promise<number>((resolveReady, reject) => {
-        child.once("error", reject);
-        child.once("message", (message) => resolveReady(Number(message)));
-      });
-      return { child, port: ready };
-    };
-
     const signals = new EventEmitter();
     const first = await startServer(0);
     const firstAuthorization = new PassThrough();
@@ -184,19 +177,17 @@ describe("Eve eval resource lifecycle", () => {
       signalCode: { value: null, writable: true },
       pid: { value: 54_589 },
     });
-    const directSignals: Array<NodeJS.Signals | number | undefined> = [];
+    const directSignals: (NodeJS.Signals | number | undefined)[] = [];
     child.kill = ((signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
       return true;
     }) as ChildProcess["kill"];
-    const groupSignals: Array<Parameters<typeof process.kill>[1]> = [];
-    const kill = vi
-      .spyOn(process, "kill")
-      .mockImplementation((_pid, signal) => {
-        groupSignals.push(signal);
-        if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
-        return true;
-      });
+    const groupSignals: Parameters<typeof process.kill>[1][] = [];
+    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
+      groupSignals.push(signal);
+      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+      return true;
+    });
 
     try {
       const exit = waitForEveEvalChild({

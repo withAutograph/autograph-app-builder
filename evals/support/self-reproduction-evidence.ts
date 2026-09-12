@@ -37,10 +37,7 @@ export function digest(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-export function evidenceCompletion(
-  exitCode: number | null,
-  records: Record<string, unknown>[],
-) {
+export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
   if (exitCode !== 0) return { status: "failed", reason: "Native eval failed or was interrupted." };
   if (!records.some((record) => record.kind === "eval-completed"))
     return {

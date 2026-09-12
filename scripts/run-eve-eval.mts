@@ -137,10 +137,7 @@ if (realSandbox) {
     const owner = lock.pid === undefined ? "" : ` owned by PID ${lock.pid}`;
     if (lock.status === "removed")
       console.error(`eve eval: removed dead prewarm lock ${lock.lock}${owner}`);
-    else
-      console.error(
-        `eve eval: preserved prewarm lock ${lock.lock}${owner}: ${lock.reason}`,
-      );
+    else console.error(`eve eval: preserved prewarm lock ${lock.lock}${owner}: ${lock.reason}`);
   }
 }
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))

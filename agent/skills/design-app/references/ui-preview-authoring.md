@@ -65,9 +65,7 @@ Pass `appId: "request-review"`, `routes: ["/"]`, this source in `files`, and
       "entry": "src/routes/index.tsx"
     }
   ],
-  "productionComponents": [
-    { "name": "Button", "source": "@autograph/components" }
-  ],
+  "productionComponents": [{ "name": "Button", "source": "@autograph/components" }],
   "productionCompositions": [],
   "productionIcons": [],
   "fixtureFacts": [

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  uiPreviewInputSchema,
-  uiPreviewSourceDigest,
-  validateUiPreview,
-} from "./ui-preview";
+import { uiPreviewInputSchema, uiPreviewSourceDigest, validateUiPreview } from "./ui-preview";
 import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 const preview = {
@@ -132,11 +128,7 @@ describe("component-backed UI preview policy", () => {
             },
           ],
         }),
-      ).toThrow(
-        new Error(
-          "Local workflow components must compose public Arrusted primitives.",
-        ),
-      );
+      ).toThrow(new Error("Local workflow components must compose public Arrusted primitives."));
     },
   );
 

@@ -1,20 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
-import {
-  chmodSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-} from "node:fs";
-import {
-  lstat,
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  rm,
-} from "node:fs/promises";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
+import { lstat, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Duplex } from "node:stream";
@@ -22,8 +9,8 @@ import type { Duplex } from "node:stream";
 type EvalSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  on(signal: EvalSignal, listener: () => void): unknown;
-  off(signal: EvalSignal, listener: () => void): unknown;
+  on: (signal: EvalSignal, listener: () => void) => unknown;
+  off: (signal: EvalSignal, listener: () => void) => unknown;
 }>;
 
 export type EveEvalPrewarmLockReceipt = Readonly<{
@@ -34,12 +21,7 @@ export type EveEvalPrewarmLockReceipt = Readonly<{
 }>;
 
 function isErrno(error: unknown, code: string) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === code
-  );
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
@@ -90,12 +72,12 @@ async function readLockOwner(lock: string) {
   const info = await lstat(ownerPath);
   if (!info.isFile() || !ownerBound(info))
     throw new Error("owner.json was not an owner-bound regular file");
-  const source = await readFile(ownerPath, "utf8");
+  const source = await readFile(ownerPath, "utf-8");
   const value = JSON.parse(source) as unknown;
   if (
     typeof value !== "object" ||
     value === null ||
-    Object.keys(value).sort().join(",") !== "createdAt,pid"
+    Object.keys(value).toSorted().join(",") !== "createdAt,pid"
   )
     throw new Error("owner.json did not match Eve's lock schema");
   const owner = value as { createdAt?: unknown; pid?: unknown };
@@ -121,18 +103,9 @@ export async function reconcileDeadEveEvalPrewarmLocks(
 ): Promise<readonly EveEvalPrewarmLockReceipt[]> {
   const canonicalRoot = await realpath(appRoot);
   const rootInfo = await lstat(canonicalRoot);
-  if (
-    resolve(appRoot) !== canonicalRoot ||
-    !rootInfo.isDirectory() ||
-    !ownerBound(rootInfo)
-  )
+  if (resolve(appRoot) !== canonicalRoot || !rootInfo.isDirectory() || !ownerBound(rootInfo))
     throw new Error("The Eve eval application root was not owner-bound.");
-  const locksRoot = join(
-    canonicalRoot,
-    ".eve",
-    "sandbox-cache",
-    "template-locks",
-  );
+  const locksRoot = join(canonicalRoot, ".eve", "sandbox-cache", "template-locks");
   let backends;
   try {
     backends = await readdir(locksRoot, { withFileTypes: true });
@@ -141,23 +114,15 @@ export async function reconcileDeadEveEvalPrewarmLocks(
     throw error;
   }
   const receipts: EveEvalPrewarmLockReceipt[] = [];
-  for (const backend of backends.toSorted((left, right) =>
-    left.name.localeCompare(right.name),
-  )) {
+  for (const backend of backends.toSorted((left, right) => left.name.localeCompare(right.name))) {
     const backendPath = join(locksRoot, backend.name);
     if (!backend.isDirectory() || backend.isSymbolicLink()) continue;
     const entries = await readdir(backendPath, { withFileTypes: true });
-    for (const entry of entries.toSorted((left, right) =>
-      left.name.localeCompare(right.name),
-    )) {
+    for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       if (!entry.name.endsWith(".lock")) continue;
       const lock = join(backendPath, entry.name);
       const display = relative(canonicalRoot, lock);
-      if (
-        !entry.isDirectory() ||
-        entry.isSymbolicLink() ||
-        !contained(locksRoot, lock)
-      ) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !contained(locksRoot, lock)) {
         receipts.push({
           lock: display,
           status: "preserved",
@@ -168,8 +133,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
       let owner;
       try {
         const lockInfo = await lstat(lock);
-        if (!ownerBound(lockInfo))
-          throw new Error("lock directory was not owner-bound");
+        if (!ownerBound(lockInfo)) throw new Error("lock directory was not owner-bound");
         owner = await readLockOwner(lock);
       } catch (error) {
         receipts.push({
@@ -207,7 +171,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
           movedOwner.source !== owner.source ||
           !sameFile(movedOwner.info, owner.info)
         ) {
-          await rename(quarantine, lock).catch(() => {});
+          await rename(quarantine, lock).catch(() => undefined);
           throw new Error("lock owner changed while it was quarantined");
         }
         await rm(quarantine, { recursive: true });
@@ -218,8 +182,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
           lock: display,
           pid: owner.pid,
           status: "preserved",
-          reason:
-            error instanceof Error ? error.message : "lock removal failed",
+          reason: error instanceof Error ? error.message : "lock removal failed",
         });
       }
     }
@@ -269,7 +232,7 @@ export function waitForEveEvalChild(
 ): Promise<number> {
   const signalTarget = input.signalTarget ?? process;
   const gracefulTimeoutMs = input.gracefulTimeoutMs ?? 16_000;
-  return new Promise<number>((resolveExit, reject) => {
+  return new Promise<number>((resolve, reject) => {
     let requestedSignal: EvalSignal | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -318,7 +281,7 @@ export function waitForEveEvalChild(
       // share the same descendant cleanup boundary.
       forceGroup();
       cleanup();
-      resolveExit(code ?? signalExitCode(requestedSignal ?? signal));
+      resolve(code ?? signalExitCode(requestedSignal ?? signal));
     };
     signalTarget.on("SIGINT", interrupt);
     signalTarget.on("SIGTERM", terminate);

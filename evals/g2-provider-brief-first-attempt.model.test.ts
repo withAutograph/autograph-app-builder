@@ -33,7 +33,7 @@ async function productionAppSpecInstructions(): Promise<string> {
     "agent/skills/design-app/references/app-spec.md",
   ];
   const contents = await Promise.all(
-    paths.map((path) => readFile(resolve(repositoryRoot, path), "utf8")),
+    paths.map((path) => readFile(resolve(repositoryRoot, path), "utf-8")),
   );
   return contents.join("\n\n");
 }
@@ -43,10 +43,7 @@ function terminalBuildHandoff(raw: string): {
   hostedResources: string[];
 } {
   const match = /\n## Build handoff\n\n```json\n([\s\S]+)\n```\s*$/u.exec(raw);
-  expect(
-    match,
-    "raw output ends with the exact Build handoff block",
-  ).not.toBeNull();
+  expect(match, "raw output ends with the exact Build handoff block").not.toBeNull();
   const parsed = JSON.parse(match?.[1] ?? "null") as {
     optionalCapabilities?: {
       integrations?: unknown;
@@ -54,9 +51,7 @@ function terminalBuildHandoff(raw: string): {
     };
   };
   expect(parsed.optionalCapabilities?.integrations).toEqual(expect.any(Array));
-  expect(parsed.optionalCapabilities?.hostedResources).toEqual(
-    expect.any(Array),
-  );
+  expect(parsed.optionalCapabilities?.hostedResources).toEqual(expect.any(Array));
   return {
     integrations: parsed.optionalCapabilities?.integrations as string[],
     hostedResources: parsed.optionalCapabilities?.hostedResources as string[],
@@ -66,15 +61,13 @@ function terminalBuildHandoff(raw: string): {
 describe.skipIf(!optIn)("G2 provider-named product brief", () => {
   test("authors a valid provider-neutral AppSpec on the first model attempt", async () => {
     if (modelId === undefined || modelId.length === 0) {
-      throw new Error(
-        "Set APP_BUILDER_G2_MODEL_ID when APP_BUILDER_G2_MODEL_EVAL=1.",
-      );
+      throw new Error("Set APP_BUILDER_G2_MODEL_ID when APP_BUILDER_G2_MODEL_EVAL=1.");
     }
 
     const { steps, toolCalls } = await generateText({
       model: modelId,
       maxRetries: 0,
-      maxOutputTokens: 8_000,
+      maxOutputTokens: 8000,
       system: await productionAppSpecInstructions(),
       tools: {
         record_prototype_artifact: tool({
@@ -107,23 +100,15 @@ ${productBrief}`,
     const rawFirstOutput = artifact.content;
     expect(validateBuildReadyAppSpec(rawFirstOutput)).toEqual({ valid: true });
 
-    const headings = [...rawFirstOutput.matchAll(/^## (.+)$/gmu)].map(
-      ([, heading]) => heading,
-    );
+    const headings = [...rawFirstOutput.matchAll(/^## (.+)$/gmu)].map(([, heading]) => heading);
     expect(headings).toEqual(REQUIRED_APP_SPEC_HEADINGS);
 
     const capabilities = terminalBuildHandoff(rawFirstOutput);
     expect(capabilities.integrations.length).toBeGreaterThanOrEqual(2);
-    expect([
-      ...capabilities.integrations,
-      ...capabilities.hostedResources,
-    ]).toEqual(
+    expect([...capabilities.integrations, ...capabilities.hostedResources]).toEqual(
       expect.not.arrayContaining([expect.stringMatching(/github|vercel/iu)]),
     );
-    const productProse = rawFirstOutput.slice(
-      0,
-      rawFirstOutput.lastIndexOf("## Build handoff"),
-    );
+    const productProse = rawFirstOutput.slice(0, rawFirstOutput.lastIndexOf("## Build handoff"));
     expect(productProse).toMatch(/\bGitHub\b/u);
     expect(productProse).toMatch(/\bVercel\b/u);
     expect(rawFirstOutput).not.toMatch(

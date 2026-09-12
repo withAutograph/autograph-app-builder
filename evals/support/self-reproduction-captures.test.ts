@@ -43,7 +43,7 @@ describe("paired capture orchestration", () => {
       expect(close).toHaveBeenCalledTimes(30);
       expect(newContext.mock.calls).toHaveLength(30);
       const receipt = JSON.parse(
-        await readFile(join(root, "parity/captures/desktop/keyboard/candidate.json"), "utf8"),
+        await readFile(join(root, "parity/captures/desktop/keyboard/candidate.json"), "utf-8"),
       );
       expect(receipt.assertions.every((item: { passed: boolean }) => !item.passed)).toBe(true);
       expect(result.reference[0]!.artifacts).not.toEqual(result.candidate[0]!.artifacts);
