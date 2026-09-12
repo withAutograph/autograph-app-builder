@@ -190,13 +190,13 @@ try {
       basename(receipt.package.checksums),
       basename(receipt.package.receipt),
       "promotion-receipt.json",
-    ].sort();
+    ].toSorted();
     if (
       metadata.tagName !== `v${receipt.package.version}` ||
       metadata.isPrerelease !== true ||
       metadata.targetCommitish !== receipt.builder.commit ||
       !Array.isArray(metadata.assets) ||
-      JSON.stringify(metadata.assets.map(({ name }) => name).sort()) !==
+      JSON.stringify(metadata.assets.map(({ name }) => name).toSorted()) !==
         JSON.stringify(expectedAssetNames)
     )
       throw new Error("Existing GitHub release did not match the promotion.");

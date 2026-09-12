@@ -39,7 +39,7 @@ function SessionAppContainer() {
     result?.inputRequests
       ?.filter((request) => request.kind === "authorization")
       .map((request) => request.requestId)
-      .sort()
+      .toSorted()
       .join(":") ?? "";
 
   const refresh = useCallback(async () => {

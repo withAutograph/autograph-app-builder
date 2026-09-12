@@ -121,7 +121,7 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
   return value && node.nodeName
     ? {
         tag: node.nodeName.toLowerCase(),
-        classes: [...new Set(value.split(/\s+/).filter(Boolean))].sort(),
+        classes: [...new Set(value.split(/\s+/).filter(Boolean))].toSorted(),
       }
     : undefined;
 }

@@ -121,7 +121,7 @@ function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
       .join(",")}}`;
   const primitive = JSON.stringify(value);
@@ -703,7 +703,7 @@ export async function runHostedProof(input: {
   });
   if (iterated.page.status !== "completed")
     throw new Error("Iteration did not reach a successful completed state.");
-  const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].sort();
+  const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].toSorted();
   if (
     JSON.stringify(observedApprovalPhases) !==
     JSON.stringify(["appspec", "change_set", "publication"])

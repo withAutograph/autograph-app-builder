@@ -26,7 +26,9 @@ export const betterAuthMembershipReadBackSchema = z
   .strict();
 
 function canonicalRows(rows: z.infer<typeof migrationRowSchema>[]) {
-  return [...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return [...rows].toSorted((left, right) =>
+    JSON.stringify(left).localeCompare(JSON.stringify(right)),
+  );
 }
 
 function sha256(value: string): `sha256:${string}` {

@@ -113,8 +113,8 @@ function git(repositoryRoot: string, ...args: string[]) {
 }
 
 function exactKeys(actual: Record<string, string>, expected: string[]) {
-  const keys = Object.keys(actual).sort();
-  if (JSON.stringify(keys) !== JSON.stringify([...expected].sort()))
+  const keys = Object.keys(actual).toSorted();
+  if (JSON.stringify(keys) !== JSON.stringify([...expected].toSorted()))
     throw new Error("Receipt file inventory was not exact.");
 }
 

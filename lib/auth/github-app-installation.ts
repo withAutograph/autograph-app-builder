@@ -490,7 +490,7 @@ function githubCallbackDiagnostic(url: string): GitHubCallbackDiagnostic {
   const error = query.get("error");
   const unknownKeys = [...new Set([...query.keys()].filter((key) => !known.has(key)))];
   return {
-    queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].sort(),
+    queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].toSorted(),
     keyCounts: Object.fromEntries([...known].map((key) => [key, query.getAll(key).length])),
     unknownKeyCount: unknownKeys.length,
     ...(unknownKeys.length === 0

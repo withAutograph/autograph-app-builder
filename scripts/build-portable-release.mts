@@ -116,7 +116,7 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
 
 const files = new Map<string, Uint8Array>();
 async function collect(directory: string) {
-  for (const entry of (await readdir(directory)).sort()) {
+  for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
     const info = await stat(path);
     if (info.isDirectory()) await collect(path);
@@ -212,7 +212,7 @@ await writeFile(
 );
 const marketplaceFiles = new Map<string, Uint8Array>();
 async function collectMarketplace(directory: string) {
-  for (const entry of (await readdir(directory)).sort()) {
+  for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
     const info = await stat(path);
     if (info.isDirectory()) await collectMarketplace(path);
@@ -226,7 +226,7 @@ await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);
 
 const auxiliaryFiles = new Map<string, Uint8Array>();
 for (const directory of [mockRoot, clientRoot]) {
-  for (const entry of (await readdir(directory)).sort()) {
+  for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
     auxiliaryFiles.set(relative(output, path), await readFile(path));
   }
@@ -251,10 +251,10 @@ const receipt = {
     }),
   ),
   coreFiles: Object.fromEntries(
-    [...files].sort().map(([path, content]) => [path, sha256(content)]),
+    [...files].toSorted().map(([path, content]) => [path, sha256(content)]),
   ),
   auxiliaryFiles: Object.fromEntries(
-    [...auxiliaryFiles].sort().map(([path, content]) => [path, sha256(content)]),
+    [...auxiliaryFiles].toSorted().map(([path, content]) => [path, sha256(content)]),
   ),
   tools,
 };

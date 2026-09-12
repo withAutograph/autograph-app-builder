@@ -52,7 +52,7 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
         };
       }),
   );
-  return cases.sort((left, right) => left.id.localeCompare(right.id));
+  return cases.toSorted((left, right) => left.id.localeCompare(right.id));
 }
 
 export async function readDesignCase(id: string, root?: string) {

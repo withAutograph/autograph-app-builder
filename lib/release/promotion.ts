@@ -281,7 +281,7 @@ export async function inspectOciCandidateArchive(path: string) {
 
 async function treeEntries(root: string, current = root): Promise<string[]> {
   const paths: string[] = [];
-  for (const entry of (await readdir(current, { withFileTypes: true })).sort((left, right) =>
+  for (const entry of (await readdir(current, { withFileTypes: true })).toSorted((left, right) =>
     left.name.localeCompare(right.name),
   )) {
     const path = join(current, entry.name);

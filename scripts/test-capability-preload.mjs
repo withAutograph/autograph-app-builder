@@ -86,7 +86,7 @@ function exactKeys(value, keys) {
   return (
     typeof value === "object" &&
     value !== null &&
-    Object.keys(value).sort().join(",") === [...keys].sort().join(",")
+    Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
   );
 }
 function readFdFrame() {

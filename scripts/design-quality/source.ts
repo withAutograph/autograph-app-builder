@@ -39,7 +39,7 @@ const structuralLiteral =
 const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/;
 
 function unique(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+  return [...new Set(values)].toSorted((left, right) => left.localeCompare(right));
 }
 
 function normalise(value: string): string {
@@ -758,7 +758,7 @@ export function analyzeSource({
   const uniqueRefs = unique(tokenRefs);
 
   return {
-    imports: imports.sort(
+    imports: imports.toSorted(
       (left, right) =>
         left.path.localeCompare(right.path) ||
         left.source.localeCompare(right.source) ||
@@ -770,7 +770,7 @@ export function analyzeSource({
     generatedLiterals,
     matchingLiterals,
     unknownLiterals,
-    observations: observations.sort((left, right) => left.id.localeCompare(right.id)),
+    observations: observations.toSorted((left, right) => left.id.localeCompare(right.id)),
     implementationDiagnostics,
     limitations: unique(limitations),
   };

@@ -69,7 +69,7 @@ function ruleSignature(
       (declaration) =>
         `${declaration.prop}\u0000${declaration.value.trim()}\u0000${Boolean(declaration.important)}`,
     )
-    .sort()
+    .toSorted()
     .join("\u0001")}`;
 }
 

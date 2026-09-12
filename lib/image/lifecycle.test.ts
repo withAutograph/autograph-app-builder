@@ -958,7 +958,7 @@ wait
       expect(
         Object.keys(invocations[0]!.environment)
           .filter((key) => key !== "__CF_USER_TEXT_ENCODING")
-          .sort(),
+          .toSorted(),
       ).toEqual(
         [
           "APP_BUILDER_GH_CONFIG_DIGEST",
@@ -977,7 +977,7 @@ wait
           "LANG",
           "NODE_ENV",
           "PATH",
-        ].sort(),
+        ].toSorted(),
       );
       expect(invocations[0]!.environment).toMatchObject({
         APP_BUILDER_GHCR_USERNAME: "withAutograph",

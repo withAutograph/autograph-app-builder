@@ -62,7 +62,7 @@ export function assertBoundGhcrPayload(
     throw new Error("GHCR provider returned malformed output.");
   const record = parsed as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !== "Secret,ServerURL,Username" ||
+    Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
     record.ServerURL !== registry ||
     record.Username !== expectedUsername ||
     typeof record.Secret !== "string" ||
@@ -101,7 +101,7 @@ export function assertVerifiedGhcrLoginPayload(
     throw new Error("GitHub keyring verification returned malformed output.");
   const record = parsed as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !== "Username,identityDigest,provenanceDigest" ||
+    Object.keys(record).toSorted().join(",") !== "Username,identityDigest,provenanceDigest" ||
     record.Username !== expectedUsername ||
     record.provenanceDigest !== expectedProvenanceDigest ||
     record.identityDigest !== expectedIdentityDigest
@@ -149,7 +149,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     throw new Error("GitHub authentication status was malformed.");
   const value = record as Record<string, unknown>;
   if (
-    Object.keys(value).sort().join(",") !==
+    Object.keys(value).toSorted().join(",") !==
       "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
     value.gitProtocol !== "https" ||

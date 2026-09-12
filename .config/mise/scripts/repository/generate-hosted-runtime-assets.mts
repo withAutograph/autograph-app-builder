@@ -26,7 +26,7 @@ function listRegularFiles(directory: string, relativeDirectory = "."): string[] 
 }
 
 const skillEntries = listRegularFiles(skillSourceRoot)
-  .sort((left, right) => left.localeCompare(right))
+  .toSorted((left, right) => left.localeCompare(right))
   .map((path) => ({
     path,
     content: readFileSync(join(skillSourceRoot, path), "utf8"),

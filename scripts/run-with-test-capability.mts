@@ -54,7 +54,7 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
     typeof profile !== "object" ||
     profile === null ||
     !Object.isFrozen(profile) ||
-    Object.keys(profile).sort().join(",") !== "image,profile,sourceRoot,version" ||
+    Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   )
     return undefined;
@@ -230,7 +230,7 @@ export async function runWithTestCapability(options: {
         context?: unknown;
       };
       if (
-        Object.keys(request).sort().join(",") !== "context,nonce,version" ||
+        Object.keys(request).toSorted().join(",") !== "context,nonce,version" ||
         request.version !== 2 ||
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||

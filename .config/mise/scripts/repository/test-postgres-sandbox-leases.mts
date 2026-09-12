@@ -110,7 +110,7 @@ try {
     acquire("user_1", "session_1"),
     acquire("user_1", "session_2"),
   ]);
-  assert.deepEqual(sameSubject.map(({ disposition }) => disposition).sort(), [
+  assert.deepEqual(sameSubject.map(({ disposition }) => disposition).toSorted(), [
     "acquired",
     "acquired",
   ]);

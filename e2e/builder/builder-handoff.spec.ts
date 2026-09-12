@@ -345,7 +345,7 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       const config = JSON.parse(
         Buffer.from(installUrl.searchParams.get("config")!, "base64").toString("utf8"),
       );
-      expect(Object.keys(config).sort()).toEqual(["auth", "url"]);
+      expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
       expect(Object.keys(config.auth)).toEqual(["CLIENT_ID"]);
       expect(config.auth.CLIENT_ID).toBe(cursorClientId);

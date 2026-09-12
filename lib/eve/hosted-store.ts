@@ -264,7 +264,7 @@ function canonicalRecordValue(value: unknown): string {
   }
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`)
       .join(",")}}`;
   }

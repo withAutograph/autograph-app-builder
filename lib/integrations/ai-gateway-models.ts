@@ -50,7 +50,7 @@ export async function loadGatewayModels(input?: {
           zdr: model.zdr,
         }),
       )
-      .sort((left, right) => left.name.localeCompare(right.name));
+      .toSorted((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) throw new Error("gateway-models-empty");
     const defaultModelId = entries.some((entry) => entry.id === activeBuilderModelId)
       ? activeBuilderModelId

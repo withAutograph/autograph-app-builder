@@ -69,7 +69,7 @@ export default defineDynamic({
           );
           const availablePaths = [...allowed]
             .filter((path) => path.startsWith(prefix))
-            .sort()
+            .toSorted()
             .slice(0, 512);
           let total = 0;
           const files = [];

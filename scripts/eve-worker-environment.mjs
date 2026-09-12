@@ -95,7 +95,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   if (
     typeof value !== "object" ||
     value === null ||
-    Object.keys(value).sort().join(",") !==
+    Object.keys(value).toSorted().join(",") !==
       [
         "appRoot",
         "baseUrl",
@@ -107,7 +107,7 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
         "transportSecret",
         "version",
       ]
-        .sort()
+        .toSorted()
         .join(",") ||
     value.version !== 1 ||
     value.appRoot !== expectedAppRoot

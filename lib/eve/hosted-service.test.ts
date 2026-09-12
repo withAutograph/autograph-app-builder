@@ -693,8 +693,8 @@ describe("hosted Eve service core", () => {
       limit: 10,
     });
     expect(
-      [...pageOne.sessions, ...pageTwo.sessions].map(({ sessionId }) => sessionId).sort(),
-    ).toEqual([first.result.sessionId, second.sessionId].sort());
+      [...pageOne.sessions, ...pageTwo.sessions].map(({ sessionId }) => sessionId).toSorted(),
+    ).toEqual([first.result.sessionId, second.sessionId].toSorted());
     expect(JSON.stringify([pageOne, pageTwo])).not.toContain(other.result.sessionId);
   });
 
