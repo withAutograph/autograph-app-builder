@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, useEffect } from "react";
+import { act, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -19,22 +19,34 @@ let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 function Harness({
   outbox,
   save,
+  onAcknowledged,
 }: {
   outbox: BuilderDraftOutbox<Snapshot>;
   save: Parameters<typeof useBuilderDraftAutosave<Snapshot>>[0]["save"];
+  onAcknowledged?: Parameters<typeof useBuilderDraftAutosave<Snapshot>>[0]["onAcknowledged"];
 }) {
-  const value = useBuilderDraftAutosave({ outbox, save, debounceMs: 10_000 });
+  const value = useBuilderDraftAutosave({ outbox, save, onAcknowledged, debounceMs: 10_000 });
   useEffect(() => {
     autosave = value;
   }, [value]);
   return null;
 }
 
-async function render(props: Parameters<typeof Harness>[0]) {
+async function render(props: Parameters<typeof Harness>[0], strict = false) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root?.render(<Harness {...props} />));
+  await act(async () =>
+    root?.render(
+      strict ? (
+        <StrictMode>
+          <Harness {...props} />
+        </StrictMode>
+      ) : (
+        <Harness {...props} />
+      ),
+    ),
+  );
   if (!autosave) throw new Error("autosave-harness-not-ready");
   return autosave;
 }
@@ -49,6 +61,63 @@ afterEach(async () => {
 });
 
 describe("useBuilderDraftAutosave", () => {
+  it("drains a snapshot queued after the save loop completes but before flush resumes", async () => {
+    const outbox: BuilderDraftOutbox<Snapshot> = {
+      read: vi.fn(),
+      write: vi.fn(),
+      clear: vi.fn(),
+      clearIfMutationId: vi.fn(async () => true),
+    };
+    const save = vi.fn(async ({ mutationId, snapshot }) => ({
+      mutationId,
+      revision: snapshot.brief === "first" ? 1 : 2,
+    }));
+    const value = await render({
+      outbox,
+      save,
+      onAcknowledged: ({ revision }) => {
+        if (revision === 1)
+          queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
+      },
+    });
+    await act(async () => {
+      value.schedule({ brief: "first" });
+      await value.flush();
+      expect(save).toHaveBeenCalledTimes(2);
+    });
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ snapshot: { brief: "completion-window" } }),
+    );
+  });
+
+  it("restores pending recovery and reports acknowledgements after StrictMode effect replay", async () => {
+    const entry = {
+      version: 1 as const,
+      mutationId: "recovered",
+      snapshot: { brief: "recovered" },
+      createdAt: 1,
+      baseRevision: 0,
+    };
+    const outbox: BuilderDraftOutbox<Snapshot> = {
+      read: vi.fn(async () => entry),
+      write: vi.fn(),
+      clear: vi.fn(),
+      clearIfMutationId: vi.fn(async () => true),
+    };
+    const save = vi.fn(async ({ mutationId }) => ({
+      mutationId,
+      revision: 1,
+      savedAt: "2030-01-01T00:00:00.000Z",
+    }));
+    const value = await render({ outbox, save }, true);
+    await act(async () => {
+      await value.resumePending();
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(autosave?.status).toBe("saved");
+    expect(autosave?.lastSavedAt).toBe("2030-01-01T00:00:00.000Z");
+  });
+
   it("waits for the newest queued checkpoint before a provider flush resolves", async () => {
     let resolveFirst: (() => void) | undefined;
     const firstSave = new Promise<void>((resolve) => {
