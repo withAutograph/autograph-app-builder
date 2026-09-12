@@ -8,7 +8,7 @@ function previewHostname(value: string | undefined) {
     !value.endsWith(".vercel.app") ||
     !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.vercel\.app$/u.test(value)
   )
-    return undefined;
+    return;
   return value;
 }
 
