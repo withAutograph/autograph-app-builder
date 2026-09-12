@@ -104,6 +104,21 @@ routes, catalog gaps, and one synchronized manifest. The manifest inventories:
 - unresolved questions that could alter the visible experience; and
 - the future production meaning of visible elements.
 
+Before authoring the first preview, read `references/ui-preview-authoring.md`
+with `read_skill_reference`. Resolve the public aliases through the prepared
+repository's `tsconfig.json` or package exports, then follow re-exports to the
+selected component implementations and stories with `inspect_repository`.
+Use exact exported names and observed props. The preview inventory supports
+capitalized component, composition, and icon names only; package helpers such
+as `buttonClassName` are not preview imports even if the package exports them.
+Use the public component's API instead. Inventory every named public import
+under its exact source; the manifest declares usage and cannot create an export.
+
+Do not author raw `<button>`, `<input>`, `<select>`, `<textarea>`, `<dialog>`, or
+`<table>` elements, including inline in route files. Use their discovered public
+Arrusted components or compositions. Plain layout and text elements may arrange
+those primitives. Keep `catalogGaps` empty and adapt to the available catalog.
+
 Do not add local component implementations under `src/components/` or elsewhere.
 Route entries may wire fixtures, event handlers, and state through the existing
 components' public APIs. Preserve stated decisions across revisions and update

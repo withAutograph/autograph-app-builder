@@ -16,6 +16,11 @@ ${renewalReviewDesignPrompt}`);
 
     t.succeeded();
     t.toolOrder(["inspect_source", "prepare_workspace", "record_ui_preview"]);
+    // A successful retry must not hide an invalid first preview. The default
+    // calledTool matcher counts completed calls only.
+    t.calledTool("record_ui_preview", { status: "failed", count: 0 });
+    t.calledTool("record_ui_preview", { status: "rejected", count: 0 });
+    t.calledTool("record_ui_preview", { count: 1 });
     t.calledTool("record_ui_preview", {
       input: {
         routes: ["/"],

@@ -19,7 +19,7 @@ import prepareWorkspace from "./prepare_workspace";
 
 export default defineTool({
   description:
-    "Create or revise the Browser prototype from React source composed only from current Arrusted public components and compositions. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route (for example #/employees), preserving the preview pathname; the renderer reacts to hashchange, not pathname-only pushState. Every enabled action must produce its intended fixture-backed visible result. Follow design-app references/interactions.md and verify the rendered controls in the Browser; compilation alone does not prove they work. When revising, set baseRevision to the prior UI preview revision returned by this tool, never an outer artifact or document digest. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
+    "Create or revise the Browser prototype from React source composed only from current Arrusted public components and compositions. Before the first call, inspect_repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; lowercase package helpers such as buttonClassName are unsupported preview imports even when exported by the package. Use Button and its public props instead. Never author raw button, input, select, textarea, dialog, or table JSX, even inline in route files. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route (for example #/employees), preserving the preview pathname; the renderer reacts to hashchange, not pathname-only pushState. Every enabled action must produce its intended fixture-backed visible result. Follow design-app references/interactions.md and verify the rendered controls in the Browser; compilation alone does not prove they work. When revising, set baseRevision to the prior UI preview revision returned by this tool, never an outer artifact or document digest. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
   inputSchema: uiPreviewInputSchema,
   async execute(input, ctx) {
     validateUiPreview(input);
@@ -30,18 +30,20 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
     if (current.phase === "empty")
-      throw new Error("Prepare the Arrusted source before creating a UI preview.");
+      throw new Error(
+        "Prepare the Arrusted source before creating a UI preview.",
+      );
     if (current.phase === "validation_pending")
-      throw new Error("Finish the running build check before revising the preview.");
+      throw new Error(
+        "Finish the running build check before revising the preview.",
+      );
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
       prior !== undefined &&
       input.baseRevision !== undefined &&
       input.baseRevision !== prior?.revision
     )
-      throw new Error(
-        `The UI preview revision is stale. Retry with the current UI preview revision: ${prior.revision}`,
-      );
+      throw new Error("The UI preview revision is stale.");
     const sourceDigest = uiPreviewSourceDigest(input);
     const revision = sourceDigest;
     const previewHtml = await renderUiPreview(input, await ctx.getSandbox());
@@ -61,7 +63,9 @@ export default defineTool({
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
       routes: [...input.routes].toSorted(),
-      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
+      files: [...input.files].toSorted((left, right) =>
+        left.path.localeCompare(right.path),
+      ),
       manifest: input.manifest,
       catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
         left.path.localeCompare(right.path),
@@ -78,7 +82,9 @@ export default defineTool({
         preparedByCallId: current.preparedByCallId,
         workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        ...(current.githubSource === undefined
+          ? {}
+          : { githubSource: current.githubSource }),
         artifacts: recorded.artifacts,
         uiPreview,
       }),
