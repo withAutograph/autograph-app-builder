@@ -1,3 +1,4 @@
+// oxlint-disable-next-line jsdoc/check-tag-names -- Vitest file-environment pragma.
 /** @vitest-environment jsdom */
 
 import { act } from "react";
