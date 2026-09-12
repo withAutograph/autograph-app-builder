@@ -141,7 +141,7 @@ export function createRepositoryAccessContinuationService(input: {
         authority: hostedTenantAuthoritySchema.parse(value.authority),
         now: now(),
       });
-      if (!record) return undefined;
+      if (!record) return;
       const callback = new URL(record.callbackUrl);
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");
