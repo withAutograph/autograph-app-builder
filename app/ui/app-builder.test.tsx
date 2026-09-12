@@ -89,12 +89,12 @@ const draftFetch = vi.hoisted(() =>
       draftId: string;
       expectedRevision: number;
     };
-    return new Response(
-      JSON.stringify({
+    return Response.json(
+      {
         draftId: input.draftId,
         revision: input.expectedRevision + 1,
         updatedAt: "2030-01-01T00:00:00.000Z",
-      }),
+      },
       { status: 200 },
     );
   }),

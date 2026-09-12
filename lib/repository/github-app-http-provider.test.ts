@@ -164,7 +164,7 @@ function freshProposal(): FreshRepositoryProposal {
 }
 
 function json(value: unknown, status = 200, requestId = "REQUEST_1") {
-  return new Response(JSON.stringify(value), {
+  return Response.json(value, {
     status,
     headers: {
       "content-type": "application/json",
