@@ -831,6 +831,7 @@ export function Builder({
   initialBrief,
   generatedNameSeed,
   onCreate,
+  submissionPending = false,
   connectionsEnabled,
   comingSoonEnabled,
   integrations,
@@ -845,7 +846,8 @@ export function Builder({
 }: {
   initialBrief: string;
   generatedNameSeed: string;
-  onCreate: (form: BuilderForm, resumeKey?: string) => void;
+  onCreate: (checkpoint: { draftId: string; revision: number }, intentKey: string) => void;
+  submissionPending?: boolean;
   connectionsEnabled: boolean;
   comingSoonEnabled: boolean;
   integrations: BuilderIntegrationState;
@@ -972,6 +974,8 @@ export function Builder({
     () => false,
   );
   const [draftRecoveryComplete, setDraftRecoveryComplete] = useState(false);
+  const checkpointing = useRef(false);
+  const [preparingSubmission, setPreparingSubmission] = useState(false);
   const interactive = clientHydrated && draftRecoveryComplete;
   const [connectedConnections, setConnectedConnections] = useState<string[]>(
     initialDraft?.connectedConnections ?? [],
@@ -1125,6 +1129,14 @@ export function Builder({
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
+        // Remove only the anonymous brief this mounted session has claimed,
+        // and only after durable acknowledgement. Never erase a newer tab's brief.
+        if (initialBrief) {
+          try {
+            if (sessionStorage.getItem("autograph-app-brief") === initialBrief)
+              sessionStorage.removeItem("autograph-app-brief");
+          } catch {}
+        }
         return {
           mutationId,
           revision: saved.revision,
@@ -1134,7 +1146,7 @@ export function Builder({
         if (!keepalive) pendingActionExpectedRevisions.current.delete(input.expectedRevision);
       }
     },
-    [requestServerSave, saveActiveBuilderDraftAction],
+    [initialBrief, requestServerSave, saveActiveBuilderDraftAction],
   );
   const autosave = useBuilderDraftAutosave({
     outbox: draftOutbox,
@@ -1501,12 +1513,13 @@ export function Builder({
       // Establish the hydrated server/form state as the baseline. The first
       // deliberate edit (including a non-RHF builder control) will differ.
       autosaveSnapshotFingerprint.current = fingerprint;
+      if (initialBrief && !initialDraft) scheduleAutosave(snapshot);
       return;
     }
     if (autosaveSnapshotFingerprint.current === fingerprint) return;
     autosaveSnapshotFingerprint.current = fingerprint;
     scheduleAutosave(snapshot);
-  }, [draftSnapshot, form, scheduleAutosave]);
+  }, [draftSnapshot, form, initialBrief, initialDraft, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
@@ -1528,39 +1541,52 @@ export function Builder({
   };
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (canSubmit && (await builderForm.trigger())) {
+    if (checkpointing.current || submissionPending || !canSubmit) return;
+    checkpointing.current = true;
+    setPreparingSubmission(true);
+    try {
+      if (!(await builderForm.trigger())) return;
       // `useWatch` intentionally updates on React's render cadence. A click
       // immediately after the final input event can therefore observe the
       // prior rendered value here. Read RHF synchronously at this action
       // boundary so the durable handoff cannot be created from a stale
       // generated name (or any other last-keystroke value).
       const currentForm = builderForm.getValues();
-      formSnapshot.current = currentForm;
-      autosave.schedule(draftSnapshot());
+      const appName =
+        currentForm.appName.trim() || appNameFromBrief(currentForm.brief) || randomAppName();
+      const submissionForm: BuilderForm = {
+        ...currentForm,
+        appName,
+        repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
+        githubInstallationId: storageProvider === "github" && gitScope ? gitScope : undefined,
+        vercelInstallationId: deploymentProvider === "vercel" && team ? team : undefined,
+        modelId: preferredModelId,
+      };
+      setForm(submissionForm);
+      autosave.schedule({ ...draftSnapshot(), form: submissionForm });
       await autosave.flush();
       if (await autosave.restorePending()) {
         setDraftSaveError("We couldn’t save your form. Retry saving before creating your app.");
         return;
       }
       setDraftSaveError("");
-      const appName =
-        currentForm.appName.trim() || appNameFromBrief(currentForm.brief) || randomAppName();
       onCreate(
-        {
-          ...currentForm,
-          appName,
-          repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
-          ...(deploymentProvider === "vercel" && team ? { vercelInstallationId: team } : {}),
-          ...(storageProvider === "github" && gitScope ? { githubInstallationId: gitScope } : {}),
-          modelId: preferredModelId,
-        },
-        activeDraftId.current,
+        { draftId: activeDraftId.current, revision: draftRevision.current },
+        JSON.stringify(builderForm.getValues()),
       );
+    } finally {
+      checkpointing.current = false;
+      setPreparingSubmission(false);
     }
   }
 
   return (
-    <main className={styles.authenticatedPage} id="main-content">
+    <main
+      className={styles.authenticatedPage}
+      id="main-content"
+      inert={submissionPending || preparingSubmission}
+      aria-busy={submissionPending || preparingSubmission}
+    >
       <form className={styles.builderCard} onSubmit={submit}>
         <p className={styles.draftStatus} role="status" aria-live="polite">
           {draftSaveError

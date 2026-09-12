@@ -49,6 +49,7 @@ export type BuilderDraftStore = {
     authority: BuilderDraftAuthority;
     draftId: string;
     now: Date;
+    expectedRevision?: number;
   }) => Promise<boolean>;
   deleteInactiveSince: (input: { now: Date; maxAgeMs?: number }) => Promise<number>;
 };
@@ -82,11 +83,21 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
         now: now(),
       });
     },
-    async archive(authorityInput: BuilderDraftAuthority, draftId: string) {
+    async archive(
+      authorityInput: BuilderDraftAuthority,
+      draftId: string,
+      expectedRevision?: number,
+    ) {
       return input.store.archive({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
         draftId: saveActiveBuilderDraftInputSchema.shape.draftId.parse(draftId),
         now: now(),
+        ...(expectedRevision === undefined
+          ? {}
+          : {
+              expectedRevision:
+                saveActiveBuilderDraftInputSchema.shape.expectedRevision.parse(expectedRevision),
+            }),
       });
     },
     /** Invoke only from scheduled maintenance; request paths must never purge drafts. */

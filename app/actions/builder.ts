@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { readPreviewOAuthRuntimeConfig } from "@/lib/auth/preview-oauth-runtime";
+import { getAuthenticatedBuilderDraftContext } from "@/lib/builder-drafts/deployment";
 import {
   getBuilderHandoffDeploymentHandler,
   getBuilderHandoffPageData,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/provisioning/contracts";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
-const handoffContinuationInputSchema = z
+const resolvedHandoffContinuationInputSchema = z
   .object({
     version: z.literal(1),
     requestId: z.string().uuid(),
@@ -47,7 +48,16 @@ const handoffContinuationInputSchema = z
   })
   .strict();
 
+const handoffContinuationInputSchema = resolvedHandoffContinuationInputSchema
+  .omit({ form: true })
+  .extend({
+    draftCheckpoint: z
+      .object({ draftId: z.string().uuid(), revision: z.number().int().positive() })
+      .strict(),
+  });
+
 export type BuilderHandoffContinuationInput = z.infer<typeof handoffContinuationInputSchema>;
+type ResolvedHandoffContinuationInput = z.infer<typeof resolvedHandoffContinuationInputSchema>;
 
 export type BuilderHandoffContinuationState =
   | {
@@ -171,7 +181,10 @@ export async function createBuilderHandoff(input: {
   }>(response, "handoff_unavailable");
 }
 
-function provisioningInput(input: BuilderHandoffContinuationInput, operation: "github" | "vercel") {
+function provisioningInput(
+  input: ResolvedHandoffContinuationInput,
+  operation: "github" | "vercel",
+) {
   return builderProvisionRequestSchema.parse({
     version: 1,
     requestId: input.requestId,
@@ -193,7 +206,7 @@ function provisioningInput(input: BuilderHandoffContinuationInput, operation: "g
 }
 
 function unavailableProvisioning(
-  input: BuilderHandoffContinuationInput,
+  input: ResolvedHandoffContinuationInput,
   code: "feature_disabled" | "provider_unavailable",
 ): BuilderProvisionResponse {
   const result = (provider: "github" | "vercel") => {
@@ -232,7 +245,7 @@ function unavailableProvisioning(
 }
 
 async function createContinuationHandoff(
-  input: BuilderHandoffContinuationInput,
+  input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
 ) {
   return createBuilderHandoff({
@@ -264,9 +277,21 @@ export async function continueBuilderHandoff(
 ): Promise<BuilderHandoffContinuationState> {
   const parsed = handoffContinuationInputSchema.safeParse(untrustedInput);
   if (!parsed.success) return { status: "error" };
-  const input = parsed.data;
-
   try {
+    const context = await getAuthenticatedBuilderDraftContext({
+      environment: process.env,
+      headers: await headers(),
+    });
+    if (!context) return { status: "error" };
+    const { draftCheckpoint, ...request } = parsed.data;
+    const draft = await context.drafts.read(context.authority, draftCheckpoint.draftId);
+    // A newer device revision must never be silently provisioned with an older
+    // device's form. The client refreshes that revision before trying again.
+    if (!draft || draft.revision !== draftCheckpoint.revision) return { status: "error" };
+    const input = resolvedHandoffContinuationInputSchema.parse({
+      ...request,
+      form: draft.record.draft.form,
+    });
     let provisioning = unavailableProvisioning(
       input,
       input.provisioningEnabled ? "provider_unavailable" : "feature_disabled",
@@ -285,6 +310,9 @@ export async function continueBuilderHandoff(
     }
 
     const handoff = await createContinuationHandoff(input, provisioning);
+    // Persistence precedes reset. Conditional archival leaves a newer device
+    // edit active if it completed while this durable handoff was being created.
+    await context.drafts.archive(context.authority, draft.draftId, draft.revision);
     return { status: "ready", provisioning, handoff };
   } catch {
     return { status: "error" };

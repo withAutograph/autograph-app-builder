@@ -76,7 +76,12 @@ function memoryStore(): BuilderDraftStore {
     },
     async archive(input) {
       const row = find(input);
-      if (!row || row.status !== "active") return false;
+      if (
+        !row ||
+        row.status !== "active" ||
+        (input.expectedRevision !== undefined && row.revision !== input.expectedRevision)
+      )
+        return false;
       row.status = "archived";
       row.updatedAt = input.now;
       return true;
@@ -185,6 +190,27 @@ describe("builder draft service", () => {
     await expect(
       service.saveActive(authority, invalid as SaveActiveBuilderDraftInput),
     ).rejects.toThrow();
+  });
+
+  it("archives only the handed-off revision, preserving a newer device edit", async () => {
+    const service = createBuilderDraftService({ store: memoryStore() });
+    await service.saveActive(authority, saveInput());
+    await service.saveActive(
+      authority,
+      saveInput({
+        clientMutationId: secondMutation,
+        expectedRevision: 1,
+        record: record("Newer device edit"),
+      }),
+    );
+    expect(await service.archive(authority, draftId, 1)).toBe(false);
+    expect(await service.readActive(authority)).toMatchObject({
+      revision: 2,
+      record: record("Newer device edit"),
+    });
+    expect(await service.archive(otherAuthority, draftId, 2)).toBe(false);
+    expect(await service.archive(authority, draftId, 2)).toBe(true);
+    expect(await service.readActive(authority)).toBeUndefined();
   });
 
   it("scheduled cleanup removes only inactive active drafts", async () => {

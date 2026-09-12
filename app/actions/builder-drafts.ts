@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import {
   getAuthenticatedBuilderDraftContext,
   readAuthenticatedActiveBuilderDraft,
-  readAuthenticatedBuilderDraft,
 } from "@/lib/builder-drafts/deployment";
 import {
   saveActiveBuilderDraftInputSchema,
@@ -42,17 +41,4 @@ export async function loadActiveBuilderDraft() {
     environment: process.env,
     headers: await headers(),
   });
-}
-
-export async function loadBuilderDraft(draftId: string) {
-  return readAuthenticatedBuilderDraft({
-    environment: process.env,
-    headers: await headers(),
-    draftId,
-  });
-}
-
-export async function clearBuilderDraft(draftId: string) {
-  const value = await context();
-  return value.drafts.archive(value.authority, draftId);
 }
