@@ -1172,25 +1172,31 @@ export function Builder({
       ),
   );
   const draftSnapshot = useCallback(
-    (origin = focusOrigin.current): BuilderDraft => ({
-      version: 1,
-      // A provider redirect can follow the final input event immediately.
-      // Read RHF synchronously so the durable checkpoint always contains that
-      // event even before useWatch has produced the next render.
-      form: formSnapshot.current,
-      team,
-      gitScope,
-      model,
-      zdrOnly,
-      showMoreConnections,
-      search,
-      connectedConnections,
-      storageProvider,
-      deploymentProvider,
-      focusOrigin: origin,
-      appNameEditedByUser: appNameEditedByUser.current,
-      repositoryEditedByUser: repositoryEditedByUser.current,
-    }),
+    (origin = focusOrigin.current): BuilderDraft => {
+      // React Hook Form is the live form authority. `useWatch` deliberately
+      // renders later, and the convenience mirror can be stale while React
+      // processes an input event. Read RHF synchronously at every durable
+      // boundary so autosave, provider redirects, and handoff creation all
+      // checkpoint exactly the values the user just entered.
+      const currentForm = builderForm.getValues();
+      formSnapshot.current = currentForm;
+      return {
+        version: 1,
+        form: currentForm,
+        team,
+        gitScope,
+        model,
+        zdrOnly,
+        showMoreConnections,
+        search,
+        connectedConnections,
+        storageProvider,
+        deploymentProvider,
+        focusOrigin: origin,
+        appNameEditedByUser: appNameEditedByUser.current,
+        repositoryEditedByUser: repositoryEditedByUser.current,
+      };
+    },
     [
       connectedConnections,
       builderForm,
@@ -1566,11 +1572,11 @@ export function Builder({
     if (canSubmit && (await builderForm.trigger())) {
       // `useWatch` intentionally updates on React's render cadence. A click
       // immediately after the final input event can therefore observe the
-      // prior rendered value here, even though RHF and the autosave checkpoint
-      // already contain the current edit. Use the synchronous RHF mirror at
-      // this action boundary so the durable handoff cannot be created from a
-      // stale generated name (or any other last-keystroke value).
-      const currentForm = formSnapshot.current;
+      // prior rendered value here. Read RHF synchronously at this action
+      // boundary so the durable handoff cannot be created from a stale
+      // generated name (or any other last-keystroke value).
+      const currentForm = builderForm.getValues();
+      formSnapshot.current = currentForm;
       autosave.schedule(draftSnapshot());
       await autosave.flush();
       if (await autosave.restorePending()) {
