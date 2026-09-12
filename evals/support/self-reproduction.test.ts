@@ -20,7 +20,7 @@ describe("self-reproduction evaluation", () => {
   });
 
   it("reports unavailable generated output as blocked instead of successful", () => {
-    expect(buildRequirements(undefined).every((item) => item.status === "blocked")).toBe(true);
+    expect(buildRequirements().every((item) => item.status === "blocked")).toBe(true);
   });
 
   it("flags a static mock missing durable workflows", () => {

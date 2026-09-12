@@ -172,7 +172,7 @@ function hostedFixture(
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {
-      if (options.denialFailure?.direction !== direction) return undefined;
+      if (options.denialFailure?.direction !== direction) return;
       if (options.denialFailure.kind === "transport") throw new Error("fixture transport failure");
       if (options.denialFailure.kind === "http500") return new Response("", { status: 500 });
       return rpc(body.id, {
