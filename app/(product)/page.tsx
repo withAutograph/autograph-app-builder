@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { Suspense, ViewTransition } from "react";
+import { ViewTransition } from "react";
+
+import { RouteProviders } from "@/components/route-providers";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import { resolveWorkspaceOnboardingState } from "@/lib/auth/workspace-onboarding";
@@ -174,11 +176,11 @@ async function HomeContent({ searchParams }: PageProps) {
 
 export default function Home(props: PageProps) {
   return (
-    <Suspense fallback={<BuilderLoadingShell />}>
+    <RouteProviders fallback={<BuilderLoadingShell />}>
       {/* Animate navigation, not autosave updates around editable controls. */}
       <ViewTransition update="none">
         <HomeContent {...props} />
       </ViewTransition>
-    </Suspense>
+    </RouteProviders>
   );
 }

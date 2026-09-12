@@ -25,16 +25,72 @@ function CursorMark() {
 }
 
 export function BuildWithSection({
+  bare = false,
   children,
   comingSoonEnabled = false,
   selected,
   onChange,
 }: {
+  bare?: boolean;
   children?: ReactNode;
   comingSoonEnabled?: boolean;
   selected: BuildDestination;
   onChange: (destination: BuildDestination) => void;
 }) {
+  const controls = (
+    <div
+      className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
+      role="radiogroup"
+      aria-label="Build destination"
+    >
+      {comingSoonEnabled ? (
+        <label className={styles.unavailableOption}>
+          <Monitor size={18} aria-hidden="true" />
+          <span>
+            Web Chat <small>Coming soon</small>
+          </span>
+          <input
+            type="radio"
+            name="build-destination"
+            value="web"
+            disabled
+            checked={selected === "web"}
+          />
+        </label>
+      ) : null}
+      <label>
+        <Monitor size={18} aria-hidden="true" />
+        ChatGPT / Codex
+        <input
+          type="radio"
+          name="build-destination"
+          value="codex"
+          required
+          checked={selected === "codex"}
+          onChange={() => onChange("codex")}
+        />
+      </label>
+      <label>
+        <CursorMark />
+        Cursor
+        <input
+          type="radio"
+          name="build-destination"
+          value="cursor"
+          required
+          checked={selected === "cursor"}
+          onChange={() => onChange("cursor")}
+        />
+      </label>
+    </div>
+  );
+  if (bare)
+    return (
+      <>
+        {controls}
+        {children}
+      </>
+    );
   return (
     <>
       <SectionShell
@@ -43,51 +99,7 @@ export function BuildWithSection({
         title="Build with"
         description="Where do you want to build this app?"
       >
-        <div
-          className={`${styles.optionGrid} ${styles.buildDestinationGrid}`}
-          role="radiogroup"
-          aria-label="Build destination"
-        >
-          {comingSoonEnabled ? (
-            <label className={styles.unavailableOption}>
-              <Monitor size={18} aria-hidden="true" />
-              <span>
-                Web Chat <small>Coming soon</small>
-              </span>
-              <input
-                type="radio"
-                name="build-destination"
-                value="web"
-                disabled
-                checked={selected === "web"}
-              />
-            </label>
-          ) : null}
-          <label>
-            <Monitor size={18} aria-hidden="true" />
-            ChatGPT / Codex
-            <input
-              type="radio"
-              name="build-destination"
-              value="codex"
-              required
-              checked={selected === "codex"}
-              onChange={() => onChange("codex")}
-            />
-          </label>
-          <label>
-            <CursorMark />
-            Cursor
-            <input
-              type="radio"
-              name="build-destination"
-              value="cursor"
-              required
-              checked={selected === "cursor"}
-              onChange={() => onChange("cursor")}
-            />
-          </label>
-        </div>
+        {controls}
       </SectionShell>
       {children}
     </>

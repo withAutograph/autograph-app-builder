@@ -19,18 +19,24 @@
 - Loading shells expose meaningful text without duplicate interactive controls.
   Instant-navigation assertions accept either a useful shell or already-prefetched
   content while navigation-time server responses are paused.
+- The authenticated builder is server-composed: `AuthenticatedBuilder` passes
+  `BuilderFormContent` through the client continuation/form boundaries as React
+  nodes. The server owns section fieldsets, headings, descriptions and feature-
+  gated composition; focused client leaves own editable controls and save status.
+  The client form never imports the server content. RHF, revision reconciliation,
+  outbox recovery and provider flush sequencing remain in the client controller.
+- The anonymous page has a server-rendered header, title and explanatory content
+  around a narrow browser-local brief island. The old monolithic `app-builder.tsx`
+  and its compatibility imports are removed; controls use `SearchCombobox` directly.
+- Shared theme/query providers no longer wait for auth configuration. Request-fresh
+  Better Auth configuration is resolved under route-local Suspense boundaries,
+  exposing the destination's builder, auth, provider or handoff shell on direct
+  loads as well as client navigations. Auth flags are never guessed or cached.
 - `mise run maintenance:builder-drafts` provides the operator entry point for
   abandoned active-draft cleanup. See [maintenance instructions](builder-draft-maintenance.md).
 
 ## Still required to finish the original plan
 
-- Decompose the remaining large client builder into server-rendered content and
-  focused interaction leaves. The smaller authenticated wrapper alone is not
-  full client-island decomposition.
-- Move request-bound shared auth-provider configuration behind an appropriate
-  boundary so direct loads can expose route-specific shells. At present the
-  shared branded shell can appear before builder/auth/provider route content.
-  Preserve the Better Auth boundary when changing this arrangement.
 - Connect draft maintenance to an authorized deployment scheduler. The operator
   task is not evidence that periodic cleanup is deployed; the repository has no
   existing scheduler credential boundary to reuse.

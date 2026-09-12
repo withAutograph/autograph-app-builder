@@ -1,6 +1,14 @@
 "use client";
 
-import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -42,7 +50,20 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
   };
 }
 
+function subscribeToClientSnapshot() {
+  return () => {
+    // Hydration readiness has no external subscription.
+  };
+}
+
 export function HandoffControls({ initial }: { initial: HandoffControlData }) {
+  // The instant server shell is visible before browser event handlers exist.
+  // Do not expose an enabled action that can silently discard that first click.
+  const isClientReady = useSyncExternalStore(
+    subscribeToClientSnapshot,
+    () => true,
+    () => false,
+  );
   const router = useRouter();
   const [data, setData] = useState(initial);
   const [destination, setDestination] = useState(initial.destination);
@@ -72,7 +93,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
   const prompt = buildAppHandoffPrompt(data.handoffId, destination);
-  const disabled = access !== "ready" || data.status === "expired" || renewalPending;
+  const disabled =
+    !isClientReady || access !== "ready" || data.status === "expired" || renewalPending;
   const installUrl =
     destination === "cursor" && access === "ready"
       ? buildCursorInstallUrl(data.mcpUrl, data.cursorInstallReady)
@@ -167,7 +189,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   }, [data.handoffId, destination, renewal, renewalPending, router]);
 
   const renew = () => {
-    if (renewalPending || access !== "ready") return;
+    if (!isClientReady || renewalPending || access !== "ready") return;
     const storageKey = `autograph-handoff-renew:${data.handoffId}`;
     if (renewalRequest.current?.handoffId !== data.handoffId) {
       let saved: string | null = null;
@@ -207,7 +229,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
       {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
-      <fieldset disabled={renewalPending}>
+      <fieldset disabled={!isClientReady || renewalPending}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (
           <label key={choice}>
@@ -230,7 +252,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         <button
           className={styles.createButton}
           type="button"
-          disabled={renewalPending}
+          disabled={!isClientReady || renewalPending}
           onClick={renew}
         >
           {renewalPending ? "Renewing…" : "Renew handoff"}

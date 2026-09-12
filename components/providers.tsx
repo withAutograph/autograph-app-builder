@@ -46,18 +46,7 @@ export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme
   ];
 }
 
-export function Providers({
-  children,
-  githubAuthEnabled,
-  passkeysEnabled,
-  vercelAuthEnabled,
-}: {
-  children: ReactNode;
-  githubAuthEnabled: boolean;
-  passkeysEnabled: boolean;
-  vercelAuthEnabled: boolean;
-}) {
-  const router = useRouter();
+export function Providers({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
 
   return (
@@ -70,22 +59,39 @@ export function Providers({
       themes={["light", "dark"]}
     >
       <QueryClientProvider client={queryClient}>
-        <AuthProvider
-          authClient={authClient}
-          Link={Link}
-          navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
-          plugins={authPlugins(passkeysEnabled, useTheme)}
-          emailAndPassword={{ enabled: false }}
-          redirectTo={DEFAULT_AUTH_REDIRECT_TO}
-          socialProviders={[
-            ...(vercelAuthEnabled ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }] : []),
-            ...(githubAuthEnabled ? (["github"] as const) : []),
-          ]}
-        >
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
-        </AuthProvider>
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster />
       </QueryClientProvider>
     </ThemeProvider>
+  );
+}
+
+export function AuthRouteProvider({
+  children,
+  githubAuthEnabled,
+  passkeysEnabled,
+  vercelAuthEnabled,
+}: {
+  children: ReactNode;
+  githubAuthEnabled: boolean;
+  passkeysEnabled: boolean;
+  vercelAuthEnabled: boolean;
+}) {
+  const router = useRouter();
+  return (
+    <AuthProvider
+      authClient={authClient}
+      Link={Link}
+      navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
+      plugins={authPlugins(passkeysEnabled, useTheme)}
+      emailAndPassword={{ enabled: false }}
+      redirectTo={DEFAULT_AUTH_REDIRECT_TO}
+      socialProviders={[
+        ...(vercelAuthEnabled ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }] : []),
+        ...(githubAuthEnabled ? (["github"] as const) : []),
+      ]}
+    >
+      {children}
+    </AuthProvider>
   );
 }

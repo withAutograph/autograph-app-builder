@@ -4,6 +4,7 @@ import { expect } from "storybook/test";
 
 import appStyles from "../app/ui/app-builder.module.css";
 import { AppShell } from "../components/app-shell";
+import { AuthRouteProvider } from "../components/providers";
 import type { authClient } from "../lib/auth-client";
 import { getQueryClient } from "../lib/query-client";
 import "../app/globals.css";
@@ -84,13 +85,19 @@ const preview: Preview = {
   decorators: [
     (Story, context) => (
       <AppShell>
-        {usesCreateAppShell(context.title) ? (
-          <div className={appStyles.appShell} data-create-app-story-environment>
+        <AuthRouteProvider
+          githubAuthEnabled={false}
+          vercelAuthEnabled={false}
+          passkeysEnabled={false}
+        >
+          {usesCreateAppShell(context.title) ? (
+            <div className={appStyles.appShell} data-create-app-story-environment>
+              <Story />
+            </div>
+          ) : (
             <Story />
-          </div>
-        ) : (
-          <Story />
-        )}
+          )}
+        </AuthRouteProvider>
       </AppShell>
     ),
   ],

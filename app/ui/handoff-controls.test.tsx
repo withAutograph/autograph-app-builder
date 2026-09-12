@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -107,6 +108,44 @@ describe("destination adapters", () => {
 });
 
 describe("durable handoff controls", () => {
+  it.each(["prepared", "expired"] as const)(
+    "keeps %s browser actions disabled until their handlers hydrate",
+    async (status) => {
+      let persisted: HandoffControlData = { ...initial, status };
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(persisted));
+      renewal.action.mockImplementation(async () => {
+        persisted = initial;
+        return { status: "renewed", handoff: initial };
+      });
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const data = persisted;
+      container = document.createElement("div");
+      container.innerHTML = renderToString(<HandoffControls initial={data} />);
+      document.body.append(container);
+      const actionLabel = status === "expired" ? "Renew handoff" : "Open in Codex";
+      const button = [...container.querySelectorAll("button")].find(
+        (element) => element.textContent === actionLabel,
+      )!;
+      expect(button.disabled).toBe(true);
+      expect(container.querySelector("input")?.matches(":disabled")).toBe(true);
+      button.click();
+      expect(renewal.action).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+      await act(async () => {
+        root = hydrateRoot(container, <HandoffControls initial={data} />);
+      });
+      expect([...container.querySelectorAll("button")]).toContain(button);
+      expect(button.disabled).toBe(false);
+      await click(actionLabel);
+      if (status === "expired") {
+        expect(renewal.action).toHaveBeenCalledOnce();
+        expect(container.textContent).not.toContain("This handoff has expired");
+      } else {
+        expect(open).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
   it("identifies the canonical endpoint required for the Codex plugin connection", async () => {
     const data = { ...initial, mcpUrl: "https://preview.builder.example/mcp" };
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(data));
