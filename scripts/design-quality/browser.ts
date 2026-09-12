@@ -771,7 +771,7 @@ export async function measureStyles(
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
-            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1]! in tokens)),
+            [...v.matchAll(/var\((--[\w-]+)/g)].some((m) => !(m[1] in tokens)),
           )
         )
           classification = "unassessed";
