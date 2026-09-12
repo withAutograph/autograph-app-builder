@@ -116,7 +116,7 @@ type BrowserStyleObservation = Observation & {
 };
 
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
-  const index = node.attributes?.findIndex((value) => value === "class") ?? -1;
+  const index = node.attributes?.indexOf("class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
   return value && node.nodeName
     ? {
