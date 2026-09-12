@@ -398,7 +398,7 @@ describe("closed GitHub publication contract", () => {
         after: { mode: "644", digest: reviewedBytesDigest },
       },
       {
-        path: "apps/demo/\u{e000}.tsx",
+        path: "apps/demo/\u{E000}.tsx",
         kind: "added",
         after: { mode: "644", digest: reviewedBytesDigest },
       },
@@ -420,7 +420,7 @@ describe("closed GitHub publication contract", () => {
     expect(proposal.approvedPaths).toEqual([
       ".codex/skills/example/SKILL.md",
       ".codex/skills/example/agents/openai.yaml",
-      "apps/demo/\u{e000}.tsx",
+      "apps/demo/\u{E000}.tsx",
       "apps/demo/\u{10000}.tsx",
     ]);
     expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();

@@ -210,7 +210,7 @@ const preferredModelId = activeBuilderModelId;
 export function repositoryNameFromAppName(appName: string) {
   return appName
     .normalize("NFKD")
-    .replaceAll(/[\u0300-\u036f]/gu, "")
+    .replaceAll(/[\u0300-\u036F]/gu, "")
     .toLowerCase()
     .replaceAll("&", " and ")
     .replaceAll(/[^a-z0-9]+/gu, "-")

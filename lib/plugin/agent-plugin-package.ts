@@ -27,7 +27,7 @@ const SKILL_FRONTMATTER_FIELDS = new Set([
   "allowed-tools",
 ]);
 const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const HTTP_FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/;
+const HTTP_FIELD_VALUE = /^[\t\x20-\x7E\x80-\xFF]*$/;
 const CREDENTIAL_HEADER =
   /(?:^|[-_])(?:authorization|cookie|credential|password|secret|token|api[-_]?key|private[-_]?key)(?:$|[-_])/i;
 const SECRET_LIKE_HEADER_VALUE =

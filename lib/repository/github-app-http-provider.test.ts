@@ -33,7 +33,7 @@ function unicodeDraftMaterial() {
   const changes = [
     ".codex/skills/example/agents/openai.yaml",
     ".codex/skills/example/SKILL.md",
-    "apps/demo/\u{e000}.tsx",
+    "apps/demo/\u{E000}.tsx",
     "apps/demo/\u{10000}.tsx",
   ]
     .map((path) => ({
