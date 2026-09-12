@@ -12,6 +12,12 @@ import {
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+export function isCandidateExportTextPath(path: string): boolean {
+  return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql)$/u.test(
+    path,
+  );
+}
+
 export async function exactNormalizedChangeSet(input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
@@ -57,22 +63,29 @@ export default defineTool({
       throw new Error("Run the repository validation before reviewing its changes.");
     const sandbox = await ctx.getSandbox();
     const changeSet = await exactNormalizedChangeSet({ state, sandbox });
+    const changedFiles = changeSet.changes.filter((change) => change.kind !== "deleted");
+    const textFiles = changedFiles.filter((change) => isCandidateExportTextPath(change.path));
     const exportFiles = input.includeContent
       ? await Promise.all(
-          changeSet.changes
-            .filter((change) => change.kind !== "deleted")
-            .map(async (change) => ({
-              path: change.path,
-              content: await sandbox.readTextFile({
-                path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${change.path}`,
-              }),
-            })),
+          textFiles.map(async (change) => ({
+            path: change.path,
+            content: await sandbox.readTextFile({
+              path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${change.path}`,
+            }),
+          })),
         )
       : undefined;
     return {
       ...changeSet,
       reviewed: state.phase === "reviewed",
-      ...(exportFiles === undefined ? {} : { exportFiles }),
+      ...(exportFiles === undefined
+        ? {}
+        : {
+            exportFiles,
+            exportOmissions: changedFiles
+              .filter((change) => !textFiles.includes(change))
+              .map((change) => ({ path: change.path, reason: "non-text artifact" })),
+          }),
     };
   },
 });
