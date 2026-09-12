@@ -55,6 +55,10 @@ export async function seedIdentity(context: BrowserContext, appName: string) {
     await sql.begin(async (transaction) => {
       await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at)
         values (${id}, ${appName}, ${email}, true, now(), now())`;
+      // Workspace admission requires a verified provider identity, not merely a
+      // valid session. This synthetic identity has no provider credentials.
+      await transaction`insert into account (id, issuer, account_id, provider_id, user_id, created_at, updated_at)
+        values (${randomUUID()}, 'https://github.com', ${id}, 'github', ${id}, now(), now())`;
       await transaction`insert into organization (id, name, slug, created_at, issuer, audience, workspace_id)
         values (${organization}, ${appName}, ${organization}, now(), ${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace})`;
       await transaction`insert into member (id, organization_id, user_id, role, created_at)
