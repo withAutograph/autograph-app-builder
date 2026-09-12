@@ -817,8 +817,8 @@ export async function publishReviewedChangeSet(input: {
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
           const observed = await fileState(target);
           if (assertFileMatches(observed, change.after)) observedPost.push(path);
-          else if (!assertFileMatches(observed, change.before))
-            if (!mutationCallReturned) uncertainPaths.push(path);
+          else if (!assertFileMatches(observed, change.before) && !mutationCallReturned)
+            uncertainPaths.push(path);
         } catch {
           if (!mutationCallReturned) uncertainPaths.push(path);
         }

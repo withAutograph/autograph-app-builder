@@ -1021,9 +1021,9 @@ export async function recordPreparedSandboxWorkspace(input: {
     eligibilityDigest: input.eligibilityDigest,
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
+  if (existing !== undefined && existing.workspaceId !== input.sandbox.id)
+    throw new Error("This app build already owns a different workspace.");
   if (existing !== undefined) {
-    if (existing.workspaceId !== input.sandbox.id)
-      throw new Error("This app build already owns a different workspace.");
     // Source changes and generated files are ordinary work inside the same
     // session-owned checkout. Refresh the diagnostic metadata below.
   }

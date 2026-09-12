@@ -468,9 +468,7 @@ async function assertContainedStatePath(
     try {
       value = await lstat(cursor);
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        if (leaf !== "directory") return;
-      }
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && leaf !== "directory") return;
       throw error;
     }
     const isLeaf = index === segments.length - 1;
@@ -2299,15 +2297,14 @@ export async function verifyFreshBootstrap(input: {
     proposalFromFreshBootstrapJournal(input.receipt),
     input.receipt.destinationPath,
   );
-  if (input.receipt.swappedOldIdentity !== undefined) {
-    if (
-      (await pathState(input.receipt.stagingPath)) !== "directory" ||
+  if (
+    input.receipt.swappedOldIdentity !== undefined &&
+    ((await pathState(input.receipt.stagingPath)) !== "directory" ||
       JSON.stringify(await identity(input.receipt.stagingPath)) !==
         JSON.stringify(input.receipt.swappedOldIdentity) ||
-      (await readdir(input.receipt.stagingPath)).length !== 0
-    )
-      throw new Error("The swapped-out empty tombstone changed after receipt.");
-  }
+      (await readdir(input.receipt.stagingPath)).length !== 0)
+  )
+    throw new Error("The swapped-out empty tombstone changed after receipt.");
   if (
     JSON.stringify(verification.destinationIdentity) !==
       JSON.stringify(input.receipt.destinationIdentity) ||
