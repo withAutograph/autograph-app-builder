@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  renewBuilderHandoff,
+  type HandoffControlData,
+} from "@/app/actions/handoff-renewal";
 import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,
@@ -13,15 +17,7 @@ import {
 import styles from "./app-builder.module.css";
 import handoffStyles from "./handoff.module.css";
 
-export type HandoffControlData = {
-  version: 1;
-  handoffId: string;
-  expiresAt: string;
-  status: "prepared" | "continued" | "expired";
-  destination: HandoffDestination;
-  cursorInstallReady: boolean;
-  mcpUrl: string;
-};
+export type { HandoffControlData } from "@/app/actions/handoff-renewal";
 
 function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
   if (
@@ -55,21 +51,23 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
   const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
-  const [renewing, setRenewing] = useState(false);
-  const renewalRequestId = useRef<string | undefined>(undefined);
-  const renewalInFlight = useRef(false);
+  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(
+    renewBuilderHandoff,
+    undefined,
+  );
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
   const prompt = buildAppHandoffPrompt(data.handoffId, destination);
-  const disabled = access !== "ready" || data.status === "expired" || renewing;
+  const disabled = access !== "ready" || data.status === "expired" || renewalPending;
   const installUrl =
     destination === "cursor" && access === "ready"
       ? buildCursorInstallUrl(data.mcpUrl, data.cursorInstallReady)
       : undefined;
 
   useEffect(() => {
-    if (access !== "ready" || renewing || data.status === "continued") return;
+    if (access !== "ready" || renewalPending || data.status === "continued") return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     let disposed = false;
@@ -129,70 +127,51 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       controller?.abort();
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [access, data.handoffId, data.status, renewing]);
+  }, [access, data.handoffId, data.status, renewalPending]);
 
-  const renew = async () => {
-    if (renewalInFlight.current) return;
-    renewalInFlight.current = true;
-    setRenewing(true);
-    setRenewalNotice("");
-    const storageKey = `autograph-handoff-renew:${data.handoffId}`;
-    try {
-      if (!renewalRequestId.current) {
-        let saved: string | null = null;
-        try {
-          saved = sessionStorage.getItem(storageKey);
-        } catch {}
-        renewalRequestId.current =
-          saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
-        try {
-          sessionStorage.setItem(storageKey, renewalRequestId.current);
-        } catch {}
-      }
-      const response = await fetch(
-        `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}/renew`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ creationRequestId: renewalRequestId.current }),
-        },
-      );
-      if (response.status === 401 || response.status === 403 || response.status === 404) {
-        setAccess(response.status === 401 ? "sign-in" : "unavailable");
-        return;
-      }
-      if (!response.ok) throw new Error("handoff-renewal-unavailable");
-      const renewed = (await response.json()) as {
-        version: number;
-        handoffId: string;
-        expiresAt: string;
-      };
-      if (
-        renewed.version !== 1 ||
-        typeof renewed.expiresAt !== "string" ||
-        Number.isNaN(Date.parse(renewed.expiresAt))
-      )
-        throw new Error("handoff-response-invalid");
-      buildAppHandoffPrompt(renewed.handoffId, destination);
-      if (renewed.handoffId === data.handoffId) {
-        const status = await fetch(
-          `/api/builder/handoffs/${encodeURIComponent(renewed.handoffId)}`,
-          { cache: "no-store" },
-        );
-        if (!status.ok) throw new Error("handoff-status-unavailable");
-        setData(readStatus(await status.json(), renewed.handoffId));
-      } else {
-        router.replace(`/handoff/${encodeURIComponent(renewed.handoffId)}`);
-      }
-      router.refresh();
-    } catch {
+  useEffect(() => {
+    if (!renewal || renewalPending) return;
+    if (renewal.status === "sign-in") {
+      setAccess("sign-in");
+      return;
+    }
+    if (renewal.status === "unavailable") {
+      setAccess("unavailable");
+      return;
+    }
+    if (renewal.status === "error") {
       setRenewalNotice(
         "We couldn’t renew this handoff. Try again; your brief and completed resources are saved.",
       );
-    } finally {
-      renewalInFlight.current = false;
-      setRenewing(false);
+      return;
     }
+    setRenewalNotice("");
+    buildAppHandoffPrompt(renewal.handoff.handoffId, destination);
+    if (renewal.handoff.handoffId === data.handoffId) setData(renewal.handoff);
+    else router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
+  }, [data.handoffId, destination, renewal, renewalPending, router]);
+
+  const renew = () => {
+    if (renewalPending || access !== "ready") return;
+    const storageKey = `autograph-handoff-renew:${data.handoffId}`;
+    if (renewalRequest.current?.handoffId !== data.handoffId) {
+      let saved: string | null = null;
+      try {
+        saved = sessionStorage.getItem(storageKey);
+      } catch {}
+      const id = saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
+      renewalRequest.current = { handoffId: data.handoffId, id };
+      try {
+        sessionStorage.setItem(storageKey, id);
+      } catch {}
+    }
+    setRenewalNotice("");
+    startTransition(() =>
+      dispatchRenewal({
+        handoffId: data.handoffId,
+        creationRequestId: renewalRequest.current!.id,
+      }),
+    );
   };
 
   return (
@@ -209,7 +188,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
       {access !== "ready" ? <a href={signInUrl}>Sign in with the same account</a> : null}
-      <fieldset disabled={renewing}>
+      <fieldset disabled={renewalPending}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (
           <label key={choice}>
@@ -232,10 +211,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         <button
           className={styles.createButton}
           type="button"
-          disabled={renewing}
-          onClick={() => void renew()}
+          disabled={renewalPending}
+          onClick={renew}
         >
-          {renewing ? "Renewing…" : "Renew handoff"}
+          {renewalPending ? "Renewing…" : "Renew handoff"}
         </button>
       ) : null}
       <button
