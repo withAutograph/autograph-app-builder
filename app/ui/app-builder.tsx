@@ -1628,6 +1628,8 @@ export function Builder({
           <AppDetailsSection
             appName={form.appName}
             brief={form.brief}
+            appNameRegistration={builderForm.register("appName")}
+            briefRegistration={builderForm.register("brief")}
             onAppNameChange={(appName) => {
               appNameEditedByUser.current = true;
               generatedAppName.current = undefined;
