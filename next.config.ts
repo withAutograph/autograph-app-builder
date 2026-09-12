@@ -2,9 +2,15 @@ import { withEmulate } from "@emulators/adapter-next";
 import createMDX from "@next/mdx";
 import { withEve } from "eve/next";
 import type { NextConfig } from "next";
+import { readProductionNavigationRuntimeConfig } from "./lib/testing/production-navigation";
+
+const productionNavigationArtifact = Boolean(readProductionNavigationRuntimeConfig(process.env));
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  experimental: {
+    exposeTestingApiInProductionBuild: productionNavigationArtifact,
+  },
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async headers() {
     return [
@@ -44,6 +50,8 @@ const externalDevelopmentEve =
   process.env.APP_BUILDER_LOCAL_ADAPTER === "1" &&
   process.env.EVE_AGENT_HOST?.startsWith("http://127.0.0.1:") === true;
 
-export default process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" || externalDevelopmentEve
+export default productionNavigationArtifact ||
+process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" ||
+externalDevelopmentEve
   ? tracedConfig
   : withEve(tracedConfig);

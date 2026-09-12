@@ -33,6 +33,7 @@ import {
 } from "../integrations/local-provider-emulation";
 import type { ProviderEmulation } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
+import { readProductionNavigationRuntimeConfig } from "../testing/production-navigation";
 
 const databaseUrlSchema = z
   .string()
@@ -445,6 +446,8 @@ export function authRateLimitForLocalEmulation(localEmulation: boolean) {
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
+  const productionNavigation = readProductionNavigationRuntimeConfig(environment);
+  if (productionNavigation) return previewOAuthRuntimeConfigSchema.parse(productionNavigation);
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const localEmulation = readProviderEmulation(resolvedEnvironment);
   if (localEmulation) {
