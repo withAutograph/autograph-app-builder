@@ -25,13 +25,13 @@ competing formatter or CI edits.
 
 ## Production validation prerequisite
 
-Slice 3 is currently design-only. The local provider and passkey emulators
-deliberately reject `NODE_ENV=production`. Preview emulation requires real
-deployment identity and protection; fake Vercel metadata is not an acceptable
-loopback-test workaround. Before implementing the rig, approve a narrowly scoped
-production-test authority model with negative tests proving deployed production
-still rejects local emulation. No guards or testing-API configuration have been
-changed for this follow-up.
+Slice 3 now has an isolated production-navigation lane; see
+[production-navigation-validation.md](production-navigation-validation.md).
+It uses fixture identities validated by real Better Auth sessions rather than
+enabling the local provider/passkey emulators in production mode. Their guards
+remain unchanged. A default-false source marker enables Next's testing API only
+in the disposable artifact; the artifact rejects deployment identity and remote
+origins/databases. No Vercel deployment metadata is spoofed.
 
 The test artifact must use an isolated source snapshot/worktree, not just a
 different `distDir`: Next also generates the root `next-env.d.ts`. The existing
