@@ -47,7 +47,7 @@ export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: s
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
-  if (!ready) return undefined;
+  if (!ready) return;
   const url = new URL(mcpUrl);
   if (
     (url.protocol !== "https:" &&
