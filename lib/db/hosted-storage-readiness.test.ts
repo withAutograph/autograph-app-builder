@@ -106,7 +106,7 @@ describe("hosted storage read-only readiness", () => {
         repositoryRoot: process.cwd(),
         readBack: {
           ...readBack,
-          migrations: [...readBack.migrations].reverse(),
+          migrations: [...readBack.migrations].toReversed(),
         },
         observedAt: new Date(),
       }),

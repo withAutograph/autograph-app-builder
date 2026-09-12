@@ -143,7 +143,7 @@ describe("closed receipt key sets", () => {
   ] as const;
 
   it("accepts the exact GHCR login receipt keys independent of declaration order", () => {
-    const exact = Object.fromEntries([...expected].reverse().map((key) => [key, true]));
+    const exact = Object.fromEntries([...expected].toReversed().map((key) => [key, true]));
 
     expect(hasExactKeys(exact, expected)).toBe(true);
     expect(hasExactKeys({ ...exact, extra: true }, expected)).toBe(false);
@@ -1527,7 +1527,7 @@ wait
         size: 564,
       },
     ];
-    const indexManifests = [...manifests].reverse();
+    const indexManifests = [...manifests].toReversed();
     const indexRaw = (entries: typeof manifests) =>
       JSON.stringify({
         manifests: entries,

@@ -1212,7 +1212,7 @@ describe("hosted Eve service core", () => {
     await service.respond(request);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
     await expect(
-      service.respond({ ...request, responses: [...responses].reverse() }),
+      service.respond({ ...request, responses: [...responses].toReversed() }),
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
   });
