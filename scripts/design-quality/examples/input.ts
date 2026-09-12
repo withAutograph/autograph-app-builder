@@ -15,6 +15,7 @@ interface ExampleConfig {
   stateTarget: string;
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
 async function text(root: string, path: string) {
   return readFile(resolve(root, path), "utf-8");
 }

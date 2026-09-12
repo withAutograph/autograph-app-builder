@@ -13,10 +13,12 @@ const stream = (...chunks: string[]) =>
   });
 
 function processFixture(stdout: string[], stderr: string[] = []) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const kill = vi.fn(async () => undefined);
   const process = {
     stdout: stream(...stdout),
     stderr: stream(...stderr),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     wait: vi.fn(async () => ({ exitCode: 0 })),
     kill,
   } as unknown as SandboxProcess;
@@ -26,6 +28,7 @@ function processFixture(stdout: string[], stderr: string[] = []) {
 describe("bounded sandbox command", () => {
   it("passes the authored command directly to spawn", async () => {
     const fixture = processFixture(["hello"], ["warning"]);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const spawn = vi.fn(async (options: unknown) => {
       void options;
       return fixture.process;
@@ -45,6 +48,7 @@ describe("bounded sandbox command", () => {
     const fixture = processFixture(["1234", "5678"]);
     await expect(
       runBoundedSandboxCommand(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => fixture.process },
         { command: "generate" },
         { outputBytes: 6 },
@@ -60,6 +64,7 @@ describe("bounded sandbox command", () => {
     const fixture = processFixture(["1234"], ["5678"]);
     await expect(
       runBoundedSandboxCommand(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => fixture.process },
         { command: "generate" },
         { outputBytes: 6 },
@@ -72,6 +77,7 @@ describe("bounded sandbox command", () => {
     // Keep stream fixtures scoped to each timeout test.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const kill = vi.fn(async () => undefined);
     const process = {
       stdout: idle(),
@@ -81,6 +87,7 @@ describe("bounded sandbox command", () => {
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => process },
         { command: "idle" },
         { noOutputTimeoutMs: 10, timeoutMs: 1000 },
@@ -98,6 +105,7 @@ describe("bounded sandbox command", () => {
       });
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const kill = vi.fn(async () => undefined);
     const process = {
       stdout: oneThenIdle(),
@@ -107,6 +115,7 @@ describe("bounded sandbox command", () => {
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => process },
         { command: "progress-then-idle" },
         { noOutputTimeoutMs: 10, timeoutMs: 1000 },
@@ -120,6 +129,7 @@ describe("bounded sandbox command", () => {
     fixture.process.kill = vi.fn(() => new Promise<never>(() => {}));
     await expect(
       runBoundedSandboxCommand(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => fixture.process },
         { command: "generate" },
         { outputBytes: 2, killCleanupTimeoutMs: 10 },
@@ -129,6 +139,7 @@ describe("bounded sandbox command", () => {
 
   it("does not project parent environment credentials", async () => {
     const fixture = processFixture([]);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const spawn = vi.fn(async (options: unknown) => {
       void options;
       return fixture.process;

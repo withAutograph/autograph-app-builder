@@ -429,6 +429,7 @@ export function createPasskeyPlugin(input: {
     ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
     registration: {
       requireSession: false,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       async resolveUser({ context }) {
         const { config } = input;
         if (!config) throw onboardingUnavailable();

@@ -14,8 +14,10 @@ const authority = {
 afterEach(() => vi.restoreAllMocks());
 
 function handlers(
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   authorityForRequest: () => Promise<typeof authority | undefined> = async () => authority,
 ) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const begin = vi.fn(async () => ({
     version: 1 as const,
     action: "github-app.installation.begin" as const,
@@ -25,6 +27,7 @@ function handlers(
     authorityDigest: "b".repeat(64),
     expiresAt: "2026-08-28T12:10:00.000Z",
   }));
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const complete = vi.fn(async () => ({
     version: 1 as const,
     action: "github-app.installation.complete" as const,
@@ -83,6 +86,7 @@ describe("GitHub App installation routes", () => {
   });
 
   it("returns unauthenticated users to sign-in instead of a provider workspace error", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const { route } = handlers(async () => undefined);
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
@@ -101,6 +105,7 @@ describe("GitHub App installation routes", () => {
   });
 
   it("routes onboarding failures to the shared recovery surface", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const { route } = handlers(async () => {
       throw new Error("database unavailable");
     });
@@ -189,6 +194,7 @@ describe("GitHub App installation routes", () => {
   });
 
   it("redirects a connected repository-access continuation back to its parked Eve turn", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const complete = vi.fn(async () => ({
       version: 1 as const,
       action: "github-app.installation.complete" as const,
@@ -207,11 +213,13 @@ describe("GitHub App installation routes", () => {
       },
     }));
     const onConnected = vi.fn(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async () =>
         "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token?provider=github&status=connected",
     );
     const route = createGitHubAppInstallationRouteHandlers({
       origin: "https://builder.example",
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       authorization: {
         begin: vi.fn(),

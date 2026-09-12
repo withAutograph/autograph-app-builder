@@ -2,6 +2,7 @@ import { expect, test } from "playwright/test";
 
 import { finishOAuth, resetApplicationState, waitForBuilderReady } from "../support/harness";
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("editing and autosave never start a view transition around the live form", async ({

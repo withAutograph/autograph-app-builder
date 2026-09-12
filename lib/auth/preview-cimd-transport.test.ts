@@ -85,6 +85,7 @@ describe("Preview CIMD transport", () => {
   it.each([{ all: true }, { all: false }])(
     "resolves once and preserves host and SNI for lookup options %o",
     async (lookupOptions) => {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const resolveHostname = vi.fn(async () => publicAddresses);
       const fixture = requestFixture({ lookupOptions });
       const fetchMetadata = createPreviewCimdTransport({
@@ -115,6 +116,7 @@ describe("Preview CIMD transport", () => {
   it("rejects a private DNS answer before opening a connection", async () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => [
         publicAddresses[0],
         { address: "169.254.169.254", family: 4 },
@@ -172,6 +174,7 @@ describe("Preview CIMD transport", () => {
     async (input) => {
       const requestHttps = vi.fn();
       const fetchMetadata = createPreviewCimdTransport({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         resolveHostname: vi.fn(async () => publicAddresses),
         requestHttps,
       });
@@ -193,6 +196,7 @@ describe("Preview CIMD transport", () => {
       responseStatus: 302,
     });
     const fetchMetadata = createPreviewCimdTransport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => publicAddresses),
       requestHttps: fixture.requestHttps,
     });

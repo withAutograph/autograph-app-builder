@@ -92,6 +92,7 @@ function packageEntryPoints(pkg: PackageJson): { suffix: string; target: string 
   return pkg.types || pkg.main ? [{ suffix: "", target: pkg.types ?? pkg.main! }] : [];
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
 async function aliasEntryPoints(root: string, limitations: string[]): Promise<EntryPoint[]> {
   let parsed: ts.ParsedCommandLine;
   try {

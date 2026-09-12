@@ -104,6 +104,7 @@ export function preparedProviderFixture(input: {
   let vercelStatus = 200;
   const githubToken = () => `ghs_mock_server_installation_token_${credentialRevision}`;
   const vercelToken = () => `mock_server_vercel_token_${credentialRevision}`;
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const githubHttp = vi.fn<typeof fetch>(async (request, init) => {
     const url = new URL(String(request));
     expect(url.origin).toBe("https://api.github.com");
@@ -155,6 +156,7 @@ export function preparedProviderFixture(input: {
       return Response.json({ variables: [] });
     throw new Error("Unexpected mocked GitHub request.");
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const vercelHttp = vi.fn<typeof fetch>(async (request, init) => {
     expect(String(request)).toBe(
       "https://api.vercel.com/v9/projects/prj_prepared?teamId=team_prepared",
@@ -171,6 +173,7 @@ export function preparedProviderFixture(input: {
       : new Response(null, { status: vercelStatus });
   });
   const credentialRead = vi.fn(
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async (value: { authority: HostedSessionTenantAuthority; installationId: string }) => {
       expect(value).toEqual({
         authority: input.authority,
@@ -200,6 +203,7 @@ export function preparedProviderFixture(input: {
     updatedAt: new Date(),
   };
   const github = vi.fn(
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async (
       sessionAuth: unknown,
       selection: { repository: string; selectedInstallationId?: string },
@@ -214,10 +218,12 @@ export function preparedProviderFixture(input: {
         authority,
         ...selection,
         installations: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           read: async (owner) => {
             expect(owner).toEqual(input.authority);
             return undefined;
           },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           list: async (owner) => {
             expect(owner).toEqual(input.authority);
             return [selectedInstallation, { ...selectedInstallation, installationId: "20" }];
@@ -246,6 +252,7 @@ export function preparedProviderFixture(input: {
         isActiveMember: input.isActiveMember,
       }),
       github,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       vercel: async (sessionAuth, intent) =>
         readPreparedVercelAccess({
           intent,

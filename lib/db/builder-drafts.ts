@@ -182,6 +182,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
 /** Save and archive share one short database transaction per tenant draft. */
 export function createBuilderDraftStore(database: Database): BuilderDraftStore {
   const unlocked = createUnlockedBuilderDraftStore(database);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const serialize = async <T>(
     authorityInput: BuilderDraftAuthority,
     run: (store: BuilderDraftStore) => Promise<T>,

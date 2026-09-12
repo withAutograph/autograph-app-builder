@@ -252,6 +252,7 @@ try {
   await expire(batchStopped.lease);
   const batch = await reconcileExpiredSandboxLeases({
     store,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
     async stopSandbox(providerSandboxId) {
       if (providerSandboxId === batchFailed.lease.providerSandboxId)
         throw new Error("provider unavailable");
@@ -275,6 +276,7 @@ try {
   assert.equal(stoppedReacquired.disposition, "acquired");
   const retry = await reconcileExpiredSandboxLeases({
     store,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
     stopSandbox: async () => undefined,
     nowEpochMs: 0,
   });

@@ -73,6 +73,7 @@ describe("sandbox execution lease", () => {
   it("keeps stop failures orphaned and reuse-blocking until a successful retry", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async () => {
       throw new Error("provider unavailable");
     });
@@ -94,6 +95,7 @@ describe("sandbox execution lease", () => {
       { disposition: "rejected", reason: "recovery-in-progress" },
       { disposition: "rejected", reason: "recovery-in-progress" },
     ]);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const retryStop = vi.fn(async () => undefined);
     const retried = await reconcileExpiredSandboxLeases({
       store,
@@ -121,6 +123,7 @@ describe("sandbox execution lease", () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
     await acquire(store, "user_2", "session_2", 1);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async (providerSandboxId: string) => {
       if (providerSandboxId === "sandbox_session_1") throw new Error("provider unavailable");
     });
@@ -186,6 +189,7 @@ describe("sandbox execution lease", () => {
     await acquire(store, "user_2", "session_2", 1);
     const settle = vi.spyOn(store, "settleRecovery");
     settle.mockRejectedValueOnce(new Error("settlement unavailable"));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async () => undefined);
     const result = await reconcileExpiredSandboxLeases({
       store,

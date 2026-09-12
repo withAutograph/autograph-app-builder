@@ -63,6 +63,7 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
     return {
       capability,
       allowedRoot: capability.allowedRoot.path,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
       cleanup: async () => undefined,
     };
   }

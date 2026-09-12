@@ -247,6 +247,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     origin: new URL(config.issuer).origin,
     authorization,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async onConnected({ authority, returnState }) {
       if (!returnState.resumeKey) return undefined;
       return repositoryAccessContinuations.authorize({

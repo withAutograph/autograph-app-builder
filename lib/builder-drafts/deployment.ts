@@ -72,6 +72,7 @@ export async function readAuthenticatedBuilderDraft(input: {
 }
 
 /** Scheduled-maintenance entry point. Do not invoke from actions or requests. */
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function deleteInactiveBuilderDraftsForMaintenance(input: {
   environment: Environment;
   now?: () => Date;

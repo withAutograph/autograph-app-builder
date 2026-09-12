@@ -105,6 +105,7 @@ function handler(environment: NodeJS.ProcessEnv) {
   return created;
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function invokePreviewEmulateRequest(request: Request) {
   const selected = handler(process.env);
   if (!selected) return new Response("Not found", { status: 404 });

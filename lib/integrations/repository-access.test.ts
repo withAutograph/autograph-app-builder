@@ -30,7 +30,9 @@ function binding(
 
 function store(bindings: HostedGitHubInstallationBinding[]): HostedGitHubInstallationStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => undefined),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     bind: vi.fn(),
   };
@@ -43,6 +45,7 @@ function provider(
   repositoryOverride: Record<string, unknown> = {},
 ): GitHubRepositoryAccessProvider {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectInstallation({ requestedPermissions }) {
       return {
         installationId: installation.installationId,
@@ -54,6 +57,7 @@ function provider(
         grantedPermissions: requestedPermissions,
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectRepositoryByName() {
       return repositoryId
         ? {
@@ -95,6 +99,7 @@ describe("tenant-bound GitHub repository access", () => {
         authority,
         repository: "withAutograph/app-builder-dogfood",
         installations: store([connected]),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         providerFactory: async () => provider(connected),
       }),
     ).resolves.toMatchObject({
@@ -110,6 +115,7 @@ describe("tenant-bound GitHub repository access", () => {
       authority,
       repository: "withAutograph/app-builder-dogfood",
       installations: store([connected]),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       providerFactory: async () => provider(connected, "200"),
     });
     expect(result).toMatchObject({
@@ -132,6 +138,7 @@ describe("tenant-bound GitHub repository access", () => {
       authority,
       repository: "withAutograph/app-builder-dogfood",
       installations: store([connected]),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       providerFactory: async () => provider(connected, "200", "all"),
     });
     expect(result).toMatchObject({
@@ -149,6 +156,7 @@ describe("tenant-bound GitHub repository access", () => {
         authority,
         repository: "withAutograph/app-builder-dogfood",
         installations: store([first, second]),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         providerFactory: async ({ installation }) => provider(installation, "200"),
       }),
     ).resolves.toMatchObject({
@@ -166,6 +174,7 @@ describe("tenant-bound GitHub repository access", () => {
         repository: "withAutograph/app-builder-dogfood",
         selectedInstallationId: "11",
         installations: store([first, second]),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         providerFactory: async () => provider(second),
       }),
     ).resolves.toMatchObject({
@@ -187,6 +196,7 @@ describe("tenant-bound GitHub repository access", () => {
           authority,
           repository: "withAutograph/app-builder-dogfood",
           installations: store([connected]),
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           providerFactory: async () => provider(connected, "200", "selected", repositoryOverride),
         }),
       ).resolves.toMatchObject({ status: "provider-unavailable" });

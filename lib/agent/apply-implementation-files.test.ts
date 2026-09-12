@@ -10,7 +10,9 @@ describe("approval-bound implementation files", () => {
         content: "export default null",
       },
     ]);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const writeTextFile = vi.fn(async () => undefined);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const executor = vi.fn(async () => ({
       exitCode: 0,
       stdout: "receipt",

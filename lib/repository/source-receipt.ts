@@ -343,6 +343,7 @@ export function sourceIdentityDigest(sourceSha: string, sourceTree: string): str
   return sha256(JSON.stringify({ sourceSha, sourceTree }));
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function inspectSourceReceipt(
   sourceKind: SourceKind,
   path: string,

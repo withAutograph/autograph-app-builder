@@ -73,6 +73,7 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
         ? rows[0]?.workspaceId
         : undefined;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async isActiveMember(input: {
       issuer: string;
       audience: string;

@@ -13,6 +13,7 @@ export default defineTool({
   inputSchema: z.strictObject({
     expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
   }),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute({ expectedRevision }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase !== "ui_previewed")

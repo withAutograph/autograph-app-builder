@@ -24,9 +24,11 @@ function memoryStore(): RepositoryAccessContinuationStore & {
   const records: RepositoryAccessContinuation[] = [];
   return {
     records,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async create(record) {
       records.push(record);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
       const record = records.find(
         (candidate) =>
@@ -40,6 +42,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
       record.authorizedAt = input.now;
       return record;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(input) {
       const record = records.find(
         (candidate) =>
@@ -57,6 +60,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
       record.consumedAt = input.now;
       return record;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
       return records.filter(
         (candidate) =>

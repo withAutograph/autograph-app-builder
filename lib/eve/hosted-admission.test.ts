@@ -29,6 +29,7 @@ function service(input: {
 }) {
   let sequence = 0;
   const transport: HostedEveTransport = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async start() {
       sequence += 1;
       return {
@@ -36,15 +37,19 @@ function service(input: {
         snapshot: { status: input.status ?? "waiting", events: [] },
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async get() {
       throw new Error("not used");
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async send() {
       throw new Error("not used");
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async respond() {
       throw new Error("not used");
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async cancel() {
       throw new Error("not used");
     },

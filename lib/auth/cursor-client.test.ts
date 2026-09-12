@@ -38,6 +38,7 @@ function storage() {
     })),
     insert: vi.fn((table: unknown) => ({
       values: (row: Record<string, unknown>) => ({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         onConflictDoNothing: async () => {
           if (!rows.get(table)!.length) rows.get(table)!.push(row);
         },

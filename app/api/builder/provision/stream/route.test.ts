@@ -33,6 +33,7 @@ function projection(
 }
 
 function mockProjection(value: BuilderProvisionProjection) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   deployment.handler.mockImplementation(async () => Response.json(value));
 }
 

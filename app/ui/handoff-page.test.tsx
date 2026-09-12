@@ -12,6 +12,7 @@ vi.mock("../../lib/handoff/deployment", () => ({
   getBuilderHandoffPageData: server.load,
 }));
 vi.mock("next/headers", () => ({
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   headers: async () => new Headers({ cookie: "web-session" }),
 }));
 vi.mock("next/navigation", () => ({ redirect: server.redirect }));

@@ -26,6 +26,7 @@ async function openAccountMenu(page: Page) {
   await expect(page.getByRole("menuitem", { name: /Theme/u })).toBeVisible();
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("first visit follows System and reacts to an OS preference change", async ({ page }) => {

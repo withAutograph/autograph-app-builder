@@ -22,6 +22,7 @@ export default defineTool({
   description:
     "Read one allowlisted reference bundled with an already selected top-level app-creation skill. Use load_skill only for the top-level skill name, then use this tool for its named reference file. This tool cannot read target repository files or arbitrary paths.",
   inputSchema: readSkillReferenceInputSchema,
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute({ skill, reference }) {
     const bundled = HOSTED_MANAGED_SKILL_CONTENTS.find(
       (file) => file.path === `${skill}/${reference}`,

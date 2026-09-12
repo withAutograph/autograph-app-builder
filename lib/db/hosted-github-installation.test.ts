@@ -28,6 +28,7 @@ const request = {
 describe("hosted GitHub installation binding", () => {
   it("plans and applies only the exactly confirmed tenant binding", async () => {
     const plan = planHostedGitHubInstallation(request);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const bind = vi.fn(async ({ binding, now }) => ({
       ...binding,
       active: true,

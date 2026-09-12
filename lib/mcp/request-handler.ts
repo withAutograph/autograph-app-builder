@@ -211,6 +211,7 @@ export function createAutographMcpHandler(
         mimeType: MCP_APP_RESOURCE_MIME_TYPE,
         _meta: sessionResourceMeta,
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       async (uri) => ({
         contents: [
           {
@@ -413,6 +414,7 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
 
 const discoveryOnlyService = new Proxy({} as EveSessionService, {
   get() {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     return async () => {
       throw new Error("Authentication is required before calling a tool.");
     };
@@ -422,6 +424,7 @@ const discoveryOnlyService = new Proxy({} as EveSessionService, {
 function authenticationRequiredService(challenge: string) {
   return new Proxy({} as EveSessionService, {
     get() {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       return async () => {
         throw new McpToolAuthenticationRequiredError(challenge);
       };

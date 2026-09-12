@@ -42,7 +42,9 @@ describe("authenticated builder provisioning route", () => {
     const execute = vi.fn();
     const handler = createBuilderProvisioningRouteHandler({
       origin,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => false,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       execute,
       read: vi.fn(),
@@ -73,11 +75,15 @@ describe("authenticated builder provisioning route", () => {
   });
 
   it("returns only the closed provisioning response and tenant-scoped read-back", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const execute = vi.fn(async () => response);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => response);
     const handler = createBuilderProvisioningRouteHandler({
       origin,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       execute,
       read,
@@ -105,13 +111,16 @@ describe("authenticated builder provisioning route", () => {
   });
 
   it("exposes a monotonic journal projection only to an authenticated reader", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => ({
       revision: 7,
       record: { response },
     }));
     const handler = createBuilderProvisioningRouteHandler({
       origin,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       execute: vi.fn(),
       read: vi.fn(),
@@ -135,10 +144,13 @@ describe("authenticated builder provisioning route", () => {
   });
 
   it("reserves a durable journal before the provider operation begins", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const reserve = vi.fn(async () => ({ record: { response } }));
     const handler = createBuilderProvisioningRouteHandler({
       origin,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       execute: vi.fn(),
       read: vi.fn(),
@@ -163,8 +175,11 @@ describe("authenticated builder provisioning route", () => {
   it("does not disclose internal failures", async () => {
     const handler = createBuilderProvisioningRouteHandler({
       origin,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       enabled: async () => true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       execute: vi.fn(async () => {
         throw new Error("Bearer super-secret provider response");
       }),

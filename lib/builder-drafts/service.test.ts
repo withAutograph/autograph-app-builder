@@ -35,12 +35,15 @@ function memoryStore(): BuilderDraftStore {
     rows.find((row) => sameAuthority(row.authority, input.authority) && row.status === "active");
 
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(input) {
       return find(input);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readActive(input) {
       return findActive(input);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async saveActive(input) {
       const active = findActive(input);
       if (active?.lastClientMutationId === input.clientMutationId)
@@ -70,6 +73,7 @@ function memoryStore(): BuilderDraftStore {
         concurrent: input.expectedRevision !== 0,
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async archive(input) {
       const row = find(input);
       if (
@@ -82,6 +86,7 @@ function memoryStore(): BuilderDraftStore {
       row.updatedAt = input.now;
       return true;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async deleteInactiveSince({ now, maxAgeMs }) {
       const cutoff = now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000);
       let deleted = 0;

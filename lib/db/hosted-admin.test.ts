@@ -32,14 +32,18 @@ function request(value: RequestInput): HostedAdminPlanRequest {
 
 function store(): HostedAdminStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     seedMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     revokeMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     applyRetention: vi.fn(async () => ({
       operationRowsDeleted: 4,
       sessionRowsDeleted: 2,
       integrationRowsDeleted: 0,
       authorizationStateRowsDeleted: 0,
     })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     deleteTenant: vi.fn(async () => ({
       membershipRowsDeleted: 1,
       operationRowsDeleted: 5,

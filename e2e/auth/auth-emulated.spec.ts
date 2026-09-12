@@ -76,6 +76,7 @@ async function expectPasskeyFailure(page: Page) {
   });
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("passkey UI defaults off without a Vercel flag override", async ({ browser }) => {
@@ -158,6 +159,7 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
       configurable: true,
       value: {
         ...credentials,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         get: async () => {
           window.dispatchEvent(new Event("e2e-credential-request"));
           return null;
@@ -204,6 +206,7 @@ for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
         configurable: true,
         value: {
           ...credentials,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
           get: async () => {
             throw new DOMException("WebAuthn unavailable", name);
           },
@@ -239,6 +242,7 @@ test("passkey registration guards Sign Up and supports returning login", async (
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         { configurable: true, value: async () => true },
       );
     });
@@ -310,6 +314,7 @@ test("passkey registration keeps the alternate authenticator flow when platform 
       "isUserVerifyingPlatformAuthenticatorAvailable",
       {
         configurable: true,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         value: async () => {
           throw new DOMException("Unavailable", "NotSupportedError");
         },
@@ -424,6 +429,7 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
       configurable: true,
       value: {
         ...credentials,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         get: async () => {
           throw new DOMException("The operation was cancelled.", "NotAllowedError");
         },
@@ -454,6 +460,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
       configurable: true,
       value: {
         ...credentials,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
         create: async () => {
           throw new DOMException("The operation was cancelled.", "NotAllowedError");
         },

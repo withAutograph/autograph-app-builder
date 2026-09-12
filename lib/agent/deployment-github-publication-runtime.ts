@@ -111,6 +111,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
 let defaultResolver: HostedGitHubPublicationRuntimeResolver | undefined;
 
 /** Lazily parses deployment configuration so local discovery stays disabled. */
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function githubPublicationRuntimeForSession(sessionAuth: unknown) {
   defaultResolver ??= createDeploymentGitHubPublicationRuntimeResolver({
     environment: process.env,

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { verifyLocalVercelRelay } from "@/lib/integrations/local-oauth-relay";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning route contract
 export async function GET(request: Request) {
   let emulation;
   try {

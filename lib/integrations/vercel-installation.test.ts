@@ -65,34 +65,41 @@ describe("Vercel integration security", () => {
         },
         states: {
           async create() {},
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async consume() {
             if (consumed) return undefined;
             consumed = true;
             return recoveredReturnState;
           },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async recover() {
             return recoveredReturnState;
           },
         },
         installations: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async list() {
             return [];
           },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async bind(input) {
             binds.push(input);
             return { ...input.binding, active: true, updatedAt: input.now };
           },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async deactivate() {
             return 0;
           },
         },
         membership: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async isActiveMember() {
             return true;
           },
         },
         nonce: () => "n".repeat(43),
         now: () => 1_800_000_000_000,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetch: (async (url) => {
           if (String(url).endsWith("/v2/oauth/access_token"))
             return Response.json({ access_token: "provider-token-sentinel" });

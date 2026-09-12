@@ -340,6 +340,7 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async function repository(name: string) {
     return github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}`,

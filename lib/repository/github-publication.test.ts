@@ -69,6 +69,7 @@ function publicationContentSource(
   mode = "644",
 ) {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readFreshTree() {
       onRead?.("README.md");
       return {
@@ -87,6 +88,7 @@ function publicationContentSource(
         ],
       };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readFile(path: string) {
       onRead?.(path);
       return bytes === null ? null : { mode, digest: reviewedBytesDigest, bytes };
@@ -299,6 +301,7 @@ class Adapter implements GitHubPublicationAdapter {
   freshContent: GitHubFreshRepositoryContent | undefined;
   draftContent: GitHubDraftPullRequestContent | undefined;
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectInstallation(operation: GitHubOperation) {
     return operation === "resolve-existing-source"
       ? this.identities.resolve
@@ -307,19 +310,23 @@ class Adapter implements GitHubPublicationAdapter {
         : this.identities.publish;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectRepository() {
     return this.resolveRepo;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectDestination() {
     return this.destination;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectFreshRepositoryOutcome() {
     if (this.throwFreshReadBack) throw new Error("read-back-failed");
     return this.freshOutcome;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
     content: GitHubFreshRepositoryContent,
@@ -332,11 +339,13 @@ class Adapter implements GitHubPublicationAdapter {
     return this.freshAcknowledgement;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectDraftPublication(proposal: DraftPullRequestProposal) {
     if (this.throwDraftReadBack) throw new Error("read-back-failed");
     return this.draftOutcome ?? draftReadBack(proposal, this.publishRepo);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async publishDraftPullRequest(
     proposal: DraftPullRequestProposal,
     content: GitHubDraftPullRequestContent,
@@ -896,6 +905,7 @@ describe("closed GitHub publication contract", () => {
       {
         name: "source-error",
         source: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async readFile(): Promise<never> {
             throw new Error("raw-content-source-secret");
           },

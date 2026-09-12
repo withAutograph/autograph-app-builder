@@ -113,6 +113,7 @@ export function createGitHubOAuthApp(input: {
   fetch?: Fetch;
 }) {
   const request = input.fetch ?? fetch;
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const oauthFetch: Fetch = async (resource, init) => {
     const url = requestUrl(resource);
     if (

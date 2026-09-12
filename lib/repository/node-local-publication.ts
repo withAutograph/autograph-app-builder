@@ -498,6 +498,7 @@ function sameFileState(left: FileState, right: FileState): boolean {
   return left.kind === right.kind && left.mode === right.mode && left.digest === right.digest;
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function gitOwnedPath(root: string, name: string): Promise<string> {
   return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
 }

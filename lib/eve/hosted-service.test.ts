@@ -37,10 +37,12 @@ describe("prepared handoff session continuity", () => {
   it("retains the internal reference across service recreation, follow-ups, and approval responses", async () => {
     const store = new InMemoryHostedEveStore();
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => ({
         adapterSessionId: "eve_prepared",
         snapshot: approvalSnapshot(["build"]),
       })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => approvalSnapshot(["build"])),
     });
     const createService = () =>
@@ -75,6 +77,7 @@ describe("prepared handoff session continuity", () => {
     const store = new InMemoryHostedEveStore();
     let starts = 0;
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => {
         starts += 1;
         return {
@@ -143,6 +146,7 @@ describe("prepared handoff session continuity", () => {
     let missing = false;
     let starts = 0;
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => {
         starts += 1;
         return {
@@ -150,6 +154,7 @@ describe("prepared handoff session continuity", () => {
           snapshot,
         };
       }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => {
         if (missing) throw new HostedAdapterSessionUnavailableError();
         return snapshot;
@@ -222,10 +227,15 @@ function approvalSnapshot(requestIds: string[]): HostedEngineSnapshot {
 
 function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     get: vi.fn(async () => snapshot),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     send: vi.fn(async () => snapshot),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     respond: vi.fn(async () => snapshot),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     cancel: vi.fn(async () => snapshot),
   };
   return { ...base, ...overrides };
@@ -235,24 +245,30 @@ function reservationStore(
   makeReservation: (candidate: HostedOperationRecord) => unknown,
 ): HostedEveStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserveOperation(_principal, candidate) {
       return makeReservation(candidate) as ReserveOperationResult;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async settleSucceeded() {
       throw new Error("settleSucceeded must not be reached");
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async settleUnsuccessful() {
       throw new Error("settleUnsuccessful must not be reached");
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async getSession() {
       return null;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listSessions() {
       return { sessions: [], cursor: 0 };
     },
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 async function invokeHostedOperation(
   service: EveSessionService,
   operation: keyof typeof hostedEveOperationScopes,
@@ -318,11 +334,13 @@ describe("hosted Eve service core", () => {
   it("runs the repository-access recovery seam before reading Eve", async () => {
     const calls: string[] = [];
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => {
         calls.push("transport");
         return snapshot;
       }),
     });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const beforeRead = vi.fn(async ({ adapterSessionId }) => {
       calls.push(`recovery:${adapterSessionId}`);
     });
@@ -581,6 +599,7 @@ describe("hosted Eve service core", () => {
 
   it("returns an honest typed rejection when cancel has no matching active turn", async () => {
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {
         throw new SubmissionRejectedBeforeDispatchError("turn_changed");
       }),
@@ -798,7 +817,9 @@ describe("hosted Eve service core", () => {
       events: [{ type: "status", index: 0, status: "completed" }],
     };
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => terminalSnapshot),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => ({
         adapterSessionId: "eve_legacy_child",
         snapshot,
@@ -832,6 +853,7 @@ describe("hosted Eve service core", () => {
 
   it("preserves outstanding input at a checkpoint boundary", async () => {
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       start: vi.fn(async () => ({
         adapterSessionId: "eve_input",
         snapshot: approvalSnapshot(["approve_one", "approve_two"]),
@@ -861,6 +883,7 @@ describe("hosted Eve service core", () => {
           adapterSessionId: "eve_input_old",
           snapshot: approvalSnapshot(["approve_one", "approve_two"]),
         })
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         .mockImplementationOnce(async ({ prompt }) => {
           recovery = prompt;
           return {
@@ -868,6 +891,7 @@ describe("hosted Eve service core", () => {
             snapshot: approvalSnapshot(["approve_one", "approve_two"]),
           };
         }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => {
         throw new HostedAdapterSessionUnavailableError();
       }),
@@ -915,6 +939,7 @@ describe("hosted Eve service core", () => {
     const first = await started({
       store,
       transport: transport({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         start: vi.fn(async () => ({
           adapterSessionId: "eve_large",
           snapshot: largeSnapshot,
@@ -975,6 +1000,7 @@ describe("hosted Eve service core", () => {
     const first = await started({
       store,
       transport: transport({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         start: vi.fn(async () => ({
           adapterSessionId: "eve_max_shape",
           snapshot: richSnapshot,
@@ -1014,6 +1040,7 @@ describe("hosted Eve service core", () => {
           adapterSessionId: "eve_child",
           snapshot,
         }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => working),
     });
     const first = await started({
@@ -1061,6 +1088,7 @@ describe("hosted Eve service core", () => {
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_old", snapshot })
         .mockResolvedValueOnce({ adapterSessionId: "eve_new", snapshot }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => {
         throw new HostedAdapterSessionUnavailableError();
       }),
@@ -1193,6 +1221,7 @@ describe("hosted Eve service core", () => {
 
   it("binds respond idempotency to the exact ordered full batch", async () => {
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => approvalSnapshot(["one", "two", "three"])),
     });
     const { service, result } = await started({ transport: adapter });
@@ -1221,7 +1250,9 @@ describe("hosted Eve service core", () => {
   it("never redispatches an accepted response whose settlement is unknown", async () => {
     const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => approvalSnapshot([requestId])),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => {
         throw new SubmissionOutcomeUnknownError();
       }),
@@ -1240,6 +1271,7 @@ describe("hosted Eve service core", () => {
 
   it("rejects a missing member of the outstanding input batch", async () => {
     const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => approvalSnapshot(["one", "two", "three"])),
     });
     const { service, result } = await started({ transport: adapter });
@@ -1260,6 +1292,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("never redispatches an operation whose submission outcome is unknown", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
       throw new SubmissionOutcomeUnknownError();
     });
@@ -1279,6 +1312,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("treats an unclassified transport failure as unknown, not safe to retry", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
       throw new Error("socket closed");
     });
@@ -1294,6 +1328,7 @@ describe("hosted Eve service core", () => {
   });
 
   it("records a proven pre-dispatch rejection without exposing transport text", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
       throw new SubmissionRejectedBeforeDispatchError("credential_expired");
     });
@@ -1363,6 +1398,7 @@ describe("hosted Eve service core", () => {
       getSession: (requestPrincipal, sessionId) => base.getSession(requestPrincipal, sessionId),
       listSessions: (request) => base.listSessions(request),
     };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
       throw new SubmissionRejectedBeforeDispatchError("credential_expired");
     });

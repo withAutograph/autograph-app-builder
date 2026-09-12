@@ -17,6 +17,7 @@ let prototypeUrl = "";
 async function loadPrototype(page: Page) {
   await page.goto(prototypeUrl);
   await page.addScriptTag({ content: axe.source });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
   const accessibility = await page.evaluate(async () => {
     const runner = (
       globalThis as typeof globalThis & {

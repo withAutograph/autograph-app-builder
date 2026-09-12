@@ -102,6 +102,7 @@ export function createPostgresHostedGitHubInstallationStore(
         .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
       return rows.map((row) => hostedGitHubInstallationBindingSchema.parse(row));
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const binding = hostedGitHubInstallationBindingSchema.parse({

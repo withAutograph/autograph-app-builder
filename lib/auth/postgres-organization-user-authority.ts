@@ -100,6 +100,7 @@ export function createPostgresPreviewOrganizationAuthority(
 ): PostgresPreviewOrganizationAuthority {
   const generateId = options.generateId ?? randomUUID;
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async ensureOrganizationForVerifiedUser({ userId }) {
       return database.transaction(async (transaction) => {
         const userResult = await transaction.execute(sql`

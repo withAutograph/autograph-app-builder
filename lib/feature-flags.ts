@@ -9,6 +9,7 @@ const booleanOptions = [
 
 function failClosedAdapter<ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async decide() {
       throw new Error("Vercel Flags is unavailable");
     },
@@ -35,6 +36,7 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Ent
         return process.env.FLAGS;
       },
     }),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async decide(input) {
       return resolveAdapter().decide(input);
     },

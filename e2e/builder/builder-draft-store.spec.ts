@@ -54,6 +54,7 @@ function saveInput(draftId: string, brief: string, expectedRevision = 0) {
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
 test("PostgreSQL serializes draft save/archive races without resurrecting a handoff draft", async () => {

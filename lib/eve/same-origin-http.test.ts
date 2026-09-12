@@ -22,6 +22,7 @@ const principal: HostedPrincipal = {
 const config = { baseUrl: "https://builder.example.test" };
 
 function identity(token = "project-oidc-token"): HostedWorkloadIdentity {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return { token: vi.fn(async () => token) };
 }
 
@@ -203,6 +204,7 @@ describe("same-origin canonical Eve transport", () => {
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
     const bodies: Record<string, unknown>[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) return stream();
       bodies.push(JSON.parse(String(init?.body)));
@@ -251,6 +253,7 @@ describe("same-origin canonical Eve transport", () => {
     const transport = createSameOriginEveTransport({
       config,
       workloadIdentity: identity(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
     });
 
@@ -319,6 +322,7 @@ describe("same-origin canonical Eve transport", () => {
     const transport = createSameOriginEveTransport({
       config,
       workloadIdentity: identity(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
     });
 
@@ -339,6 +343,7 @@ describe("same-origin canonical Eve transport", () => {
 
   it("uses fresh project OIDC and canonical create/stream routes", async () => {
     const workloadIdentity = identity();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       const headers = new Headers(init?.headers);
       expect(init?.redirect).toBe("manual");
@@ -388,6 +393,7 @@ describe("same-origin canonical Eve transport", () => {
 
   it("uses canonical continuation and inputResponses bodies", async () => {
     const bodies: unknown[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) return stream();
       bodies.push(JSON.parse(String(init?.body)));
@@ -448,6 +454,7 @@ describe("same-origin canonical Eve transport", () => {
       },
     ];
     let streamReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) {
         streamReads += 1;
@@ -477,6 +484,7 @@ describe("same-origin canonical Eve transport", () => {
   it("keeps an accepted but unsettled input response non-replayable", async () => {
     const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
     let streamReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
       if (String(url).includes("/stream?")) {
         streamReads += 1;
@@ -508,6 +516,7 @@ describe("same-origin canonical Eve transport", () => {
       { type: "session.waiting", data: {} },
     ];
     let streamReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).endsWith("/cancel")) {
         expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
@@ -534,6 +543,7 @@ describe("same-origin canonical Eve transport", () => {
       { type: "session.waiting", data: {} },
       { type: "step.started", data: { turnId: "turn_new" } },
     ];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
@@ -550,6 +560,7 @@ describe("same-origin canonical Eve transport", () => {
 
   it("rejects a stale guarded turn and keeps no-active-turn observational", async () => {
     const active = [{ type: "step.started", data: { turnId: "turn_new" } }];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const staleGuardFetch = vi.fn<typeof fetch>(async () => stream(active));
     await expect(
       createSameOriginEveTransport({
@@ -565,6 +576,7 @@ describe("same-origin canonical Eve transport", () => {
     expect(staleGuardFetch).toHaveBeenCalledTimes(1);
 
     const waiting = [{ type: "session.waiting", data: {} }];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const noActiveGuardFetch = vi.fn<typeof fetch>(async () => stream(waiting));
     await expect(
       createSameOriginEveTransport({
@@ -579,6 +591,7 @@ describe("same-origin canonical Eve transport", () => {
     ).rejects.toMatchObject({ code: "turn_changed" });
     expect(noActiveGuardFetch).toHaveBeenCalledTimes(1);
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" })
@@ -594,6 +607,7 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("rejects inconsistent canonical cancellation replies", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" }, { status: 202 })
@@ -614,6 +628,7 @@ describe("same-origin canonical Eve transport", () => {
       createSameOriginEveTransport({
         config,
         workloadIdentity: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           token: async () => {
             throw new Error("unavailable");
           },
@@ -627,6 +642,7 @@ describe("same-origin canonical Eve transport", () => {
       createSameOriginEveTransport({
         config,
         workloadIdentity: identity(),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetchImplementation: vi.fn(async () => {
           throw new Error("connection lost");
         }),
@@ -639,6 +655,7 @@ describe("same-origin canonical Eve transport", () => {
       createSameOriginEveTransport({
         config,
         workloadIdentity: identity(),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetchImplementation: vi.fn(async () =>
           Response.json(
             { code: "session_not_active", error: "inactive", ok: false },
@@ -661,6 +678,7 @@ describe("same-origin canonical Eve transport", () => {
         config,
         workloadIdentity: identity(),
         fetchImplementation: vi.fn(
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async () =>
             new Response(null, {
               status: 307,
@@ -699,6 +717,7 @@ describe("same-origin canonical Eve transport", () => {
     const transport = createSameOriginEveTransport({
       config,
       workloadIdentity: identity(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
     });
     const result = await transport.get({
@@ -721,6 +740,7 @@ describe("same-origin canonical Eve transport", () => {
       config,
       workloadIdentity: identity(),
       fetchImplementation: vi.fn(
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () =>
           new Response("", {
             status: 200,
@@ -754,6 +774,7 @@ describe("same-origin canonical Eve transport", () => {
         createSameOriginEveTransport({
           config,
           workloadIdentity: identity(),
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           fetchImplementation: vi.fn(async () => response),
         }).get({ principal, adapterSessionId: "wrun_1" }),
       ).rejects.toThrow("incompatible stream contract");

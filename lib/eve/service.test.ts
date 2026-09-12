@@ -38,6 +38,7 @@ describe("local Eve acceptance", () => {
   it("lists recent work and resumes the selected local session", async () => {
     const events = [{ type: "session.waiting", data: {} }] as MessageStreamEvent[];
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         for (const event of events) yield event;
@@ -45,17 +46,22 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_recent" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       snapshot: vi.fn(async () => ({
         events,
         session: { sessionId: "wrun_recent", streamIndex: events.length },
       })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const service = createLocalEveSessionService(
       {
         sessions: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
         } as never,
@@ -93,12 +99,14 @@ describe("local Eve acceptance", () => {
       { type: "session.waiting", data: {} },
     ] as MessageStreamEvent[];
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield durableEvents[0]!;
         throw new Error("connection lost before the durable tail");
       },
     };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const snapshot = vi.fn(async () => ({
       events: durableEvents,
       session: { sessionId: "wrun_stream_recovery", streamIndex: 2 },
@@ -109,14 +117,18 @@ describe("local Eve acceptance", () => {
       stream: vi.fn(async function* durableEventStream() {
         yield durableEvents[1]!;
       }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
         sessions: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           create: vi.fn(async () => ({ session, response })),
           attach,
         } as never,
@@ -152,6 +164,7 @@ describe("local Eve acceptance", () => {
       releaseTail = resolve;
     });
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield {
@@ -160,6 +173,7 @@ describe("local Eve acceptance", () => {
         } as MessageStreamEvent;
       },
     };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const snapshot = vi.fn(async () => {
       throw new Error("snapshot must not run for a live tail");
     });
@@ -170,14 +184,18 @@ describe("local Eve acceptance", () => {
         await tailReady;
         yield { type: "session.waiting", data: {} } as MessageStreamEvent;
       }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService(
       {
         sessions: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           create: vi.fn(async () => ({ session, response })),
           attach,
         } as never,
@@ -211,6 +229,7 @@ describe("local Eve acceptance", () => {
     try {
       const never = new Promise<void>(() => {});
       const response = {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
@@ -225,13 +244,17 @@ describe("local Eve acceptance", () => {
           await never;
           yield* [];
         }),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         respond: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
           } as never,
@@ -268,6 +291,7 @@ describe("local Eve acceptance", () => {
       { type: "session.waiting", data: {} },
     ] as unknown as MessageStreamEvent[];
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         for (const event of settledEvents) yield event;
@@ -275,14 +299,18 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_module_reload" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const stateGeneration = "one-development-invocation";
     const firstService = createLocalEveSessionService(
       {
         sessions: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
         } as never,
@@ -344,6 +372,7 @@ describe("local Eve acceptance", () => {
 
   it("does not preserve sessions across fresh Eve cycle generations", async () => {
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield { type: "session.waiting", data: {} } as MessageStreamEvent;
@@ -351,12 +380,16 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_previous_cycle" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const client = {
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
       } as never,
@@ -398,6 +431,7 @@ describe("local Eve acceptance", () => {
   it("makes an active local turn resumable after its Eve child restarts", async () => {
     let keepOldResponseOpen!: () => void;
     const oldResponse = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         yield {
@@ -411,6 +445,7 @@ describe("local Eve acceptance", () => {
     };
     const resumedEvents = [{ type: "session.waiting", data: {} }] as MessageStreamEvent[];
     const resumedResponse = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         for (const event of resumedEvents) yield event;
@@ -418,6 +453,7 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_restart_interrupted" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       snapshot: vi.fn(async () => ({
         events: [
           {
@@ -427,13 +463,17 @@ describe("local Eve acceptance", () => {
         ] as MessageStreamEvent[],
         session: { sessionId: "wrun_restart_interrupted", streamIndex: 1 },
       })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => resumedResponse),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => resumedResponse),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const attach = vi.fn(() => session);
     const client = {
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session, response: oldResponse })),
         attach,
       } as never,
@@ -534,6 +574,7 @@ describe("local Eve acceptance", () => {
     // Keep stream response fixtures scoped to this test.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const response = (entries: MessageStreamEvent[]) => ({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         for (const event of entries) yield event;
@@ -541,12 +582,16 @@ describe("local Eve acceptance", () => {
     });
     const session = {
       state: { sessionId: "wrun_prototype" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response([])),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response([])),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const service = createLocalEveSessionService({
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session, response: response(events) })),
         attach: vi.fn(() => session),
       } as never,
@@ -623,6 +668,7 @@ describe("local Eve acceptance", () => {
       },
       { type: "session.waiting", data: {} },
     ] as unknown as MessageStreamEvent[];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const snapshot = vi.fn(async () => ({
       events,
       session: {
@@ -659,6 +705,7 @@ describe("local Eve acceptance", () => {
   it("returns one stable public handle without waiting for the active turn", async () => {
     const never = new Promise<void>(() => {});
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         await never;
@@ -667,10 +714,14 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_prompt_return" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const create = vi.fn(async () => ({ session, response }));
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService({
@@ -705,6 +756,7 @@ describe("local Eve acceptance", () => {
     try {
       const never = new Promise<void>(() => {});
       const response = {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
@@ -722,6 +774,7 @@ describe("local Eve acceptance", () => {
       ] as MessageStreamEvent[];
       const session = {
         state: { sessionId: "wrun_model_stalled" },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         snapshot: vi.fn(async () => ({
           events: durableEvents,
           session: {
@@ -729,13 +782,17 @@ describe("local Eve acceptance", () => {
             streamIndex: durableEvents.length,
           },
         })),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         respond: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
           } as never,
@@ -781,6 +838,7 @@ describe("local Eve acceptance", () => {
     vi.useFakeTimers();
     try {
       const response = {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
         async *[Symbol.asyncIterator]() {
           yield {
@@ -792,13 +850,17 @@ describe("local Eve acceptance", () => {
       };
       const session = {
         state: { sessionId: "wrun_model_healthy" },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         respond: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
       };
       const service = createLocalEveSessionService(
         {
           sessions: {
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             create: vi.fn(async () => ({ session, response })),
             attach: vi.fn(() => session),
           } as never,
@@ -826,6 +888,7 @@ describe("local Eve acceptance", () => {
       publishCancellation = resolve;
     });
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {
         publishCancellation();
         return { status: "accepted" };
@@ -844,12 +907,16 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_lifecycle" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const service = createLocalEveSessionService({
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
       } as never,
@@ -910,12 +977,16 @@ describe("local Eve acceptance", () => {
       };
       const session = {
         state: { sessionId: "wrun_cancel_timeout" },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         respond: vi.fn(async () => response),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         cancel: vi.fn(async () => ({ status: "accepted" })),
       };
       const service = createLocalEveSessionService({
         sessions: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           create: vi.fn(async () => ({ session, response })),
           attach: vi.fn(() => session),
         } as never,
@@ -938,6 +1009,7 @@ describe("local Eve acceptance", () => {
 
   it("uses the retained session for an explicit turn cancellation", async () => {
     const response = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         await new Promise<void>(() => {});
@@ -946,12 +1018,16 @@ describe("local Eve acceptance", () => {
     };
     const session = {
       state: { sessionId: "wrun_exact_turn" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => response),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const service = createLocalEveSessionService({
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session, response })),
         attach: vi.fn(() => session),
       } as never,
@@ -968,6 +1044,7 @@ describe("local Eve acceptance", () => {
   it("rebinds follow-up and response streams at the exact buffered raw tail", async () => {
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const stream = (events: MessageStreamEvent[]) => ({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
         for (const event of events) yield event;
@@ -1008,14 +1085,18 @@ describe("local Eve acceptance", () => {
     ]);
     const rebound = {
       state: { sessionId: "wrun_rebound" },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => followUp),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => responded),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
     };
     const created = { ...rebound };
     const attach = vi.fn(() => rebound);
     const service = createLocalEveSessionService({
       sessions: {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         create: vi.fn(async () => ({ session: created, response: initial })),
         attach,
       } as never,

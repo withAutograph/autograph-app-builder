@@ -125,6 +125,7 @@ function hostedFixture(
   let createIterated = false;
   let cancelRequested = false;
   let primaryStartCount = 0;
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
     const url = String(urlInput);
     if (url.endsWith("/.well-known/oauth-protected-resource"))

@@ -320,6 +320,7 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
 }
 
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async ({ appId, command }) =>
     appId === "validation-failure" && command.startsWith("mise run app:check-build ")
       ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }

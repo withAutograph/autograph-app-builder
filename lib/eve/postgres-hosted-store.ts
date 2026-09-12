@@ -257,6 +257,7 @@ function assertReserved(
  */
 export function createPostgresHostedEveStore(database: Database): HostedEveStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async reserveOperation(principalInput, candidateInput) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       const candidate = hostedOperationRecordSchema.parse(candidateInput);
@@ -358,6 +359,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async settleSucceeded(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
@@ -420,6 +422,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async settleUnsuccessful(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
@@ -450,6 +453,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       return sessionById(database, principal, sessionId);
@@ -470,6 +474,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       };
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async observeSession(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
@@ -520,6 +525,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {

@@ -332,6 +332,7 @@ export function sandboxTargetCommandExecutor(sandbox: SandboxSession): TargetCom
 }
 
 export function fixtureTargetCommandExecutor(): TargetCommandExecutor {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async ({ command, appId: requestedAppId, appSpecDigest }) => {
     const identity = {
       appId: requestedAppId,

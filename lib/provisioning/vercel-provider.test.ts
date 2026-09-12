@@ -43,6 +43,7 @@ describe("Vercel project provisioning", () => {
     "creates and reads back one linked %s project without a deployment call",
     async (scopeType) => {
       let created = false;
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
         const value = new URL(String(url));
         expect(value.searchParams.has("teamId")).toBe(scopeType === "team");
@@ -85,9 +86,11 @@ describe("Vercel project provisioning", () => {
         githubSelected: true,
         persistedCandidates: [],
         persistedAbsentCandidates: [],
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         persistCandidate: async (value) => {
           candidates.push(value);
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         persistAbsent: async (value) => {
           absent.push(value);
         },
@@ -133,6 +136,7 @@ describe("Vercel project provisioning", () => {
 
   it("reports Git-access rejection without creating an unlinked fallback", async () => {
     const bodies: unknown[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
         bodies.push(JSON.parse(String(init.body)));
@@ -165,6 +169,7 @@ describe("Vercel project provisioning", () => {
     const candidates: string[] = [];
     const absent: string[] = [];
     let created = false;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
       const path = new URL(String(url)).pathname;
       if (init?.method === "POST") {
@@ -196,9 +201,11 @@ describe("Vercel project provisioning", () => {
       githubSelected: false,
       persistedCandidates: [],
       persistedAbsentCandidates: [],
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistCandidate: async (value) => {
         candidates.push(value);
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistAbsent: async (value) => {
         absent.push(value);
       },

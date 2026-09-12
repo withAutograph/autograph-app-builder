@@ -93,6 +93,7 @@ export function createDeploymentMcpRequestHandler(input: {
   let hostedHandler: ((request: Request) => Promise<Response>) | undefined;
   let hostedResourceUrl: string | undefined;
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (request: Request): Promise<Response> => {
     if (input.environment.EVE_HOSTED_ADAPTER !== "1") {
       return fallbackHandler(request);

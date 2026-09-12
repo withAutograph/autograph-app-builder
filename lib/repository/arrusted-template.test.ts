@@ -34,6 +34,7 @@ describe("canonical Arrusted source preparation", () => {
         sandbox: {
           id: "sandbox",
           run,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readTextFile: vi.fn(async () => JSON.stringify(workspace)),
         } as never,
         receipt,

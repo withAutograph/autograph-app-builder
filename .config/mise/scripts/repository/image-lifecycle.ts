@@ -66,6 +66,7 @@ export function parseLifecycleArguments(
   };
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
 export async function runImageLifecycleTask(
   action: ImageLifecycleAction,
   args: readonly string[],

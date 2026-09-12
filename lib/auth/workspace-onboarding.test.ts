@@ -10,10 +10,12 @@ import {
 describe("workspace onboarding", () => {
   it("allows the signed-in product only after workspace setup succeeds", async () => {
     const value = { userId: "user_one", workspaceId: "workspace_one" };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await expect(resolveWorkspaceOnboardingState(async () => value)).resolves.toEqual({
       status: "ready",
       value,
     });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await expect(resolveWorkspaceOnboardingState(async () => undefined)).resolves.toEqual({
       status: "anonymous",
     });
@@ -27,6 +29,7 @@ describe("workspace onboarding", () => {
     ["signup-disabled", "access-denied"],
   ] as const)("maps %s to %s", async (reason, status) => {
     await expect(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveWorkspaceOnboardingState(async () => {
         throw new OrganizationProvisioningError(reason);
       }),

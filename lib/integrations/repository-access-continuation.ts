@@ -146,6 +146,7 @@ export function createRepositoryAccessContinuationService(input: {
       return callback.toString();
     },
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async consume(value: {
       authority: z.infer<typeof hostedTenantAuthoritySchema>;
       continuationId: string;

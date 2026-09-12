@@ -32,11 +32,14 @@ async function fixture() {
     createId: () => handoffId,
     now: () => new Date("2020-01-01T00:00:00Z"),
     store: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       reserve: async (value) => {
         record = value;
         return { disposition: "created", record: value };
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       read: async () => record,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       bindSession: async () => undefined,
     },
   });
@@ -58,7 +61,9 @@ async function fixture() {
 describe("prepared session context", () => {
   it("loads the full record under current authority even after launch expiry", async () => {
     const record = await fixture();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => record);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const isActiveMember = vi.fn(async () => true);
     const result = await createPreparedHandoffReader({ read, isActiveMember })(sessionAuth);
     expect(result).toEqual(record.intent);
@@ -67,17 +72,21 @@ describe("prepared session context", () => {
   });
   it("rejects revoked membership and substituted records without exposing another app", async () => {
     const record = await fixture();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => record);
     await expect(
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       createPreparedHandoffReader({ read, isActiveMember: async () => false })(sessionAuth),
     ).rejects.toThrow("handoff is unavailable");
     expect(read).not.toHaveBeenCalled();
     await expect(
       createPreparedHandoffReader({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         read: async () => ({
           ...record,
           authority: { ...authority, ownerUserId: "user_2" },
         }),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         isActiveMember: async () => true,
       })(sessionAuth),
     ).rejects.toThrow("handoff is unavailable");

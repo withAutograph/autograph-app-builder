@@ -75,6 +75,7 @@ describe("Browser prototype preview", () => {
   });
 
   it("serves exact prototype bytes only through an isolated no-store page", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const resolvePrototype = vi.fn(async () => prototype);
     const handler = createPrototypePreviewRequestHandler({ resolvePrototype });
     const response = await handler(
@@ -126,6 +127,7 @@ describe("Browser prototype preview", () => {
     const projections = await Promise.all(
       cases.map(async (candidate) => {
         const handler = createPrototypePreviewRequestHandler({
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           resolvePrototype: async () => {
             if (candidate.prototype instanceof Error) throw candidate.prototype;
             return candidate.prototype;
@@ -164,9 +166,11 @@ describe("Browser prototype preview", () => {
   });
 
   it("reads the requested owned session through the selected service", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const get = vi.fn(async () => result);
     const service = { get } as unknown as EveSessionService;
     const resolver = createServicePrototypePreviewResolver({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       serviceForRequest: async () => service,
     });
     await expect(
@@ -188,6 +192,7 @@ describe("Browser prototype preview", () => {
       .mockResolvedValueOnce({ ...result, prototype: undefined })
       .mockResolvedValueOnce(result);
     const resolver = createServicePrototypePreviewResolver({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
     });
     await expect(

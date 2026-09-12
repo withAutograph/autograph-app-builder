@@ -44,12 +44,14 @@ beforeEach(() => {
     status: "active",
     record: { version: 1, draft: { form: storedForm } },
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   drafts.archive.mockImplementation(async () => {
     calls.push("archive");
     return true;
   });
 });
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://app.test" })),
@@ -108,6 +110,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
   }),
 }));
 vi.mock("@/lib/handoff/deployment", () => ({
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   getBuilderHandoffDeploymentHandler: vi.fn(() => async () => {
     calls.push("handoff");
     return Response.json({
@@ -176,6 +179,7 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("retains the draft when durable handoff creation fails", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     vi.mocked(getBuilderHandoffDeploymentHandler).mockReturnValueOnce(async () =>
       Response.json({ error: "unavailable" }, { status: 503 }),
     );

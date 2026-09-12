@@ -1221,6 +1221,7 @@ async function assertPrestate(
     throw new Error("The approved empty destination changed.");
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 async function markerContent(proposal: FreshBootstrapProposal): Promise<Buffer> {
   return Buffer.from(`APP_BUILDER_REPOSITORY_BOOTSTRAP_CLAIM_V1:${proposal.digest}\n`);
 }
@@ -2271,12 +2272,14 @@ async function executeBootstrap(input: {
   }
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function publishFreshBootstrap(
   input: Omit<Parameters<typeof executeBootstrap>[0], "recoveryOfDigest">,
 ) {
   return executeBootstrap(input);
 }
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export async function recoverFreshBootstrap(
   input: Omit<Parameters<typeof executeBootstrap>[0], "recoveryOfDigest"> & {
     expectedJournalDigest: string;

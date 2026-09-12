@@ -31,6 +31,7 @@ function memoryStore(): BuilderHandoffStore {
       : undefined;
   };
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserve(record) {
       const key = JSON.stringify([record.authority, record.creationRequestId]);
       const existing = byRequest.get(key);
@@ -39,9 +40,11 @@ function memoryStore(): BuilderHandoffStore {
       byRequest.set(key, record);
       return { disposition: "created", record };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(input) {
       return readOwned(input);
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async renewExpired(input) {
       const record = readOwned(input);
       if (!record || record.requestDigest !== input.requestDigest) return undefined;
@@ -52,6 +55,7 @@ function memoryStore(): BuilderHandoffStore {
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
       return { disposition: "renewed", record: updated };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async bindSession(input) {
       const record = readOwned(input);
       if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)

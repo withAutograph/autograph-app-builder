@@ -65,7 +65,9 @@ describe("prepared provider continuity", () => {
     const result = await readPreparedVercelAccess({
       authority,
       intent,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       readCredential: async () => credential,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       fetch: async () => new Response(null, { status: 404 }),
     });
     expect(result).toEqual({
@@ -84,7 +86,9 @@ describe("prepared provider continuity", () => {
           await readPreparedVercelAccess({
             authority,
             intent,
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
             readCredential: async () => credential,
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
             fetch: async () => response,
           }),
         ).toEqual({
@@ -98,7 +102,9 @@ describe("prepared provider continuity", () => {
       await readPreparedVercelAccess({
         authority,
         intent,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => credential,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         fetch: async () => Response.json({ id: "prj_1", name: "stock", accountId: "team_1" }),
       }),
     ).toMatchObject({ status: "ready", project: { id: "prj_1" } });
@@ -113,16 +119,21 @@ describe("prepared provider continuity", () => {
     };
     let connected = false;
     const read = createPreparedAppContextReader({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       readHandoff: async () => intent,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       github: async () => ({
         status: "provider-unavailable",
         repository: { owner: "acme", name: "stock", fullName: "acme/stock" },
       }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       vercel: async () =>
         readPreparedVercelAccess({
           intent,
           authority,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           readCredential: async () => credential,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           fetch: async () =>
             connected
               ? Response.json({ id: "prj_1", name: "apps-stock" })
@@ -166,7 +177,9 @@ describe("prepared provider continuity", () => {
   });
 
   it("reads the selected installation under the full tenant and returns only observed project metadata", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const readCredential = vi.fn(async () => credential);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const request = vi.fn<typeof fetch>(async () =>
       Response.json({
         id: "prj_1",
@@ -213,7 +226,9 @@ describe("prepared provider continuity", () => {
       const result = await readPreparedVercelAccess({
         authority,
         intent,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => credential,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         fetch: async () => new Response(credential.token, { status }),
       });
       expect(result).toEqual({
@@ -231,7 +246,9 @@ describe("prepared provider continuity", () => {
         await readPreparedVercelAccess({
           authority,
           intent,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           readCredential: async () => credential,
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           fetch: async () => new Response(credential.token, { status }),
         }),
       ).toEqual({
@@ -244,6 +261,7 @@ describe("prepared provider continuity", () => {
 
   it("does not use another tenant or a different selected scope when credentials are unavailable", async () => {
     const request = vi.fn<typeof fetch>();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const readCredential = vi.fn(async (input: { authority: typeof authority }) =>
       input.authority.ownerUserId === authority.ownerUserId ? credential : undefined,
     );
@@ -259,6 +277,7 @@ describe("prepared provider continuity", () => {
       await readPreparedVercelAccess({
         authority,
         intent,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => ({
           ...credential,
           binding: { ...credential.binding, scopeId: "team_other" },
@@ -275,16 +294,20 @@ describe("prepared provider continuity", () => {
   it("treats transport, storage, malformed responses, and incorrect readbacks as retryable", async () => {
     await Promise.all(
       [
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         async () => {
           throw new Error(credential.token);
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         async () => new Response("invalid-json"),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         async () => Response.json({ id: "another-project", name: "wrong" }),
       ].map(async (request) => {
         expect(
           await readPreparedVercelAccess({
             authority,
             intent,
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
             readCredential: async () => credential,
             fetch: request,
           }),
@@ -295,6 +318,7 @@ describe("prepared provider continuity", () => {
       await readPreparedVercelAccess({
         authority,
         intent,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => {
           throw new Error(credential.token);
         },
@@ -303,6 +327,7 @@ describe("prepared provider continuity", () => {
   });
 
   it("uses emulated GET scope readback when provisioning did not create a project", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const request = vi.fn<typeof fetch>(async () =>
       Response.json({ id: "team_1", secret: credential.token }),
     );
@@ -310,6 +335,7 @@ describe("prepared provider continuity", () => {
       await readPreparedVercelAccess({
         authority,
         intent: { ...intent, provisioning: undefined },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readCredential: async () => credential,
         fetch: request,
         apiOrigin: "https://preview.vercel.app/api/emulate/vercel",
@@ -322,10 +348,12 @@ describe("prepared provider continuity", () => {
 
   it("does no provider work before the trusted handoff lookup, and reloads context on every call", async () => {
     const auth = { trusted: true };
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const github = vi.fn(async () => ({
       status: "provider-unavailable" as const,
       repository: { owner: "acme", name: "stock", fullName: "acme/stock" },
     }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const vercel = vi.fn(async () => ({
       status: "ready" as const,
       scope: {
@@ -335,6 +363,7 @@ describe("prepared provider continuity", () => {
         slug: "acme",
       },
     }));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const readHandoff = vi.fn(async () => intent);
     const read = createPreparedAppContextReader({
       readHandoff,
@@ -359,6 +388,7 @@ describe("prepared provider continuity", () => {
     vercel.mockClear();
     await expect(
       createPreparedAppContextReader({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readHandoff: async () => {
           throw new Error("Handoff unavailable");
         },
@@ -370,6 +400,7 @@ describe("prepared provider continuity", () => {
     expect(vercel).not.toHaveBeenCalled();
     expect(
       await createPreparedAppContextReader({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
         readHandoff: async () => undefined,
         github,
         vercel,

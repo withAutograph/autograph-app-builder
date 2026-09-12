@@ -56,6 +56,7 @@ const legacyReceipt = {
 } as unknown as SourceReceipt;
 
 function sandboxFixture() {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path === "repository/assets/payload.bin" ? Buffer.from([0, 255, 17, 128]) : null,
   );
@@ -97,9 +98,11 @@ describe("fresh bootstrap source workspace", () => {
 
   it("re-verifies V4 canonical state before reading its prepared manifest", async () => {
     const calls: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     mocks.inspectSourceBoundSandboxWorkspace.mockImplementation(async () => {
       calls.push("reverify");
     });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     mocks.readPreparedSandboxSourceManifest.mockImplementation(async () => {
       calls.push("manifest");
       return [];

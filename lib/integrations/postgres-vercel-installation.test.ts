@@ -21,7 +21,9 @@ function databaseFixture(rows: unknown[]) {
     from: vi.fn(),
     set: vi.fn(),
     where: vi.fn(),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     returning: vi.fn(async () => rows),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     limit: vi.fn(async () => rows),
   };
   for (const key of ["select", "update", "from", "set", "where"] as const)

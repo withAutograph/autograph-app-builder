@@ -18,6 +18,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   if (root) await act(async () => root?.unmount());
   root = undefined;
   container?.remove();
@@ -39,13 +40,16 @@ it("hydrates the brief island and persists the selected brief before sign-in nav
   container.innerHTML = renderToString(<AnonymousBrief />);
   document.body.append(container);
   const textarea = container.querySelector("textarea");
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => {
     root = hydrateRoot(container, <AnonymousBrief />);
   });
   expect(container.querySelector("textarea")).toBe(textarea);
   expect(textarea?.disabled).toBe(false);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => container.querySelectorAll("button")[1]!.click());
   expect(textarea?.value).toBe("Build a customer feedback portal");
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => container.querySelector("button")!.click());
   expect(sessionStorage.getItem("autograph-app-brief")).toBe("Build a customer feedback portal");
   expect(navigation.push).toHaveBeenCalledWith("/auth/sign-in?callbackURL=%2F");
@@ -56,10 +60,13 @@ it("supports the isolated story continuation without browser navigation", async 
   container = document.createElement("div");
   container.innerHTML = renderToString(<AnonymousBrief onContinue={onContinue} />);
   document.body.append(container);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => {
     root = hydrateRoot(container, <AnonymousBrief onContinue={onContinue} />);
   });
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => container.querySelectorAll("button")[1]!.click());
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => container.querySelector("button")!.click());
   expect(onContinue).toHaveBeenCalledWith("Build a customer feedback portal");
   expect(navigation.push).not.toHaveBeenCalled();

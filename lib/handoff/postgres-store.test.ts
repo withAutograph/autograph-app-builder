@@ -48,6 +48,7 @@ function store(input: {
     from: () => ({
       where: (condition: SQL) => {
         readWhere(new PgDialect().sqlToQuery(condition));
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         return { limit: async () => input.current ?? [] };
       },
     }),
@@ -59,6 +60,7 @@ function store(input: {
         return {
           where: (condition: SQL) => {
             updateWhere(new PgDialect().sqlToQuery(condition));
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             return { returning: async () => input.updated ?? [] };
           },
         };

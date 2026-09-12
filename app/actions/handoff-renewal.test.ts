@@ -12,6 +12,7 @@ const deployment = vi.hoisted(() => ({
 const cache = vi.hoisted(() => ({ refresh: vi.fn() }));
 
 vi.mock("next/cache", () => cache);
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers({ cookie: "session" })) }));
 vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://builder.example" })),
@@ -42,6 +43,7 @@ function handoff(overrides: Partial<{ handoffId: string; status: "prepared" | "c
 describe("renewBuilderHandoff", () => {
   it("uses the authenticated deployment renewal boundary and returns a fresh typed handoff", async () => {
     let receivedRequest: Request | undefined;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const handler = vi.fn(async (request: Request) => {
       receivedRequest = request;
       return Response.json({
@@ -89,6 +91,7 @@ describe("renewBuilderHandoff", () => {
     [404, "unavailable"],
     [503, "error"],
   ] as const)("maps renewal HTTP %s to the typed %s state", async (status, expected) => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     deployment.renew.mockReturnValue(async () => new Response(null, { status }));
 
     await expect(

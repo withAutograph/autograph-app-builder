@@ -75,6 +75,7 @@ export const OpenAndRefresh: Story = {
 };
 export const ActionableFailure: Story = {
   args: {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     onOpenLink: fn(async () => {
       throw new Error("blocked");
     }),

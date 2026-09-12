@@ -20,14 +20,17 @@ const navigation = vi.hoisted(() => ({
 }));
 const builderActions = vi.hoisted(() => ({
   continueBuilderHandoff: vi.fn(),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   saveActiveBuilderDraft: vi.fn(async (input: { draftId: string; expectedRevision: number }) => ({
     draftId: input.draftId,
     revision: input.expectedRevision + 1,
     updatedAt: "2030-01-01T00:00:00.000Z",
   })),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   loadActiveBuilderDraft: vi.fn(async () => undefined),
 }));
 
+// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
 async function defaultContinuation(
   _previous: unknown,
   input: {
@@ -81,6 +84,7 @@ async function defaultContinuation(
 
 builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
 const draftFetch = vi.hoisted(() =>
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   vi.fn(async (_url: string, init?: RequestInit) => {
     const input = JSON.parse(String(init?.body)) as {
       draftId: string;
@@ -221,6 +225,7 @@ async function render(ui: ReactNode) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => root?.render(ui));
   return container;
 }
@@ -231,6 +236,7 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {
     setter?.call(control, value);
     control.dispatchEvent(new Event("input", { bubbles: true }));
@@ -238,14 +244,17 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
 }
 
 async function click(element: HTMLElement) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => element.click());
 }
 
 async function focus(element: HTMLElement) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => element.focus());
 }
 
 async function press(element: HTMLElement, key: string) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () =>
     element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
   );
@@ -253,6 +262,7 @@ async function press(element: HTMLElement, key: string) {
 
 afterEach(async () => {
   vi.useRealTimers();
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   if (root) await act(async () => root?.unmount());
   container?.remove();
   root = undefined;
@@ -593,6 +603,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
 
     await fill(view.querySelector<HTMLTextAreaElement>("#app-brief")!, "Keep this draft.");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(500));
 
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
@@ -614,6 +625,7 @@ describe("Vercel-faithful App Builder flow", () => {
       <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(1000));
 
     expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
@@ -625,7 +637,9 @@ describe("Vercel-faithful App Builder flow", () => {
     const saved = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
     builderActions.saveActiveBuilderDraft.mockImplementationOnce(() => saved.promise);
     await render(<AppBuilder authenticated />);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersToNextFrame());
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(500));
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -638,6 +652,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     expect(sessionStorage.getItem("autograph-app-brief")).toBe("Claim this anonymous brief.");
     const [[request]] = builderActions.saveActiveBuilderDraft.mock.calls;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () =>
       saved.resolve({
         draftId: request.draftId,
@@ -693,6 +708,7 @@ describe("Vercel-faithful App Builder flow", () => {
         },
       },
     } as never);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       Object.defineProperty(document, "visibilityState", {
         configurable: true,
@@ -705,6 +721,7 @@ describe("Vercel-faithful App Builder flow", () => {
       });
       document.dispatchEvent(new Event("visibilitychange"));
     });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => undefined);
 
     expect(brief.value).toBe("Saved on another device.");
@@ -713,11 +730,15 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("does not apply an older remote revision after a newer revision settles", async () => {
     const delayedRead = Promise.withResolvers<undefined>();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => undefined);
     vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
       read,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       write: async () => undefined,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clear: async () => undefined,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: async () => true,
     });
     const draft = {
@@ -758,9 +779,12 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     const view = await render(page(1));
     read.mockImplementationOnce(() => delayedRead.promise);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.render(page(2)));
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.render(page(3)));
     expect(view.querySelector<HTMLInputElement>("#app-name")!.value).toBe("Revision 3");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => delayedRead.resolve(undefined));
     expect(view.querySelector<HTMLInputElement>("#app-name")!.value).toBe("Revision 3");
   });
@@ -779,9 +803,11 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     await fill(brief, "First local edit.");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(500));
     await fill(brief, "Newer local edit.");
 
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       Object.defineProperty(document, "visibilityState", {
         configurable: true,
@@ -843,6 +869,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => new Promise(requestAnimationFrame));
 
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
@@ -884,6 +911,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const view = await render(
       <AppBuilder authenticated user={{ name: "Taylor", email: "taylor@example.com" }} />,
     );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => new Promise(requestAnimationFrame));
 
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
@@ -955,6 +983,7 @@ describe("Vercel-faithful App Builder flow", () => {
     const appName = view.querySelector<HTMLInputElement>("#app-name")!;
 
     await fill(appName, "Replay Draft");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => new Promise(requestAnimationFrame));
 
     expect(appName.value).toBe("Replay Draft");
@@ -1029,22 +1058,26 @@ describe("Vercel-faithful App Builder flow", () => {
     const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
     await fill(brief, "Do not lose this saved intent.");
     const form = view.querySelector("form")!;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
     expect(view.querySelector("#app-brief")).toBe(brief);
     expect(view.querySelector("main")!.hasAttribute("inert")).toBe(true);
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => continuation.resolve({ status: "error" }));
     expect(view.querySelector("#app-brief")).toBe(brief);
     expect(brief.value).toBe("Do not lose this saved intent.");
     expect(view.querySelector("main")!.hasAttribute("inert")).toBe(false);
     expect(navigation.replace).not.toHaveBeenCalled();
     const [[, first]] = builderActions.continueBuilderHandoff.mock.calls;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });

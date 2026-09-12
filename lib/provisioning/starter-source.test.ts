@@ -49,6 +49,7 @@ function fixture() {
 describe("immutable Arrusted starter source", () => {
   it("verifies the content-addressed manifest, archive, and exact file inventory", async () => {
     const value = fixture();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url) =>
       String(url) === value.manifestUrl
         ? new Response(value.manifestBytes)
@@ -86,6 +87,7 @@ describe("immutable Arrusted starter source", () => {
           manifestUrl: value.manifestUrl,
           manifestSha256: value.manifestSha256,
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetch: vi.fn(async () => new Response("tampered")),
       }),
     ).rejects.toThrow("manifest-mismatch");

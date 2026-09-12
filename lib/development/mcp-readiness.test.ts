@@ -13,6 +13,7 @@ function response(body: unknown, status = 200, sessionId?: string) {
 describe("development MCP readiness", () => {
   it("initializes one session and returns the advertised tool names", async () => {
     const methods: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as {
         id?: number;
@@ -39,6 +40,7 @@ describe("development MCP readiness", () => {
 
   it("retries an endpoint that is still starting, then proves exactly five tools", async () => {
     let attempt = 0;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as {
         id?: number;
@@ -68,6 +70,7 @@ describe("development MCP readiness", () => {
   });
 
   it("fails closed as soon as a live endpoint advertises another contract", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as {
         id?: number;
