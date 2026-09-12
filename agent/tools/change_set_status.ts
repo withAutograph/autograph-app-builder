@@ -50,16 +50,29 @@ export async function exactNormalizedChangeSet(input: {
 export default defineTool({
   description:
     "Summarize the reviewed changes after repository validation succeeds. This never publishes or changes an external repository.",
-  inputSchema: z.object({}),
-  async execute(_input, ctx) {
-    void _input;
+  inputSchema: z.strictObject({ includeContent: z.boolean().default(false) }),
+  async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
       throw new Error("Run the repository validation before reviewing its changes.");
-    const changeSet = await exactNormalizedChangeSet({
-      state,
-      sandbox: await ctx.getSandbox(),
-    });
-    return { ...changeSet, reviewed: state.phase === "reviewed" };
+    const sandbox = await ctx.getSandbox();
+    const changeSet = await exactNormalizedChangeSet({ state, sandbox });
+    const exportFiles = input.includeContent
+      ? await Promise.all(
+          changeSet.changes
+            .filter((change) => change.kind !== "deleted")
+            .map(async (change) => ({
+              path: change.path,
+              content: await sandbox.readTextFile({
+                path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${change.path}`,
+              }),
+            })),
+        )
+      : undefined;
+    return {
+      ...changeSet,
+      reviewed: state.phase === "reviewed",
+      ...(exportFiles === undefined ? {} : { exportFiles }),
+    };
   },
 });

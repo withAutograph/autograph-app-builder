@@ -82,6 +82,13 @@ export default defineEval({
     t.succeeded();
 
     await send("Apply the current creation proposal.");
+    if (
+      t.pendingInputRequests.length !== 1 ||
+      t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
+    )
+      throw new Error("Expected one apply_app_creation approval request.");
+    emit({ kind: "response", request: "apply_app_creation", response: "approve" });
+    await t.respondAll("approve");
     t.succeeded();
 
     await send("Validate the applied creation.");
@@ -93,14 +100,19 @@ export default defineEval({
     await send("Accept the displayed change set.");
     t.succeeded();
 
+    await send(
+      "Export the reviewed candidate source by calling change_set_status with includeContent true.",
+    );
+    t.succeeded();
+    t.calledTool("change_set_status", { count: 1 });
+
     await send("Report artifact workflow status.");
     t.succeeded();
     emit({
       kind: "eval-completed",
       candidate: {
-        status: "unavailable",
-        reason:
-          "Native Eve reviewed sandbox change set has no local candidate export API wired to this eval.",
+        status: "available",
+        source: "change_set_status.exportFiles",
       },
     });
   },

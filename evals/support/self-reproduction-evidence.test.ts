@@ -4,7 +4,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { evidenceCompletion, evidencePrefix, evidenceSink } from "./self-reproduction-evidence";
+import {
+  candidateExportFromEvidence,
+  evidenceCompletion,
+  evidencePrefix,
+  evidenceSink,
+} from "./self-reproduction-evidence";
 
 const directories: string[] = [];
 
@@ -90,6 +95,49 @@ describe("self-reproduction evidence persistence", () => {
       continuationToken: "[REDACTED]",
       nested: { password: "[REDACTED]" },
     });
+  });
+
+  it("extracts only a valid reviewed candidate source export", () => {
+    expect(
+      candidateExportFromEvidence([
+        { kind: "event", event: { type: "action.result", data: { toolName: "other" } } },
+        {
+          kind: "event",
+          event: {
+            type: "action.result",
+            data: {
+              toolName: "change_set_status",
+              result: {
+                exportFiles: [
+                  { path: "apps/replica/package.json", content: "{}\n" },
+                  {
+                    path: "apps/replica/app/page.tsx",
+                    content: "export default function Page() {}\n",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ).toEqual([
+      { path: "apps/replica/app/page.tsx", content: "export default function Page() {}\n" },
+      { path: "apps/replica/package.json", content: "{}\n" },
+    ]);
+    expect(
+      candidateExportFromEvidence([
+        {
+          kind: "event",
+          event: {
+            type: "action.result",
+            data: {
+              toolName: "change_set_status",
+              result: { exportFiles: [{ path: "../reference", content: "leak" }] },
+            },
+          },
+        },
+      ]),
+    ).toBeUndefined();
   });
 
   it("flushes partial runs and preserves successful and failed tool outcomes in order", () => {

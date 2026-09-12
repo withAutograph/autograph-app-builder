@@ -95,3 +95,45 @@ export function evidenceSink(
     },
   };
 }
+
+export type CandidateExportFile = Readonly<{ path: string; content: string }>;
+
+export function candidateExportFromEvidence(
+  records: readonly Record<string, unknown>[],
+): CandidateExportFile[] | undefined {
+  for (const record of records.toReversed()) {
+    const { event } = record;
+    if (!event || typeof event !== "object" || Array.isArray(event)) continue;
+    const typedEvent = event as { type?: unknown; data?: unknown };
+    if (
+      typedEvent.type !== "action.result" ||
+      !typedEvent.data ||
+      typeof typedEvent.data !== "object"
+    )
+      continue;
+    const data = typedEvent.data as { toolName?: unknown; result?: unknown };
+    if (data.toolName !== "change_set_status" || !data.result || typeof data.result !== "object")
+      continue;
+    const files = (data.result as { exportFiles?: unknown }).exportFiles;
+    if (!Array.isArray(files) || files.length === 0) continue;
+    const validated: CandidateExportFile[] = [];
+    const paths = new Set<string>();
+    for (const file of files) {
+      if (!file || typeof file !== "object" || Array.isArray(file)) return undefined;
+      const { path, content } = file as { path?: unknown; content?: unknown };
+      if (
+        typeof path !== "string" ||
+        typeof content !== "string" ||
+        path.startsWith("/") ||
+        path.includes("\\") ||
+        path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
+        paths.has(path)
+      )
+        return undefined;
+      paths.add(path);
+      validated.push({ path, content });
+    }
+    return validated.toSorted((left, right) => left.path.localeCompare(right.path));
+  }
+  return undefined;
+}

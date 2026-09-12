@@ -17,6 +17,7 @@ import {
 } from "../evals/support/self-reproduction";
 import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
+  candidateExportFromEvidence,
   digest,
   evidenceCompletion,
   evidenceSink,
@@ -509,12 +510,30 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           reason: error instanceof Error ? error.message : String(error),
         };
       }
-    } else
-      candidate = {
-        status: "unavailable",
-        reason:
-          "The reviewed native Eve sandbox change set has no candidate export API wired to this eval. Framework and workflow comparison are blocked until a candidate tree is exported.",
-      };
+    } else {
+      const exported = candidateExportFromEvidence(records);
+      if (exported) {
+        candidateFiles = exported;
+        for (const file of exported) {
+          const destination = join(output, "candidate", file.path);
+          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
+          await writeFile(destination, file.content, { mode: 0o600 });
+        }
+        candidate = {
+          status: "available",
+          provenance: "native reviewed change_set_status export",
+          files: exported.map((file) => ({
+            path: `candidate/${file.path}`,
+            sha256: digest(file.content),
+          })),
+        };
+      } else
+        candidate = {
+          status: "unavailable",
+          reason:
+            "The native run did not retain a valid reviewed candidate export. Framework and workflow comparison remain blocked.",
+        };
+    }
     await saveReport();
     captures.push(
       ...(await Promise.all([

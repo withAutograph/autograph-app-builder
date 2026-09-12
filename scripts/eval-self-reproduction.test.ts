@@ -116,6 +116,35 @@ describe("native self-reproduction report orchestration", () => {
     expect(report.generation.reason).toBe("Native strict eval did not pass.");
   });
 
+  it("persists a candidate exported by the native reviewed change set", () => {
+    const exportEvent = {
+      kind: "event",
+      event: {
+        type: "action.result",
+        data: {
+          toolName: "change_set_status",
+          result: {
+            exportFiles: [
+              {
+                path: "apps/replica/app/page.tsx",
+                content: "export default function Page() { return null; }\n",
+              },
+            ],
+          },
+        },
+      },
+    };
+    const { result, report, output } = run(emit([exportEvent, { kind: "eval-completed" }]));
+    expect(result.status).toBe(0);
+    expect(report.candidate).toMatchObject({
+      status: "available",
+      provenance: "native reviewed change_set_status export",
+    });
+    expect(readFileSync(join(output, "candidate/apps/replica/app/page.tsx"), "utf-8")).toContain(
+      "export default function Page",
+    );
+  });
+
   it("reports a completed native eval without claiming candidate or capture proof", () => {
     const { result, report } = run(emit([{ kind: "event" }, { kind: "eval-completed" }]));
     expect(result.status).toBe(0);
