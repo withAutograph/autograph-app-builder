@@ -219,11 +219,11 @@ export function SessionAppView({
     const answer = answers[request.requestId];
     return answer === undefined || (answer.kind === "answer" && answer.value.trim().length === 0);
   }).length;
-  const continueGuidance = !canCallTools
-    ? "Answer in chat to continue."
-    : unansweredCount > 0
+  const continueGuidance = canCallTools
+    ? unansweredCount > 0
       ? `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`
-      : undefined;
+      : undefined
+    : "Answer in chat to continue.";
 
   async function submitApproval(
     request: PublicInputRequest,
@@ -280,7 +280,7 @@ export function SessionAppView({
 
   return (
     <main className={`mcpApp shell${onlyApproval ? " approval-shell" : ""}`}>
-      {!onlyApproval ? (
+      {onlyApproval ? null : (
         <header>
           <div>
             <strong>Autograph App Builder</strong>
@@ -288,7 +288,7 @@ export function SessionAppView({
           </div>
           <span>{requests.length} requested</span>
         </header>
-      ) : null}
+      )}
       <div className="request-list">
         {requests.map((request) =>
           request.kind === "approval" ? (

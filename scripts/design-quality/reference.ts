@@ -627,14 +627,7 @@ export function checkJsxAttributes({
                 .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
                 .join("; ")}`,
             });
-          else if (!expected)
-            attributes.push({
-              ...key,
-              verdict: "unassessed",
-              reason:
-                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
-            });
-          else {
+          else if (expected) {
             const finite = finiteLiteralEvidence(expression, expected, checker);
             if (
               finite === undefined &&
@@ -675,7 +668,13 @@ export function checkJsxAttributes({
                       : "The static JSX expression is not assignable to the selected Arrusted prop type.",
                 });
             }
-          }
+          } else
+            attributes.push({
+              ...key,
+              verdict: "unassessed",
+              reason:
+                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
+            });
         }
         ts.forEachChild(node, visit);
       };

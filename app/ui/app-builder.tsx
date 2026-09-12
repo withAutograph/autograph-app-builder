@@ -316,11 +316,11 @@ export function ModelControls({
         prefix={<Search size={15} />}
         showSelectedCheck={false}
       />
-      {!available ? (
+      {available ? null : (
         <button className={styles.retryModels} type="button" onClick={onRetry}>
           Retry models
         </button>
-      ) : null}
+      )}
     </fieldset>
   );
 }
@@ -1294,11 +1294,11 @@ export function Builder({
   const submitGuidance =
     form.appName.trim() && !validAppId
       ? "Use an app name that can form a lowercase, URL-safe app ID."
-      : !form.brief.trim()
-        ? "Add an app brief to continue."
-        : form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
+      : form.brief.trim()
+        ? form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
           ? "Choose an available model to continue."
-          : undefined;
+          : undefined
+        : "Add an app brief to continue.";
   const updateBrief = (brief: string) => {
     setForm((current) => {
       // `formSnapshot` is updated atomically by every builder field handler.

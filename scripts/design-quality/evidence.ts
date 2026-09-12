@@ -74,14 +74,14 @@ export function scoreAdherence(
   const assessed = Object.values(scores).reduce((n, d) => n + d.assessed, 0);
   return {
     version: evaluatorVersion,
-    status: !available.length
-      ? "unassessed"
-      : !sourceAvailable ||
-          available.length < dimensions.length ||
-          assessed < total ||
-          limitations.length
+    status: available.length
+      ? !sourceAvailable ||
+        available.length < dimensions.length ||
+        assessed < total ||
+        limitations.length
         ? "partial"
-        : "complete",
+        : "complete"
+      : !sourceAvailable || "unassessed",
     score: available.length
       ? Math.round(available.reduce((n, d) => n + d.percent!, 0) / available.length)
       : null,

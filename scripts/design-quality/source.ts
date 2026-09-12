@@ -645,32 +645,32 @@ export function analyzeSource({
                   "api",
                   typed
                     ? typed.verdict
-                    : value === undefined || !kind
+                    : value === undefined
                       ? "unassessed"
-                      : allowed
-                        ? allowed.includes(value)
-                          ? "conforming"
-                          : "nonconforming"
-                        : acceptedPrimitives
-                          ? acceptedPrimitives.includes(kind)
+                      : kind
+                        ? allowed
+                          ? allowed.includes(value)
                             ? "conforming"
                             : "nonconforming"
-                          : "unassessed",
+                          : acceptedPrimitives
+                            ? acceptedPrimitives.includes(kind)
+                              ? "conforming"
+                              : "nonconforming"
+                            : "unassessed"
+                        : "unassessed",
                   typed
                     ? typed.reason
                     : value === undefined
                       ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
-                      : !kind
-                        ? `${item.name}.${name} is not a static primitive literal.`
-                        : !allowed && !acceptedPrimitives
-                          ? `${item.name}.${name}'s primitive type cannot be resolved.`
-                          : !allowed && acceptedPrimitives?.includes(kind)
+                      : kind
+                        ? allowed
+                          ? allowed.includes(value)
+                            ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
+                            : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`
+                          : acceptedPrimitives?.includes(kind)
                             ? `${item.name}.${name} accepts static ${kind} values.`
-                            : !allowed
-                              ? `${item.name}.${name} does not accept static ${kind} values.`
-                              : allowed.includes(value)
-                                ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
-                                : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`,
+                            : `${item.name}.${name}'s primitive type cannot be resolved.`
+                        : `${item.name}.${name} is not a static primitive literal.`,
                   position(source, attribute),
                   "prop",
                 ),

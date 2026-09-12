@@ -241,9 +241,8 @@ function draftReadBack(
           idempotencyKey: proposal.idempotencyKey,
         } as const);
   const pullRequest =
-    state !== "complete"
-      ? ({ status: "absent" } as const)
-      : ({
+    state === "complete"
+      ? ({
           status: "present",
           pullRequestId: "400",
           pullRequestNumber: 7,
@@ -256,7 +255,8 @@ function draftReadBack(
           baseSha: proposal.baseSha,
           changeSetDigest: proposal.changeSetDigest,
           idempotencyKey: proposal.idempotencyKey,
-        } as const);
+        } as const)
+      : ({ status: "absent" } as const);
   const unsigned = {
     version: GITHUB_PUBLICATION_VERSION,
     idempotencyKey: proposal.idempotencyKey,

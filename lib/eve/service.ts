@@ -542,11 +542,11 @@ export function createLocalEveSessionService(
             stage:
               result.status === "completed"
                 ? ("complete" as const)
-                : result.implementationPlan !== undefined
-                  ? ("ready" as const)
-                  : result.prototype !== undefined
-                    ? ("prototype" as const)
-                    : ("designing" as const),
+                : result.implementationPlan === undefined
+                  ? result.prototype === undefined
+                    ? ("designing" as const)
+                    : ("prototype" as const)
+                  : ("ready" as const),
             status: result.status,
             resumability: ["completed", "failed", "cancelled"].includes(result.status)
               ? ("terminal" as const)

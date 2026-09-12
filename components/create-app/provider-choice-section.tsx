@@ -48,12 +48,12 @@ export function ProviderChoiceSection<Provider extends string>({
             <ChoiceCard
               key={option.provider}
               dataProvider={option.provider}
-              className={!option.available ? unavailableClassName : undefined}
+              className={option.available ? undefined : unavailableClassName}
               disabled={!option.available}
               checked={option.available && selected === option.provider}
               name={name}
               value={option.provider}
-              badge={!option.available ? "Coming soon" : undefined}
+              badge={option.available ? undefined : "Coming soon"}
               icon={<Icon size={18} aria-hidden="true" />}
               onChange={() => onChange(option.provider)}
             >

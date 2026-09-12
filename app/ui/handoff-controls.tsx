@@ -212,7 +212,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 ? "This handoff has expired. Renew it to continue with your saved brief and resources."
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
-      {access !== "ready" ? <a href={signInUrl}>Sign in with the same account</a> : null}
+      {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
       <fieldset disabled={renewing}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (

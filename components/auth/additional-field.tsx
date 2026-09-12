@@ -254,7 +254,7 @@ export function AdditionalField({
 
         <Select
           name={name}
-          defaultValue={field.defaultValue != null ? String(field.defaultValue) : undefined}
+          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
           required={field.required}
           disabled={isPending || field.readOnly}
         >
@@ -284,7 +284,7 @@ export function AdditionalField({
         <Combobox
           items={field.options ?? []}
           name={name}
-          defaultValue={field.defaultValue != null ? String(field.defaultValue) : undefined}
+          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
           required={field.required}
           disabled={isPending || field.readOnly}
         >

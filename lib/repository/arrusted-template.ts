@@ -481,16 +481,8 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   }
   const receipt = parseSourceReceipt(input.receipt);
   const observed =
-    input.githubSource !== undefined
-      ? await inspectGitHubSourceSandboxWorkspace({
-          sandbox: input.sandbox,
-          receipt,
-          githubSource: input.githubSource,
-          ...(input.expectedWorkspace === undefined
-            ? {}
-            : { expectedWorkspace: input.expectedWorkspace }),
-        })
-      : receipt.version === SOURCE_RECEIPT_VERSION
+    input.githubSource === undefined
+      ? receipt.version === SOURCE_RECEIPT_VERSION
         ? await inspectCanonicalArrustedSandboxWorkspace({
             sandbox: input.sandbox,
             receipt,
@@ -499,7 +491,15 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
             if (status.state !== "prepared")
               throw new Error("The prepared source workspace is missing.");
             return status.workspace;
-          });
+          })
+      : await inspectGitHubSourceSandboxWorkspace({
+          sandbox: input.sandbox,
+          receipt,
+          githubSource: input.githubSource,
+          ...(input.expectedWorkspace === undefined
+            ? {}
+            : { expectedWorkspace: input.expectedWorkspace }),
+        });
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== receipt.sourcePath ||

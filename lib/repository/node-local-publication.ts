@@ -746,8 +746,8 @@ export async function publishReviewedChangeSet(input: {
       throw new Error("Repository filesystem identity changed before Git apply.");
     fixedGitApply(snapshot.canonicalPath, patch, { check: true });
     mutationDispatched = true;
-    if (input.hooks?.dispatchGitApply !== undefined) await input.hooks.dispatchGitApply();
-    else fixedGitApply(snapshot.canonicalPath, patch);
+    if (input.hooks?.dispatchGitApply === undefined) fixedGitApply(snapshot.canonicalPath, patch);
+    else await input.hooks.dispatchGitApply();
     mutationCallReturned = true;
     appliedPaths = [...input.proposal.executionPaths];
     pending = { ...pending, appliedPaths, digest: "" };

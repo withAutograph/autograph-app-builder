@@ -237,8 +237,8 @@ export async function withLifecycleLock<T>(
     const acquired = await new Promise<boolean>((resolve, reject) => {
       const onError = (error: NodeJS.ErrnoException) => {
         server.removeListener("listening", onListening);
-        if (error.code !== "EADDRINUSE") reject(error);
-        else resolve(false);
+        if (error.code === "EADDRINUSE") resolve(false);
+        else reject(error);
       };
       const onListening = () => {
         server.removeListener("error", onError);

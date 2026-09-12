@@ -1626,8 +1626,9 @@ export default defineAgent({
     externalDependencies: ["@emulators/adapter-next", "@emulators/github", "@emulators/vercel"],
   },
   model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
-  ...(!hasTestCapability("mock-model")
-    ? {
+  ...(hasTestCapability("mock-model")
+    ? {}
+    : {
         modelOptions: {
           providerOptions: {
             gateway: {
@@ -1636,8 +1637,7 @@ export default defineAgent({
             },
           },
         },
-      }
-    : {}),
+      }),
   modelContextWindowTokens: 128_000,
   reasoning: localDevelopmentAgent ? "low" : "high",
 });

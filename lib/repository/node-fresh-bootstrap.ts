@@ -2023,7 +2023,11 @@ async function executeBootstrap(input: {
       } catch {
         verification = undefined;
       }
-      if (verification !== undefined) {
+      if (verification === undefined) {
+        if (input.proposal.destinationPrestate.kind !== "empty-directory")
+          throw new Error("The destination conflicts with recovery state.");
+        await assertPrestate(capability, input.proposal);
+      } else {
         destinationPublished = true;
         await removeVerifiedSwappedEmptyDirectory(capability, input.proposal);
         const success = successReceipt({
@@ -2041,10 +2045,6 @@ async function executeBootstrap(input: {
         });
         await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
         return { ok: true, receipt: success };
-      } else {
-        if (input.proposal.destinationPrestate.kind !== "empty-directory")
-          throw new Error("The destination conflicts with recovery state.");
-        await assertPrestate(capability, input.proposal);
       }
     }
     if (!stageCreated) {

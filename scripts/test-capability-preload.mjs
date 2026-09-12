@@ -133,16 +133,16 @@ function requestAuthorization() {
       : undefined;
   const request = registry.begin(process, context, delegatedPublicKey);
   let response;
-  if (port !== undefined) {
-    port.postMessage({ version: 2, ...request });
-    response = readPortFrame(port);
-    port.close();
-    delete workerData[workerPortKey];
-  } else {
+  if (port === undefined) {
     if (!fstatSync(authorizationFd).isSocket())
       throw new Error("Structural test authorization was not private IPC.");
     writeSync(authorizationFd, `${JSON.stringify({ version: 2, ...request })}\n`);
     response = readFdFrame();
+  } else {
+    port.postMessage({ version: 2, ...request });
+    response = readPortFrame(port);
+    port.close();
+    delete workerData[workerPortKey];
   }
   if (
     Buffer.byteLength(JSON.stringify(response)) > maxBytes ||

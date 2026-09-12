@@ -146,11 +146,11 @@ export function createBuilderHandoffService(input: {
     async status(value: { authority: Authority; handoffId: string }) {
       const record = await read(value);
       const status =
-        record.sessionId !== undefined
-          ? ("continued" as const)
-          : now() >= record.expiresAt
+        record.sessionId === undefined
+          ? now() >= record.expiresAt
             ? ("expired" as const)
-            : ("prepared" as const);
+            : ("prepared" as const)
+          : ("continued" as const);
       return { status, record };
     },
 
