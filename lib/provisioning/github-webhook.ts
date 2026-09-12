@@ -13,6 +13,7 @@ import type * as databaseSchema from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verify(input: { body: Uint8Array; signature: string; secret: string }) {
   if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) return false;
   const expected = `sha256=${createHmac("sha256", input.secret).update(input.body).digest("hex")}`;
@@ -32,6 +33,7 @@ const authorizationEvent = z
   })
   .passthrough();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {
   database: Database;
   secret: string;

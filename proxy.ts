@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function previewHostname(value: string | undefined) {
   if (
     value === undefined ||
@@ -16,6 +17,7 @@ function previewHostname(value: string | undefined) {
  * on the stable branch hostname so its canonical callback can consume them,
  * even when a developer entered through an immutable deployment URL.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function proxy(request: NextRequest) {
   if (
     process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||

@@ -10,6 +10,7 @@ const claims = {
   scopes: ["autograph:session", "autograph:respond"],
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorize(verifiedClaims: unknown = claims) {
   return authorizeHostedPrincipal({
     verifiedClaims,

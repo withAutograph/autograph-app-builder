@@ -15,11 +15,13 @@ export interface ProviderConnectionNotice {
   reason?: ProviderConnectionFailureReason;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseProviderConnectionFailureReason(input: unknown) {
   const parsed = providerConnectionFailureReasonSchema.safeParse(input);
   return parsed.success ? parsed.data : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionFailureMessage(
   provider: "GitHub" | "Vercel",
   reason?: ProviderConnectionFailureReason,

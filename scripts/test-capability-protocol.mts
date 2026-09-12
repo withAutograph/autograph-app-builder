@@ -1,5 +1,6 @@
 import type { Readable, Writable } from "node:stream";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function relayBoundedFrames(options: {
   source: Readable;
   target: Writable;

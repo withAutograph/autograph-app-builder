@@ -27,6 +27,7 @@ import {
  *
  * @returns A callback taking the resolved data of a sign-in mutation.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useSignInContinuation() {
   const { basePaths, navigate, plugins, redirectTo } = useAuth();
 

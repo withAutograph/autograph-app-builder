@@ -28,6 +28,7 @@ export interface DesktopSize {
 }
 
 /** Parses an opt-in desktop window size without imposing a width policy. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^(?<width>[1-9]\d*)x(?<height>[1-9]\d*)$/u.exec(value);
   if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
@@ -38,6 +39,7 @@ export function parseAdditionalDesktopSize(value: string): DesktopSize {
   return { width, height };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function captureViewports(additionalDesktopSize?: DesktopSize) {
   return additionalDesktopSize
     ? [
@@ -89,6 +91,7 @@ export const properties: Record<string, Category> = {
   "border-top-color": "border",
   "box-shadow": "shadow",
 };
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
   const unique = [...new Set(values)];
   if (unique.length !== 1) return "unassessed" as const;
@@ -120,6 +123,7 @@ type BrowserStyleObservation = Observation & {
   };
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
   const index = node.attributes?.indexOf("class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
@@ -131,6 +135,7 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
     : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function matchedSelector(match: {
   matchingSelectors?: number[];
   rule: { selectorList?: { selectors?: { text?: string }[] } };
@@ -147,6 +152,7 @@ function matchedSelector(match: {
  * either axis only when it contains exactly one top-level CSS value; two-value
  * gaps deliberately remain ambiguous rather than being assigned to both axes.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
   if (!candidate) return undefined;
@@ -197,6 +203,7 @@ interface CssSourceFile {
  * declaration. A map path, a matching utility name, or a matching value alone
  * is deliberately insufficient provenance.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function mappedSharedCssRule(input: {
   map: CssSourceMap | undefined;
   mapped: ReturnType<typeof originalCssSource>;
@@ -228,6 +235,7 @@ export function mappedSharedCssRule(input: {
 }
 
 /** Wait for currently active finite CSS motion before sampling visual evidence. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function settleFiniteMotion(page: Page) {
   await page.evaluate(async () => {
     // Let hydration/class updates start their CSS transitions before taking the
@@ -247,6 +255,7 @@ export async function settleFiniteMotion(page: Page) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function measurePage(page: Page) {
   await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
@@ -415,6 +424,7 @@ export async function measurePage(page: Page) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function measureStyles(
   page: Page,
   tokens: Record<string, string>,
@@ -961,6 +971,7 @@ export async function measureStyles(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function capturePreview(input: {
   url: string;
   output: string;

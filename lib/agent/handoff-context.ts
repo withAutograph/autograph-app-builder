@@ -7,6 +7,7 @@ import {
 } from "../hosted/session-authority";
 import type { HostedSessionTenantAuthority } from "../hosted/session-authority";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
@@ -32,6 +33,7 @@ export function createPreparedHandoffReader(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function createDeploymentPreparedHandoffReader() {
   const [
     { readPreviewOAuthRuntimeConfig },
@@ -67,6 +69,7 @@ async function createDeploymentPreparedHandoffReader() {
 // and provider credentials are always resolved anew for each invocation.
 let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) return undefined;
   // Preserve the shared lazy promise while clearing it after a failed creation.

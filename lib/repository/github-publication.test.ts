@@ -63,6 +63,7 @@ const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
 const reviewedBytesDigest = createHash("sha256").update(reviewedBytes).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicationContentSource(
   bytes: Uint8Array | null = reviewedBytes,
   onRead?: (path: string) => void,
@@ -96,6 +97,7 @@ function publicationContentSource(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function source(
   sourceKind: SourceReceiptEvidence["sourceKind"] = "fresh-template",
 ): SourceReceiptEvidence {
@@ -112,6 +114,7 @@ function source(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function review(
   inputChanges: NormalizedChangeSet["changes"] = [
     {
@@ -168,6 +171,7 @@ function review(
   return createReviewedChangeSetReceipt(changeSet, "review-call");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installation(
   operation: GitHubOperation,
   repositoryIds: readonly string[] = ["100"],
@@ -183,6 +187,7 @@ function installation(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repository(
   identity: GitHubInstallationIdentity,
   overrides: Partial<Omit<GitHubRepositoryObservation, "version" | "digest">> = {},
@@ -204,6 +209,7 @@ function repository(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshReadBack(
   proposal: FreshRepositoryProposal,
   identity: GitHubInstallationIdentity,
@@ -228,6 +234,7 @@ function freshReadBack(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftReadBack(
   proposal: DraftPullRequestProposal,
   repo: GitHubRepositoryObservation,
@@ -359,6 +366,7 @@ class Adapter implements GitHubPublicationAdapter {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshProposal(adapter: Adapter) {
   return createFreshRepositoryProposal({
     installation: adapter.identities.create,
@@ -369,6 +377,7 @@ function freshProposal(adapter: Adapter) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftProposal(adapter: Adapter) {
   return createDraftPullRequestProposal({
     installation: adapter.identities.publish,

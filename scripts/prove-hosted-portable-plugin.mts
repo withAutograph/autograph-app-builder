@@ -19,6 +19,7 @@ const required = (name: string) => {
   return value;
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function secretFile(pathValue: string) {
   const requested = resolve(pathValue);
   const info = await lstat(requested);

@@ -22,6 +22,7 @@ export interface AccountSettingsProps {
  *   code-based flow).
  * - Plugin-contributed account cards are rendered via the plugins array.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AccountSettings({
   className,
   ...props

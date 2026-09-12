@@ -3,6 +3,7 @@
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function PasskeySkeleton() {
   return (
     <Item>

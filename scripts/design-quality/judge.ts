@@ -43,6 +43,7 @@ export interface ImageEvidence {
   width: number;
   height: number;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateJudgment(value: unknown, images: ImageEvidence[]) {
   const judgment = judgmentSchema.parse(value);
   for (const finding of judgment.findings) {
@@ -67,6 +68,7 @@ Anchors: 0 unusable, 1 major problems, 2 usable with notable issues, 3 strong, 4
 Every finding MUST identify an exact provided image name and a rectangle in that image's original pixel coordinates, severity, explanation and concrete improvement. Don't invent findings or pretend unseen states were tested. Report uncertainties. Keep Arrusted token adherence separate; do not invent a token adherence percentage.
 Return the requested structured object only.`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function judgeDesign(
   input: { brief: string; evidence: unknown; images: ImageEvidence[] },
   hooks?: { getToken: () => Promise<string>; generate: () => Promise<unknown> },

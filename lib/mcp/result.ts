@@ -17,6 +17,7 @@ export { McpProviderUnavailableError, McpToolAuthenticationRequiredError } from 
 
 export const SESSION_RESOURCE_URI = "ui://autograph-app-builder/session.html";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
   result: Result,
   text: string,
@@ -33,6 +34,7 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(error: unknown, sessionId = "") {
   if (error instanceof McpProviderUnavailableError) {
     const message =

@@ -18,6 +18,7 @@ export interface BetterAuthInfrastructureSummary {
   organizationAuthorityReady: boolean;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readApiKey(value: string | undefined): string {
   const apiKey = value?.trim();
   if (!apiKey) {
@@ -26,6 +27,7 @@ function readApiKey(value: string | undefined): string {
   return apiKey;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveBetterAuthInfrastructure(options: BetterAuthInfrastructureOptions) {
   const configuredValue = options.environment.BETTER_AUTH_INFRASTRUCTURE?.trim();
 

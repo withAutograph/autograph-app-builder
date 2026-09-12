@@ -6,18 +6,22 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
   return <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogPortal({ ...props }: AlertDialogPrimitive.Portal.Props) {
   return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdrop.Props) {
   return (
     <AlertDialogPrimitive.Backdrop
@@ -31,6 +35,7 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogContent({
   className,
   size = "default",
@@ -54,6 +59,7 @@ function AlertDialogContent({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -67,6 +73,7 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">)
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -80,6 +87,7 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">)
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogMedia({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -93,6 +101,7 @@ function AlertDialogMedia({ className, ...props }: React.ComponentProps<"div">) 
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogTitle({
   className,
   ...props
@@ -109,6 +118,7 @@ function AlertDialogTitle({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogDescription({
   className,
   ...props
@@ -125,10 +135,12 @@ function AlertDialogDescription({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof Button>) {
   return <Button data-slot="alert-dialog-action" className={cn(className)} {...props} />;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AlertDialogCancel({
   className,
   variant = "outline",

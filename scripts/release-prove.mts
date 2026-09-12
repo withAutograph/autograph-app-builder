@@ -35,6 +35,7 @@ import { releaseEndpoint, TOOL_NAMES } from "./portable-release";
 const execFileAsync = promisify(execFile);
 const repositoryRoot = await realpath(resolve("."));
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
@@ -69,6 +70,7 @@ function parseArguments(args: readonly string[]) {
   return parsed;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
   if (value === undefined || !isAbsolute(value))
@@ -76,6 +78,7 @@ function requiredExecutable(name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function run(
   executable: string,
   args: string[],
@@ -96,6 +99,7 @@ async function run(
   return result.stdout;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function ownerBoundFile(path: string, label: string) {
   const info = await lstat(path);
   if (

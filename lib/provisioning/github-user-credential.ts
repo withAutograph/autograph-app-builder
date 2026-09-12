@@ -13,6 +13,7 @@ const credentialConfigSchema = z
 
 export type GitHubUserCredentialConfig = z.infer<typeof credentialConfigSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readGitHubUserCredentialEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): GitHubUserCredentialConfig {
@@ -78,6 +79,7 @@ export interface GitHubUserCredentialStore {
   }) => Promise<number>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubCredentialAssociatedData(input: {
   authority: BuilderProvisionAuthority;
   providerUserId: string;
@@ -88,6 +90,7 @@ export function githubCredentialAssociatedData(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function encryptGitHubUserTokens(input: {
   tokens: GitHubUserTokenSet;
   key: Buffer;
@@ -105,6 +108,7 @@ export function encryptGitHubUserTokens(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function decryptGitHubUserTokens(input: {
   encryptedCredential: string;
   credentialIv: string;

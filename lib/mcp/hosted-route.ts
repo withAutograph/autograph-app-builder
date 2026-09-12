@@ -28,6 +28,7 @@ type RecheckRepositoryAccess = (input: {
   repository: string;
 }) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: string) {
   const context = {
     attributes: {
@@ -45,6 +46,7 @@ function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: stri
   return { current: context, initiator: context };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedDeploymentConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
@@ -67,6 +69,7 @@ export function readHostedDeploymentConfig(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function openHostedPostgresDatabase(databaseUrl: string): Database {
   const client = postgres(parseHostedDatabaseUrl(databaseUrl), hostedRuntimePostgresOptions);
   return drizzle(client, { schema: databaseSchema });
@@ -78,6 +81,7 @@ export function openHostedPostgresDatabase(databaseUrl: string): Database {
  * The resulting runtime is principal-free and may safely reuse its database
  * pool; the request handler still derives a fresh principal for every request.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createDeploymentMcpRequestHandler(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   workloadIdentity: HostedWorkloadIdentity;

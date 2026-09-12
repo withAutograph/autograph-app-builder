@@ -27,6 +27,7 @@ const exactTools = [
   "autograph_start",
 ];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims {
   return {
     issuer: auth.issuer,
@@ -68,6 +69,7 @@ const transport: HostedEveTransport = {
   },
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runtime(
   input: {
     verifiedClaims?: VerifiedHostedClaims;
@@ -96,6 +98,7 @@ function runtime(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mcpRequest(
   headers: Record<string, string> = {},
   method = "tools/list",
@@ -117,6 +120,7 @@ function mcpRequest(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
   return new Request(auth.resourceUrl, {
     method: "POST",
@@ -133,6 +137,7 @@ function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function mcpResult<T>(response: Response): Promise<T> {
   const body = await response.text();
   const data = body
@@ -144,6 +149,7 @@ async function mcpResult<T>(response: Response): Promise<T> {
   return payload.result;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function toolNames(response: Response): Promise<string[]> {
   const result = await mcpResult<{
     tools?: { name?: string }[];

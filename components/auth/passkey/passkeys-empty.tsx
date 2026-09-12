@@ -18,6 +18,7 @@ export interface PasskeysEmptyProps {
   onAddPress: () => void;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function PasskeysEmpty({ onAddPress }: PasskeysEmptyProps) {
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 

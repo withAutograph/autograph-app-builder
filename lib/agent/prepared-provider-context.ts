@@ -19,6 +19,7 @@ type PreparedIntent = BuilderHandoffIntent & {
 };
 
 /** Call only after the durable handoff reader has verified the session. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedHandoffReturnPath(sessionAuth: unknown) {
   const parsed = z
     .object({
@@ -34,6 +35,7 @@ export function preparedHandoffReturnPath(sessionAuth: unknown) {
     : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedGitHubRepository(intent: PreparedIntent) {
   return (
     intent.repository.resolvedFullName ??
@@ -43,6 +45,7 @@ export function preparedGitHubRepository(intent: PreparedIntent) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withPreparedGitHubSelection(
   input: RepositoryAccessToolInput,
   intent: PreparedIntent | undefined,
@@ -94,6 +97,7 @@ const reconnect = (): PreparedVercelAccess => ({
   action: "reconnect",
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("invalid-response");
@@ -121,6 +125,7 @@ async function boundedJson(response: Response): Promise<unknown> {
 }
 
 /** Server-only credential read followed by a fresh, read-only provider request. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedVercelAccess(input: {
   intent: PreparedIntent;
   authority: Authority;
@@ -225,6 +230,7 @@ export async function readPreparedVercelAccess(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedAppContextReader(input: {
   readHandoff: (sessionAuth: unknown) => Promise<PreparedIntent | undefined>;
   github: (
@@ -337,6 +343,7 @@ export function createPreparedAppContextReader(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedAppContext(sessionAuth: unknown) {
   const { readPreparedHandoffContext } = await import("./handoff-context");
   return createPreparedAppContextReader({

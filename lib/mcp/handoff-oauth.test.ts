@@ -28,6 +28,7 @@ import {
   sessionEnvelope,
 } from "./handoff-provider-test-harness";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handoffStore(): BuilderHandoffStore {
   const records = new Map<string, BuilderHandoffRecord>();
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -69,6 +70,7 @@ function handoffStore(): BuilderHandoffStore {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function callStart(
   handler: ReturnType<typeof createMcpRequestHandler>,
   token: string,

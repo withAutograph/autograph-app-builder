@@ -8,6 +8,7 @@ type SignalTarget = Readonly<{
   off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createDevelopmentShutdown(target: SignalTarget = process): Readonly<{
   signal: AbortSignal;
   exitCode: () => number;
@@ -35,6 +36,7 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
   if (signal.aborted) return Promise.resolve({ kind: "stop" as const, code: exitCode() });
   return new Promise<{ kind: "stop"; code: number }>((resolve) => {
@@ -44,6 +46,7 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentChildExit(child: ChildProcess) {
   if (child.exitCode !== null) return Promise.resolve(child.exitCode);
   if (child.signalCode !== null) return Promise.resolve(1);
@@ -53,6 +56,7 @@ export function developmentChildExit(child: ChildProcess) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function stopDevelopmentChild(
   child: ChildProcess,
   options: Readonly<{
@@ -112,6 +116,7 @@ export async function stopDevelopmentChild(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForDevelopmentPortRelease(
   port: number,
   options: Readonly<{ timeoutMs?: number; pollMs?: number }> = {},

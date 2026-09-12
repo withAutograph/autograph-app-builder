@@ -22,6 +22,7 @@ const actions = [
   "tenant.delete",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readPrivateRequest(path: string): Promise<unknown> {
   if (!isAbsolute(path)) {
     throw new Error("Hosted admin request path must be absolute.");

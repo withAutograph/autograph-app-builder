@@ -37,6 +37,7 @@ const renewal = {
   expiresAt: new Date("2026-09-01T12:02:00Z"),
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function store(input: {
   updated?: (typeof builderHandoffs.$inferSelect)[];
   current?: (typeof builderHandoffs.$inferSelect)[];

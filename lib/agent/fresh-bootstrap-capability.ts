@@ -11,11 +11,13 @@ interface FreshBootstrapTestContext {
 }
 const structurallyInjectedCapability = new AsyncLocalStorage<FreshBootstrapTestContext>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function currentFreshBootstrapCapability(): Promise<FreshBootstrapCapability> {
   const injected = structurallyInjectedCapability.getStore()?.capability;
   return injected === undefined ? productionFreshBootstrapCapability() : Promise.resolve(injected);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withFreshBootstrapTestCapability<T>(
   capability: FreshBootstrapCapability,
   operation: () => Promise<T>,
@@ -26,10 +28,12 @@ export function withFreshBootstrapTestCapability<T>(
   return structurallyInjectedCapability.run({ capability, hooks }, operation);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function currentFreshBootstrapTestHooks(): FreshBootstrapFaultHooks | undefined {
   return structurallyInjectedCapability.getStore()?.hooks;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function configuredFreshBootstrapEvalHooks(): FreshBootstrapFaultHooks | undefined {
   if (
     !hasTestCapability("simulated-publication") ||

@@ -9,6 +9,7 @@ export interface PreviewEmulateStateStore {
   reset: (namespace: string) => Promise<number>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateState(state: string) {
   let parsed: unknown;
   try {
@@ -26,6 +27,7 @@ function validateState(state: string) {
   return state;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingVercelCodeCount(state: string | undefined) {
   if (!state) return 0;
   try {
@@ -38,6 +40,7 @@ function pendingVercelCodeCount(state: string | undefined) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewEmulatePersistence(input: {
   namespace: string;
   store: PreviewEmulateStateStore;
@@ -68,6 +71,7 @@ export function createPreviewEmulatePersistence(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresPreviewEmulateStateStore(
   databaseUrl: string,
 ): PreviewEmulateStateStore {
@@ -103,6 +107,7 @@ export function createPostgresPreviewEmulateStateStore(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resetPostgresPreviewEmulateState(databaseUrl: string, namespace: string) {
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   try {

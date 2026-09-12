@@ -16,6 +16,7 @@ import { createPostgresHostedGitHubInstallationStore } from "../repository/postg
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readOwnerOnlyRequest(path: string): Promise<unknown> {
   if (!isAbsolute(path)) throw new Error("Request path must be absolute.");
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);

@@ -5,6 +5,7 @@ import { storybookAuthenticatedSession } from "@/.storybook/auth-session";
 import { AccountSettings } from "@/components/auth/settings/account/account-settings";
 import { UserButton } from "@/components/auth/user/user-button";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ThemeControls() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 bg-background p-6 text-foreground">

@@ -67,6 +67,7 @@ export interface PreviewOrganizationUserAuthority {
   ensureOrganizationForVerifiedUser: (input: { userId: string }) => Promise<EnsuredOrganization>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function identityUnavailable() {
   return APIError.from("FORBIDDEN", {
     code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED",
@@ -75,6 +76,7 @@ function identityUnavailable() {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function organizationError(cause: unknown) {
   if (!(cause instanceof OrganizationProvisioningError)) {
     return APIError.from("SERVICE_UNAVAILABLE", {
@@ -117,6 +119,7 @@ function organizationError(cause: unknown) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewUserManagementLifecycle(authority: PreviewOrganizationUserAuthority) {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -165,6 +168,7 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function previewUserManagementPlugins(authority: PreviewOrganizationUserAuthority) {
   const lifecycle = createPreviewUserManagementLifecycle(authority);
   return [

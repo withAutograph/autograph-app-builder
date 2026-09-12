@@ -155,6 +155,7 @@ export interface GitHubAppInstallationProvider {
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sanitizedProviderCall(operation: () => Promise<unknown>): Promise<unknown> {
   try {
     return await operation();
@@ -163,6 +164,7 @@ async function sanitizedProviderCall(operation: () => Promise<unknown>): Promise
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {
@@ -171,6 +173,7 @@ function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
   return result.data;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repositoryObservation(
   snapshotInput: unknown,
   installationIdentityDigest: string,
@@ -196,9 +199,11 @@ function repositoryObservation(
  * Validates an operation-scoped GitHub App provider without reading a token or
  * accepting caller-supplied permissions, endpoints, or provider payloads.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppPublicationAdapter(
   provider: GitHubAppInstallationProvider,
 ): GitHubPublicationAdapter {
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function inspectInstallation(operation: GitHubOperation) {
     const expected = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(
@@ -224,6 +229,7 @@ export function createGitHubAppPublicationAdapter(
     });
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function observationFor(
     operation: GitHubOperation,
     snapshotOperation: () => Promise<unknown>,
@@ -309,9 +315,11 @@ export type GitHubAppSourceResolutionProvider = Pick<
 >;
 
 /** The read-only subset used to bind one exact existing-repository source. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppSourceResolutionAdapter(
   provider: GitHubAppSourceResolutionProvider,
 ): GitHubSourceResolutionAdapter {
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function inspectInstallation(operation: GitHubOperation) {
     const expected = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(

@@ -28,6 +28,7 @@ const authority = {
 
 // Keep the in-memory journal fixture scoped to these tests.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): BuilderProvisionJournalStore {
   const rows = new Map<string, BuilderProvisionJournalRow>();
   // Keep key serialization local to the in-memory store.

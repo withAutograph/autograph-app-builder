@@ -83,14 +83,17 @@ export const docs: readonly DocsDocument[] = [
   },
 ];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function docsHref(document: DocsDocument) {
   return document.slug === "overview" ? "/docs" : `/docs/${document.slug}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getDocument(slug: string) {
   return docs.find((document) => document.slug === slug);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getAdjacentDocuments(document: DocsDocument) {
   const index = docs.indexOf(document);
   return {

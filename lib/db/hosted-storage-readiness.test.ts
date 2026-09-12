@@ -10,6 +10,7 @@ import {
   verifyHostedStorageReadBack,
 } from "./hosted-storage-readiness";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exactReadBack() {
   const contract = await loadHostedStorageContract(process.cwd());
   return {

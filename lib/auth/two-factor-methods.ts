@@ -26,6 +26,7 @@ interface TwoFactorRedirect {
 }
 
 /** Detect the redirect payload Better Auth returns before a second factor. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
   return (
     typeof data === "object" &&
@@ -35,6 +36,7 @@ export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
 }
 
 /** Narrow arbitrary method names to the challenge views this UI supports. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
   if (!Array.isArray(methods)) return [];
 
@@ -42,6 +44,7 @@ export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
 }
 
 /** Persist the enabled method names without blocking sign-in on storage errors. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function storeTwoFactorMethods(methods?: unknown) {
   if (typeof sessionStorage === "undefined") return;
 
@@ -56,6 +59,7 @@ export function storeTwoFactorMethods(methods?: unknown) {
 }
 
 /** Read the stored methods, falling back to every supported challenge. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readTwoFactorMethods(): TwoFactorMethod[] {
   if (typeof sessionStorage === "undefined") return TWO_FACTOR_METHODS;
 
@@ -71,6 +75,7 @@ export function readTwoFactorMethods(): TwoFactorMethod[] {
 }
 
 /** Clear stored method hints after the challenge finishes or is abandoned. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearTwoFactorMethods() {
   if (typeof sessionStorage === "undefined") return;
 

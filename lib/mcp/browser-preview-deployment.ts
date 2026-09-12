@@ -17,6 +17,7 @@ import { openHostedPostgresDatabase } from "./hosted-route";
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function adapterMode(environment: Environment): "local" | "hosted" | "unavailable" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
@@ -28,6 +29,7 @@ function adapterMode(environment: Environment): "local" | "hosted" | "unavailabl
   return "unavailable";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createDeploymentPrototypePreviewRequestHandler(input: {
   environment: Environment;
   workloadIdentity: HostedWorkloadIdentity;

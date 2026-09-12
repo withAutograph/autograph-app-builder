@@ -46,6 +46,7 @@ afterEach(async () => {
   );
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-source-")));
   roots.push(root);

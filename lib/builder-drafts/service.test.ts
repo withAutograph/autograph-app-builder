@@ -21,10 +21,12 @@ const otherDraftId = "00000000-0000-4000-8000-000000000002";
 const firstMutation = "00000000-0000-4000-8000-000000000011";
 const secondMutation = "00000000-0000-4000-8000-000000000012";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameAuthority(left: BuilderDraftAuthority, right: BuilderDraftAuthority) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): BuilderDraftStore {
   const rows: BuilderDraftRow[] = [];
   const find = (input: { authority: BuilderDraftAuthority; draftId: string }) =>
@@ -102,6 +104,7 @@ function memoryStore(): BuilderDraftStore {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(brief = "A saved builder brief."): BuilderDraftRecord {
   return {
     version: 1,
@@ -132,6 +135,7 @@ function record(brief = "A saved builder brief."): BuilderDraftRecord {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function saveInput(
   input: {
     draftId?: string;

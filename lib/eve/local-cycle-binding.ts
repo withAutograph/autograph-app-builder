@@ -5,6 +5,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 
 const cyclePattern = /^[a-f0-9]{64}$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalCyclePath(path: string) {
   if (!isAbsolute(path) || resolve(path) !== path) {
     throw new Error("The local Eve cycle binding path was not canonical.");
@@ -12,6 +13,7 @@ function canonicalCyclePath(path: string) {
   return path;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
   if (realpathSync(path) !== path)
@@ -30,6 +32,7 @@ export function readLocalEveCycleBinding(path: string) {
   return generation;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function rotateLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
   const parent = dirname(path);

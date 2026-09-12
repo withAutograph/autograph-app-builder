@@ -54,6 +54,7 @@ export class HostedAuthorizationError extends Error {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function authorizeHostedPrincipal(input: {
   verifiedClaims: unknown;
   expectedIssuer: string;
@@ -86,6 +87,7 @@ export function authorizeHostedPrincipal(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function tenantKeyFor(principal: HostedPrincipal): string {
   return JSON.stringify([
     principal.issuer,
@@ -95,6 +97,7 @@ export function tenantKeyFor(principal: HostedPrincipal): string {
   ]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function requireHostedOperationScope(
   principal: HostedPrincipal,
   operation: HostedEveOperation,

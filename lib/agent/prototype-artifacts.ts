@@ -20,6 +20,7 @@ export type PrototypeArtifactReceipt = Omit<PrototypeArtifact, "content"> & {
 // Browser documents include the compiled React/component runtime and theme.
 const maximumArtifactBytes = 8 * 1024 * 1024;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parsePrototypeArtifactPath(path: string): {
   appId: string;
   fileName: "app-spec.md" | "decisions.md" | "index.html";
@@ -39,10 +40,12 @@ export function parsePrototypeArtifactPath(path: string): {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtifactMediaType {
   return parsePrototypeArtifactPath(path).fileName === "index.html" ? "text/html" : "text/markdown";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recordPrototypeArtifactRevision(input: {
   artifacts: readonly PrototypeArtifact[];
   path: string;
@@ -97,6 +100,7 @@ export function recordPrototypeArtifactRevision(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactPrototypeArtifact(
   artifacts: readonly PrototypeArtifact[],
   input: {
@@ -121,6 +125,7 @@ export function exactPrototypeArtifact(
   return artifact;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function prototypeArtifactReceipt(artifact: PrototypeArtifact): PrototypeArtifactReceipt {
   const { content, ...receipt } = artifact;
   return { ...receipt, size: Buffer.byteLength(content) };
@@ -132,6 +137,7 @@ export function prototypeArtifactReceipt(artifact: PrototypeArtifact): Prototype
  * workflow-phase check: recording a valid AppSpec must not turn an exploratory
  * draft into accepted planning state.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function completeBuildReadyPrototypeAppSpec(input: {
   artifacts: readonly PrototypeArtifact[];
   appId: string;
@@ -154,6 +160,7 @@ export function completeBuildReadyPrototypeAppSpec(input: {
   return appSpec;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recordPrototypeArtifactBundle(input: {
   artifacts: readonly PrototypeArtifact[];
   appId: string;

@@ -5,6 +5,7 @@ import {
   localGitHubCallbackFixtureCookie,
 } from "./local-github-callback-fixture";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request(fixture: string) {
   return new Request(
     "https://localhost:3001/github/installations/callback?code=opaque&state=correlation",

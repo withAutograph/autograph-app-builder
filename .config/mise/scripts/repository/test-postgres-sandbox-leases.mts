@@ -14,6 +14,7 @@ import {
 } from "../../../../lib/sandbox/execution-policy";
 import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbox/postgres-execution-lease-store";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function argument(name: string) {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
@@ -39,6 +40,7 @@ const store = createPostgresSandboxExecutionLeaseStore(database);
 const policy = SANDBOX_EXECUTION_POLICY;
 const policyDigest = sandboxExecutionPolicyDigest();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function principal(ownerUserId: string, workspaceId = "workspace_1") {
   return {
     issuer: "https://builder.example.test/api/auth",
@@ -49,6 +51,7 @@ function principal(ownerUserId: string, workspaceId = "workspace_1") {
   } satisfies HostedPrincipal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function acquire(owner: string, session: string, workspace = "workspace_1") {
   return store.acquire({
     principal: principal(owner, workspace),
@@ -60,10 +63,12 @@ function acquire(owner: string, session: string, workspace = "workspace_1") {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function clear() {
   await client`truncate table sandbox_execution_lease`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function waitForDatabase() {
   let lastError: unknown;
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -82,6 +87,7 @@ async function waitForDatabase() {
   throw lastError;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expire(lease: SandboxExecutionLease) {
   const expiresAtEpochMs = Date.now() - 1000;
   const heartbeatAtEpochMs = expiresAtEpochMs - 1000;

@@ -11,6 +11,7 @@ export type VercelGitSessionSource = Readonly<{
 
 const pendingSources = new Map<string, VercelGitSessionSource>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function configureVercelSessionGitSource(input: {
   sessionId: string;
   source: VercelGitSessionSource;
@@ -18,6 +19,7 @@ export function configureVercelSessionGitSource(input: {
   pendingSources.set(input.sessionId, input.source);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readVercelSessionGitSource(sessionId: string) {
   const exact = pendingSources.get(sessionId);
   if (exact !== undefined) return exact;
@@ -33,6 +35,7 @@ export function readVercelSessionGitSource(sessionId: string) {
   return matches.length === 1 ? matches[0]?.[1] : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearVercelSessionGitSource(sessionId: string) {
   pendingSources.delete(sessionId);
 }

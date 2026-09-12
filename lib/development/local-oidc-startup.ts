@@ -28,6 +28,7 @@ export class LocalOidcRefreshFailedError extends Error {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" | "PATH"): string {
   const value = environment[name];
   if (typeof value !== "string" || value.length === 0) {
@@ -36,6 +37,7 @@ function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" |
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     NODE_ENV: environment.NODE_ENV ?? "development",
@@ -49,6 +51,7 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertNoStaticCredential(environment: NodeJS.ProcessEnv): void {
   if (
     Object.hasOwn(environment, "VERCEL_TOKEN") ||
@@ -58,6 +61,7 @@ function assertNoStaticCredential(environment: NodeJS.ProcessEnv): void {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameProject(
   left: ReturnType<typeof parseLinkedVercelProject>,
   right: ReturnType<typeof parseLinkedVercelProject>,
@@ -69,6 +73,7 @@ function sameProject(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readLinkedProject(repositoryRoot: string) {
   return parseLinkedVercelProject(
     readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
@@ -77,6 +82,7 @@ function readLinkedProject(repositoryRoot: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installedOidcNeedsRefresh(input: {
   repositoryRoot: string;
   nowEpochSeconds: number;
@@ -122,6 +128,7 @@ function installedOidcNeedsRefresh(input: {
   return claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateInstalledOidc(input: {
   repositoryRoot: string;
   nowEpochSeconds: number;
@@ -132,6 +139,7 @@ function validateInstalledOidc(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function runLocalOidcStartupCommand(invocation: LocalOidcStartupInvocation): void {
   const result = spawnSync(invocation.executable, [...invocation.args], {
     cwd: invocation.cwd,
@@ -145,6 +153,7 @@ export function runLocalOidcStartupCommand(invocation: LocalOidcStartupInvocatio
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ensureLocalDevelopmentOidc(input: {
   repositoryRoot: string;
   vercelExecutable: string;

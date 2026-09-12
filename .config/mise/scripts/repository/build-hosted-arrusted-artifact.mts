@@ -57,10 +57,12 @@ const targetDigests = {
   repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
@@ -99,11 +101,13 @@ function git(root: string, args: readonly string[], encoding: "utf-8"): string {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function within(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !path.startsWith(sep));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function packageRoot(
   installedRoot: string,
   resolutionRoot: string,
@@ -117,6 +121,7 @@ function packageRoot(
   return resolved;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function packageResolutionRoot(packagePath: string): string {
   const marker = `${sep}node_modules${sep}`;
   const index = packagePath.lastIndexOf(marker);
@@ -124,6 +129,7 @@ function packageResolutionRoot(packagePath: string): string {
   return packagePath.slice(0, index + marker.length - 1);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function packageVersion(packagePath: string): string {
   const manifest = JSON.parse(readFileSync(join(packagePath, "package.json"), "utf-8")) as {
     version?: string;
@@ -133,6 +139,7 @@ function packageVersion(packagePath: string): string {
   return manifest.version;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function dependencyClosure(root: string): Map<string, string> {
   const installedRoot = join(root, "node_modules");
   const pending = EXECUTION_ROOT_PACKAGES.map((name) => ({
@@ -194,6 +201,7 @@ function dependencyClosure(root: string): Map<string, string> {
   return new Map([...packages.entries()].toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function normalizeTree(root: string): void {
   const visit = (path: string): void => {
     const entry = lstatSync(path);
@@ -214,6 +222,7 @@ function normalizeTree(root: string): void {
   visit(root);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function writeGzipTar(root: string, entries: readonly string[], output: string) {
   const uncompressed = `${output}.${process.pid}.tar`;
   createTar(

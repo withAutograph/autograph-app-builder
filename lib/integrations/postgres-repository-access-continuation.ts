@@ -30,6 +30,7 @@ const columns = {
   consumedAt: githubRepositoryAccessContinuations.consumedAt,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenant(authority: HostedGitHubTenantAuthority) {
   return and(
     eq(githubRepositoryAccessContinuations.issuer, authority.issuer),
@@ -39,6 +40,7 @@ function tenant(authority: HostedGitHubTenantAuthority) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(
   row: typeof githubRepositoryAccessContinuations.$inferSelect,
 ): RepositoryAccessContinuation {
@@ -66,6 +68,7 @@ function record(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresRepositoryAccessContinuationStore(
   database: Database,
 ): RepositoryAccessContinuationStore {

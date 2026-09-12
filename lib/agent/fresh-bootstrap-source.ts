@@ -11,6 +11,7 @@ import type { FreshBootstrapSourceWorkspace } from "../repository/node-fresh-boo
  * Bridge the canonical sandbox clone into local fresh-repository publication
  * without creating or consulting a second host-side checkout.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function freshBootstrapSourceWorkspace(input: {
   sandbox: SandboxSession;
   receipt: SourceReceipt;

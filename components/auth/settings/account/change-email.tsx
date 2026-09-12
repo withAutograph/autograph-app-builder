@@ -27,6 +27,7 @@ export interface ChangeEmailProps {
  *
  * @returns A JSX element rendering the change-email card and form
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ChangeEmail({ className }: ChangeEmailProps) {
   const { authClient, basePaths, baseURL, localization, viewPaths } = useAuth();
   const { data: session } = useSession(authClient);
@@ -39,6 +40,7 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     email?: string;
   }>({});
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
 

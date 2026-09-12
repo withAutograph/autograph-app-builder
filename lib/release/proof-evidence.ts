@@ -2,11 +2,13 @@ import { sha256, TOOL_NAMES } from "../../scripts/portable-release";
 
 export type ReleaseEvaluation = "sandbox-reviewed-change-set" | "sandbox-existing-iteration";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactToolDiscovery(tools: readonly string[]) {
   if (JSON.stringify(tools) !== JSON.stringify(TOOL_NAMES))
     throw new Error("Fresh portable clients did not discover five public tools.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
   output: string,
   evaluation: Evaluation,

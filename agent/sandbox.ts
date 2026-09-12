@@ -14,6 +14,7 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const installHostedBunRuntime = createHostedBunRuntimeInstaller();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createVercelDefinition() {
   // Deterministic evals exercise fixture target behavior and must not acquire
   // provider credentials. Production and development continue to use Vercel.

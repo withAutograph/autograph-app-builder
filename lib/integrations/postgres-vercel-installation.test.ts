@@ -14,6 +14,7 @@ const authority = {
 const returnTo = "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32";
 const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseFixture(rows: unknown[]) {
   const query = {
     select: vi.fn(),

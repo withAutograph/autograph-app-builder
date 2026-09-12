@@ -70,6 +70,7 @@ export type SpendAction =
 
 const requiredTargets: SpendTarget[] = ["vendor_name", "amount", "transaction_date"];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function initialSpendState(fixture: SpendFixture): SpendState {
   return {
     stage: "mapping",
@@ -79,10 +80,12 @@ export function initialSpendState(fixture: SpendFixture): SpendState {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sourceFor(mapping: SpendMapping, target: SpendTarget) {
   return Object.entries(mapping).find(([, value]) => value === target)?.[0];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mappedValue(
   source: Record<string, string | number>,
   mapping: SpendMapping,
@@ -92,6 +95,7 @@ function mappedValue(
   return key === undefined ? undefined : source[key];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping): SpendPreview {
   const complete = requiredTargets.every((target) => sourceFor(mapping, target));
   const representativeBaselineReady = fixture.representativeRows.filter(
@@ -135,6 +139,7 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function reduceSpendState(state: SpendState, action: SpendAction): SpendState {
   if (action.type === "mapping-changed") {
     const mapping = { ...state.mapping };
@@ -175,6 +180,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
   return state;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function spendActionModel(state: SpendState) {
   return {
     saveEnabled: state.stage === "preview",

@@ -18,6 +18,7 @@ const hostedForwarderConfigSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedForwarderSubject(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string | undefined {

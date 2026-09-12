@@ -8,6 +8,7 @@ import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 
 const secret = "github-webhook-secret-that-is-long-enough";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   const bytes = JSON.stringify(body);
   const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;
@@ -22,6 +23,7 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function database() {
   const updates: unknown[] = [];
   interface FakeDatabase {

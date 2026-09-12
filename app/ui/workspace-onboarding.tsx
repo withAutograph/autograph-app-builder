@@ -28,6 +28,7 @@ const content = {
   { title: string; description: string; action: string }
 >;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function WorkspaceOnboarding({ status }: { status: WorkspaceOnboardingFailure }) {
   const message = content[status];
   return (

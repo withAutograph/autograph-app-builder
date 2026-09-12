@@ -1,5 +1,6 @@
 import type { ProviderEmulation } from "./local-provider-emulation";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function providerEmulationFetch(
   input: string | URL,
   init: RequestInit | undefined,

@@ -44,6 +44,7 @@ const repositoryReferenceResultSchema = z
 
 export type RepositoryReference = z.output<typeof repositoryReferenceSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseRepositoryReference(value: string): RepositoryReference {
   const segments = value.trim().split("/");
   if (segments.length !== 2) throw new Error("repository-reference-invalid");
@@ -159,6 +160,7 @@ const READ_PERMISSIONS = readPermissionsSchema.parse({
 
 const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function scope(binding: HostedGitHubInstallationBinding) {
   return scopeSchema.parse({
     installationId: binding.installationId,
@@ -167,6 +169,7 @@ function scope(binding: HostedGitHubInstallationBinding) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactInstallation(
   binding: HostedGitHubInstallationBinding,
   readBack: z.infer<typeof installationReadBackSchema>,
@@ -184,6 +187,7 @@ function exactInstallation(
  * authority from provider state. Caller/model supplied ids can narrow an
  * already-proven choice but can never establish access.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function classifyGitHubRepositoryAccess(input: {
   authority: HostedGitHubTenantAuthority;
   repository: string;

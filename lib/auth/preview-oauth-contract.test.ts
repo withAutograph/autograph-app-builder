@@ -12,6 +12,7 @@ const config = {
   resource: "https://builder.example.test/mcp",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function membership(active = true) {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract

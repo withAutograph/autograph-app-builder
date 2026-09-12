@@ -29,6 +29,7 @@ type GitHubCallbackFixture =
   | "duplicate-installation-id"
   | "duplicate-setup-action";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function setGitHubCallbackFixture(page: Page, fixture: GitHubCallbackFixture) {
   await page.context().addCookies([
     {
@@ -41,22 +42,26 @@ async function setGitHubCallbackFixture(page: Page, fixture: GitHubCallbackFixtu
   ]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function completeGitHubConnection(page: Page) {
   await expect(page).toHaveURL(/\/github\/installations/u);
   await advanceProviderConnectionToApproval(page, "GitHub");
   await selectProviderIdentity(page, "GitHub");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startGitHubConnection(page: Page) {
   await openProviderConnection(page, "GitHub");
   await completeGitHubConnection(page);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function openBuilderPage(page: Page) {
   await page.goto("/");
   await waitForBuilderReady(page);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expectProviderCheckpoint(page: Page, appName: string, brief: string) {
   const draftId = new URL(page.url()).searchParams.get("resume");
   expect(draftId).toBeTruthy();
@@ -75,6 +80,7 @@ async function expectProviderCheckpoint(page: Page, appName: string, brief: stri
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly string[]) {
   const messages: string[] = [];
   page.on("console", (message) => messages.push(message.text()));

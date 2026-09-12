@@ -6,6 +6,7 @@ interface PlatformAuthenticatorCapability {
  * Prefer the device authenticator when the browser confirms one is available.
  * Omitting the attachment keeps Better Auth's platform/cross-platform fallback.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function preferredPasskeyAuthenticatorAttachment(
   capability: PlatformAuthenticatorCapability | undefined = typeof PublicKeyCredential ===
   "undefined"

@@ -12,6 +12,7 @@ import type { PreviewActivationStore } from "./preview-activation";
 
 const now = Date.parse("2026-08-27T12:00:00.000Z");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function store(): PreviewActivationStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

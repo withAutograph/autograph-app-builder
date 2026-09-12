@@ -92,6 +92,7 @@ interface GitHubOAuthTokens {
   accessToken?: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
   if (!response.ok) return null;
   const declaredLength = Number(response.headers.get("content-length"));
@@ -110,6 +111,7 @@ async function readBoundedJson(response: Response, limit: number): Promise<unkno
  * endpoint. Read it explicitly so private profile emails still produce a
  * usable, verified identity without trusting a profile field alone.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function fetchVerifiedGitHubUserInfo(
   tokens: GitHubOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
@@ -167,6 +169,7 @@ export async function fetchVerifiedGitHubUserInfo(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exchangeLocalEmulatedOAuthCode(input: {
   tokenUrl: string;
   clientId: string;
@@ -221,6 +224,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
  * to the already verified ID-token subject and email before Better Auth may
  * treat the provider identity as verified.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function fetchVerifiedVercelUserInfo(
   tokens: VercelOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
@@ -426,6 +430,7 @@ export const previewOAuthRateLimit = {
   },
 } satisfies NonNullable<BetterAuthOptions["rateLimit"]>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function authRateLimitForLocalEmulation(localEmulation: boolean) {
   return localEmulation
     ? {
@@ -442,6 +447,7 @@ export function authRateLimitForLocalEmulation(localEmulation: boolean) {
     : previewOAuthRateLimit;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
@@ -527,6 +533,7 @@ export function readPreviewOAuthRuntimeConfig(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewOAuthServer(input: {
   config: PreviewOAuthRuntimeConfig;
   database: NonNullable<BetterAuthOptions["database"]>;

@@ -17,6 +17,7 @@ type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
  */
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicationContentSourceForReviewedWorkflow(input: {
   state: ReviewedWorkflow;
   sandbox: SandboxSession;

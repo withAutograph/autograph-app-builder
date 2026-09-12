@@ -24,6 +24,7 @@ const inspectionSource = `
 `;
 
 const fullCapabilities = ["mock-model", "simulated-target", "simulated-publication"];
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", inspectionSource], {
     cwd: repositoryRoot,

@@ -41,6 +41,7 @@ const buttonVariants = cva(
   },
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function Button({
   className,
   variant = "default",

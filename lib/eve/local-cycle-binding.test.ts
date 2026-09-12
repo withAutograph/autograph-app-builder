@@ -12,6 +12,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "autograph-eve-cycle-")));
   roots.push(root);

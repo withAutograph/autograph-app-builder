@@ -49,6 +49,7 @@ export class HostedSessionAuthorityError extends Error {
  * used by every hosted side effect. Current and initiating users must match;
  * callers cannot adopt ambient workspace or owner identifiers.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactForwardedSessionAuthority(sessionAuth: unknown): {
   authority: HostedSessionTenantAuthority;
   principal: HostedPrincipal;
@@ -58,6 +59,7 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
     throw new HostedSessionAuthorityError("invalid");
   }
   const { current, initiator } = parsed.data;
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function authorityInput(context: typeof current) {
     if (context.principalId !== context.subject) {
       throw new HostedSessionAuthorityError("subject");
@@ -91,6 +93,7 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
 }
 
 /** A prepared app belongs to the initiating session, not a later message. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
   const parsed = forwardedSessionAuthSchema.safeParse(sessionAuth);
   if (!parsed.success) {

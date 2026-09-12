@@ -22,6 +22,7 @@ const authority = {
 
 const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingReceipt(
   overrides: Partial<Omit<GitHubMutationReceipt, "version" | "kind" | "status" | "digest">> = {},
 ) {
@@ -37,6 +38,7 @@ function pendingReceipt(
   return { ...unsigned, digest: sha256(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function journalRow(receipt = pendingReceipt()) {
   return {
     proposalDigest: receipt.proposalDigest,
@@ -50,6 +52,7 @@ function journalRow(receipt = pendingReceipt()) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseFixture(input: {
   selected?: unknown[];
   inserted?: unknown[];

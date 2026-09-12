@@ -1,5 +1,6 @@
 import type { SessionAnswer } from "./view";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ApprovalRequest({
   description,
   isSubmitting = false,

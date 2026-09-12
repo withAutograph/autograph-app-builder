@@ -82,6 +82,7 @@ export interface GitHubPublicationRuntime {
   }) => Promise<DraftPullRequestSuccessReceipt>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
   return {
     version: 3,
@@ -115,6 +116,7 @@ const unavailable = (): never => {
   );
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function disabledRuntime(): GitHubPublicationRuntime {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -146,6 +148,7 @@ function disabledRuntime(): GitHubPublicationRuntime {
  * function never reads environment variables, credentials, endpoints, or
  * database URLs.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function composeGitHubPublicationRuntime(input: {
   enabled: boolean;
   adapter?: GitHubPublicationAdapter;

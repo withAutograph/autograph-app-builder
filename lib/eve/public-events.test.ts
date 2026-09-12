@@ -14,10 +14,12 @@ import {
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: string): string {
   return createHash("sha256").update(value, "utf-8").digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function recordedPrototypeEvents(input?: {
   callId?: string;
   content?: string;
@@ -73,6 +75,7 @@ function recordedPrototypeEvents(input?: {
   ];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function recordedPlanEvents(input?: {
   callId?: string;
   expectedAppSpecDigest?: string;

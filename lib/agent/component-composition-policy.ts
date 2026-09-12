@@ -9,6 +9,7 @@ const relativePath = z
   .refine((value) => !value.includes(".."), "Path must remain relative.");
 const gitObject = z.string().regex(/^[a-f0-9]{40}$/u);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sortedUnique<T extends z.ZodType<string>>(item: T) {
   return z.array(item).superRefine((values, context) => {
     const sorted = [...values].toSorted();
@@ -89,6 +90,7 @@ const digest = (content: string) => createHash("sha256").update(content).digest(
  * contain its own final tree hash, so the evaluator creates this binding from
  * the exact source receipt selected for the current app build.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function bindArrustedComponentCompositionPolicy(input: {
   content: string | null;
   sourceSha: string;
@@ -137,6 +139,7 @@ export function bindArrustedComponentCompositionPolicy(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function importsFrom(content: string): string[] {
   const imports = new Set<string>();
   const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu;
@@ -147,11 +150,13 @@ function importsFrom(content: string): string[] {
   return [...imports].toSorted();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function appRelativePath(appId: string, path: string): string | undefined {
   const prefix = `apps/${appId}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function auditAppliedAppComposition(input: {
   appId: string;
   binding: BoundArrustedComponentCompositionPolicy;

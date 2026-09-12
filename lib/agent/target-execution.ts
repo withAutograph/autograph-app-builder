@@ -29,6 +29,7 @@ export type ProposalWorkflowState = Extract<
   }
 >;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function plannedProposalForExecution(
   state: AppBuilderWorkflowState,
   expectedProposalDigest: string,
@@ -50,6 +51,7 @@ export function plannedProposalForExecution(
   return state.proposal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
@@ -91,6 +93,7 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
     throw new Error("The planned proposal no longer matches its durable execution bindings.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function targetExecutionBlockers(input: {
   imageConfigured: boolean;
   toolchainReady: boolean;
@@ -105,6 +108,7 @@ export function targetExecutionBlockers(input: {
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resolveTargetExecutionEnvironment(input: {
   environment: Readonly<Record<string, string | undefined>>;
   fixture: boolean;
@@ -130,6 +134,7 @@ export function resolveTargetExecutionEnvironment(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectTargetExecutionReadiness(input: {
   state: ProposalWorkflowState;
   sandbox: SandboxSession;

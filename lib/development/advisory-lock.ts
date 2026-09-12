@@ -12,6 +12,7 @@ export type DevelopmentLockInvocation = Readonly<{
   busyExitCode: number;
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentLockInvocation(input: {
   platform: SupportedPlatform;
   lockPath: string;
@@ -31,12 +32,14 @@ export function developmentLockInvocation(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function supportedPlatform(): SupportedPlatform {
   const platform = hostPlatform();
   if (platform === "darwin" || platform === "linux") return platform;
   throw new Error("Development mode supports macOS and Linux hosts only.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function runWithDevelopmentLock(input: {
   lockPath: string;
   command: string;

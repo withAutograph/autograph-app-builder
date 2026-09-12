@@ -23,6 +23,7 @@ import { DEFAULT_AUTH_REDIRECT_TO } from "@/lib/auth/preview-auth-ui";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
   return [
     {
@@ -46,6 +47,7 @@ export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme
   ];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function Providers({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
 
@@ -66,6 +68,7 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AuthRouteProvider({
   children,
   githubAuthEnabled,

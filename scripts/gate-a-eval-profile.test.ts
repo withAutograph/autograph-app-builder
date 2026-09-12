@@ -14,10 +14,12 @@ import { gateAEvalWorkflowBodyTimeout } from "./run-with-test-capability.mts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostileEnvironment(): Record<string, string | undefined> {
   return Object.fromEntries(gateAEnvironmentFields.map((field) => [field, `hostile-${field}`]));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshRoots() {
   const owner = realpathSync(mkdtempSync(join(tmpdir(), "gate-a-eval-profile-")));
   const stateRoot = join(owner, "state");

@@ -33,10 +33,12 @@ const callbackUrl =
   "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token";
 const repository = "withAutograph/app-builder-dogfood";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameAuthority(left: typeof authority, right: typeof authority) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryContinuationStore(): RepositoryAccessContinuationStore & {
   records: RepositoryAccessContinuation[];
 } {
@@ -101,6 +103,7 @@ const installation: HostedGitHubInstallationBinding = {
   updatedAt: new Date("2026-09-01T12:00:00.000Z"),
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installationStore(
   bindings: HostedGitHubInstallationBinding[],
 ): HostedGitHubInstallationStore {
@@ -113,6 +116,7 @@ function installationStore(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mutableProvider(input: { repositoryAvailable: () => boolean }) {
   const provider: GitHubRepositoryAccessProvider = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -148,6 +152,7 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
   return vi.fn<GitHubRepositoryAccessProviderFactory>(async () => provider);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runtimeFixture(input?: {
   bindings?: HostedGitHubInstallationBinding[];
   available?: boolean;

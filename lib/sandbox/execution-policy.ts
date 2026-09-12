@@ -48,6 +48,7 @@ export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
   },
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxExecutionPolicyDigest(
   policy: SandboxExecutionPolicy = SANDBOX_EXECUTION_POLICY,
 ): string {

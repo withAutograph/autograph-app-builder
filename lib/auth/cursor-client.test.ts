@@ -12,6 +12,7 @@ const resource = "https://builder.example.test/mcp";
 
 // Storage-boundary fake: real policy and Drizzle query construction run above
 // this boundary; real OAuth behavior is covered by preview-oauth-real.test.ts.
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function storage() {
   const rows = new Map<unknown, Record<string, unknown>[]>([
     [schema.oauthClient, []],

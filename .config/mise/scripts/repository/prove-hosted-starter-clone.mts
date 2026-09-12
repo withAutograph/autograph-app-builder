@@ -28,6 +28,7 @@ const requiredEnvironmentKeys = [
   "GITHUB_APP_PRIVATE_KEY",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseQuotedEnvironmentValue(source: string, name: string): string {
   const matches = source.split(/\r?\n/u).filter((line) => line.startsWith(`${name}=`));
   if (matches.length !== 1) throw new Error(`The Development environment is missing ${name}.`);

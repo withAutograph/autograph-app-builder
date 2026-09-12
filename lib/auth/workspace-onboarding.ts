@@ -10,6 +10,7 @@ export type WorkspaceOnboardingState<T> =
   | { status: "ready"; value: T }
   | { status: WorkspaceOnboardingFailure };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveWorkspaceOnboardingState<T>(
   ensure: () => Promise<T | undefined>,
 ): Promise<WorkspaceOnboardingState<T>> {
@@ -30,12 +31,14 @@ export async function resolveWorkspaceOnboardingState<T>(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function workspaceOnboardingRedirect(origin: string, failure: WorkspaceOnboardingFailure) {
   const url = new URL("/", origin);
   url.searchParams.set("onboarding", failure);
   return url.toString();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signInForWorkspaceRedirect(origin: string) {
   const url = new URL("/auth/sign-in", origin);
   url.searchParams.set("callbackURL", "/");

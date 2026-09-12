@@ -23,6 +23,7 @@ export interface PasskeyProps {
   passkey: ListedPasskey;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function Passkey({ passkey }: PasskeyProps) {
   const { localization } = useAuth();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);

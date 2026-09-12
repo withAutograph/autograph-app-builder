@@ -10,10 +10,12 @@ const schema = z
     expiresAt: z.number().int().positive(),
   })
   .strict();
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signLocalVercelRelay(input: z.infer<typeof schema>, secret: string) {
   const payload = Buffer.from(JSON.stringify(schema.parse(input))).toString("base64url");
   return `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
 }
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyLocalVercelRelay(
   value: string,
   secret: string,

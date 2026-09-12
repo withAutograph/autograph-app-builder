@@ -1,6 +1,7 @@
 import type { MDXComponents } from "mdx/types";
 import type { ReactNode } from "react";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function headingId(children: ReactNode) {
   return String(children)
     .toLowerCase()
@@ -21,6 +22,7 @@ const components: MDXComponents = {
   ),
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useMDXComponents(): MDXComponents {
   return components;
 }

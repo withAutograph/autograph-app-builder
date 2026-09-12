@@ -12,6 +12,7 @@ import * as schema from "./schema";
 
 type Database = PostgresJsDatabase<typeof schema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorityPredicate(authorityInput: BuilderDraftAuthority) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
@@ -22,10 +23,12 @@ function authorityPredicate(authorityInput: BuilderDraftAuthority) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
   return and(authorityPredicate(authority), eq(schema.builderDrafts.draftId, draftId));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseRow(row: typeof schema.builderDrafts.$inferSelect): BuilderDraftRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
@@ -46,10 +49,12 @@ function parseRow(row: typeof schema.builderDrafts.$inferSelect): BuilderDraftRo
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isUniqueViolation(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore {
   const read: BuilderDraftStore["read"] = async ({ authority, draftId }) => {
     const rows = await database
@@ -180,6 +185,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
 }
 
 /** Save and archive share one short database transaction per tenant draft. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderDraftStore(database: Database): BuilderDraftStore {
   const unlocked = createUnlockedBuilderDraftStore(database);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

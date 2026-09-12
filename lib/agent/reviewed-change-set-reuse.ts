@@ -1,3 +1,4 @@
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertAtomicReviewedChangeSetReuse(input: {
   latest: {
     phase: string;

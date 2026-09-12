@@ -62,6 +62,7 @@ const apply: TargetApplyReceipt = {
   digest: digest("5"),
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" }));

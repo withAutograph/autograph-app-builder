@@ -17,6 +17,7 @@ const manifest = JSON.stringify({
   },
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function binding() {
   const result = bindArrustedComponentCompositionPolicy({
     content: manifest,

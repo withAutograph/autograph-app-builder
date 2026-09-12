@@ -11,6 +11,7 @@ const row = {
   userId: "user-a",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readBack() {
   return {
     transactionReadOnly: true as const,

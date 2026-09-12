@@ -54,6 +54,7 @@ interface DevelopmentSupervisorState {
   snapshot?: DevelopmentSnapshot;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
   if (value === undefined || !value.startsWith("/"))
@@ -61,6 +62,7 @@ function requiredEnvironment(name: string, description = "executable") {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const canonical = await realpath(path);
@@ -77,6 +79,7 @@ async function privateRoot(path: string) {
   return canonical;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function nextEnvironment(input: {
   cycleFile: string;
   evePort: number;
@@ -109,6 +112,7 @@ function nextEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function eveWrapperEnvironment(input: {
   closed: Readonly<Record<string, string>>;
   applicationRoot: string;
@@ -141,6 +145,7 @@ function eveWrapperEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function runEveCycle(input: {
   cycleFile: string;
   sourceRoot: string;

@@ -27,6 +27,7 @@ import planAppCreation from "./plan_app_creation";
  * own state transition makes retries safe.  This guard avoids even invoking
  * it again once the accepted design has already produced a proposal.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function planAcceptedAppSpec(
   ctx: Parameters<typeof planAppCreation.execute>[1],
   existingAppChanges?: { path: string; content: string }[],

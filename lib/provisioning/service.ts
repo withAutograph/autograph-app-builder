@@ -53,6 +53,7 @@ export interface BuilderProvisioningDependencies {
 
 const LEASE_MS = 15 * 60_000;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameIntent(
   request: BuilderProvisionRequest,
   stored: Omit<BuilderProvisionRequest, "operation">,
@@ -63,6 +64,7 @@ function sameIntent(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function executeBuilderProvisioning(input: {
   authority: BuilderProvisionAuthority;
   request: unknown;
@@ -235,6 +237,7 @@ export async function executeBuilderProvisioning(input: {
   return builderProvisionResponseSchema.parse(completed.record.response);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readBuilderProvisioning(input: {
   authority: BuilderProvisionAuthority;
   requestId: string;

@@ -12,6 +12,7 @@ const verifiedReleaseInstall = {
   heading: "## Install before shared marketplace publication",
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
   const match = section.match(/```sh\n(?<shell>[\s\S]*?)\n```/u);
@@ -19,12 +20,14 @@ function firstShellBlock(documentation: string, heading: string) {
   return match[1];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeStub(root: string, name: string, body: string) {
   await writeFile(join(root, name), `#!/bin/sh\nset -eu\n${body}\n`, {
     mode: 0o700,
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readAuditLog(path: string) {
   try {
     return await readFile(path, "utf-8");
@@ -34,6 +37,7 @@ async function readAuditLog(path: string) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function runInstall(script: string, failure: "none" | "checksum" | "release-verifier") {
   const root = await mkdtemp(join(tmpdir(), "autograph-install-docs-"));
   const bin = join(root, "bin");

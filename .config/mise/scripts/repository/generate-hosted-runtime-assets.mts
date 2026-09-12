@@ -7,6 +7,7 @@ const repositoryRoot = resolve(process.cwd());
 const skillSourceRoot = join(repositoryRoot, "agent/skills");
 const skillOutputPath = join(repositoryRoot, "lib/sandbox/hosted-managed-seeds.generated.ts");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function listRegularFiles(directory: string, relativeDirectory = "."): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {

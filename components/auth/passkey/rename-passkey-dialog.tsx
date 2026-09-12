@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
 import type { ListedPasskey } from "./delete-passkey-dialog";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function RenamePasskeyDialog({
   open,
   onOpenChange,

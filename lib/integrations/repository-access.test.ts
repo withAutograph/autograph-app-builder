@@ -14,6 +14,7 @@ const authority = {
   ownerUserId: "user-1",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function binding(
   installationId: string,
   accountLogin = "withAutograph",
@@ -28,6 +29,7 @@ function binding(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function store(bindings: HostedGitHubInstallationBinding[]): HostedGitHubInstallationStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -38,6 +40,7 @@ function store(bindings: HostedGitHubInstallationBinding[]): HostedGitHubInstall
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function provider(
   installation: HostedGitHubInstallationBinding,
   repositoryId?: string,

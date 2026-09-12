@@ -14,6 +14,7 @@ export interface ComboOption {
 export type ComboFooter = ComboOption & { disabled?: boolean };
 
 /** Browser-only combobox island. The builder owns data and persistence; this leaf owns interaction. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SearchCombobox({
   label,
   value,

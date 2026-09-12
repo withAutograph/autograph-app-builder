@@ -4,6 +4,7 @@ import { parseLocalOAuthAuthorization } from "@/lib/auth/local-oauth-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import { providerEmulationFetch } from "@/lib/integrations/provider-emulation-fetch";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function completeAuthorization(
   context: { params: Promise<{ provider: string }> },
   values: Record<string, string | undefined>,

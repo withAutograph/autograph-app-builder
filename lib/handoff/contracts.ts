@@ -126,6 +126,7 @@ export const builderHandoffRecordSchema = z
 
 export type BuilderHandoffRecord = z.infer<typeof builderHandoffRecordSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value instanceof Date) return JSON.stringify(value.toISOString());
@@ -137,6 +138,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function builderHandoffRequestDigest(input: {
   authority: z.infer<typeof hostedTenantAuthoritySchema>;
   creationRequestId: string;

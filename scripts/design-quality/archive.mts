@@ -6,6 +6,7 @@ import { captureFilename } from "./archive-path";
 import { readArchivedReport } from "./archive-entry";
 import { formatWithOxfmt } from "../format-with-oxfmt.mts";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeFile(path: string, content: string) {
   await writeRawFile(path, await formatWithOxfmt(path, content));
 }

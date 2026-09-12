@@ -24,6 +24,7 @@ const journalRowSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
   const receipt = row.record as GitHubMutationReceipt;
@@ -41,6 +42,7 @@ export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutation
   return receipt;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function journalValues(receipt: GitHubMutationReceipt, now: Date) {
   assertCanonicalGitHubMutationReceipt(receipt);
   return {
@@ -58,6 +60,7 @@ function journalValues(receipt: GitHubMutationReceipt, now: Date) {
 /** PostgreSQL CAS journal for provider mutation intent and terminal receipts.
  * Failed or pending rows are never expired by the hosted tenant-retention
  * operation because deleting them could authorize a duplicate side effect. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubPublicationReceiptStore(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,

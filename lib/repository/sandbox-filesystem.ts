@@ -3,12 +3,14 @@ import type { SandboxSession } from "eve/sandbox";
 const DIRECTORY_BATCH_SIZE = 256;
 const DIRECTORY_TIMEOUT_MS = 30_000;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function quoteSandboxArgument(value: string): string {
   const singleQuote = String.fromCodePoint(39);
   const escapedQuote = `${singleQuote}"${singleQuote}"${singleQuote}`;
   return `${singleQuote}${value.replaceAll(singleQuote, escapedQuote)}${singleQuote}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function ensureSandboxDirectories(
   sandbox: SandboxSession,
   paths: readonly string[],

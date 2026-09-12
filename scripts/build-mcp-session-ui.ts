@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { build } from "vite";
 import { formatWithOxfmt } from "./format-with-oxfmt.mts";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function main() {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "autograph-mcp-ui-"));
   try {

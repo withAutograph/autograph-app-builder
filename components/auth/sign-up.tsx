@@ -65,6 +65,7 @@ export interface SignUpProps {
  * @param onSignUpSuccess - Replaces the post-sign-up redirect when the new account is immediately usable
  * @returns The sign-up form React element.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SignUp({
   className,
   signInRedirectTo,

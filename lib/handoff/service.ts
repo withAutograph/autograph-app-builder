@@ -54,6 +54,7 @@ export interface BuilderHandoffStore {
   }) => Promise<BuilderHandoffRecord | undefined>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requireOwnedRecord(
   value: unknown,
   expected: { authority: Authority; handoffId?: string },
@@ -72,6 +73,7 @@ function requireOwnedRecord(
   return record;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const intent = builderHandoffIntentSchema.parse(intentInput);
   const repository = intent.repository.resolvedFullName ?? intent.repository.requestedName;
@@ -92,6 +94,7 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
     .join("\n\n");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderHandoffService(input: {
   store: BuilderHandoffStore;
   now?: () => Date;

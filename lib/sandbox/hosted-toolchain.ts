@@ -123,6 +123,7 @@ with tarfile.open(archive_path, "r:*") as archive:
         raise SystemExit("required archive subtree is missing")
     archive.extractall(destination, members=selected, filter="data")`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hostedArchiveExtractorShellFunction(): string {
   return `extract_verified_archive() {
   python3 - "$1" "$2" "\${3-}" <<'PY'
@@ -131,6 +132,7 @@ PY
 }`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hostedToolchainBootstrapCommand(): string {
   return `set -euo pipefail
 case "$(uname -m)" in
@@ -228,6 +230,7 @@ rustc --version | grep -E '^rustc 1[.]97[.]1 '
 node -e 'const fs=require("node:fs"); const cache=JSON.parse(fs.readFileSync("/opt/app-builder/dependency-cache/manifest.json","utf-8")); if(cache.platform!=="linux/x86_64"||cache.scope!=="builder-execution"||cache.target.sha!=="d378904a05e1bc2c0896886e6fbd3b816babaee2"||cache.target.tree!=="6735f4b45cc2b29a139531a41dac990c925e0d39") process.exit(1)'`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hostedArtifactWorkspaceInstallCommand(): string {
   return `set -euo pipefail
 command -v sha256sum >/dev/null
@@ -249,6 +252,7 @@ install -m 0444 "$artifact/manifest.json" '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROO
 install -m 0444 "$artifact/node-modules.tar.gz" '${HOSTED_ARTIFACT_WORKSPACE_CACHE_ROOT}/node-modules.tar.gz'`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hostedToolchainRevalidationKey(
   bootstrapCommand = hostedToolchainBootstrapCommand(),
 ): string {

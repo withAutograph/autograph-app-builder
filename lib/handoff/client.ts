@@ -5,6 +5,7 @@ export const codexInstallCommand = `codex plugin marketplace add withAutograph/m
 codex plugin marketplace upgrade autograph
 codex plugin add app-builder@autograph`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildAppHandoffPrompt(
   handoffId: string,
   destination: HandoffDestination = "codex",
@@ -36,6 +37,7 @@ Continue the prepared app by calling autograph_start with {"handoffId":"${handof
 Use the same Autograph account as the web form. Reuse its saved GitHub and Vercel connections and selected resources through Autograph. Do not request provider tokens or separate provider logins. If access needs attention, use Autograph's recovery flow. If autograph_start remains unavailable after the destination-specific recovery above, explain the specific blocker and stop. This handoff does not approve building, publishing, or deploying; retain the normal approval flow.`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: string) {
   const prompt = encodeURIComponent(buildAppHandoffPrompt(handoffId, destination));
   return destination === "codex"
@@ -43,6 +45,7 @@ export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: s
     : `cursor://anysphere.cursor-deeplink/prompt?text=${prompt}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
   if (!ready) return undefined;
   const url = new URL(mcpUrl);

@@ -52,6 +52,7 @@ export interface SignInProps {
  * @param socialPosition - Position of social provider buttons; `"top"` or `"bottom"`. Defaults to `"bottom"`.
  * @returns The rendered sign-in UI as a JSX element
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SignIn({
   className,
   signUpRedirectTo,

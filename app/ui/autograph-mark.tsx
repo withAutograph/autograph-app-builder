@@ -3,6 +3,7 @@ import Image from "next/image";
 import autographIcon from "../../assets/autograph-icon.png";
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AutographMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={styles.brand} data-compact={compact || undefined}>

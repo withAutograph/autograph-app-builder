@@ -24,6 +24,7 @@ class BuilderHandoffRequestError extends Error {
   name = "BuilderHandoffRequestError";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hasCanonicalRequestOrigin(request: Request, origin: string) {
   const requestUrl = new URL(request.url);
   if (requestUrl.origin === origin) return true;
@@ -34,6 +35,7 @@ function hasCanonicalRequestOrigin(request: Request, origin: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readBoundedJson(request: Request) {
   if (request.body === null) throw new BuilderHandoffRequestError();
   const reader = request.body.getReader();
@@ -104,6 +106,7 @@ export interface BuilderHandoffPageData {
   provisioningRevision?: number;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderHandoffRouteHandler(input: {
   origin: string;
   authorityForRequest: (request: Request) => Promise<Authority | undefined>;
@@ -187,6 +190,7 @@ export function createBuilderHandoffRouteHandler(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handoffErrorResponse(error: unknown) {
   if (error instanceof BuilderHandoffUnavailableError)
     return Response.json({ error: "handoff_unavailable" }, { status: 404, headers: noStore });
@@ -197,6 +201,7 @@ function handoffErrorResponse(error: unknown) {
   return Response.json({ error: "handoff_unavailable" }, { status: 503, headers: noStore });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderHandoffStatusRouteHandler(input: {
   pageData: (request: Request, handoffId: string) => Promise<BuilderHandoffPageData | undefined>;
 }) {
@@ -212,6 +217,7 @@ export function createBuilderHandoffStatusRouteHandler(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderHandoffRenewRouteHandler(input: {
   origin: string;
   authorityForRequest: (request: Request) => Promise<Authority | undefined>;
@@ -265,6 +271,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 const deploymentDatabases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function deploymentContext(environment: Environment) {
   const preview = readPreviewOAuthRuntimeConfig(environment);
   let database = deploymentDatabases.get(preview.databaseUrl);
@@ -295,6 +302,7 @@ function deploymentContext(environment: Environment) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function getBuilderHandoffPageData(input: {
   environment: Environment;
   headers: Headers;
@@ -334,6 +342,7 @@ export async function getBuilderHandoffPageData(input: {
  * uses this to resume durable provider work; settled and provider-less
  * handoffs deliberately return users to a fresh builder.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function findAuthenticatedPendingBuilderHandoff(input: {
   environment: Environment;
   headers: Headers;
@@ -345,6 +354,7 @@ export async function findAuthenticatedPendingBuilderHandoff(input: {
   return record ? { handoffId: record.handoffId } : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderHandoffStatusDeploymentHandler(environment: Environment) {
   return createBuilderHandoffStatusRouteHandler({
     pageData: (request, handoffId) =>
@@ -356,6 +366,7 @@ export function getBuilderHandoffStatusDeploymentHandler(environment: Environmen
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderHandoffRenewDeploymentHandler(environment: Environment) {
   // Compose inside the error boundary so setup failures also remain no-store.
   return async (request: Request, handoffId: string) => {
@@ -372,6 +383,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderHandoffDeploymentHandler(environment: Environment) {
   const context = deploymentContext(environment);
   return createBuilderHandoffRouteHandler({

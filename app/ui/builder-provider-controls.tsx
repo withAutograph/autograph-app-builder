@@ -32,6 +32,7 @@ const deploymentProviderOptions = [
   },
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function DeployToSection({
   bare = false,
   available,
@@ -117,6 +118,7 @@ export function DeployToSection({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function StoreInSection({
   bare = false,
   available,

@@ -39,6 +39,7 @@ const approvalRelaySchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signLocalOAuthApproval(input: z.infer<typeof approvalRelaySchema>, secret: string) {
   const payload = Buffer.from(JSON.stringify(approvalRelaySchema.parse(input))).toString(
     "base64url",
@@ -47,6 +48,7 @@ export function signLocalOAuthApproval(input: z.infer<typeof approvalRelaySchema
   return `${payload}.${signature}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signFreshLocalOAuthApproval(
   input: Omit<z.infer<typeof approvalRelaySchema>, "expiresAt">,
   secret: string,
@@ -54,6 +56,7 @@ export function signFreshLocalOAuthApproval(
   return signLocalOAuthApproval({ ...input, expiresAt: Date.now() + 5 * 60_000 }, secret);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyLocalOAuthApproval(value: string, secret: string, now = Date.now()) {
   const [payload, signature, extra] = value.split(".");
   if (!payload || !signature || extra) throw new Error("invalid-approval");
@@ -68,6 +71,7 @@ export function verifyLocalOAuthApproval(value: string, secret: string, now = Da
   return result;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseLocalOAuthAuthorization(input: {
   provider: string;
   values: Record<string, string | undefined>;
@@ -88,6 +92,7 @@ export function parseLocalOAuthAuthorization(input: {
   return { provider, authorization };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function localOAuthProviderDetails(provider: LocalOAuthProvider) {
   return provider === "github"
     ? {

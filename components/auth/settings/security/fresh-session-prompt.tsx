@@ -14,6 +14,7 @@ export interface FreshSessionPromptProps {
   onFresh: () => unknown | Promise<unknown>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const auth = useAuth();
   const session = useSession(auth.authClient);

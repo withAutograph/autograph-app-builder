@@ -124,6 +124,7 @@ const sourceLocationPattern = /^\s*,-\[(?<path>.+?):(?<line>\d+):(?<column>\d+)\
 const vitestFailurePattern = /^\s*FAIL\s+(?<file>.+?)\s*>\s*(?<message>.+)$/u;
 const vitestLocationPattern = /^\s*❯\s+(?<path>.+?):(?<line>\d+):(?<column>\d+)$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeDiagnosticPath(value: string): string | undefined {
   const normalized = value.replaceAll("\\", "/");
   const appsOffset = normalized.indexOf("apps/");
@@ -139,6 +140,7 @@ function safeDiagnosticPath(value: string): string | undefined {
   return path;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
   // Command text may contain source literals or credentials. Keep the actual
   // compiler code and location, but generate the explanation ourselves.
@@ -150,6 +152,7 @@ function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
   return "Compiler error at this location; inspect the reported code and file.";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function compilerDiagnostics(output: string): TargetValidationDiagnostic[] {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
@@ -216,6 +219,7 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
   return diagnostics;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validationBinding(apply: TargetApplyReceipt): TargetValidationBinding {
   return {
     appId: apply.targetReceipt.appId,
@@ -241,6 +245,7 @@ export function validationBinding(apply: TargetApplyReceipt): TargetValidationBi
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createTargetValidationAttempt(
   apply: TargetApplyReceipt,
   startedByCallId: string,
@@ -262,6 +267,7 @@ export function createTargetValidationAttempt(
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function attemptBinding(attempt: TargetValidationAttemptReceipt): TargetValidationBinding {
   return {
     appId: attempt.appId,
@@ -287,6 +293,7 @@ function attemptBinding(attempt: TargetValidationAttemptReceipt): TargetValidati
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
   return async ({ sandbox, appId, command, validationRoot }) => {
     const run = (script: "check" | "build" | "test", args = "") =>
@@ -319,6 +326,7 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async ({ appId, command }) =>
@@ -327,6 +335,7 @@ export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
       : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function failureReceipt(
   attempt: TargetValidationAttemptReceipt,
   commands: readonly TargetValidationCommandReceipt[],
@@ -349,6 +358,7 @@ function failureReceipt(
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function executeProposalBoundValidation(input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;

@@ -22,6 +22,7 @@ export const hostedGitHubInstallationBindingSchema = z
 
 export type HostedGitHubInstallationBinding = z.infer<typeof hostedGitHubInstallationBindingSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function mergeHostedGitHubInstallationBindings(
   bindings: HostedGitHubInstallationBinding[],
   legacy: HostedGitHubInstallationBinding | undefined,
@@ -32,6 +33,7 @@ export function mergeHostedGitHubInstallationBindings(
     : [...bindings, legacy];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   const parsed = hostedTenantAuthoritySchema.parse(authority);
   return and(
@@ -42,6 +44,7 @@ function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function bindingTenantPredicate(authority: HostedGitHubTenantAuthority) {
   const parsed = hostedTenantAuthoritySchema.parse(authority);
   return and(
@@ -73,6 +76,7 @@ export interface HostedGitHubInstallationStore {
   }) => Promise<HostedGitHubInstallationBinding>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedGitHubInstallationStore(
   database: Database,
 ): HostedGitHubInstallationStore {

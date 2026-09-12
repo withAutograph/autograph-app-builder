@@ -15,10 +15,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function json(value: unknown, status = 200) {
   return Response.json(value, { status });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readerFetch(input?: {
   permissions?: Record<string, string>;
   repositorySelection?: "all" | "selected";
@@ -65,6 +67,7 @@ function readerFetch(input?: {
   return { calls, implementation };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reader(fetch: typeof globalThis.fetch) {
   return createArrustedTemplateReader({
     config: {

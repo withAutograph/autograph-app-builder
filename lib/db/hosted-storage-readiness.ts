@@ -713,6 +713,7 @@ export const hostedStorageReadBackSchema = z
 
 export type HostedStorageReadBack = z.infer<typeof hostedStorageReadBackSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadHostedStorageContract(repositoryRoot: string) {
   const [migrationFiles, rawJournal] = await Promise.all([
     Promise.all(
@@ -793,14 +794,17 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tupleColumns(rows: HostedStorageReadBack["columns"]) {
   return rows.map((row) => [row.table, row.column, row.type, row.notNull]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tupleObjects(rows: { table: string; name: string }[]) {
   return rows.map((row) => [row.table, row.name]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function verifyHostedStorageReadBack(input: {
   repositoryRoot: string;
   readBack: unknown;

@@ -20,6 +20,7 @@ const organization = {
   role: "owner",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createDatabase(results: unknown[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const execute = vi.fn(async () => {

@@ -66,6 +66,7 @@ const failed = (reason: string, message: string, retryable = false) =>
     message,
   });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactPrincipal(
   principal: ConnectionPrincipal,
   expected: { ownerUserId: string; issuer: string },
@@ -124,6 +125,7 @@ type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
     }>;
   };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repositorySourceProvider(
   value: GitHubRepositoryAccessProvider,
 ): value is GitHubRepositorySourceProvider {
@@ -134,6 +136,7 @@ function repositorySourceProvider(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRepositoryAccessRuntime(input: {
   authority: {
     issuer: string;
@@ -455,6 +458,7 @@ let runtimeInput:
     }
   | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
   const { readPreparedHandoffContext } = await import("./handoff-context");
@@ -521,6 +525,7 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
 }
 
 /** Internal Check-access seam for the hosted session service. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resumeAuthorizedRepositoryAccessForSession(input: {
   sessionAuth: unknown;
   sessionId: string;

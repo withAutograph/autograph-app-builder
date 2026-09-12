@@ -6,6 +6,7 @@ import { parseDevelopmentArguments } from "../lib/development/local-mode";
 
 const repositoryRoot = resolve(".");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const canonical = await realpath(path);

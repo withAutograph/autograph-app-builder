@@ -17,6 +17,7 @@ const chartCompositions = new Set([
 ]);
 
 /** Compile the submitted interface against the actual checkout, not substitutes. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function uiPreviewRendererFiles(input: UiPreviewInput) {
   const root = `.builder-preview/${uiPreviewSourceDigest(input)}`;
   // These public compositions use Arrusted's AG Charts runtime. Match its
@@ -96,6 +97,7 @@ await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function renderUiPreview(
   input: UiPreviewInput,
   sandbox: SandboxSession,

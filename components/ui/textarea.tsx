@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea

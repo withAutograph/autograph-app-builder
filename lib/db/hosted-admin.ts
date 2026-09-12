@@ -162,6 +162,7 @@ export interface HostedAdminStore {
   }>;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalRequest(request: HostedAdminPlanRequest): string {
   return JSON.stringify(
     request.action === "retention.apply"
@@ -189,10 +190,12 @@ function canonicalRequest(request: HostedAdminPlanRequest): string {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function planHostedAdminRequest(input: unknown) {
   const request = hostedAdminPlanRequestSchema.parse(input);
   return {
@@ -217,6 +220,7 @@ const emptyEffects = {
   authorizationStateRowsDeleted: 0,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function executeHostedAdminRequest(input: {
   request: unknown;
   store: HostedAdminStore;

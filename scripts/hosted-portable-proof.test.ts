@@ -60,7 +60,7 @@ const scenario = hostedProofScenarioSchema.parse({
 });
 
 // Keep the fixture token helper scoped to this proof test.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 function jwt(subject: string, workspaceId: string) {
   // Keep JWT encoding local to this fixture.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -91,6 +91,7 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
     { status, headers: { "content-type": "application/json" } },
   );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function session(
   sessionId: string,
   status: "working" | "input_required" | "waiting" | "completed" | "cancelled",
@@ -107,6 +108,7 @@ function session(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedFixture(
   options: {
     metadataResource?: string;

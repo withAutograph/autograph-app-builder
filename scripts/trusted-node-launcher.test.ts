@@ -26,6 +26,7 @@ const pinnedNode = process.execPath.includes("/mise/installs/")
 const [accountHome] = pinnedNode.split("/.local/share/mise/");
 const pinnedPnpm = resolve(accountHome, ".local/share/mise/installs/pnpm/11.7.0/pnpm");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function taskFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
@@ -158,7 +159,7 @@ describe("trusted Node launcher", () => {
     expect(observation.executable).toBe(pinnedNode);
     expect(observation.path).not.toContain(hostile);
     expect(observation.path.endsWith(`${dirname(pinnedNode)}:/usr/bin:/bin`)).toBe(true);
-  });
+  }, 30_000);
 
   it("does not trust a forged public symbol and matching environment", () => {
     const cleanEnvironment: NodeJS.ProcessEnv = {

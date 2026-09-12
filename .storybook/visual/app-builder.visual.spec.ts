@@ -4,6 +4,7 @@ import type { Page } from "playwright/test";
 const authenticatedStory = "/iframe.html?id=create-app-flow-page--default&viewMode=story";
 const anonymousStory = "/iframe.html?id=create-app-flow-anonymous-entry--empty&viewMode=story";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function openAuthenticatedStory(page: Page) {
   await page.goto(authenticatedStory);
   await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
@@ -12,6 +13,7 @@ async function openAuthenticatedStory(page: Page) {
   await expect(page.getByLabel("App Name")).toHaveValue("Visual Regression");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function openAnonymousStory(page: Page) {
   await page.goto(anonymousStory);
   await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();

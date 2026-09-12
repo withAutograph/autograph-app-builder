@@ -9,6 +9,7 @@ import {
 
 const html = (page: Page) => page.locator("html");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expectTheme(
   page: Page,
   theme: "light" | "dark",
@@ -21,6 +22,7 @@ async function expectTheme(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function openAccountMenu(page: Page) {
   await page.getByRole("button", { name: "Account" }).click();
   await expect(page.getByRole("menuitem", { name: /Theme/u })).toBeVisible();

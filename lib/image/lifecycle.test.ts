@@ -158,6 +158,7 @@ describe("closed receipt key sets", () => {
   });
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installFakeGhBoundary(
   root: string,
   token: string,
@@ -263,6 +264,7 @@ process.stdout.write("preloaded\\n");
 // These helpers intentionally expose callback-based setup for synchronous and
 // asynchronous test scopes.
 // oxlint-disable promise/prefer-await-to-callbacks
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function withFakeGhEnvironment(
   fixture: ReturnType<typeof installFakeGhBoundary>,
   callback: () => void,
@@ -287,6 +289,7 @@ function withFakeGhEnvironment(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function withFakeGhEnvironmentAsync(
   fixture: ReturnType<typeof installFakeGhBoundary>,
   callback: () => Promise<void>,
@@ -312,6 +315,7 @@ async function withFakeGhEnvironmentAsync(
 }
 // oxlint-enable promise/prefer-await-to-callbacks
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function seedFakeGhState(fixture: ReturnType<typeof installFakeGhBoundary>): string {
   mkdirSync(join(fixture.state, "gh"), { mode: 0o700 });
   writeFileSync(join(fixture.state, "gh", "device-id"), "fixture-device-id\n", {
@@ -328,6 +332,7 @@ type FixtureReceipt = Readonly<{
   digest: string;
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function writeFixtureReceipt(
   stateRoot: string,
   filename: string,
@@ -346,6 +351,7 @@ function writeFixtureReceipt(
   return receipt;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stateArtifactText(root: string): string {
   const contents: string[] = [];
   const visit = (path: string) => {
@@ -359,6 +365,7 @@ function stateArtifactText(root: string): string {
   return contents.join("\n");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installPreloadFixture(
   variant:
     | "current"

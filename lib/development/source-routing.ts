@@ -3,6 +3,7 @@
  * the checkout that launched this run. Other paths remain subject to the
  * ordinary allowlist at the inspection boundary.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentInspectionPath(input: {
   requestedPath: string;
   environment?: Readonly<Record<string, string | undefined>>;

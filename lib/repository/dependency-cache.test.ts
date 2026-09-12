@@ -133,6 +133,7 @@ const developmentManifest = {
   },
 } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySource?: string }) {
   const contents = new Map([
     [".config/mise/config.toml", "[tools]\nnode = '24.18.0'\n"],
@@ -172,6 +173,7 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
 const liveNodeModulesDigest = "a".repeat(64);
 const liveCargoHomeDigest = "b".repeat(64);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
@@ -243,6 +245,7 @@ function liveTemplateCacheFixture() {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
     .fn()
@@ -272,6 +275,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   return { run, sandbox, writeTextFile };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest) {
   const run = vi
     .fn()
@@ -288,6 +292,7 @@ function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest
   return { run, sandbox: { run } as unknown as SandboxSession };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeDependencyTopologyFixture(root: string) {
   const source = join(root, "cache", "source");
   const cargo = join(root, "cache", "cargo-home");

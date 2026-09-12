@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {

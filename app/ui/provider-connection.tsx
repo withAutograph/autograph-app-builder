@@ -17,6 +17,7 @@ interface ProviderConnectionProps {
   title: string;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderConnection({
   action,
   buttonLabel,
@@ -66,6 +67,7 @@ export function ProviderConnection({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderConnectionNotice({
   children,
   status,

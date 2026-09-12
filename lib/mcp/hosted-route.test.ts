@@ -30,6 +30,7 @@ const workloadIdentity: HostedWorkloadIdentity = {
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request() {
   return new Request(environment.MCP_RESOURCE_URL, {
     method: "POST",

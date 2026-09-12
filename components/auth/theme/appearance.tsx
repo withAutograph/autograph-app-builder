@@ -28,6 +28,7 @@ export interface AppearanceProps {
  * @param className - Optional additional CSS class names for the card container.
  * @returns A JSX element containing the theme selector card.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function Appearance({ className }: AppearanceProps) {
   const { useTheme, localization } = useAuthPlugin(themePlugin);
   const { theme, setTheme, themes = [] } = useTheme();

@@ -19,6 +19,7 @@ const contentKeyedDevelopmentImage =
  * resolved it to an immutable OCI manifest digest. Image construction and
  * acquisition are deliberately outside the agent runtime.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function configuredToolchainImage(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string | undefined {
@@ -40,10 +41,12 @@ export function configuredToolchainImage(
   return image;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toolVersionMatches(tool: RequiredTool, version: string): boolean {
   return requiredToolVersions[tool].test(version);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxRevalidationKey(image: string | undefined, backend = "local"): string {
   return `autograph-app-builder-toolchain-v2:${backend}:${image ?? "unconfigured"}`;
 }

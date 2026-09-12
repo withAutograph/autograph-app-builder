@@ -26,10 +26,12 @@ const runtimePrefixes = [
   "lib/sandbox/",
 ] as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isDevelopmentRuntimePath(path: string) {
   return exactRuntimeFiles.has(path) || runtimePrefixes.some((prefix) => path.startsWith(prefix));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function runtimePaths(repositoryRoot: string) {
   const { stdout } = await execFileAsync(
     "/usr/bin/git",
@@ -55,6 +57,7 @@ async function runtimePaths(repositoryRoot: string) {
     .toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right)));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
   const hash = createHash("sha256");
   for (const path of await runtimePaths(repositoryRoot)) {
@@ -74,6 +77,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
   return hash.digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentRuntimeChange(input: {
   repositoryRoot: string;
   expectedFingerprint: string;

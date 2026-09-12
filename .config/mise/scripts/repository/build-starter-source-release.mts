@@ -10,10 +10,12 @@ const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 const REPOSITORY = "https://github.com/withAutograph/arrusted-development";
 const TREE_ENTRY = /^(?<mode>100644|100755) blob [0-9a-f]{40}\t(?<path>.+)$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(value: Uint8Array) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function argumentsFrom(values: readonly string[]) {
   const args = new Map<string, string>();
   for (let index = 0; index < values.length; index += 2) {

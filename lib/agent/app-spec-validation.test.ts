@@ -11,6 +11,7 @@ import {
   validateBuildReadyAppSpec,
 } from "./app-spec-validation";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function completeAppSpec(handoff: unknown = BUILD_READY_HANDOFF_EXAMPLE): string {
   return `${REQUIRED_APP_SPEC_HEADINGS.filter((heading) => heading !== "Build handoff")
     .map((heading) => `## ${heading}\n\nProduct decision.`)

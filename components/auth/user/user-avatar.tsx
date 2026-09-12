@@ -29,6 +29,7 @@ export interface UserAvatarProps {
  * @param fallback - Node to render inside the avatar fallback area before initials or the default icon
  * @returns The avatar element to render (JSX)
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function UserAvatar({ className, user, isPending, fallback }: UserAvatarProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {

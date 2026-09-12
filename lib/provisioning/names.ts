@@ -6,6 +6,7 @@ export const builderAppIdSchema = z
   .max(92)
   .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveBuilderAppId(appName: string): string {
   const value = appName
     .normalize("NFKD")
@@ -19,6 +20,7 @@ export function deriveBuilderAppId(appName: string): string {
   return builderAppIdSchema.parse(value);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function suffixedProviderName(input: {
   base: string;
   suffix: string;

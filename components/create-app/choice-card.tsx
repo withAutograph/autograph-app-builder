@@ -7,6 +7,7 @@ export type CreateAppSectionId =
   | "deploy-to"
   | "connections";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ChoiceCard({
   badge,
   checked,
@@ -51,6 +52,7 @@ export function ChoiceCard({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SectionShell({
   children,
   className,

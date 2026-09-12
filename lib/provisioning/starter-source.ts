@@ -100,6 +100,7 @@ const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 const MAX_STARTER_FILES = 10_000;
 const MAX_STARTER_FILE_BYTES = 10 * 1024 * 1024;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function restrictedGit(
   args: string[],
   timeout = 30_000,
@@ -166,10 +167,12 @@ const starterConfigSchema = z
 
 export type StarterSourceConfig = z.infer<typeof starterConfigSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedBytes(response: Response, maximum: number) {
   const declared = response.headers.get("content-length");
   if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > maximum))
@@ -179,6 +182,7 @@ async function boundedBytes(response: Response, maximum: number) {
   return bytes;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tarFiles(archive: Uint8Array) {
   const tar = gunzipSync(archive);
   const files = new Map<string, { mode: "100644" | "100755"; bytes: Uint8Array }>();
@@ -220,6 +224,7 @@ function tarFiles(archive: Uint8Array) {
   return files;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadStarterSource(input: {
   config: StarterSourceConfig;
   fetch?: typeof fetch;
@@ -297,6 +302,7 @@ export async function loadStarterSource(input: {
  * transport as fresh App Builder sessions.  The legacy archive loader above
  * remains readable solely for sessions that already recorded a V3 receipt.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function cloneStarterSource(input?: {
   reader?: ArrustedTemplateReader;
 }): Promise<StarterSource> {

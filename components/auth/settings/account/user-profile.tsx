@@ -28,6 +28,7 @@ export interface UserProfileProps {
  * @param className - Optional additional CSS class names applied to the card container
  * @returns A JSX element containing the profile card with avatar upload and editable name/username fields
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function UserProfile({ className }: UserProfileProps) {
   const { additionalFields, authClient, localization } = useAuth<UsernameAuthClient>();
   const { data: session } = useSession(authClient);
@@ -40,6 +41,7 @@ export function UserProfile({ className }: UserProfileProps) {
     name?: string;
   }>({});
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
 

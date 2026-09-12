@@ -7,6 +7,7 @@ const booleanOptions = [
   { value: true, label: "Enabled" },
 ];
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function failClosedAdapter<ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -16,9 +17,11 @@ function failClosedAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Entiti
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> {
   let adapter: Adapter<ValueType, EntitiesType> | undefined;
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function resolveAdapter() {
     const sdkKey = process.env.FLAGS;
     if (!sdkKey) return failClosedAdapter<ValueType, EntitiesType>();

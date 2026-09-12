@@ -12,6 +12,7 @@ const maximumCredentialBytes = 4096;
 const maximumGhOutputBytes = 256 * 1024;
 const ghTimeoutMs = 10_000;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readBoundedInput(fd: number, maximumBytes: number): Buffer {
   const input = Buffer.alloc(maximumBytes + 1);
   let offset = 0;
@@ -28,6 +29,7 @@ export function readBoundedInput(fd: number, maximumBytes: number): Buffer {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ghcrIdentityDigest(
   username: string,
   provenanceDigest: string,
@@ -46,6 +48,7 @@ export function ghcrIdentityDigest(
     .digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertBoundGhcrPayload(
   payload: string,
   expectedUsername: string,
@@ -85,6 +88,7 @@ export function assertBoundGhcrPayload(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertVerifiedGhcrLoginPayload(
   payload: string,
   expectedUsername: string,
@@ -119,6 +123,7 @@ type GhStatusRecord = Readonly<{
   tokenSource: "keyring";
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGhAuthStatus(payload: string, expectedUsername: string): GhStatusRecord {
   let parsed: unknown;
   try {
@@ -171,6 +176,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   return value as GhStatusRecord;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.length === 0)
@@ -178,6 +184,7 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactGithubCli(): string {
   const path = requiredEnvironment("APP_BUILDER_IMAGE_GH_BIN");
   const expectedSha256 = requiredEnvironment("APP_BUILDER_GH_SHA256");
@@ -190,6 +197,7 @@ function exactGithubCli(): string {
   return path;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubConfigDigest(configRoot: string): string {
   if (!isAbsolute(configRoot) || realpathSync(configRoot) !== configRoot)
     throw new Error("GitHub configuration root is invalid.");
@@ -224,6 +232,7 @@ export function githubConfigDigest(configRoot: string): string {
   return createHash("sha256").update(records.join("\n")).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertGithubStateRoot(stateRoot: string): void {
   if (!isAbsolute(stateRoot) || !existsSync(stateRoot) || realpathSync(stateRoot) !== stateRoot)
     throw new Error("GitHub state root is invalid.");
@@ -280,6 +289,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     throw new Error("GitHub state root is unsafe.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubStateDigest(stateRoot: string): string {
   assertGithubStateRoot(stateRoot);
   const deviceId = join(stateRoot, "gh", "device-id");
@@ -295,6 +305,7 @@ export function githubStateDigest(stateRoot: string): string {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function githubEnvironment(): NodeJS.ProcessEnv {
   const configRoot = requiredEnvironment("APP_BUILDER_GH_CONFIG_DIR");
   const expectedDigest = requiredEnvironment("APP_BUILDER_GH_CONFIG_DIGEST");
@@ -316,6 +327,7 @@ function githubEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertExpectedGithubState(): void {
   const stateRoot = requiredEnvironment("APP_BUILDER_GH_STATE_DIR");
   const expectedDigest = process.env.APP_BUILDER_GH_STATE_DIGEST;
@@ -325,6 +337,7 @@ function assertExpectedGithubState(): void {
     throw new Error("GitHub state drifted after approval.");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
   const executable = exactGithubCli();
   assertExpectedGithubState();
@@ -386,6 +399,7 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
 
 // Keep token parsing private to this credential boundary.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseExactToken(raw: Buffer): Buffer {
   let end = raw.length;
   if (end > 0 && raw[end - 1] === 0x0a) end -= 1;
@@ -409,6 +423,7 @@ function parseExactToken(raw: Buffer): Buffer {
   return token;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readApprovedKeyringToken(username: string): Promise<Buffer> {
   const status = await runBoundedGh([
     "auth",
@@ -432,6 +447,7 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyNamespace(username: string): Promise<void> {
   const user = await runBoundedGh(["api", "/user", "--jq", ".login"]);
   const membership = await runBoundedGh([
@@ -452,6 +468,7 @@ async function verifyNamespace(username: string): Promise<void> {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeCredential(username: string, token: Buffer): Promise<void> {
   assertExpectedGithubState();
   const prefix = Buffer.from(
@@ -473,6 +490,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeVerifiedLogin(
   username: string,
   provenanceDigest: string,
@@ -498,6 +516,7 @@ async function writeVerifiedLogin(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function run(): Promise<void> {
   const { 2: mode } = process.argv;
   if (process.argv.length !== 3 || (mode !== "get" && mode !== "verify-login"))

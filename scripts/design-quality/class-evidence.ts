@@ -16,6 +16,7 @@ export interface ClassTokenEvidence {
   source: IntrinsicClassSignature["source"];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
   const { initializer } = attribute;
   if (!initializer) return undefined;
@@ -33,6 +34,7 @@ function staticClassName(attribute: ts.JsxAttribute): string | undefined {
  * These are source candidates, not a CSS provenance claim. A candidate is only
  * useful when the browser sees the exact intrinsic tag and complete class list.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicClassSignature[] {
   const candidates: IntrinsicClassSignature[] = [];
   for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
@@ -86,6 +88,7 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
  * local `cx("...")` composition convention. These are reviewer candidates,
  * not declaration provenance.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEvidence[] {
   const candidates: ClassTokenEvidence[] = [];
   const add = (source: ts.SourceFile, node: ts.Node, value: string) => {
@@ -132,6 +135,7 @@ const signatureKey = (tag: string, classes: string[]) =>
   `${tag}:${[...classes].toSorted().join(" ")}`;
 
 /** Returns a source only for a unique full DOM signature. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function uniqueIntrinsicSignature(
   signatures: IntrinsicClassSignature[],
   tag: string,
@@ -153,6 +157,7 @@ export interface SignatureAttribution {
  * Generated source alone cannot exclude a shared component using the same DOM
  * shape. Omit the shared inventory and this intentionally returns unknown.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signatureAttribution(
   generated: IntrinsicClassSignature[],
   shared: IntrinsicClassSignature[] | undefined,
@@ -169,11 +174,13 @@ export function signatureAttribution(
 }
 
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactClassSelector(selector: string | undefined) {
   if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) return undefined;
   return selector.trim().slice(1);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generatedSignatureSelector(
   signature: IntrinsicClassSignature | undefined,
   selector: string | undefined,
@@ -183,6 +190,7 @@ export function generatedSignatureSelector(
 }
 
 /** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function escapedTailwindClassToken(selector: string | undefined) {
   if (!selector?.startsWith(".")) return undefined;
   let token = "";
@@ -231,6 +239,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
   return token;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classTokenAttribution(
   generated: ClassTokenEvidence[],
   shared: ClassTokenEvidence[] | undefined,

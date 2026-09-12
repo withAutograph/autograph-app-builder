@@ -13,6 +13,7 @@ const authority = {
 
 afterEach(() => vi.restoreAllMocks());
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handlers(
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   authorityForRequest: () => Promise<typeof authority | undefined> = async () => authority,

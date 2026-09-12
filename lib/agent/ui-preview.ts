@@ -127,10 +127,12 @@ const publicImports = new Set([
   "react/jsx-runtime",
 ]);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function imports(content: string) {
   return [
     ...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu),
@@ -139,6 +141,7 @@ function imports(content: string) {
     .toSorted();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function namedImports(content: string, source: string): string[] {
   const names = new Set<string>();
   const pattern = new RegExp(
@@ -159,6 +162,7 @@ function namedImports(content: string, source: string): string[] {
   return [...names].toSorted();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function manifestNames(values: readonly { name: string; source: string }[], source: string) {
   return new Set(values.filter((value) => value.source === source).map(({ name }) => name));
 }
@@ -167,6 +171,7 @@ function manifestNames(values: readonly { name: string; source: string }[], sour
  * Preview code intentionally has a much smaller authority surface than an
  * application.  It can compose visuals and local fixture state only.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateUiPreview(input: UiPreviewInput): void {
   const parsed = uiPreviewInputSchema.parse(input);
   const paths = new Set(parsed.files.map(({ path }) => path));
@@ -261,6 +266,7 @@ export function validateUiPreview(input: UiPreviewInput): void {
     }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function uiPreviewSourceDigest(input: UiPreviewInput) {
   return digest({
     appId: input.appId,

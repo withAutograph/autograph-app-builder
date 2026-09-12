@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createPreviewEmulatePersistence } from "./preview-emulate-persistence";
 import type { PreviewEmulateStateStore } from "./preview-emulate-persistence";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): PreviewEmulateStateStore & {
   states: Map<string, string>;
 } {

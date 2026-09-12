@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import { developmentMcpToolNames, waitForDevelopmentMcp } from "./mcp-readiness";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
     status,

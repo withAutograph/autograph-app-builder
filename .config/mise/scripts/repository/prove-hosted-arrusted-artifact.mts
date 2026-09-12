@@ -29,6 +29,7 @@ disable = ["bun"]
 `;
 const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {

@@ -36,6 +36,7 @@ test.use({ trace: "off", screenshot: "off", video: "off" });
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function completeHandoff(page: Page) {
   await page.getByRole("button", { name: "Create App" }).click();
   await expect(page).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u, {
@@ -44,6 +45,7 @@ async function completeHandoff(page: Page) {
   await expect(page.getByRole("region", { name: "Continue your app" })).toBeVisible();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function getWithTransientRetry(page: Page, path: string) {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -61,6 +63,7 @@ async function getWithTransientRetry(page: Page, path: string) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function prepareNamedHandoff(
   page: Page,
   appName: string,

@@ -13,6 +13,7 @@ import type { HostedMcpRuntime } from "./request-handler";
  * already-created database handle and workload identity; this module reads no
  * process environment, obtains no credential, and opens no connection itself.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function composeHostedMcpRuntime(input: {
   auth: unknown;
   database: PostgresJsDatabase<typeof databaseSchema>;

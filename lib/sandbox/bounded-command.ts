@@ -14,6 +14,7 @@ export class SandboxCommandLimitError extends Error {
 
 type OutputReader = ReadableStreamDefaultReader<Uint8Array>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function collectBounded(
   reader: OutputReader,
   state: { bytes: number; readonly maximumBytes: number },
@@ -34,12 +35,14 @@ async function collectBounded(
   return chunks;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function decodeChunks(chunks: readonly Uint8Array[]) {
   return new TextDecoder("utf-8", { fatal: true }).decode(
     Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function timeoutRejection(error: Error, timeoutMs: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const promise = new Promise<never>((_resolve, reject) => {
@@ -50,7 +53,7 @@ function timeoutRejection(error: Error, timeoutMs: number) {
 }
 
 // Keep timeout rejection construction private to command execution.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 function resettableTimeoutRejection(error: Error, timeoutMs: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   // Keep settlement state local to this timeout promise.
@@ -68,6 +71,7 @@ function resettableTimeoutRejection(error: Error, timeoutMs: number) {
   return { promise, clear, reset };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function settleWithin(operation: Promise<unknown>, timeoutMs: number) {
   const bounded = timeoutRejection(new Error("cleanup timed out"), timeoutMs);
   try {
@@ -80,6 +84,7 @@ async function settleWithin(operation: Promise<unknown>, timeoutMs: number) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function runBoundedSandboxCommand(
   sandbox: Pick<SandboxSession, "spawn">,
   options: Omit<SandboxRunOptions, "abortSignal"> & {

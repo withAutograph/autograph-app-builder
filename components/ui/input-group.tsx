@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -42,6 +43,7 @@ const inputGroupAddonVariants = cva(
   },
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroupAddon({
   className,
   align = "inline-start",
@@ -78,6 +80,7 @@ const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm shadow-non
   },
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroupButton({
   className,
   type = "button",
@@ -99,6 +102,7 @@ function InputGroupButton({
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
@@ -111,6 +115,7 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroupInput({ className, ...props }: React.ComponentProps<"input">) {
   return (
     <Input
@@ -124,6 +129,7 @@ function InputGroupInput({ className, ...props }: React.ComponentProps<"input">)
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function InputGroupTextarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <Textarea

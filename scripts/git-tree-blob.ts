@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 
 const objectId = /^[0-9a-f]{40}$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(repositoryRoot: string, args: string[]) {
   return execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
@@ -15,6 +16,7 @@ function git(repositoryRoot: string, args: string[]) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalTrackedPath(path: string) {
   return (
     path !== "" &&
@@ -26,6 +28,7 @@ function canonicalTrackedPath(path: string) {
 }
 
 /** Reads one exact regular file from an immutable Git tree, never the checkout. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: string; path: string }) {
   if (!objectId.test(input.tree) || !canonicalTrackedPath(input.path))
     throw new Error("Tracked tree asset reference was not canonical.");

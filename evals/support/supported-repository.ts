@@ -49,6 +49,7 @@ export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
   2,
 )}\n`;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureGit(root: string, args: string[]): void {
   execFileSync(
     "git",
@@ -65,6 +66,7 @@ function fixtureGit(root: string, args: string[]): void {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSupportedRepositoryFixture(): string {
   if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1")
     mkdirSync(join(tmpdir(), "autograph-app-builder-branch-publication"), {

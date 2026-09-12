@@ -30,6 +30,7 @@ type SignalTarget = Readonly<{
   off: (signal: ForwardedSignal, listener: () => void) => unknown;
 }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0)
@@ -37,6 +38,7 @@ function required(environment: Environment, name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerDirectory(path: string, label: string, ownerOnly = false) {
   if (!isAbsolute(path) || pathResolve(path) !== path || realpathSync(path) !== path)
     throw new Error(`${label} was not an absolute canonical directory.`);
@@ -52,6 +54,7 @@ function ownerDirectory(path: string, label: string, ownerOnly = false) {
   return path;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function contained(root: string, path: string) {
   const candidate = relative(root, path);
   return (
@@ -62,6 +65,7 @@ function contained(root: string, path: string) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactRoots(repositoryRoot: string, environment: Environment) {
   const runsRoot = ownerDirectory(
     required(environment, "APP_BUILDER_DEV_RUNS_ROOT"),
@@ -130,6 +134,7 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactBinding(environment: Environment) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
@@ -173,6 +178,7 @@ function exactBinding(environment: Environment) {
   return { dependencyKey, fingerprint, port, sourceSha, sourceTree };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createLocalEveInvocation(input: {
   repositoryRoot: string;
   pinnedNode: string;
@@ -228,6 +234,7 @@ export function createLocalEveInvocation(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function localEveLaunchReceipt(invocation: LocalEveInvocation) {
   return {
     format: "autograph-local-eve-launch-v3",
@@ -248,6 +255,7 @@ export function localEveLaunchReceipt(invocation: LocalEveInvocation) {
  * supervisor remove the per-run application root while Eve is still watching
  * and writing beneath it.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForForwardedEveChild(
   child: ChildProcess,
   signalTarget: SignalTarget = process,
@@ -272,6 +280,7 @@ export function waitForForwardedEveChild(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function runLocalEve(input: {
   repositoryRoot: string;
   environment?: Environment;

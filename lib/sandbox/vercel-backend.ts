@@ -49,6 +49,7 @@ const PROVIDER_REQUEST_TIMEOUT_MS = Number(
 );
 const PROVIDER_RETRY_DELAY_MS = 250;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const { status } = error as Error & { status?: unknown };
@@ -58,6 +59,7 @@ function retryableProviderFailure(error: unknown): boolean {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) return "unknown";
   const { cause } = error as Error & { cause?: unknown };
@@ -70,6 +72,7 @@ function providerDiagnostic(error: unknown): string {
 
 type ProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createProviderFetch(
   fetchImpl: typeof fetch = fetch,
   requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS,
@@ -127,6 +130,7 @@ export function createProviderFetch(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createRuntimeRecoveringBackend<BO, SO>(input: {
   readonly backend: SandboxBackend<BO, SO>;
   readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
@@ -169,6 +173,7 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createProcessSessionReusingBackend<BO, SO>(
   backend: SandboxBackend<BO, SO>,
 ): SandboxBackend<BO, SO> {
@@ -249,6 +254,7 @@ function createProcessSessionReusingBackend<BO, SO>(
  * Keeps network authority different for the reusable template and every live
  * session. Only template construction may download the pinned toolchain.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedVercelBackend(
   input: HostedVercelBackendInput,
 ): ReturnType<typeof vercel> {

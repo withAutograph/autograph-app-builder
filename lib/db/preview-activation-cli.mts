@@ -22,6 +22,7 @@ import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readPrivateRequest(path: string): Promise<unknown> {
   if (!isAbsolute(path)) throw new Error("Activation request path must be absolute.");
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
@@ -42,10 +43,12 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf-8"));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stableId(prefix: string, value: string) {
   return `${prefix}_${createHash("sha256").update(value).digest("hex")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function configureLoginRole(
   sql: Sql,
   action: "create" | "alter",
@@ -67,6 +70,7 @@ async function configureLoginRole(
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createStore(sql: Sql): PreviewActivationStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

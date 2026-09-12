@@ -11,6 +11,7 @@ import type { BetterFetchError } from "better-auth/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ErrorToaster() {
   const queryClient = useQueryClient();
 

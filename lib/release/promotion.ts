@@ -135,12 +135,14 @@ export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSc
 
 export { sha256 } from "../../scripts/portable-release";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sha256File(path: string) {
   const digest = createHash("sha256");
   for await (const chunk of createReadStream(path)) digest.update(chunk);
   return digest.digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sealPromotionReceipt(input: PromotionReceiptUnsigned): PromotionReceipt {
   const unsigned = promotionReceiptUnsignedSchema.parse(input);
   if (unsigned.endpoint !== `${releaseEndpoint(new URL(unsigned.endpoint).origin)}/mcp`)
@@ -152,6 +154,7 @@ export function sealPromotionReceipt(input: PromotionReceiptUnsigned): Promotion
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(root: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", ["-C", root, ...args], {
     encoding: "utf-8",
@@ -165,6 +168,7 @@ function git(root: string, ...args: string[]) {
   }).trim();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exactCleanGitSource(rootInput: string, label: string) {
   if (!isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
   const requested = pathResolve(rootInput);
@@ -191,6 +195,7 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
   } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function tarEntry(path: string, requested: string) {
   let result: Buffer | undefined;
   const pending: Promise<void>[] = [];
@@ -221,6 +226,7 @@ async function tarEntry(path: string, requested: string) {
   return result;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectOciCandidateArchive(path: string) {
   const indexBytes = await tarEntry(path, "index.json");
   const index = JSON.parse(indexBytes.toString("utf-8")) as {
@@ -280,6 +286,7 @@ export async function inspectOciCandidateArchive(path: string) {
   } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function treeEntries(root: string, current = root): Promise<string[]> {
   const paths: string[] = [];
   for (const entry of (await readdir(current, { withFileTypes: true })).toSorted((left, right) =>
@@ -294,6 +301,7 @@ async function treeEntries(root: string, current = root): Promise<string[]> {
   return paths;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function immutableTreeDigest(rootInput: string) {
   const root = await realpath(rootInput);
   const digest = createHash("sha256");
@@ -312,11 +320,13 @@ export async function immutableTreeDigest(rootInput: string) {
   return digest.digest("hex");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function within(root: string, path: string) {
   const child = relative(root, path);
   return child === "" || (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exactFile(root: string, path: string, expected: string) {
   const absolute = pathResolve(root, path);
   if (!within(root, absolute) || basename(path) === "")
@@ -340,6 +350,7 @@ async function exactFile(root: string, path: string, expected: string) {
   return bytes;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function verifyPromotionCandidate(input: {
   candidateRoot: string;
   receiptPath?: string;
@@ -405,6 +416,7 @@ export async function verifyPromotionCandidate(input: {
   return { root, receipt, packageReceipt } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releasePublicationCommands(receipt: PromotionReceipt) {
   return [
     {

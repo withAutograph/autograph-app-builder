@@ -18,6 +18,7 @@ const authority = {
   ownerUserId: "user-one",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): BuilderHandoffStore {
   const byId = new Map<string, BuilderHandoffRecord>();
   const byRequest = new Map<string, BuilderHandoffRecord>();

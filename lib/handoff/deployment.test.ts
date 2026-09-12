@@ -21,6 +21,7 @@ const authority = {
 const creationRequestId = "123e4567-e89b-42d3-a456-426614174000";
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function route(input: { authenticated?: boolean } = {}) {
   const rows = new Map<string, BuilderHandoffRecord>();
   const clock = { now: new Date("2026-09-01T12:00:00.000Z") };
@@ -94,6 +95,7 @@ function route(input: { authenticated?: boolean } = {}) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request(body: unknown, input: { origin?: string } = {}) {
   return new Request(`${origin}/api/builder/handoffs`, {
     method: "POST",

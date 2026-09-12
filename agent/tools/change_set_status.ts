@@ -12,6 +12,7 @@ import {
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isCandidateExportTextPath(path: string): boolean {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
     return false;
@@ -21,6 +22,7 @@ export function isCandidateExportTextPath(path: string): boolean {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exactNormalizedChangeSet(input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
@@ -56,6 +58,7 @@ export async function exactNormalizedChangeSet(input: {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exportAppliedTextFiles(input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,

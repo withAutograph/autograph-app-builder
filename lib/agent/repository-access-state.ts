@@ -55,6 +55,7 @@ export const repositoryAccessReceiptSchema = repositoryAccessReceiptUnsignedSche
 export type RepositoryAccessReceipt = z.infer<typeof repositoryAccessReceiptSchema>;
 type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receiptObservation(input: { sessionId: string; access: ReadyRepositoryAccess }) {
   return {
     version: REPOSITORY_ACCESS_RECEIPT_VERSION,
@@ -72,6 +73,7 @@ function receiptObservation(input: { sessionId: string; access: ReadyRepositoryA
   } as const;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recordRepositoryAccessReceipt(input: {
   current: RepositoryAccessReceipt | undefined;
   sessionId: string;
@@ -105,6 +107,7 @@ export function recordRepositoryAccessReceipt(input: {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertRepositoryAccessReceiptForSource(input: {
   receipt: RepositoryAccessReceipt | undefined;
   expectedDigest: string;
@@ -129,6 +132,7 @@ export function assertRepositoryAccessReceiptForSource(input: {
   return receipt;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertResolvedSourceMatchesRepositoryAccess(input: {
   access: RepositoryAccessReceipt;
   source: ImmutableGitHubSourceReceipt;

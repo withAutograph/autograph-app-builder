@@ -61,6 +61,7 @@ const operationRowSchema = z
   })
   .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenantPredicate(principal: HostedPrincipal) {
   return and(
     eq(agentOperations.issuer, principal.issuer),
@@ -70,6 +71,7 @@ function tenantPredicate(principal: HostedPrincipal) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sessionTenantPredicate(principal: HostedPrincipal) {
   return and(
     eq(agentSessions.issuer, principal.issuer),
@@ -79,6 +81,7 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
   const row = operationRowSchema.parse(input);
   const record = hostedOperationRecordSchema.parse(row.record);
@@ -101,6 +104,7 @@ export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
   return record;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
   const row = sessionRowSchema.parse(input);
   const record = hostedSessionRecordSchema.parse(row.record);
@@ -136,6 +140,7 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
   return record;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function operationValues(record: HostedOperationRecord) {
   return {
     issuer: record.principal.issuer,
@@ -154,6 +159,7 @@ function operationValues(record: HostedOperationRecord) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sessionValues(record: HostedSessionRecord) {
   return {
     issuer: record.principal.issuer,
@@ -177,6 +183,7 @@ function sessionValues(record: HostedSessionRecord) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function operationById(
   database: Database | Transaction,
   principal: HostedPrincipal,
@@ -192,6 +199,7 @@ async function operationById(
   return rows[0] === undefined ? null : parseHostedOperationRow(rows[0]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function operationByRequest(
   database: Database | Transaction,
   principal: HostedPrincipal,
@@ -212,6 +220,7 @@ async function operationByRequest(
   return rows[0] === undefined ? null : parseHostedOperationRow(rows[0]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sessionById(
   database: Database | Transaction,
   principal: HostedPrincipal,
@@ -227,6 +236,7 @@ async function sessionById(
   return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isExactReservation(existing: HostedOperationRecord, candidate: HostedOperationRecord) {
   return (
     existing.operationId === candidate.operationId &&
@@ -238,6 +248,7 @@ function isExactReservation(existing: HostedOperationRecord, candidate: HostedOp
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertReserved(
   operation: HostedOperationRecord | null,
   requestDigest: string,
@@ -255,6 +266,7 @@ function assertReserved(
  * Durable tenant-scoped store. The JSON record is the closed authority; every
  * duplicated index column is re-bound to it on read before it can be used.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedEveStore(database: Database): HostedEveStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

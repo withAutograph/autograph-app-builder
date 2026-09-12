@@ -32,6 +32,7 @@ export interface UserViewProps {
  * @param user - Optional user object to display; when omitted the current session user is used
  * @returns A React element showing the user's avatar with their identifying information
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function UserView({ className, isPending, hideSubtitle = false, user }: UserViewProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {

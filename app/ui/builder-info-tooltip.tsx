@@ -5,6 +5,7 @@ import { useId } from "react";
 
 import styles from "./app-builder.module.css";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function InfoTooltip({ children }: { children: string }) {
   const tooltipId = useId();
 

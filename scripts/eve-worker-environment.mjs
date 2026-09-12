@@ -5,10 +5,12 @@ export const eveWorkerEnvelopeKey = "__appBuilderAuthorizedEveWorkerEnvironmentV
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const transportSecretPattern = /^[A-Za-z0-9_-]{43}$/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fail(field) {
   throw new Error(`The trusted Eve worker ${field} was invalid.`);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validLoopbackHostname(hostname) {
   const normalized = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
   if (normalized === "::1") return true;
@@ -16,6 +18,7 @@ function validLoopbackHostname(hostname) {
   return normalized.split(".")[0] === "127";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateBaseUrl(value) {
   if (typeof value !== "string") fail("base URL");
   let url;
@@ -41,12 +44,14 @@ function validateBaseUrl(value) {
   return { baseUrl: url.origin, port: String(port) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateUuid(value, field, optional = false) {
   if (value === undefined && optional) return undefined;
   if (typeof value !== "string" || !uuidPattern.test(value)) fail(field);
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateTransportSecret(value) {
   if (
     typeof value !== "string" ||
@@ -58,12 +63,14 @@ function validateTransportSecret(value) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateWorkflowTimeout(value, field) {
   if (value === undefined) return undefined;
   if (value !== "360000") fail(field);
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function captureEveWorkerEnvelope(source, expectedAppRoot) {
   if (source === undefined || source === null) fail("explicit environment");
   if (source.EVE_DEV !== "1") fail("development marker");
@@ -91,6 +98,7 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   if (
     typeof value !== "object" ||

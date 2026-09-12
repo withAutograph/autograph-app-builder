@@ -30,6 +30,7 @@ export type ProviderButtonProps = {
  * @param provider - Provider to sign in with.
  * @param display - `"full"` (e.g. "Continue with Google"), `"name"` (just the provider name), or `"icon"` (icon only).
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderButton({
   provider,
   display = "full",

@@ -18,6 +18,7 @@ const PROJECT = {
   projectName: "autograph-app-builder",
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function token(expiresAt = NOW + 3600): string {
   const claims = {
     iss: "https://oidc.vercel.com/autographing",
@@ -39,6 +40,7 @@ function token(expiresAt = NOW + 3600): string {
   ].join(".");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture(input: { expiresAt?: number; environmentMode?: number } = {}) {
   const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "local-oidc-startup-")));
   mkdirSync(join(repositoryRoot, ".vercel"), { mode: 0o700 });
@@ -54,6 +56,7 @@ function fixture(input: { expiresAt?: number; environmentMode?: number } = {}) {
   return repositoryRoot;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function baseInput(repositoryRoot: string) {
   return {
     repositoryRoot,

@@ -42,15 +42,18 @@ const structuralLiteral =
   /^(?:0(?:\.0+)?(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)?|auto|(?:\d*\.\d+|\d+)%|(?:inline-)?grid)$/iu;
 const autographUiImport = /^@autograph\/(?:components|compositions|icons)(?:\/|$)/u;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unique(values: Iterable<string>): string[] {
   return [...new Set(values)].toSorted((left, right) => left.localeCompare(right));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function normalise(value: string): string {
   return value.trim().replaceAll(/\s+/gu, " ").toLowerCase();
 }
 
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseTokens(css: string): Record<string, string> {
   const declared: Record<string, string> = {};
   parse(css).walkDecls(/^--/u, (declaration) => {
@@ -72,16 +75,19 @@ export function parseTokens(css: string): Record<string, string> {
   return Object.fromEntries(Object.keys(declared).map((name) => [name, resolve(name)]));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isSemanticToken(name: string): boolean {
   return /^(?:--color-(?:bg|text|action|border|status|chart)-|--(?:space|radius|shadow|size|text|leading|tracking)-)/u.test(
     name,
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectVarReferences(text: string, destination: string[]) {
   for (const match of text.matchAll(varReference)) destination.push(match[1]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectCssLiterals(text: string, destination: string[]) {
   const candidate = text.trim();
   if (structuralLiteral.test(candidate)) return;
@@ -90,6 +96,7 @@ function collectCssLiterals(text: string, destination: string[]) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
   if (!attribute.initializer) return undefined;
   if (ts.isStringLiteral(attribute.initializer)) return attribute.initializer.text;
@@ -102,6 +109,7 @@ function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
   return undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectStyleExpression(expression: ts.Expression, destination: string[]) {
   if (!ts.isObjectLiteralExpression(expression)) return;
   for (const property of expression.properties) {
@@ -113,6 +121,7 @@ function collectStyleExpression(expression: ts.Expression, destination: string[]
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   if (ts.isIdentifier(tag)) return tag.text;
   // TypeScript represents `<Icons.Check />` as a PropertyAccessExpression.
@@ -122,6 +131,7 @@ function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
   return ts.isIdentifier(expression) ? expression.text : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectCssFile(content: string, tokenRefs: string[], literals: string[]) {
   parse(content).walkDecls((declaration) => {
     collectVarReferences(declaration.value, tokenRefs);
@@ -129,6 +139,7 @@ function collectCssFile(content: string, tokenRefs: string[], literals: string[]
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function position(source: ts.SourceFile, node: ts.Node) {
   const start = source.getLineAndCharacterOfPosition(node.getStart(source));
   return {
@@ -138,10 +149,12 @@ function position(source: ts.SourceFile, node: ts.Node) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
   return jsxAttributeText(attribute);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean" | undefined {
   if (!attribute.initializer) return "boolean";
   if (ts.isStringLiteral(attribute.initializer)) return "string";
@@ -159,6 +172,7 @@ function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean
   return undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function containsJsx(node: ts.Node): boolean {
   let found = false;
   const inspect = (child: ts.Node) => {
@@ -172,6 +186,7 @@ function containsJsx(node: ts.Node): boolean {
   return found;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isStaticallyFalse(expression: ts.Expression | undefined): boolean {
   return Boolean(
     expression &&
@@ -180,6 +195,7 @@ function isStaticallyFalse(expression: ts.Expression | undefined): boolean {
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exportedEntries(source: ts.SourceFile): ts.Node[] {
   const entries: ts.Node[] = [];
   for (const statement of source.statements) {
@@ -198,6 +214,7 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
   return entries;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicImport(
   imported: Map<string, { source: string; name: string }>,
   tag: ts.JsxTagNameExpression,
@@ -206,6 +223,7 @@ function publicImport(
   return root ? imported.get(root) : undefined;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observation(
   id: string,
   dimension: Observation["dimension"],
@@ -226,12 +244,14 @@ function observation(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isStructuralProperty(name: string): boolean {
   return /^(?:width|max-?width|min-?width|height|max-?height|min-?height|grid-?template-?columns|grid-?template-?rows)$/iu.test(
     name,
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function containsNativeControl(node: ts.Node): boolean {
   if (
     (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
@@ -246,6 +266,7 @@ function containsNativeControl(node: ts.Node): boolean {
  * Inspect generated TSX without applying a policy gate. The report is evidence:
  * callers decide how, or whether, to score it.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function analyzeSource({
   files,
   tokenCss,

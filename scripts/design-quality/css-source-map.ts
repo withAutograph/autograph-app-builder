@@ -8,6 +8,7 @@ export interface CssSourceMap {
 
 const base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function decodeVlq(value: string, start: number) {
   let result = 0;
   let shift = 0;
@@ -30,6 +31,7 @@ function decodeVlq(value: string, start: number) {
  * follows the source-map's greatest-lower-bound rule, so an unmapped line is
  * never guessed from a nearby line.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function originalCssSource(
   map: CssSourceMap,
   generatedLine: number,

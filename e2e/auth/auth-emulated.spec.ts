@@ -28,6 +28,7 @@ const emptyAuthCounts = {
   vercelInstallations: 0,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function onboardingContextIds() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -40,6 +41,7 @@ async function onboardingContextIds() {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expireOnboardingContexts() {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
@@ -54,6 +56,7 @@ async function expireOnboardingContexts() {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reportPasskeyFailures(page: Page) {
   page.on("response", async (response) => {
     if (response.ok() || !new URL(response.url()).pathname.startsWith("/api/auth/passkey/")) {
@@ -70,6 +73,7 @@ function reportPasskeyFailures(page: Page) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expectPasskeyFailure(page: Page) {
   await expect(page.getByRole("button", { name: "Passkey failed (try again)" })).toBeVisible({
     timeout: 30_000,

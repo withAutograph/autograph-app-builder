@@ -9,6 +9,7 @@ import {
 import { saveActiveBuilderDraftInputSchema } from "@/lib/builder-drafts/contracts";
 import type { SaveActiveBuilderDraftInput } from "@/lib/builder-drafts/contracts";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function context() {
   const value = await getAuthenticatedBuilderDraftContext({
     environment: process.env,
@@ -19,6 +20,7 @@ async function context() {
 }
 
 /** The revisioned mutation used by the autosave island and provider redirects. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function saveActiveBuilderDraft(input: SaveActiveBuilderDraftInput) {
   const value = await context();
   const saved = await value.drafts.saveActive(
@@ -34,6 +36,7 @@ export async function saveActiveBuilderDraft(input: SaveActiveBuilderDraftInput)
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadActiveBuilderDraft() {
   return readAuthenticatedActiveBuilderDraft({
     environment: process.env,
