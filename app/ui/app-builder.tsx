@@ -1569,19 +1569,17 @@ export function Builder({
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
         <p className={styles.draftStatus} role="status" aria-live="polite">
-          {draftSaveError
-            ? draftSaveError
-            : draftSyncNotice
-              ? draftSyncNotice
-              : autosave.status === "saving"
-                ? "Saving your draft…"
-                : autosave.status === "saved"
-                  ? "Draft saved"
-                  : autosave.status === "offline"
-                    ? "Offline — your draft will retry when you’re back online."
-                    : autosave.status === "error"
-                      ? "Your latest edit is safe on this device and will retry."
-                      : "Your draft saves automatically."}
+          {draftSaveError ||
+            draftSyncNotice ||
+            (autosave.status === "saving"
+              ? "Saving your draft…"
+              : autosave.status === "saved"
+                ? "Draft saved"
+                : autosave.status === "offline"
+                  ? "Offline — your draft will retry when you’re back online."
+                  : autosave.status === "error"
+                    ? "Your latest edit is safe on this device and will retry."
+                    : "Your draft saves automatically.")}
           {autosave.status === "error" || draftSaveError ? (
             <button
               type="button"
