@@ -31,7 +31,6 @@ describe("AI Gateway model catalog", () => {
     const result = await loadGatewayModels({
       fetch: request,
       defaultModelId: "openai/gpt-5.6-terra",
-      now: () => 1,
     });
     expect(result.status).toBe("ready");
     expect(result.entries).toEqual([
@@ -62,12 +61,9 @@ describe("AI Gateway model catalog", () => {
           ],
         }),
       ),
-      now: () => 1,
     });
     const result = await loadGatewayModels({
       fetch: vi.fn<typeof fetch>().mockRejectedValue(new Error("offline")),
-      now: () => 10_000_000,
-      force: true,
     });
     expect(result.status).toBe("ready");
     expect(result.cached).toBe(true);
@@ -82,5 +78,28 @@ describe("AI Gateway model catalog", () => {
       entries: [],
       cached: false,
     });
+  });
+
+  it("retries after failure and never uses last-known-good as a freshness cache", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementation(async () =>
+        Response.json({
+          data: [
+            {
+              id: "openai/gpt-5.6-terra",
+              name: "Terra",
+              owned_by: "openai",
+              type: "language",
+              tags: [],
+            },
+          ],
+        }),
+      );
+    expect((await loadGatewayModels({ fetch: request })).status).toBe("unavailable");
+    expect((await loadGatewayModels({ fetch: request })).status).toBe("ready");
+    expect((await loadGatewayModels({ fetch: request })).cached).toBe(false);
+    expect(request).toHaveBeenCalledTimes(3);
   });
 });

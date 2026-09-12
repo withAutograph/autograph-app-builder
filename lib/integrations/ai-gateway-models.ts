@@ -5,7 +5,6 @@ import type { BuilderIntegrationState } from "./builder-state";
 import { activeBuilderModelId } from "./active-model";
 
 const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
-const CACHE_MS = 5 * 60_000;
 
 const gatewayModelSchema = z
   .object({
@@ -23,17 +22,13 @@ const gatewayModelSchema = z
 const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).passthrough();
 
 type ModelState = BuilderIntegrationState["models"];
-let cached: { value: ModelState; expiresAt: number } | undefined;
+// Availability fallback only, never a freshness cache. The Next adapter owns TTL.
+let lastKnownGood: ModelState | undefined;
 
 export async function loadGatewayModels(input?: {
   fetch?: typeof fetch;
-  now?: () => number;
   defaultModelId?: string;
-  force?: boolean;
 }): Promise<ModelState> {
-  const now = input?.now?.() ?? Date.now();
-  if (!input?.force && cached && cached.expiresAt > now) return { ...cached.value, cached: true };
-
   try {
     const response = await (input?.fetch ?? fetch)(GATEWAY_MODELS_URL, {
       headers: { Accept: "application/json" },
@@ -64,14 +59,14 @@ export async function loadGatewayModels(input?: {
       ...(defaultModelId ? { defaultModelId } : {}),
       cached: false,
     };
-    cached = { value, expiresAt: now + CACHE_MS };
+    lastKnownGood = value;
     return value;
   } catch {
-    if (cached) return { ...cached.value, cached: true };
+    if (lastKnownGood) return { ...lastKnownGood, cached: true };
     return { status: "unavailable", entries: [], cached: false };
   }
 }
 
 export function resetGatewayModelCacheForTests() {
-  cached = undefined;
+  lastKnownGood = undefined;
 }

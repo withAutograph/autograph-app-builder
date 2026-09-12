@@ -19,6 +19,7 @@ import {
   builderResourceProvisioningFlag,
 } from "@/lib/feature-flags";
 import { loadBuilderIntegrationState } from "@/lib/integrations/builder-integration-deployment";
+import { loadNextGatewayModels } from "@/lib/integrations/ai-gateway-models.next";
 import { findAuthenticatedPendingBuilderHandoff } from "@/lib/handoff/deployment";
 import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-return";
 import { parseProviderConnectionFailureReason } from "@/lib/integrations/provider-connection-status";
@@ -144,13 +145,16 @@ async function HomeContent({ searchParams }: PageProps) {
         environment: process.env,
         headers: await headers(),
       });
-  const integrations = await loadBuilderIntegrationState({
-    environment: process.env,
-    authenticated: true as const,
-    organizationId: user.user.organizationId,
-    userId: user.user.id,
-    workspaceId: user.user.workspaceId,
-  });
+  const integrations = await loadBuilderIntegrationState(
+    {
+      environment: process.env,
+      authenticated: true as const,
+      organizationId: user.user.organizationId,
+      userId: user.user.id,
+      workspaceId: user.user.workspaceId,
+    },
+    loadNextGatewayModels,
+  );
 
   return (
     <div className={styles.appShell}>

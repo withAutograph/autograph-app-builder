@@ -1,4 +1,3 @@
-import { cacheLife } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -17,9 +16,6 @@ import {
 import type { AuthPageSearchParams } from "@/lib/auth/preview-auth-ui";
 
 async function hasAuthenticatedVisitor() {
-  "use cache: private";
-  cacheLife("minutes");
-
   const requestHeaders = await headers();
   const session = await getPreviewOAuthDeploymentSession({
     environment: process.env,
