@@ -99,7 +99,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
   await finishOAuth(page, "GitHub");
   await openBuilderPage(page);
   let checkpointStarted = false;
-  const releaseCheckpoint = Promise.withResolvers<void>();
+  const releaseCheckpoint = Promise.withResolvers<undefined>();
   let held = false;
   await page.route(`${appOrigin}/`, async (route) => {
     const request = route.request();
@@ -122,7 +122,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
     await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
     await expect.poll(() => checkpointStarted).toBe(true);
     await page.getByLabel("App Name").fill("Edited During Checkpoint");
-    releaseCheckpoint.resolve();
+    releaseCheckpoint.resolve(undefined);
     await expect(page).toHaveURL(/\/github\/installations\?/u);
     await expectProviderCheckpoint(
       page,
@@ -136,7 +136,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
     await waitForBuilderReady(page);
     await expect(page.getByLabel("App Name")).toHaveValue("Edited During Checkpoint");
   } finally {
-    releaseCheckpoint.resolve();
+    releaseCheckpoint.resolve(undefined);
     await page.unrouteAll({ behavior: "wait" });
   }
 });
