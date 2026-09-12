@@ -120,13 +120,13 @@ function reportHtml(report: {
   const gaps = report.gaps.length
     ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Confirmed source gap" : "Blocked; cause not established"))}</small></li>`).join("")}</ol>`
     : "<p>No failed or blocked requirements were recorded.</p>";
-  const captures = report.captures
+  const captureItems = report.captures
     .map(
-      (capture) =>
-        `<li><strong>${escape(capture.label)}</strong>: ${escape(capture.status)}${capture.files.length ? ` — ${capture.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(capture.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
+      (item) =>
+        `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Expected</th><th>Evidence</th><th>Layer</th><th>Recommended repair</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captures || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Expected</th><th>Evidence</th><th>Layer</th><th>Recommended repair</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -187,7 +187,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
     exitCode: number | null;
     signal?: string | null;
     error?: string;
-  }>((resolve) => {
+  }>((_resolve) => {
     const child = spawn(command, args, {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
@@ -234,7 +234,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
       process.removeListener("SIGTERM", onTerm);
       stdout.end();
       stderr.end();
-      resolve({ exitCode, signal, ...(spawnError ? { error: spawnError } : {}) });
+      _resolve({ exitCode, signal, ...(spawnError ? { error: spawnError } : {}) });
     });
   });
   // --verbose adds checkpoint lines before the final native JSON document.
@@ -284,7 +284,7 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
   try {
     await mkdir(destination, { recursive: true, mode: 0o700 });
     const { capturePreview } = await import("./design-quality/browser");
-    const captures = await capturePreview({
+    const previewFiles = await capturePreview({
       url,
       output: destination,
       tokens: {},
@@ -295,7 +295,7 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
     });
     return {
       label,
-      files: captures.map((item) => `captures/${label}/${basename(item.path)}`),
+      files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
       status: "captured",
     };
   } catch {

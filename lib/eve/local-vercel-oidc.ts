@@ -55,13 +55,6 @@ function isContainedPath(parent: string, candidate: string): boolean {
   );
 }
 
-function closedObject(value: unknown, name: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${name} was not an object.`);
-  }
-  return value as Record<string, unknown>;
-}
-
 export function resolveInstalledEveCli(repositoryRootInput: string): string {
   const repositoryRoot = realpathSync(repositoryRootInput);
   if (repositoryRoot !== resolve(repositoryRootInput)) {

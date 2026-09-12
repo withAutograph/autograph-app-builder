@@ -108,11 +108,6 @@ export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-/** Reject persisted V2 receipts whose durable fields no longer bind together. */
-export function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 export function assertExactDependencyPreparationReceipt(
   receipt: DependencyPreparationReceipt,
 ): void {
