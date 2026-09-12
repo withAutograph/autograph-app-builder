@@ -148,7 +148,8 @@ export function createPreviewCimdTransport(
           headers,
           lookup: createPinnedPreviewLookup(addresses),
           method: webRequest.method,
-          servername: isIP(url.hostname.replace(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
+          servername:
+            isIP(url.hostname.replaceAll(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
           signal,
         },
         (response) => {

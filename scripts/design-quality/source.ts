@@ -43,7 +43,7 @@ function unique(values: Iterable<string>): string[] {
 }
 
 function normalise(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+  return value.trim().replaceAll(/\s+/g, " ").toLowerCase();
 }
 
 /** Parse custom properties from a CSS token sheet and resolve simple var() aliases. */

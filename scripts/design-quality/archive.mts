@@ -27,7 +27,7 @@ const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
 const timestamp = new Date(report.createdAt).toISOString();
 const date = timestamp.slice(0, 10);
-const time = timestamp.slice(11, 23).replace(/[:.]/g, "");
+const time = timestamp.slice(11, 23).replaceAll(/[:.]/g, "");
 const archiveRoot = resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
 const destination = join(archiveRoot, relative);
@@ -48,7 +48,7 @@ report.archive = {
 await writeFile(join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replace(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
+  String(v).replaceAll(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
 const lines = [
   `# ${values.name} — ${timestamp}`,
   "",

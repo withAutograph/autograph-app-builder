@@ -1,7 +1,7 @@
 import type { Adherence, Observation } from "./evidence";
 
 export function escapeHtml(value: unknown) {
-  return String(value).replace(
+  return String(value).replaceAll(
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
   );

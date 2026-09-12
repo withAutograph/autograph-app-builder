@@ -168,9 +168,9 @@ export const sourcePath = (value: string | undefined) => {
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
   if (!path) return false;
-  const clean = path.replace(/\\/g, "/");
+  const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
-    const expected = sourcePath(candidate)?.replace(/\\/g, "/");
+    const expected = sourcePath(candidate)?.replaceAll("\\", "/");
     return Boolean(
       expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/, "")}`)),
     );
@@ -180,7 +180,7 @@ export const generatedSource = (path: string | undefined, generated: string[]) =
 // A stylesheet URL alone is not provenance. The only shared source family we
 // recognise in browser evidence is the checked-in Arrusted design-system tree.
 export const arrustedSharedSource = (path: string | undefined) =>
-  Boolean(path?.replace(/\\/g, "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
+  Boolean(path?.replaceAll("\\", "/").match(/(?:^|\/)packages\/design-systems(?:\/|$)/));
 
 type CssSourceFile = { path: string; content: string };
 

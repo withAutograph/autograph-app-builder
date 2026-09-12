@@ -38,7 +38,7 @@ describe("preview runtime initialization", () => {
 
     // Supply imports at the execution boundary; exercise the generated entry's
     // initialization and routing, without mounting a DOM or calling providers.
-    runInNewContext(entry.replace(/^import .*;\n/gmu, ""), {
+    runInNewContext(entry.replaceAll(/^import .*;\n/gmu, ""), {
       Screen0: overview,
       Screen1: details,
       bootstrapAgCharts: initialized,
