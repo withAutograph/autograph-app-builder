@@ -44,7 +44,9 @@ export interface HostedVercelBackendInput {
 // Provider command responses may legitimately remain open for the full
 // repository-operation window. Keep the transport deadline above that window
 // so the HTTP wrapper does not discard a successful sandbox operation.
-const PROVIDER_REQUEST_TIMEOUT_MS = 150_000;
+const PROVIDER_REQUEST_TIMEOUT_MS = Number(
+  process.env.APP_BUILDER_SANDBOX_REQUEST_TIMEOUT_MS ?? "150000",
+);
 const PROVIDER_RETRY_DELAY_MS = 250;
 
 function retryableProviderFailure(error: unknown): boolean {
@@ -252,6 +254,10 @@ export function createHostedVercelBackend(
   const factory = input.factory ?? (vercel as unknown as HostedVercelBackendFactory);
   const backend = factory({
     ...(input.sandboxEnvironment === undefined ? {} : { env: { ...input.sandboxEnvironment } }),
+    // The Vercel SDK otherwise uses an unbounded default transport. Keep a
+    // provider outage visible to Eve and the eval runner instead of leaving a
+    // session creation promise pending indefinitely.
+    fetch: createProviderFetch(),
     networkPolicy: "allow-all",
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.

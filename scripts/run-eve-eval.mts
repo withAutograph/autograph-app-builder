@@ -2,10 +2,19 @@ import { resolve } from "node:path";
 
 import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
 import { runWithTestCapability } from "./run-with-test-capability.mts";
+import {
+  parseLinkedVercelProject,
+  parseLocalVercelOidcToken,
+  readOwnerBoundLocalFile,
+  validateLocalVercelOidcToken,
+} from "../lib/eve/local-vercel-oidc";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const eveEntry = resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
+const liveModelIndex = args.indexOf("--live-model");
+const liveModel = liveModelIndex !== -1;
+if (liveModel) args.splice(liveModelIndex, 1);
 const option = (name: string, required = false): string | undefined => {
   const index = args.indexOf(name);
   if (index === -1) {
@@ -97,6 +106,7 @@ const sandboxEvaluations = new Set([
   "sandbox-identity-planning",
   "sandbox-reviewed-change-set",
   "sandbox-existing-iteration",
+  "self-reproduction",
 ]);
 if (
   (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
@@ -119,9 +129,30 @@ if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =
   gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact";
-const capabilities = realSandbox
-  ? ["mock-model"]
-  : ["mock-model", "simulated-target", "simulated-publication"];
+if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
+  throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
+if (liveModel) {
+  const project = parseLinkedVercelProject(
+    readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
+      confidential: false,
+    }),
+  );
+  const token = parseLocalVercelOidcToken(
+    readOwnerBoundLocalFile(resolve(repositoryRoot, ".env.local"), { confidential: true }),
+  );
+  process.env.VERCEL_OIDC_TOKEN = validateLocalVercelOidcToken({
+    token,
+    project,
+    nowEpochSeconds: Math.floor(Date.now() / 1000),
+  });
+  process.env.VERCEL_TEAM_ID = project.orgId;
+  process.env.VERCEL_PROJECT_ID = project.projectId;
+}
+const capabilities = liveModel
+  ? []
+  : realSandbox
+    ? ["mock-model"]
+    : ["mock-model", "simulated-target", "simulated-publication"];
 
 const exitCode = await runWithTestCapability({
   profile: "eve",

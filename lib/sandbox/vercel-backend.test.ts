@@ -407,6 +407,22 @@ describe.skip("retired template-backed Vercel backend", () => {
   });
 });
 
+describe("active hosted Vercel transport", () => {
+  it("supplies the bounded provider transport to the Vercel SDK factory", () => {
+    let options: HostedVercelBackendOptions | undefined;
+    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
+      options = input;
+      return { name: "injected-vercel-backend" } as never;
+    }) satisfies HostedVercelBackendFactory);
+
+    createHostedVercelBackend({ factory });
+
+    expect(factory).toHaveBeenCalledOnce();
+    expect(options?.fetch).toBeTypeOf("function");
+    expect(options?.fetch).not.toBe(globalThis.fetch);
+  });
+});
+
 describe("provider-native Vercel source", () => {
   it("falls back to a fresh sandbox when an optional template is absent", async () => {
     const session = { id: "fresh-session" } as SandboxSession;

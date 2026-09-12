@@ -36,6 +36,9 @@ const allowedEnvironment = [
   "NO_COLOR",
   "FORCE_COLOR",
   "NODE_ENV",
+  "VERCEL_OIDC_TOKEN",
+  "VERCEL_TEAM_ID",
+  "VERCEL_PROJECT_ID",
 ] as const;
 
 function childEnvironment(): NodeJS.ProcessEnv {
@@ -175,7 +178,7 @@ export async function runWithTestCapability(options: {
     options.command !== process.execPath ||
     options.args[0] !== expectedEntry ||
     (options.profile === "vitest" && options.capabilities.length !== 3) ||
-    (options.profile === "eve" && ![1, 3].includes(options.capabilities.length)) ||
+    (options.profile === "eve" && ![0, 1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   )
     throw new Error("The structural test wrapper profile was invalid.");
