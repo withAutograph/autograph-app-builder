@@ -125,8 +125,7 @@ async function runGenerator(candidateRoot: string, transcript: string) {
         SELF_REPRODUCTION_ANSWERS_PATH: resolve("evals/self-reproduction/answers.json"),
         SELF_REPRODUCTION_CANDIDATE_ROOT: candidateRoot,
         SELF_REPRODUCTION_TRANSCRIPT_PATH: transcript,
-        SELF_REPRODUCTION_GENERATION_TIMEOUT_MS:
-          values["generation-timeout-ms"] ?? "600000",
+        SELF_REPRODUCTION_GENERATION_TIMEOUT_MS: values["generation-timeout-ms"] ?? "600000",
         SELF_REPRODUCTION_PROVIDER_REQUEST_TIMEOUT_MS:
           values["provider-request-timeout-ms"] ?? "30000",
         ...(arrustedRoot ? { SELF_REPRODUCTION_ARRUSTED_ROOT: resolve(arrustedRoot) } : {}),

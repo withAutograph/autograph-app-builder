@@ -32,7 +32,9 @@ export default defineEval({
     t.succeeded();
     t.calledTool("prepare_workspace", { count: 1 });
 
-    await t.send(`${brief}\n\nFixed benchmark answers (use these without asking product questions):\n${answers}\n\nDesign the replica and accept a build-ready AppSpec. Stop before target planning.`);
+    await t.send(
+      `${brief}\n\nFixed benchmark answers (use these without asking product questions):\n${answers}\n\nDesign the replica and accept a build-ready AppSpec. Stop before target planning.`,
+    );
     t.succeeded();
     t.check(
       t.reply,

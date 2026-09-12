@@ -44,8 +44,8 @@ during the run.
   sections and invalid Build handoff structure. Subsequent planning rejected
   `optionalCapabilities.integrations` because entries were provider-specific.
 - **Evidence:** Repeated `app_spec_invalid` results and `AppSpec Build
-  handoff.optionalCapabilities.integrations entries must be provider-neutral
-  identifiers` in the live baseline.
+handoff.optionalCapabilities.integrations entries must be provider-neutral
+identifiers` in the live baseline.
 - **Likely layer:** AppSpec authoring instructions, examples, and preflight
   normalization before the planning command.
 - **Repair:** Give the model one canonical complete skeleton and make the

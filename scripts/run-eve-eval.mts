@@ -151,8 +151,8 @@ if (liveModel) {
 const capabilities = liveModel
   ? []
   : realSandbox
-  ? ["mock-model"]
-  : ["mock-model", "simulated-target", "simulated-publication"];
+    ? ["mock-model"]
+    : ["mock-model", "simulated-target", "simulated-publication"];
 
 const exitCode = await runWithTestCapability({
   profile: "eve",

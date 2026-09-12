@@ -37,8 +37,11 @@ async function availableLoopbackPort(configured: string | undefined): Promise<nu
     server.listen(0, "127.0.0.1", () => resolvePort());
   });
   const address = server.address();
-  await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
-  if (address === null || typeof address === "string") throw new Error("A loopback port was unavailable.");
+  await new Promise<void>((resolveClose, reject) =>
+    server.close((error) => (error ? reject(error) : resolveClose())),
+  );
+  if (address === null || typeof address === "string")
+    throw new Error("A loopback port was unavailable.");
   return address.port;
 }
 
@@ -47,33 +50,35 @@ function run(
   args: string[],
   options: { input?: string; timeoutMs?: number } = {},
 ) {
-  return new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>((done) => {
-    const child = spawn(command, args, { cwd: root, stdio: "pipe", env: process.env });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let forceStop: ReturnType<typeof setTimeout> | undefined;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      forceStop = setTimeout(() => child.kill("SIGKILL"), 5_000);
-    }, options.timeoutMs ?? 0);
-    timer.unref();
-    child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
-    child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
-    if (options.input) child.stdin.end(options.input);
-    else child.stdin.end();
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (forceStop !== undefined) clearTimeout(forceStop);
-      done({ code, stdout, stderr, timedOut });
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      if (forceStop !== undefined) clearTimeout(forceStop);
-      done({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut });
-    });
-  });
+  return new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(
+    (done) => {
+      const child = spawn(command, args, { cwd: root, stdio: "pipe", env: process.env });
+      let stdout = "";
+      let stderr = "";
+      let timedOut = false;
+      let forceStop: ReturnType<typeof setTimeout> | undefined;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGTERM");
+        forceStop = setTimeout(() => child.kill("SIGKILL"), 5_000);
+      }, options.timeoutMs ?? 0);
+      timer.unref();
+      child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
+      child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
+      if (options.input) child.stdin.end(options.input);
+      else child.stdin.end();
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (forceStop !== undefined) clearTimeout(forceStop);
+        done({ code, stdout, stderr, timedOut });
+      });
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        if (forceStop !== undefined) clearTimeout(forceStop);
+        done({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut });
+      });
+    },
+  );
 }
 
 async function waitForEve(url: string, signal: AbortSignal) {
@@ -158,13 +163,11 @@ async function main() {
   process.once("SIGTERM", stop);
   try {
     await waitForEve(url, controller.signal);
-    let invocation = await run(process.execPath, [
-      "node_modules/eve/bin/eve.js",
-      "invoke",
-      "--url",
-      url,
-      brief,
-    ], { timeoutMs: generationTimeoutMs });
+    let invocation = await run(
+      process.execPath,
+      ["node_modules/eve/bin/eve.js", "invoke", "--url", url, brief],
+      { timeoutMs: generationTimeoutMs },
+    );
     await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
     for (let turn = 0; turn < 8 && invocation.code === 3; turn += 1) {
       let result: unknown;
@@ -192,11 +195,11 @@ async function main() {
       JSON.stringify(
         {
           "independent-creation": {
-            status: invocation.code === 0 ? "unassessed" : invocation.timedOut ? "blocked" : "failed",
-            evidence:
-              invocation.timedOut
-                ? `The Vercel Sandbox-backed invocation exceeded its ${generationTimeoutMs}ms deadline.`
-                : "Live Eve invocation completed; inspect the recorded transcript and generated files for workflow-level acceptance.",
+            status:
+              invocation.code === 0 ? "unassessed" : invocation.timedOut ? "blocked" : "failed",
+            evidence: invocation.timedOut
+              ? `The Vercel Sandbox-backed invocation exceeded its ${generationTimeoutMs}ms deadline.`
+              : "Live Eve invocation completed; inspect the recorded transcript and generated files for workflow-level acceptance.",
           },
         },
         null,
