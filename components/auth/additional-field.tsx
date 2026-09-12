@@ -145,7 +145,7 @@ export function AdditionalField({
         type="hidden"
         name={name}
         value={
-          field.defaultValue == null
+          field.defaultValue === null || field.defaultValue === undefined
             ? ""
             : field.defaultValue instanceof Date
               ? field.defaultValue.toISOString()
@@ -163,7 +163,11 @@ export function AdditionalField({
         <Textarea
           id={name}
           name={name}
-          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
+          defaultValue={
+            field.defaultValue === null || field.defaultValue === undefined
+              ? undefined
+              : String(field.defaultValue)
+          }
           placeholder={field.placeholder}
           required={field.required}
           readOnly={field.readOnly}
@@ -191,7 +195,7 @@ export function AdditionalField({
           max={field.max}
           step={field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)}
           defaultValue={
-            field.defaultValue == null
+            field.defaultValue === null || field.defaultValue === undefined
               ? undefined
               : typeof field.defaultValue === "number"
                 ? field.defaultValue
@@ -254,7 +258,11 @@ export function AdditionalField({
 
         <Select
           name={name}
-          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
+          defaultValue={
+            field.defaultValue === null || field.defaultValue === undefined
+              ? undefined
+              : String(field.defaultValue)
+          }
           required={field.required}
           disabled={isPending || field.readOnly}
         >
@@ -284,7 +292,11 @@ export function AdditionalField({
         <Combobox
           items={field.options ?? []}
           name={name}
-          defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
+          defaultValue={
+            field.defaultValue === null || field.defaultValue === undefined
+              ? undefined
+              : String(field.defaultValue)
+          }
           required={field.required}
           disabled={isPending || field.readOnly}
         >
@@ -318,8 +330,8 @@ export function AdditionalField({
 function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const hasPrefix = field.prefix != null;
-  const hasSuffix = field.suffix != null || field.copyable;
+  const hasPrefix = field.prefix !== null && field.prefix !== undefined;
+  const hasSuffix = (field.suffix !== null && field.suffix !== undefined) || field.copyable;
 
   const isNumeric = field.type === "number";
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
@@ -342,7 +354,11 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
             type={nativeInputType}
             inputMode={nativeInputMode}
             step={nativeStep}
-            defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
+            defaultValue={
+              field.defaultValue === null || field.defaultValue === undefined
+                ? undefined
+                : String(field.defaultValue)
+            }
             placeholder={field.placeholder}
             required={field.required}
             readOnly={field.readOnly}
@@ -354,7 +370,8 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
               <CopyButton getValue={() => inputRef.current?.value} isDisabled={isPending} />
             </InputGroupAddon>
           ) : (
-            field.suffix != null && (
+            field.suffix !== null &&
+            field.suffix !== undefined && (
               <InputGroupAddon align="inline-end">{field.suffix}</InputGroupAddon>
             )
           )}
@@ -375,7 +392,11 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
         type={nativeInputType}
         inputMode={nativeInputMode}
         step={nativeStep}
-        defaultValue={field.defaultValue == null ? undefined : String(field.defaultValue)}
+        defaultValue={
+          field.defaultValue === null || field.defaultValue === undefined
+            ? undefined
+            : String(field.defaultValue)
+        }
         placeholder={field.placeholder}
         required={field.required}
         readOnly={field.readOnly}
@@ -400,7 +421,9 @@ function SliderField({ name, field, isPending }: AdditionalFieldProps) {
   const initial =
     typeof field.defaultValue === "number"
       ? field.defaultValue
-      : field.defaultValue != null && !Number.isNaN(Number(field.defaultValue))
+      : field.defaultValue !== null &&
+          field.defaultValue !== undefined &&
+          !Number.isNaN(Number(field.defaultValue))
         ? Number(field.defaultValue)
         : min;
 

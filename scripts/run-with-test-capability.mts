@@ -198,7 +198,7 @@ export async function runWithTestCapability(options: {
     },
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
-  if (authorization == null)
+  if (authorization === null || authorization === undefined)
     throw new Error("The structural test authorization pipe was not created.");
   let buffered = "";
   let answered = false;
