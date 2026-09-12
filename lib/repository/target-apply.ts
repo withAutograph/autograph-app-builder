@@ -328,10 +328,10 @@ const visit = (directory, relativeDirectory) => {
     if (!entry.isFile()) continue;
     const stat = lstatSync(absolutePath);
     const mode = (stat.mode & 0o7777).toString(8);
-    const digest = createHash("sha256")
+    const fileDigest = createHash("sha256")
       .update(readFileSync(absolutePath))
       .digest("hex");
-    files.push({ path: relativePath, mode, digest });
+    files.push({ path: relativePath, mode, digest: fileDigest });
   }
 };
 
