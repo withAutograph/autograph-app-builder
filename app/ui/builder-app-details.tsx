@@ -43,10 +43,7 @@ export function AppDetailsSection({
           autoComplete="off"
           spellCheck={false}
           {...(appNameRegistration ?? { value: appName })}
-          // Keep RHF's native event path intact. The derived-field callback
-          // then updates the synchronous draft checkpoint. Replacing the
-          // registration handler left a narrow concurrent-render window where
-          // a browser fill could append a manual name to the generated one.
+          // Record the native edit in RHF before deriving related fields.
           onChange={(event) => {
             appNameRegistration?.onChange(event);
             onAppNameChange(event.target.value);

@@ -61,11 +61,6 @@ import styles from "./app-builder.module.css";
 import autographIcon from "../../assets/autograph-icon.png";
 import type { ProviderConnectionNotice } from "../../lib/integrations/provider-connection-status";
 import { githubStoreInViewModel } from "../../lib/integrations/store-in-view-model";
-import {
-  clearBuilderDraft as clearSessionBuilderDraft,
-  persistBuilderDraft,
-  readBuilderDraftResume,
-} from "./builder-session";
 import { ProviderNotices } from "./builder-shell";
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
@@ -1413,41 +1408,6 @@ export function Builder({
     };
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
-    // The provider popup/window is the one short-lived browser-local bridge.
-    // Only a snapshot whose Server Action checkpoint was acknowledged at the
-    // same revision as the request-fresh RSC read can participate. This makes
-    // the bridge resilient to streamed acknowledgement ordering without
-    // making browser storage a normal builder source of truth.
-    if (!resumeKey || !durableDraftId || durableDraftRevision === undefined) return;
-    const resumed = readBuilderDraftResume(resumeKey);
-    if (
-      !resumed ||
-      resumed.acknowledgedRevision === undefined ||
-      resumed.acknowledgedRevision !== durableDraftRevision
-    )
-      return;
-    const snapshot = resumed.draft;
-    formSnapshot.current = snapshot.form;
-    builderForm.reset(snapshot.form);
-    activeDraftId.current = durableDraftId;
-    draftRevision.current = durableDraftRevision;
-    setTeam(snapshot.team);
-    setGitScope(snapshot.gitScope);
-    setModel(snapshot.model);
-    setZdrOnly(snapshot.zdrOnly);
-    setShowMoreConnections(snapshot.showMoreConnections);
-    setSearch(snapshot.search);
-    setConnectedConnections(snapshot.connectedConnections);
-    setStorageProvider(snapshot.storageProvider ?? null);
-    setDeploymentProvider(snapshot.deploymentProvider ?? null);
-    focusOrigin.current = snapshot.focusOrigin;
-    appNameEditedByUser.current = snapshot.appNameEditedByUser;
-    generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
-    repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
-    autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
-    clearSessionBuilderDraft(resumeKey);
-  }, [builderForm, durableDraftId, durableDraftRevision, resumeKey]);
-  useEffect(() => {
     let disposed = false;
     let wasHidden = document.visibilityState === "hidden";
     const checkForServerDraft = async () => {
@@ -1547,9 +1507,6 @@ export function Builder({
   const beginProviderConnection = async (provider: ProviderField) => {
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
-    // Keep the redirect bridge in this tab only; the server copy is the
-    // authoritative draft used by page loads and other devices.
-    persistBuilderDraft(activeDraftId.current, draft);
     autosave.schedule(draft);
     await autosave.flush();
     if (await autosave.restorePending()) {
@@ -1557,10 +1514,9 @@ export function Builder({
       return;
     }
     setDraftSaveError("");
-    // Mark this popup bridge as safe only after its Server Action checkpoint
-    // has been acknowledged. Provider-return hydration rejects unacknowledged
-    // session snapshots and otherwise remains server-authoritative.
-    persistBuilderDraft(activeDraftId.current, draft, draftRevision.current);
+    // The flush includes edits queued while the checkpoint was in flight.
+    // Return hydration reads that server draft; never stamp the earlier click
+    // snapshot with the final revision and restore it over the newer save.
     // The service owns the one active draft and may acknowledge a canonical
     // ID different from the optimistic local ID. Capture it only after the
     // Server Action checkpoint has completed so a provider return can never

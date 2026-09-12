@@ -59,6 +59,28 @@ async function openBuilderPage(page: import("playwright/test").Page) {
   await waitForBuilderReady(page);
 }
 
+async function expectProviderCheckpoint(
+  page: import("playwright/test").Page,
+  appName: string,
+  brief: string,
+) {
+  const draftId = new URL(page.url()).searchParams.get("resume");
+  expect(draftId).toBeTruthy();
+  const sql = postgres(databaseUrl, { max: 1 });
+  try {
+    // Navigation must already have awaited the committed snapshot. Deliberately
+    // do not poll: eventual persistence after leaving the form is not enough.
+    const rows = await sql`
+      SELECT record->'draft'->'form'->>'appName' AS "appName",
+             record->'draft'->'form'->>'brief' AS brief
+      FROM builder_draft WHERE draft_id = ${draftId} AND status = 'active'
+    `;
+    expect([...rows]).toEqual([{ appName, brief }]);
+  } finally {
+    await sql.end();
+  }
+}
+
 function expectGitHubControlAndNoOAuthLeak(
   page: import("playwright/test").Page,
   rawValues: ReadonlyArray<string>,
@@ -73,6 +95,52 @@ function expectGitHubControlAndNoOAuthLeak(
 
 test.beforeEach(async () => resetApplicationState());
 
+test("GitHub return preserves edits made while its checkpoint is in flight", async ({ page }) => {
+  await finishOAuth(page, "GitHub");
+  await openBuilderPage(page);
+  let checkpointStarted = false;
+  const releaseCheckpoint = Promise.withResolvers<void>();
+  let held = false;
+  await page.route(`${appOrigin}/`, async (route) => {
+    const request = route.request();
+    if (
+      held ||
+      request.method() !== "POST" ||
+      !request.headers()["next-action"] ||
+      !request.postData()?.includes("clientMutationId")
+    )
+      return route.continue();
+    held = true;
+    const response = await route.fetch();
+    checkpointStarted = true;
+    await releaseCheckpoint.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.locator("#app-brief").fill("Keep this GitHub brief through authorization.");
+    await page.getByRole("checkbox", { name: /GitHub/u }).check();
+    await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+    await expect.poll(() => checkpointStarted).toBe(true);
+    await page.getByLabel("App Name").fill("Edited During Checkpoint");
+    releaseCheckpoint.resolve();
+    await expect(page).toHaveURL(/\/github\/installations\?/u);
+    await expectProviderCheckpoint(
+      page,
+      "Edited During Checkpoint",
+      "Keep this GitHub brief through authorization.",
+    );
+    await advanceProviderConnectionToApproval(page, "GitHub");
+    await approveProviderConnection(page, "GitHub");
+    await expect(page.getByLabel("App Name")).toHaveValue("Edited During Checkpoint");
+    await page.reload();
+    await waitForBuilderReady(page);
+    await expect(page.getByLabel("App Name")).toHaveValue("Edited During Checkpoint");
+  } finally {
+    releaseCheckpoint.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 for (const provider of emulatedProviders) {
   test(`${provider} installation restores the draft and persists one binding`, async ({ page }) => {
     const descriptor = providerDescriptor(provider);
@@ -83,13 +151,18 @@ for (const provider of emulatedProviders) {
       `Keep this ${provider} brief through authorization.`,
     );
     await page.getByLabel("App Name").fill(`${provider} Restored App`);
-    // The provider checkpoint reads RHF's live values. Confirm the controlled
-    // input has received the final edit before leaving the page so this test
-    // exercises recovery, rather than racing React's input event with the
-    // navigation click.
+    // This checks the visible edit. The assertions after OAuth and reload
+    // below independently verify the durable checkpoint, not just the DOM.
     await expect(page.getByLabel("App Name")).toHaveValue(`${provider} Restored App`);
 
-    await installProvider(page, provider);
+    await openProviderConnection(page, provider);
+    await expectProviderCheckpoint(
+      page,
+      `${provider} Restored App`,
+      `Keep this ${provider} brief through authorization.`,
+    );
+    await advanceProviderConnectionToApproval(page, provider);
+    await approveProviderConnection(page, provider);
     await expect(page.getByLabel("App Name")).toHaveValue(`${provider} Restored App`);
     await expect(page.locator("#app-brief")).toHaveValue(
       `Keep this ${provider} brief through authorization.`,
@@ -107,6 +180,10 @@ for (const provider of emulatedProviders) {
 
     await openBuilderPage(page);
     await expect(page).toHaveURL(`${appOrigin}/`);
+    await expect(page.getByLabel("App Name")).toHaveValue(`${provider} Restored App`);
+    await expect(page.locator("#app-brief")).toHaveValue(
+      `Keep this ${provider} brief through authorization.`,
+    );
     await expectProviderSelection(page, provider);
     expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
   });

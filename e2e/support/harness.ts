@@ -142,6 +142,9 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { email: "dev@autograph.local" } });
+  // Session creation precedes the setting-up route's final navigation. Do not
+  // let a caller's goto interrupt that still-running OAuth continuation.
+  await expect(page).toHaveURL(new URL(callbackURL, appOrigin).href, { timeout: 30_000 });
 }
 
 export async function waitForBuilderReady(page: Page) {
