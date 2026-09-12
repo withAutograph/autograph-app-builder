@@ -22,9 +22,7 @@ function ShellLoading() {
     >
       <header className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Autograph</p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Autograph App Builder
-        </h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Autograph App Builder</h1>
         <p className="text-muted-foreground" role="status">
           Loading your workspace…
         </p>

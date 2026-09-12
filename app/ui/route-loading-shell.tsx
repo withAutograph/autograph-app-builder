@@ -9,10 +9,7 @@ type AuthLoadingShellProps = {
  */
 export function AuthLoadingShell({ title }: AuthLoadingShellProps) {
   return (
-    <main
-      aria-busy="true"
-      className="flex min-h-svh items-center justify-center p-6"
-    >
+    <main aria-busy="true" className="flex min-h-svh items-center justify-center p-6">
       <section
         aria-label="Authentication form loading"
         className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm"
@@ -58,10 +55,7 @@ export function ProviderConnectionLoadingShell({
         <p className="mt-5 text-sm text-muted-foreground" role="status">
           Preparing connection options…
         </p>
-        <div
-          aria-hidden="true"
-          className="mt-5 h-10 animate-pulse rounded-md bg-muted"
-        />
+        <div aria-hidden="true" className="mt-5 h-10 animate-pulse rounded-md bg-muted" />
       </section>
     </main>
   );
@@ -76,9 +70,7 @@ export function HandoffLoadingShell() {
     >
       <header className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Autograph</p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Continue your app
-        </h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Continue your app</h1>
         <p className="text-muted-foreground" role="status">
           Loading your saved handoff…
         </p>
