@@ -989,10 +989,12 @@ export function Builder({
   );
   const draftRevision = useRef(durableDraftRevision);
   const draftUpdatedAt = useRef(durableDraftUpdatedAt);
-  // A Server Action may stream a route update before its promise continuation
-  // runs. Remember its expected revision so that update is treated as an ack,
-  // never as a form replacement.
-  const pendingActionExpectedRevision = useRef<number | undefined>(undefined);
+  // Server Actions can overlap at the React/RSC boundary even though the
+  // autosave transport serializes their database writes: the next action may
+  // have started by the time an earlier RSC acknowledgement arrives. Track
+  // every in-flight base revision, rather than one mutable slot, so an older
+  // completion cannot clear the newer action's hydration guard.
+  const pendingActionExpectedRevisions = useRef(new Set<number>());
   // The RSC payload for a local action can arrive after the action promise has
   // settled. Remember the local edit version that initiated each revision so a
   // delayed acknowledgement cannot replace a newer RHF edit. This only applies
@@ -1101,7 +1103,7 @@ export function Builder({
         } satisfies BuilderDraftRecord,
       };
       if (!keepalive) {
-        pendingActionExpectedRevision.current = input.expectedRevision;
+        pendingActionExpectedRevisions.current.add(input.expectedRevision);
         localActionMutationVersions.current.set(
           input.expectedRevision + 1,
           localFormMutationVersion.current,
@@ -1134,7 +1136,7 @@ export function Builder({
           savedAt: saved.updatedAt,
         };
       } finally {
-        pendingActionExpectedRevision.current = undefined;
+        if (!keepalive) pendingActionExpectedRevisions.current.delete(input.expectedRevision);
       }
     },
     [requestServerSave, saveActiveBuilderDraftAction],
@@ -1449,14 +1451,14 @@ export function Builder({
       // its acknowledgement advances draftRevision. Do not reinterpret that
       // device-local save as a remote revision and replace edits made while
       // the action was in flight.
-      if (pendingActionExpectedRevision.current !== undefined) return;
+      if (pendingActionExpectedRevisions.current.size > 0) return;
       try {
         if (!loadActiveBuilderDraftAction) return;
         const remote = await loadActiveBuilderDraftAction();
         if (
           disposed ||
           !remote ||
-          pendingActionExpectedRevision.current !== undefined ||
+          pendingActionExpectedRevisions.current.size > 0 ||
           localFormMutationVersion.current !== localMutationVersion
         )
           return;
@@ -1487,10 +1489,7 @@ export function Builder({
     if (durableDraftRevision <= draftRevision.current) return;
     if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
     const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
-    if (
-      pendingActionExpectedRevision.current !== undefined &&
-      durableDraftRevision === pendingActionExpectedRevision.current + 1
-    ) {
+    if (pendingActionExpectedRevisions.current.has(durableDraftRevision - 1)) {
       activeDraftId.current = durableDraftId;
       draftRevision.current = durableDraftRevision;
       draftUpdatedAt.current = durableDraftUpdatedAt;
