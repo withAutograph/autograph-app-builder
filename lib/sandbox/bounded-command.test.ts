@@ -131,7 +131,9 @@ describe("bounded sandbox command", () => {
       return fixture.process;
     });
     await runBoundedSandboxCommand({ spawn }, { command: "true", env: { SAFE_INPUT: "exact" } });
-    expect((spawn.mock.calls[0]?.[0] as { env?: unknown }).env).toEqual({
+    const firstCall = spawn.mock.calls.at(0);
+    if (firstCall === undefined) throw new Error("The bounded command was not spawned.");
+    expect((firstCall[0] as { env?: unknown }).env).toEqual({
       SAFE_INPUT: "exact",
     });
     expect(JSON.stringify(spawn.mock.calls)).not.toContain("GITHUB_TOKEN");
