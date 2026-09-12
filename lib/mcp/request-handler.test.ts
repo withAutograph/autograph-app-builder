@@ -492,8 +492,10 @@ describe("branded public tool mapping", () => {
     ] as const;
 
     for (const [name, args] of invocations) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await handler(mcpToolRequest(name, args));
       expect(response.status).toBe(200);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const callResult = await mcpResult<{ structuredContent?: unknown }>(response);
       expect(callResult.structuredContent).toEqual(result);
     }
@@ -715,6 +717,7 @@ describe("request-scoped MCP service selection", () => {
     expect(verifier).not.toHaveBeenCalled();
     for (const response of responses) {
       expect(response.status).toBe(200);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const result = await mcpResult<{
         _meta: { "mcp/www_authenticate": string[] };
       }>(response);

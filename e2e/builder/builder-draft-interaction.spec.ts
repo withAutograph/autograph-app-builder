@@ -37,10 +37,14 @@ test("editing and autosave never start a view transition around the live form", 
         Boolean(body?.includes("clientMutationId") && body.includes(JSON.stringify(value)))
       );
     });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await page.getByLabel(label, { exact: true }).fill(value);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const response = await saved;
     expect(response.ok()).toBe(true);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await response.finished();
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await expect(page.getByRole("status")).toHaveText("Draft saved");
   }
   // Observe the real browser API, without disabling animations in the test or

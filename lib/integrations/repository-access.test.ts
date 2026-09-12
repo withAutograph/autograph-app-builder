@@ -184,6 +184,7 @@ describe("tenant-bound GitHub repository access", () => {
       { name: "renamed-dogfood" },
       { owner: "another-owner" },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         classifyGitHubRepositoryAccess({
           authority,

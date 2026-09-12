@@ -105,6 +105,7 @@ export async function waitForDevelopmentMcp(input: {
   while (Date.now() - started < timeoutMs) {
     if (input.signal?.aborted) throw abortReason(input.signal);
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const names = await developmentMcpToolNames(input);
       if (
         names.length !== TOOL_NAMES.length ||
@@ -119,6 +120,7 @@ export async function waitForDevelopmentMcp(input: {
       lastError = error;
     }
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await delay(intervalMs, undefined, { signal: input.signal });
     } catch {
       if (input.signal?.aborted) throw abortReason(input.signal);

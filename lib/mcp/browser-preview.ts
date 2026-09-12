@@ -199,9 +199,11 @@ export function createServicePrototypePreviewResolver(input: {
     // that normal delivery race a short chance to settle so the first Browser
     // navigation does not turn a valid preview into a sticky 404.
     for (let attempt = 0; attempt < 5; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const result = await service.get({ sessionId, cursor: 0, limit: 1 });
       if (result.prototype !== undefined) return result.prototype;
       if (attempt < 4)
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await new Promise<void>((resolve) => {
           setTimeout(resolve, 100);
         });

@@ -850,6 +850,7 @@ async function verifyPreparedSandboxWorkspace(
     throw new Error("The prepared workspace checksum receipt drifted.");
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const content = await sandbox.readBinaryFile({
         path: `repository/${file.path}`,
       });
@@ -1157,6 +1158,7 @@ export async function prepareSupportedSandboxWorkspace(
       sourceFiles.map(({ path }) => `repository/${path.split("/").slice(0, -1).join("/")}`),
     );
     for (const entry of sourceFiles) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeBinaryFile({
         path: `repository/${entry.path}`,
         content: execFileSync(
@@ -1367,8 +1369,10 @@ export async function prepareDevelopmentSandboxWorkspace(
       }),
     );
     for (const path of deletedPaths)
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.removePath({ path: `repository/${path}`, force: true });
     for (const file of changedFiles) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeBinaryFile({
         path: `repository/${file.path}`,
         content: readFileSync(resolve(sourcePath, file.path)),

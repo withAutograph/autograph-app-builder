@@ -36,6 +36,7 @@ await mkdir(join(archiveRoot, date), { recursive: true });
 await mkdir(destination);
 for (const capture of report.captures) {
   const filename = captureFilename(capture.name);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await copyFile(join(input, filename), join(destination, filename));
   capture.path = filename;
 }
@@ -143,10 +144,12 @@ const rows: {
 }[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
   if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) continue;
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   for (const run of await readdir(join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {
     if (!run.isDirectory()) continue;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await readArchivedReport(join(archiveRoot, day.name, run.name));
     if (saved === null) continue;
     rows.push({

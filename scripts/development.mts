@@ -369,10 +369,12 @@ try {
     code,
   }));
   while (!shutdown.signal.aborted) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const outcome = await runEveCycle({
       cycleFile,
       sourceRoot,
       runsRoot,
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       codexRoot: await privateRoot(join(cacheRoot, "codex")),
       supervisorRoot,
       packageState,

@@ -90,11 +90,15 @@ function deploymentIdentity(value: string) {
 async function sealPublicationTree(root: string, current = root) {
   for (const entry of await readdir(current, { withFileTypes: true })) {
     const path = join(current, entry.name);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(path);
     if (info.isSymbolicLink()) throw new Error("Release publication staging contained a link.");
     if (entry.isDirectory()) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sealPublicationTree(root, path);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await chmod(path, 0o500);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     } else if (entry.isFile()) await chmod(path, 0o400);
     else throw new Error("Release publication staging contained a special file.");
   }
@@ -111,6 +115,7 @@ async function removePublicationTree(root: string) {
     if (info.isSymbolicLink()) return;
     if (info.isDirectory()) {
       await chmod(path, 0o700);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       for (const entry of await readdir(path)) await makeWritable(join(path, entry));
     } else await chmod(path, 0o600);
   }
@@ -233,10 +238,12 @@ try {
       );
       for (const [path, expected] of assets) {
         const downloaded = join(downloadRoot, basename(path));
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const info = await lstat(downloaded);
         if (
           !info.isFile() ||
           info.isSymbolicLink() ||
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           sha256(await readFile(downloaded)) !== expected
         )
           throw new Error("Existing GitHub release assets did not match proof.");
@@ -265,6 +272,7 @@ try {
   };
   let deploymentUrl: string | undefined;
   for (const command of commands.slice(0, -1)) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const stdout = await execute(command);
     if (command.tool === "vercel")
       deploymentUrl = stdout

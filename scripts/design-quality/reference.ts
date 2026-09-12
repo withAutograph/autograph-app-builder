@@ -58,6 +58,7 @@ async function walk(root: string, relative = ""): Promise<string[]> {
   for (const entry of entries) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const path = join(relative, entry.name);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (entry.isDirectory()) result.push(...(await walk(root, path)));
     else if (entry.isFile() && entry.name === "package.json") result.push(path);
   }
@@ -200,6 +201,7 @@ export async function readReference(arrustedRoot: string): Promise<Reference> {
   for (const manifest of manifests) {
     let pkg: PackageJson;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       pkg = JSON.parse(await readFile(join(arrustedRoot, manifest), "utf-8"));
     } catch {
       continue;

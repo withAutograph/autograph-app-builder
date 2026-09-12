@@ -233,6 +233,7 @@ export async function provisionGitHubRepository(input: {
 
   async function refreshUserToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const credential = await input.credentialStore.read({
         authority: input.authority,
         providerUserId: input.installation.accountId,
@@ -250,6 +251,7 @@ export async function provisionGitHubRepository(input: {
         throw new Error("credential-unavailable");
       let authentication: unknown;
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         ({ authentication } = await createGitHubOAuthApp({
           clientId: config.clientId,
           clientSecret: config.clientSecret,
@@ -258,6 +260,7 @@ export async function provisionGitHubRepository(input: {
         }).refreshToken({ refreshToken: credential.tokens.refreshToken }));
       } catch (error) {
         if (record(error) && error.status === 401) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.credentialStore.deactivate({
             authority: input.authority,
             providerUserId: input.installation.accountId,
@@ -274,6 +277,7 @@ export async function provisionGitHubRepository(input: {
       if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now())
         throw new Error("invalid-response");
       const refreshedAt = now();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const rotated = await input.credentialStore.rotate({
         authority: input.authority,
         providerUserId: input.installation.accountId,
@@ -358,6 +362,7 @@ export async function provisionGitHubRepository(input: {
     };
     for (let offset = 0; offset < input.source.files.length; offset += 12) {
       const page = input.source.files.slice(offset, offset + 12);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const values = await Promise.all(page.map(writeBlob));
       for (const [path, sha] of values) blobs.set(path, sha);
     }
@@ -486,19 +491,23 @@ export async function provisionGitHubRepository(input: {
               maximumLength: 100,
             });
       if (candidates.includes(candidate)) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
     for (const candidate of candidates.slice(0, 5)) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await repository(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
       if (before.status === 200 && !wasAbsent) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
       if (before.status === 404) {
         const createPath =
           input.installation.accountType === "Organization"
             ? `/orgs/${encodeURIComponent(input.installation.accountLogin)}/repos`
             : "/user/repos";
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const created = await github({
           method: "POST",
           path: createPath,
@@ -512,26 +521,33 @@ export async function provisionGitHubRepository(input: {
           expected: [201, 422],
         });
         if (created.status === 422) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const recovered = await repository(candidate);
           if (recovered.status !== 200) continue;
         } else {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           if (input.installation.accountType === "Organization") token = await installationToken();
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await writeStarter(candidate);
         }
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const owned = await repository(candidate);
       if (
         owned.status !== 200 ||
         stringProperty(owned.body, "description") !== marker(input.requestId)
       )
         continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const main = await github({
         path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(candidate)}/commits/main`,
         token,
         expected: [200, 404, 409],
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (main.status !== 200) await writeStarter(candidate);
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         return await readBack(candidate);
       } catch {
         return {

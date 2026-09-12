@@ -48,8 +48,10 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
   })) {
     if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
     const path = join(relative, entry.name);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (entry.isDirectory()) files.push(...(await sources(root, path)));
     else if (entry.isFile() && /\.(tsx?|css)$/u.test(path))
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       files.push({ path, content: await readFile(join(root, path), "utf-8") });
   }
   return files;

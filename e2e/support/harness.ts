@@ -201,6 +201,7 @@ export async function advanceProviderConnectionToApproval(page: Page, provider: 
   await page.getByRole("button", { name: descriptor.installationButton }).click();
   await expect(page).toHaveURL(new RegExp(`/local-connections/${descriptor.slug}`, "u"));
   for (const scope of descriptor.seededScopes)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
 }
 
@@ -208,6 +209,7 @@ export async function selectProviderIdentity(page: Page, provider: EmulatedProvi
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
   for (const scope of descriptor.seededScopes)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: descriptor.approvalButton }).click();
   if (provider === "GitHub") {

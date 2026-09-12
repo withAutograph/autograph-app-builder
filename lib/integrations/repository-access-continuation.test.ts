@@ -211,6 +211,7 @@ describe("GitHub repository access continuation", () => {
       "https://builder.example/not-eve",
       "https://builder.example/eve/v1/connections/github/callback/a/b?token=leak",
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         service.create({
           authority,

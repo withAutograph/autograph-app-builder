@@ -306,12 +306,14 @@ export async function reconcileExpiredSandboxLeases(input: {
     const digest = sandboxLeaseReceiptDigest(lease);
     let providerOutcome: "stopped" | "stop-failed" = "stopped";
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.stopSandbox(lease.providerSandboxId);
     } catch {
       providerOutcome = "stop-failed";
       providerFailed.push(digest);
     }
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const settled = await input.store.settleRecovery({
         lease,
         providerOutcome,

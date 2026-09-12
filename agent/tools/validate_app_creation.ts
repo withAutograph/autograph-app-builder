@@ -36,6 +36,7 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     for (const file of input.implementationFiles)
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeTextFile({
         path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,

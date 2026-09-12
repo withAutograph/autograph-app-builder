@@ -225,11 +225,13 @@ export async function classifyGitHubRepositoryAccess(input: {
   let providerFailures = 0;
   for (const binding of active) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const provider = await input.providerFactory({
         authority,
         installation: binding,
       });
       const installation = installationReadBackSchema.parse(
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await provider.inspectInstallation({
           operation: "resolve-existing-source",
           requestedPermissions: READ_PERMISSIONS,
@@ -239,6 +241,7 @@ export async function classifyGitHubRepositoryAccess(input: {
         providerFailures += 1;
         continue;
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const candidate = await provider.inspectRepositoryByName(repository);
       if (candidate === undefined) continue;
       const snapshot = repositoryAccessSnapshotSchema.parse(candidate);

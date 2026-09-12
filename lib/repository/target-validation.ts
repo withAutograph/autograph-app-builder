@@ -360,6 +360,7 @@ export async function executeProposalBoundValidation(input: {
   for (const planned of input.attempt.commands) {
     let result: ApplyCommandResult;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       result = await input.executor({
         sandbox: input.sandbox,
         appId: input.appId,

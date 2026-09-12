@@ -101,6 +101,7 @@ export async function renderUiPreview(
 ): Promise<string> {
   const bundle = uiPreviewRendererFiles(input);
   for (const file of bundle.files)
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await sandbox.writeTextFile({
       path: `/workspace/repository/${bundle.root}/${file.path}`,
       content: file.content,

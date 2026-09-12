@@ -9,7 +9,6 @@ export default defineConfig({
     "unicorn/import-style": "off",
     "typescript/consistent-type-definitions": "off",
     "eslint/curly": "off",
-    "eslint/no-await-in-loop": "off",
     "eslint/no-bitwise": "off",
     "eslint/no-shadow": "off",
     "eslint/no-nested-ternary": "off",

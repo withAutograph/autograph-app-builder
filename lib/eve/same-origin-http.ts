@@ -263,6 +263,7 @@ async function readInstalledSnapshot(input: {
   let buffered = "";
   try {
     while (events.length <= tail) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const chunk = await reader.read();
       if (chunk.done) {
         buffered += decoder.decode();
@@ -379,6 +380,7 @@ async function readRespondSettlement(input: {
   requestIds: readonly string[];
 }): Promise<HostedEngineSnapshot> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const observed = await readInstalledSnapshot(input);
     const outstanding = outstandingRequestIds(observed.installed);
     if (
@@ -501,6 +503,7 @@ export function createSameOriginEveTransport(input: {
       if (cancelled.status === "no_active_turn") return before.snapshot;
       if (guardedTurnId === undefined) throw new HostedCancellationUnsettledError();
       for (let attempt = 0; attempt < 8; attempt += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const observed = await readInstalledSnapshot({
           ...common,
           sessionId: request.adapterSessionId,

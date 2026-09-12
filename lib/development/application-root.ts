@@ -36,6 +36,7 @@ async function makeDevelopmentWorkAreaWritable(
     await chmod(path, 0o700);
     for (const entry of await readdir(path)) {
       if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await makeDevelopmentWorkAreaWritable(join(path, entry), preserveRuntime);
     }
     return;
@@ -155,9 +156,11 @@ export async function refreshDevelopmentApplication(input: {
     await makeDevelopmentWorkAreaWritable(applicationRoot, true);
     for (const entry of await readdir(applicationRoot)) {
       if (entry === ".eve" || entry === "node_modules") continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await rm(join(applicationRoot, entry), { recursive: true, force: true });
     }
     for (const entry of await readdir(snapshot.root))
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await rename(join(snapshot.root, entry), join(applicationRoot, entry));
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live

@@ -137,6 +137,7 @@ describe("HandoffProvisioningProgress", () => {
       { ...projection(99), extra: "unexpected" },
       { ...projection(99), revision: Number.MAX_SAFE_INTEGER + 1 },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await act(async () => stream.emit("snapshot", invalid));
     }
     await act(async () => stream.emit("snapshot", projection(1)));

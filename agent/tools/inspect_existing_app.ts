@@ -76,6 +76,7 @@ export default defineDynamic({
           const missingPaths = [];
           const omittedPaths = [];
           for (const path of requestedPaths) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const content = await sandbox.readTextFile({
               path: `repository/${path}`,
             });

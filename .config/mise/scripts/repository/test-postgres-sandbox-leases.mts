@@ -70,10 +70,12 @@ async function waitForDatabase() {
   let lastError: unknown;
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await client`select 1`;
       return;
     } catch (error) {
       lastError = error;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 100);
       });

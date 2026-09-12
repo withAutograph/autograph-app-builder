@@ -210,9 +210,11 @@ describe("builder handoff deployment", () => {
     await handler(request(validBody));
     rows.get(handoffId)!.authority = { ...authority, ownerUserId: "user-two" };
     for (const id of [handoffId, randomUUID(), "not-a-uuid"]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await renew(request(renewBody), id);
       expect(response.status).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       expect(await response.json()).toEqual({ error: "handoff_unavailable" });
     }
   });
@@ -240,6 +242,7 @@ describe("builder handoff deployment", () => {
       }),
     ];
     for (const attempt of attempts) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await renew(attempt, handoffId);
       expect(response.status).toBe(400);
       expect(response.headers.get("cache-control")).toBe("no-store");

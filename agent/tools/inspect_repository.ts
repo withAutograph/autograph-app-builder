@@ -34,6 +34,7 @@ export default defineTool({
       const missingPaths = [];
       for (const requestedPath of paths) {
         const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const content = await sandbox.readTextFile({
           path: `/workspace/repository/${relativePath}`,
         });
@@ -87,6 +88,7 @@ export default defineTool({
     const availablePaths: string[] = [];
     const missingPaths: string[] = [];
     for (const overviewPath of sandboxOverviewPaths) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const content = await sandbox.readTextFile({
         path: `repository/${overviewPath}`,
       });

@@ -530,6 +530,7 @@ async function pollUntilSettled(input: {
   for (let poll = 0; poll < input.scenario.maxPolls; poll += 1) {
     const page = toolSession(
       "autograph_get",
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.client.callTool("autograph_get", {
         sessionId: input.sessionId,
         cursor,
@@ -548,6 +549,7 @@ async function pollUntilSettled(input: {
     if (responses.length > 0) {
       toolSession(
         "autograph_respond",
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await input.client.callTool("autograph_respond", {
           sessionId: input.sessionId,
           responses,
@@ -571,6 +573,7 @@ async function pollUntilSettled(input: {
         responseBatchCount,
         approvalPhases,
       };
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await new Promise<void>((resolve) => {
       setTimeout(() => resolve(), input.scenario.pollIntervalMs);
     });

@@ -333,6 +333,7 @@ export function createGitHubAppHttpProvider(input: {
     const accessToken = await token(permissions);
     const ids: string[] = [];
     for (let page = 1; ; page += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await github({
         path: `/installation/repositories?per_page=100&page=${page}`,
         authorization: accessToken,
@@ -372,6 +373,7 @@ export function createGitHubAppHttpProvider(input: {
     const tree = property(commitData, "tree");
     const variableNames: string[] = [];
     for (let page = 1; page <= 10; page += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const variables = await github({
         path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/actions/variables?per_page=100&page=${page}`,
         authorization: accessToken,
@@ -461,6 +463,7 @@ export function createGitHubAppHttpProvider(input: {
         path: file.path,
         mode: file.mode,
         type: "blob",
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         sha: await createBlob(input.owner, input.repositoryName, input.accessToken, file),
       });
     }

@@ -547,6 +547,7 @@ export async function measureStyles(
       interactive: boolean;
     }[] = [];
     for (const nodeId of nodeIds) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
         .catch(() => ({ model: null }));
@@ -586,6 +587,7 @@ export async function measureStyles(
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const described = await session.send("DOM.describeNode", { nodeId });
       const signature = domClassSignature(described.node);
       const generatedSignature = signature
@@ -599,11 +601,13 @@ export async function measureStyles(
             signature.classes,
           )
         : { provenance: "unknown" as const };
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
       const cv = Object.fromEntries(computed.computedStyle.map((p) => [p.name, p.value]));
       if (cv.display === "none" || cv.visibility === "hidden") continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
       });
@@ -688,6 +692,7 @@ export async function measureStyles(
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
         const path = sourcePath(styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined);
         const declaration = uniqueDeclarationEntries[0]?.p;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const styleMap = await sourceMapFor(styleSheetId);
         // CDP omits CSSProperty.range in some backends. A rule range can only
         // stand in when it contains one usable declaration, so it still names
@@ -968,17 +973,22 @@ export async function capturePreview(input: {
   const captures = [];
   try {
     for (const viewport of captureViewports(input.additionalDesktopSize)) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
         deviceScaleFactor: 1,
       });
       // tsx preserves local function names using this helper when serializing
       // page.evaluate callbacks. Install it only in this disposable QA context.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await context.addInitScript("globalThis.__name = (value) => value;");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await page.goto(input.url, { waitUntil: "load" });
       if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index += 1) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -986,6 +996,7 @@ export async function capturePreview(input: {
           status: "not-run",
         };
         if (scenario) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const refreshed = await page.reload({ waitUntil: "load" });
           if (refreshed && !refreshed.ok())
             throw new Error(`Preview returned HTTP ${refreshed.status()}`);
@@ -997,11 +1008,15 @@ export async function capturePreview(input: {
                     name: step.name,
                     exact: true,
                   });
+              // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
               if (step.action === "click") await locator.click();
+              // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
               else if (step.action === "fill") await locator.fill(step.value ?? "");
+              // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
               else await locator.selectOption({ label: step.value ?? "" });
             }
             if (scenario.expect?.text)
+              // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
               await page
                 .getByText(scenario.expect.text, { exact: false })
                 .first()
@@ -1018,10 +1033,12 @@ export async function capturePreview(input: {
           }
         }
         const name = `${viewport.name}-${index}`;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const measurements = await measurePage(page);
         const styles =
           index === 0
-            ? await measureStyles(
+            ? // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+              await measureStyles(
                 page,
                 input.tokens,
                 input.generatedSourcePaths,
@@ -1041,7 +1058,9 @@ export async function capturePreview(input: {
             observation.id = `${name}-${observation.id}`;
           }
         const path = join(input.output, `${name}.png`);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await settleFiniteMotion(page);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await page.screenshot({ path, fullPage: true });
         captures.push({
           name,
@@ -1054,6 +1073,7 @@ export async function capturePreview(input: {
           interaction,
         });
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await context.close();
     }
     return captures;

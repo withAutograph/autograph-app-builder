@@ -44,6 +44,7 @@ const files = [
 ];
 for (const file of files) {
   if (basename(file) !== file) throw new Error("Release asset path was unsafe.");
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const bytes = await readFile(
     file === "promotion-receipt.json" ? join(candidate, file) : join(packageRoot, file),
   );

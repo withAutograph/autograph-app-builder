@@ -21,6 +21,7 @@ async function collectBounded(
 ): Promise<Uint8Array[]> {
   const chunks: Uint8Array[] = [];
   for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const next = await reader.read();
     if (next.done) break;
     state.bytes += next.value.byteLength;

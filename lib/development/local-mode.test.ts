@@ -33,8 +33,10 @@ afterEach(async () => {
   const makeWritable = async (path: string) => {
     await chmod(path, 0o700).catch(() => undefined);
     for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (entry.isDirectory()) await makeWritable(join(path, entry.name));
       else if (!entry.isSymbolicLink())
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await chmod(join(path, entry.name), 0o600).catch(() => undefined);
     }
   };

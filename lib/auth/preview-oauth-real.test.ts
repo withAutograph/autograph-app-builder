@@ -34,6 +34,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       { id: cursorClientId, redirectUri: cursorRedirectUri },
       { id: codexClientId, redirectUri: codexRedirectUris[0] },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const first = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
       expect(first.consentRequired).toBe(true);
       expect(first.claims).toMatchObject({
@@ -47,9 +48,11 @@ describe("real Better Auth Preview OAuth handler", () => {
         expires_in: 300,
         refresh_token: expect.any(String),
       });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const repeated = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
       expect(repeated.consentRequired).toBe(false);
       expect(repeated.claims.sub).toBe(user.id);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const refreshed = await refreshRealOAuth(harness, client.id, first.tokens.refresh_token);
       expect(refreshed.claims).toMatchObject({
         sub: user.id,
@@ -74,6 +77,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       "http://localhost:8787/other",
       "https://attacker.example/callback",
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await harness.customFetchImpl(
         authorizationUrl("a".repeat(43), "invalid_redirect", {
           id: cursorClientId,
@@ -320,6 +324,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
 
     for (let attempt = 0; attempt < 60; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const retry = await customFetchImpl(`${issuer}/oauth2/token`, {
         method: "POST",
         headers: {
@@ -368,6 +373,7 @@ describe("real Better Auth Preview OAuth handler", () => {
 
     const signInStatuses: number[] = [];
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await customFetchImpl(`${issuer}/sign-in/email`, {
         method: "POST",
         headers: { origin, "content-type": "application/json" },

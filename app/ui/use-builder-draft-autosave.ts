@@ -133,6 +133,7 @@ export function useBuilderDraftAutosave<T>(
           queued.current = undefined;
           updateStatus("saving");
           try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const acknowledgement = await save.current({
               mutationId: current.mutationId,
               snapshot: current.snapshot,
@@ -145,6 +146,7 @@ export function useBuilderDraftAutosave<T>(
               acknowledgedRevision.current,
               acknowledgement.revision,
             );
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             await (options.outbox.clearIfAcknowledged
               ? options.outbox.clearIfAcknowledged({
                   mutationId: current.mutationId,
@@ -182,6 +184,7 @@ export function useBuilderDraftAutosave<T>(
       // dispatch is completing. In particular, provider redirects must not
       // continue until that newer snapshot has received its own acknowledgement.
       do {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const drained = await dispatch(reason);
         // An offline/error result deliberately retains the outbox entry for a
         // later retry. Do not spin indefinitely while the save is unavailable.

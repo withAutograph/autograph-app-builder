@@ -61,8 +61,10 @@ const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
   const source = resolve(repositoryRoot, path);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   if ((await lstat(source)).isSymbolicLink())
     throw new Error(`Portable source cannot be a symbolic link: ${path}`);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await cp(source, join(core, path), { recursive: true });
 }
 const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));
@@ -95,6 +97,7 @@ await writeFile(
 const clientRoot = join(output, "clients");
 await mkdir(clientRoot);
 for (const client of ["vscode", "cursor", "codex"] as const) {
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await writeFile(
     join(clientRoot, `${client}.client-harness.json`),
     `${JSON.stringify(
@@ -118,8 +121,11 @@ const files = new Map<string, Uint8Array>();
 async function collect(directory: string) {
   for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await stat(path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (info.isDirectory()) await collect(path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     else files.set(relative(output, path), await readFile(path));
   }
 }
@@ -159,7 +165,9 @@ for (const reference of new Set(codexAssetReferences)) {
     path: relativeAssetPath,
   });
   const destinationAsset = join(marketplacePluginRoot, relativeAssetPath);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await mkdir(dirname(destinationAsset), { recursive: true, mode: 0o755 });
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
   codexMarketplaceAssetPaths.push(`plugins/${portable.name}/${relativeAssetPath}`);
 }
@@ -214,8 +222,11 @@ const marketplaceFiles = new Map<string, Uint8Array>();
 async function collectMarketplace(directory: string) {
   for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await stat(path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (info.isDirectory()) await collectMarketplace(path);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     else marketplaceFiles.set(relative(marketplaceRoot, path), await readFile(path));
   }
 }
@@ -226,8 +237,10 @@ await writeFile(join(output, marketplaceArchiveName), marketplaceArchive);
 
 const auxiliaryFiles = new Map<string, Uint8Array>();
 for (const directory of [mockRoot, clientRoot]) {
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     auxiliaryFiles.set(relative(output, path), await readFile(path));
   }
 }

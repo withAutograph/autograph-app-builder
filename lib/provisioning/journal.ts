@@ -123,6 +123,7 @@ export async function updateBuilderProvisionJournal(input: {
   update: (current: BuilderProvisionJournalRecord) => BuilderProvisionJournalRecord;
 }): Promise<BuilderProvisionJournalRow> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await input.store.read({
       authority: input.authority,
       requestId: input.requestId,
@@ -135,6 +136,7 @@ export async function updateBuilderProvisionJournal(input: {
     next.response.updatedAt = updatedAt.toISOString();
     next.response.status =
       operationSettled(next, "github") && operationSettled(next, "vercel") ? "settled" : "pending";
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await input.store.compareAndSet({
       authority: input.authority,
       requestId: input.requestId,

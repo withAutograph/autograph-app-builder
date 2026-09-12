@@ -148,9 +148,12 @@ async function buildExactGitPatch(input: {
   try {
     for (const path of input.executionPaths) {
       const change = input.changes.find((candidate) => candidate.path === path)!;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const item = await mkdtemp(resolve(scratch, "item-"));
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await Promise.all([mkdir(resolve(item, "old")), mkdir(resolve(item, "new"))]);
       const before = input.preimages.get(path)!;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializePatchFile(
         item,
         "old",
@@ -160,6 +163,7 @@ async function buildExactGitPatch(input: {
           : undefined,
       );
       const afterBytes = input.overlay.get(path);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializePatchFile(
         item,
         "new",
@@ -434,8 +438,10 @@ async function safeTarget(
   let cursor = root;
   for (const segment of segments) {
     cursor = resolve(cursor, segment);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor, false);
     if (state.kind === "absent" && createParents) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(cursor, { mode: 0o755 });
       createdDirs.push(cursor);
     } else if (state.kind === "absent") {
@@ -588,7 +594,9 @@ async function verifyPreconditions(input: {
   if (!exactProposalMatch(current, input.proposal))
     throw new Error("The destination preconditions changed after approval.");
   for (const change of input.proposal.changes) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!assertFileMatches(await fileState(target), change.before))
       throw new Error(`The approved preimage changed for ${change.path}.`);
   }
@@ -617,7 +625,9 @@ export async function verifyPublishedChangeSet(input: {
   )
     throw new Error("The destination Git identity changed after local publication.");
   for (const change of input.receipt.changes) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(root, change.path, false, []);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!assertFileMatches(await fileState(target), change.after))
       throw new Error(`The local-publication postimage changed for ${change.path}.`);
   }
@@ -684,6 +694,7 @@ export async function publishReviewedChangeSet(input: {
     let totalBytes = 0;
     for (const change of input.proposal.changes) {
       if (change.after === undefined) continue;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const bytes = await input.readOverlayFile(change.path);
       if (bytes === null || contentDigest(bytes) !== change.after.digest)
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
@@ -695,7 +706,9 @@ export async function publishReviewedChangeSet(input: {
       overlay.set(change.path, bytes);
     }
     for (const change of input.proposal.changes) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await fileState(target);
       if (!assertFileMatches(before, change.before))
         throw new Error(`The approved preimage changed for ${change.path}.`);
@@ -732,6 +745,7 @@ export async function publishReviewedChangeSet(input: {
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
       const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.hooks?.beforeMutation?.(change.path, index);
     }
     await input.hooks?.beforeGitApply?.();
@@ -756,10 +770,13 @@ export async function publishReviewedChangeSet(input: {
     await input.hooks?.afterGitApply?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.hooks?.afterMutation?.(path, index);
     }
     for (const change of input.proposal.changes) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (!assertFileMatches(await fileState(target), change.after))
         throw new Error(`The published postimage failed verification: ${change.path}.`);
     }
@@ -812,9 +829,13 @@ export async function publishReviewedChangeSet(input: {
         const path = input.proposal.executionPaths[index];
         const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
         try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.hooks?.beforeRollback?.(path, index);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.hooks?.beforeUncertainClassification?.(path, index);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const observed = await fileState(target);
           if (assertFileMatches(observed, change.after)) observedPost.push(path);
           else if (!assertFileMatches(observed, change.before) && !mutationCallReturned)
@@ -848,7 +869,9 @@ export async function publishReviewedChangeSet(input: {
       for (const path of observedPost) {
         const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
         try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           if (assertFileMatches(await fileState(target), change.before)) rolledBackPaths.push(path);
           else if (!conflictedPaths.includes(path)) conflictedPaths.push(path);
         } catch {

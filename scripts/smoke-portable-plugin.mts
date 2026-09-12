@@ -40,6 +40,7 @@ if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
 for (const client of ["vscode", "cursor", "codex"] as const) {
   const root = join(installRoot, client);
   const pluginRoot = join(root, "app-builder");
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await validateAgentPluginPackage({
     pluginRoot,
     repositoryRoot: resolve("."),
@@ -48,19 +49,23 @@ for (const client of ["vscode", "cursor", "codex"] as const) {
   });
   for (const [path, digest] of Object.entries(receipt.coreFiles as Record<string, string>)) {
     const relativePath = path.replace(/^app-builder\//u, "");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await readFile(join(pluginRoot, relativePath));
     if (sha256(bytes) !== digest)
       throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
   }
   for (const forbidden of [".codex-plugin", ".app.json"]) {
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await lstat(join(pluginRoot, forbidden));
       throw new Error(`${client} portable root contains ${forbidden}.`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const harness = JSON.parse(await readFile(join(root, "client-harness.json"), "utf-8"));
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const installation = JSON.parse(await readFile(join(root, "installation-receipt.json"), "utf-8"));
   if (
     harness.format !== "agent-plugins-client-harness-v2" ||

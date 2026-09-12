@@ -124,12 +124,14 @@ describe("GET /api/builder/provision/stream", () => {
       ["4", undefined],
       ["1", { "Last-Event-ID": "4" }],
     ] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await GET(
         new Request(
           `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}&afterRevision=${query}`,
           { headers },
         ),
       );
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       expect(await readAll(response)).toBe(
         `id: 4\nevent: end\ndata: ${JSON.stringify(projection(4))}\n\n`,
       );
