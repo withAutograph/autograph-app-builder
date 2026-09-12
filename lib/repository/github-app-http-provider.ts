@@ -444,7 +444,7 @@ export function createGitHubAppHttpProvider(input: {
     return objectId.parse(stringProperty(response.body, "sha"));
   }
 
-  async function createTree(input: {
+  async function createTree(treeInput: {
     owner: string;
     repositoryName: string;
     accessToken: string;
@@ -458,24 +458,29 @@ export function createGitHubAppHttpProvider(input: {
       type: "blob";
       sha: string;
     }[] = [];
-    for (const file of input.files) {
+    for (const file of treeInput.files) {
       entries.push({
         path: file.path,
         mode: file.mode,
         type: "blob",
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        sha: await createBlob(input.owner, input.repositoryName, input.accessToken, file),
+        sha: await createBlob(
+          treeInput.owner,
+          treeInput.repositoryName,
+          treeInput.accessToken,
+          file,
+        ),
       });
     }
     const response = await github({
       method: "POST",
-      path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/trees`,
-      authorization: input.accessToken,
+      path: `/repos/${encodeURIComponent(treeInput.owner)}/${encodeURIComponent(treeInput.repositoryName)}/git/trees`,
+      authorization: treeInput.accessToken,
       body: {
-        ...(input.baseTree === undefined ? {} : { base_tree: input.baseTree }),
+        ...(treeInput.baseTree === undefined ? {} : { base_tree: treeInput.baseTree }),
         tree: [
           ...entries,
-          ...(input.deletions ?? []).map((path) => ({
+          ...(treeInput.deletions ?? []).map((path) => ({
             path,
             mode: "100644",
             type: "blob",
