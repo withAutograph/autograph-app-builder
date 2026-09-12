@@ -90,16 +90,15 @@ function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
       reject(signal.reason);
     };
     signal.addEventListener("abort", onAbort, { once: true });
-    operation.then(
-      (value) => {
+    operation
+      .then((value) => {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
-      },
-      (error: unknown) => {
+      })
+      .catch((error: unknown) => {
         signal.removeEventListener("abort", onAbort);
         reject(error);
-      },
-    );
+      });
   });
 }
 
