@@ -253,8 +253,8 @@ export async function measurePage(page: Page) {
       };
     };
     const visible = (el: Element) => {
-      const r = el.getBoundingClientRect(),
-        s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
     const label = (el: Element) =>
@@ -296,9 +296,9 @@ export async function measurePage(page: Page) {
     for (const el of controls) {
       let parent = el.parentElement;
       while (parent) {
-        const s = getComputedStyle(parent),
-          a = el.getBoundingClientRect(),
-          b = parent.getBoundingClientRect();
+        const s = getComputedStyle(parent);
+        const a = el.getBoundingClientRect();
+        const b = parent.getBoundingClientRect();
         if (/hidden|clip/.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
           findings.push({
             kind: "possible-clipping",
@@ -333,11 +333,11 @@ export async function measurePage(page: Page) {
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
     for (let i = 0; i < Math.min(controls.length, 150); i += 1)
       for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
-        const a = controls[i]!,
-          b = controls[j]!;
+        const a = controls[i]!;
+        const b = controls[j]!;
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
-        const x = a.getBoundingClientRect(),
-          y = b.getBoundingClientRect();
+        const x = a.getBoundingClientRect();
+        const y = b.getBoundingClientRect();
         if (
           Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
           Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4

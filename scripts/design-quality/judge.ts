@@ -46,8 +46,8 @@ export type ImageEvidence = {
 export function validateJudgment(value: unknown, images: ImageEvidence[]) {
   const judgment = judgmentSchema.parse(value);
   for (const finding of judgment.findings) {
-    const image = images.find((i) => i.name === finding.image),
-      r = finding.region;
+    const image = images.find((i) => i.name === finding.image);
+    const r = finding.region;
     if (!image || r.x + r.width > image.width || r.y + r.height > image.height)
       throw new Error("Unknown screenshot or out-of-bounds region");
   }
@@ -99,7 +99,8 @@ export async function judgeDesign(
     };
   }
   try {
-    let output: unknown, usage: unknown;
+    let output: unknown;
+    let usage: unknown;
     if (hooks) output = await hooks.generate();
     else {
       const gateway = createGateway({ apiKey: token });

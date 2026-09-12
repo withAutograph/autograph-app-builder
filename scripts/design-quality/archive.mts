@@ -26,8 +26,8 @@ if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
 const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
 const timestamp = new Date(report.createdAt).toISOString();
-const date = timestamp.slice(0, 10),
-  time = timestamp.slice(11, 23).replace(/[:.]/g, "");
+const date = timestamp.slice(0, 10);
+const time = timestamp.slice(11, 23).replace(/[:.]/g, "");
 const archiveRoot = resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
 const destination = join(archiveRoot, relative);
