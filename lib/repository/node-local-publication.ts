@@ -899,12 +899,11 @@ export async function publishReviewedChangeSet(input: {
     }
     let afterStatusDigest = "unavailable";
     try {
-      afterStatusDigest = (
-        await inspectLocalPublicationDestination({
-          destinationPath: input.proposal.destinationPath,
-          sourceReceipt: input.sourceReceipt,
-        })
-      ).statusDigest;
+      const destination = await inspectLocalPublicationDestination({
+        destinationPath: input.proposal.destinationPath,
+        sourceReceipt: input.sourceReceipt,
+      });
+      afterStatusDigest = destination.statusDigest;
     } catch {
       /* Receipt records that readback was unavailable. */
     }

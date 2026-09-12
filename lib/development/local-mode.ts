@@ -216,7 +216,8 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await lstat(join(absolute, ".git"));
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          paths.push(...(await sourcePaths(absolute)).map((child) => `${path}/${child}`));
+          const children = await sourcePaths(absolute);
+          paths.push(...children.map((child) => `${path}/${child}`));
           continue;
         }
       } catch (error) {

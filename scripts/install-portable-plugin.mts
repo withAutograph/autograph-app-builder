@@ -17,7 +17,8 @@ if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
   );
 const source = await realpath(resolve(sourceValue));
-if (!(await lstat(source)).isDirectory()) throw new Error("Release root must be a real directory.");
+const sourceStats = await lstat(source);
+if (!sourceStats.isDirectory()) throw new Error("Release root must be a real directory.");
 const requestedDestination = resolve(destinationValue);
 await mkdir(requestedDestination, { recursive: true, mode: 0o700 });
 const destination = await realpath(requestedDestination);
