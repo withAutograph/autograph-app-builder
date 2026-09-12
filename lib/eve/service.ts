@@ -209,7 +209,7 @@ function localEveRestartGeneration(
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
   )
-    return undefined;
+    return;
   const path = environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE;
   if (path === undefined) throw new Error("The local Eve cycle binding was unavailable.");
   return readLocalEveCycleBinding(path);
