@@ -13,6 +13,9 @@ import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set"
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export function isCandidateExportTextPath(path: string): boolean {
+  if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
+    return false;
+  }
   return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql)$/u.test(
     path,
   );

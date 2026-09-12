@@ -13,10 +13,16 @@ describe("reviewed candidate export", () => {
     expect(isCandidateExportTextPath(path)).toBe(true);
   });
 
-  it.each(["apps/replica/hk.pkl", "apps/replica/public/logo.png", "apps/replica/font.woff2"])(
-    "omits non-text artifact %s",
-    (path) => {
-      expect(isCandidateExportTextPath(path)).toBe(false);
-    },
-  );
+  it.each([
+    "apps/replica/hk.pkl",
+    "apps/replica/public/logo.png",
+    "apps/replica/font.woff2",
+    "apps/replica/.next/server/app/page.js",
+    "apps/replica/node_modules/.vite/vitest/results.json",
+    "apps/replica/dist/manifest.json",
+    "apps/replica/coverage/coverage-final.json",
+    "apps/replica/storybook-static/index.html",
+  ])("omits non-text artifact %s", (path) => {
+    expect(isCandidateExportTextPath(path)).toBe(false);
+  });
 });
