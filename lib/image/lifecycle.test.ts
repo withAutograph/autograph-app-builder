@@ -299,7 +299,7 @@ async function withFakeGhEnvironmentAsync(
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    return callback();
+    return await callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) Reflect.deleteProperty(process.env, key);

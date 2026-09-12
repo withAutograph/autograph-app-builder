@@ -925,7 +925,7 @@ export function Builder({
         // unchanged field from an older composite snapshot can otherwise
         // arrive after a later input event and overwrite it (for example, a
         // generated name replacing a manually edited name before OAuth).
-        if (Object.is(current[field], next[field])) return;
+        if (Object.is(current[field], next[field])) continue;
         builderForm.setValue(field, next[field], {
           shouldDirty: true,
           shouldValidate: true,
