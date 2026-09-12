@@ -5,6 +5,7 @@ import type { UseFormRegisterReturn } from "react-hook-form";
 import styles from "./app-builder.module.css";
 
 export function AppDetailsSection({
+  bare = false,
   appName,
   brief,
   onAppNameChange,
@@ -13,6 +14,7 @@ export function AppDetailsSection({
   appNameRegistration,
   briefRegistration,
 }: {
+  bare?: boolean;
   appName: string;
   brief: string;
   onAppNameChange: (value: string) => void;
@@ -26,12 +28,8 @@ export function AppDetailsSection({
   appNameRegistration?: UseFormRegisterReturn<"appName">;
   briefRegistration?: UseFormRegisterReturn<"brief">;
 }) {
-  return (
-    <fieldset
-      className={`${styles.sectionField} ${styles.appDetailsSection}`}
-      data-create-app-section="app-details"
-    >
-      <legend className={styles.visuallyHidden}>App details</legend>
+  const controls = (
+    <>
       <label htmlFor="app-name">
         <span className={styles.fieldLabel}>
           App Name <small aria-hidden="true">Optional</small>
@@ -77,6 +75,16 @@ export function AppDetailsSection({
         Define this app’s users, workflow, constraints, and desired outcome.{" "}
         <Link href="/docs">Read the App Builder docs</Link>.
       </p>
+    </>
+  );
+  if (bare) return controls;
+  return (
+    <fieldset
+      className={`${styles.sectionField} ${styles.appDetailsSection}`}
+      data-create-app-section="app-details"
+    >
+      <legend className={styles.visuallyHidden}>App details</legend>
+      {controls}
     </fieldset>
   );
 }

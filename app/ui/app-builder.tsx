@@ -24,6 +24,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub, FaLock, FaLockOpen } from "react-icons/fa";
 import { useForm, useWatch } from "react-hook-form";
 import {
+  createContext,
+  useContext,
+  type ReactNode,
   startTransition,
   useActionState,
   useCallback,
@@ -829,7 +832,7 @@ export function ConnectionDrawer({
   );
 }
 
-export function Builder({
+function useBuilderController({
   initialBrief,
   generatedNameSeed,
   onCreate,
@@ -1596,193 +1599,114 @@ export function Builder({
     }
   }
 
+  return {
+    form,
+    builderForm,
+    appNameEditedByUser,
+    generatedAppName,
+    repositoryEditedByUser,
+    setForm,
+    updateBrief,
+    comingSoonEnabled,
+    integrations,
+    model,
+    modelOptions,
+    zdrOnly,
+    setModel,
+    setZdrOnly,
+    router,
+    storageProvider,
+    gitScope,
+    gitScopeOptions,
+    setStorageProvider,
+    setGitScope,
+    beginProviderConnection,
+    deploymentProvider,
+    team,
+    teamOptions,
+    setDeploymentProvider,
+    setTeam,
+    connectedConnections,
+    search,
+    showMoreConnections,
+    addConnection,
+    removeConnection,
+    setSearch,
+    setShowMoreConnections,
+    setConnectionFlow,
+    canSubmit,
+    submitGuidance,
+    visibleProviderNotices,
+    draftSaveError,
+    draftSyncNotice,
+    autosave,
+    setDraftSaveError,
+    submissionPending,
+    preparingSubmission,
+    submit,
+    interactive,
+    connectionFlow,
+    completeConnection,
+    briefExamples,
+    repositoryNameFromAppName,
+  };
+}
+
+const BuilderControllerContext = createContext<ReturnType<typeof useBuilderController> | null>(
+  null,
+);
+
+export function useBuilderControllerContext() {
+  const controller = useContext(BuilderControllerContext);
+  if (!controller) throw new Error("Builder fields require the builder controller.");
+  return controller;
+}
+
+/** Browser behavior wraps server-composed form content without importing it. */
+export function Builder({
+  children,
+  draftStatus,
+  ...props
+}: Parameters<typeof useBuilderController>[0] & { children: ReactNode; draftStatus: ReactNode }) {
+  const controller = useBuilderController(props);
+  const {
+    submissionPending,
+    preparingSubmission,
+    submit,
+    interactive,
+    connectionFlow,
+    setConnectionFlow,
+    completeConnection,
+  } = controller;
   return (
-    <main
-      className={styles.authenticatedPage}
-      id="main-content"
-      inert={submissionPending || preparingSubmission}
-      aria-busy={submissionPending || preparingSubmission}
-    >
-      <form className={styles.builderCard} onSubmit={submit}>
-        <p className={styles.draftStatus} role="status" aria-live="polite">
-          {draftSaveError ||
-            draftSyncNotice ||
-            (autosave.status === "saving"
-              ? "Saving your draft…"
-              : autosave.status === "saved"
-                ? "Draft saved"
-                : autosave.status === "offline"
-                  ? "Offline — your draft will retry when you’re back online."
-                  : autosave.status === "error"
-                    ? "Your latest edit is safe on this device and will retry."
-                    : "Your draft saves automatically.")}
-          {autosave.status === "error" || draftSaveError ? (
-            <button
-              type="button"
-              className={styles.draftRetry}
-              onClick={() => {
-                setDraftSaveError("");
-                void autosave.retry();
-              }}
-            >
-              Retry
-            </button>
-          ) : null}
-        </p>
-        <fieldset
-          className={styles.builderControls}
-          disabled={!interactive}
-          aria-busy={!interactive}
-        >
-          <div className={styles.cardTitle}>
-            <div>
-              <h1>Build an app</h1>
-              <p>
-                Describe what you want to build, then choose how it should be created and delivered.
-              </p>
-            </div>
-          </div>
-          <ProviderNotices notices={visibleProviderNotices} />
-          <AppDetailsSection
-            appName={form.appName}
-            brief={form.brief}
-            appNameRegistration={builderForm.register("appName")}
-            briefRegistration={builderForm.register("brief")}
-            onAppNameChange={(appName) => {
-              appNameEditedByUser.current = true;
-              generatedAppName.current = undefined;
-              setForm((current) => ({
-                ...current,
-                appName,
-                repository: repositoryEditedByUser.current
-                  ? current.repository
-                  : repositoryNameFromAppName(appName),
-              }));
-            }}
-            onBriefChange={updateBrief}
-            onCycleBrief={() => {
-              const currentIndex = briefExamples.indexOf(
-                form.brief as (typeof briefExamples)[number],
-              );
-              const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
-              updateBrief(briefExamples[nextIndex]);
-            }}
-          />
-          <BuildWithSection
-            comingSoonEnabled={comingSoonEnabled}
-            selected={form.buildDestination}
-            onChange={(buildDestination) => {
-              setForm((current) => ({ ...current, buildDestination }));
-            }}
+    <BuilderControllerContext value={controller}>
+      <main
+        className={styles.authenticatedPage}
+        id="main-content"
+        inert={submissionPending || preparingSubmission}
+        aria-busy={submissionPending || preparingSubmission}
+      >
+        <form className={styles.builderCard} onSubmit={submit}>
+          {draftStatus}
+          <fieldset
+            className={styles.builderControls}
+            disabled={!interactive}
+            aria-busy={!interactive}
           >
-            {form.buildDestination === "web" ? (
-              <ModelControls
-                available={integrations.models.status === "ready"}
-                model={model}
-                options={modelOptions}
-                zdrOnly={zdrOnly}
-                onModelChange={(value) => {
-                  setModel(value);
-                }}
-                onZdrChange={(checked) => {
-                  setZdrOnly(checked);
-                  if (
-                    checked &&
-                    !integrations.models.entries.some(
-                      (entry) => entry.id === model && entry.zdr === "all",
-                    )
-                  )
-                    setModel("");
-                }}
-                onRetry={() => router.refresh()}
-              />
-            ) : null}
-          </BuildWithSection>
-          <StoreInSection
-            available={integrations.github.status !== "unavailable"}
-            comingSoonEnabled={comingSoonEnabled}
-            connected={integrations.github.status === "connected"}
-            selected={storageProvider}
-            gitScope={gitScope}
-            gitScopeOptions={gitScopeOptions}
-            repository={form.repository}
-            privateRepository={form.privateRepository}
-            onProviderChange={(provider) => {
-              setStorageProvider((current) => (current === provider ? null : provider));
-            }}
-            onGitScopeChange={(value) => {
-              setGitScope(value);
-            }}
-            onRepositoryChange={(repository) => {
-              repositoryEditedByUser.current = true;
-              setForm((current) => ({ ...current, repository }));
-            }}
-            onPrivacyChange={(privateRepository) => {
-              setForm((current) => ({ ...current, privateRepository }));
-            }}
-            onConnect={() => beginProviderConnection("github")}
+            {children}
+          </fieldset>
+        </form>
+        {connectionFlow ? (
+          <ConnectionDrawer
+            flow={connectionFlow}
+            onClose={() => setConnectionFlow(null)}
+            onStageChange={(stage) =>
+              setConnectionFlow((current) => (current ? { ...current, stage } : current))
+            }
+            onConnected={completeConnection}
           />
-          <DeployToSection
-            available={integrations.vercel.status !== "unavailable"}
-            comingSoonEnabled={comingSoonEnabled}
-            connected={integrations.vercel.status === "connected"}
-            selected={deploymentProvider}
-            team={team}
-            teamOptions={teamOptions}
-            onProviderChange={(provider) => {
-              setDeploymentProvider((current) => (current === provider ? null : provider));
-            }}
-            onTeamChange={(value) => {
-              setTeam(value);
-            }}
-            onConnect={() => beginProviderConnection("vercel")}
-          />
-          {connectionsEnabled ? (
-            <ConnectionsSection
-              connected={connectedConnections}
-              comingSoonEnabled={comingSoonEnabled}
-              search={search}
-              selected={form.connections}
-              showMore={showMoreConnections}
-              onAdd={addConnection}
-              onRemove={removeConnection}
-              onSearchChange={setSearch}
-              onShowMore={() => setShowMoreConnections(true)}
-              onCustomize={(name) =>
-                setConnectionFlow({
-                  name,
-                  stage: connectedConnections.includes(name) ? "configure" : "connect",
-                })
-              }
-            />
-          ) : null}
-          <div className={styles.submitArea}>
-            <button
-              className={styles.createButton}
-              type="submit"
-              disabled={!canSubmit}
-              aria-describedby={submitGuidance ? "create-app-guidance" : undefined}
-            >
-              Create App
-            </button>
-            {submitGuidance ? (
-              <p className={styles.submitGuidance} id="create-app-guidance">
-                {submitGuidance}
-              </p>
-            ) : null}
-          </div>
-        </fieldset>
-      </form>
-      {connectionFlow ? (
-        <ConnectionDrawer
-          flow={connectionFlow}
-          onClose={() => setConnectionFlow(null)}
-          onStageChange={(stage) =>
-            setConnectionFlow((current) => (current ? { ...current, stage } : current))
-          }
-          onConnected={completeConnection}
-        />
-      ) : null}
-    </main>
+        ) : null}
+      </main>
+    </BuilderControllerContext>
   );
 }
