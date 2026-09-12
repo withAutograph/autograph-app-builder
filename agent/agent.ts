@@ -185,8 +185,8 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("component-backed renewal review ui")) {
-    const path = lastUserMessage?.match(/supported repository at (\/\S+)/iu)?.[1];
-    if (path === undefined)
+    const requestedPath = lastUserMessage?.match(/supported repository at (\/\S+)/iu)?.[1];
+    if (requestedPath === undefined)
       return "I need the supported project location before I can shape the renewal review.";
     const inspection = toolResults.find(({ name }) => name === "inspect_source");
     if (inspection === undefined)
@@ -195,7 +195,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             name: "inspect_source",
             input: {
-              path: developmentInspectionPath({ requestedPath: path }),
+              path: developmentInspectionPath({ requestedPath }),
               sourceKind: "existing-repository",
             },
           },

@@ -4,7 +4,6 @@ import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { capturePreview } from "./design-quality/browser";
-import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   auditFramework,
   buildRequirements,
