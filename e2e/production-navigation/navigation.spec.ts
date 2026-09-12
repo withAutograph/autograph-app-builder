@@ -70,7 +70,7 @@ test("builder shell streams before an authenticated saved draft", async ({
     { baseURL },
   );
   await expect(page.getByLabel("App Name", { exact: true })).toHaveValue(identity.appName);
-  await expect(page.getByLabel("What should this app do?")).toHaveValue(
+  await expect(page.getByLabel("App Brief", { exact: true })).toHaveValue(
     `Saved brief for ${identity.appName}`,
   );
 });

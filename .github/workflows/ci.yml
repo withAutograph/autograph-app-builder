@@ -137,6 +137,29 @@ jobs:
       - run: mise run dependencies:install
       - run: mise run ci-auth-e2e-emulated
 
+  production-navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run storybook:install-browser
+      - run: mise run test:production-navigation
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: production-navigation-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .artifacts/production-navigation
+          if-no-files-found: ignore
+
   vercel-preview:
     name: Vercel deployment proof
     runs-on: ubuntu-latest
@@ -194,6 +217,7 @@ jobs:
       - sandbox-toolchain
       - package-build
       - auth-e2e-emulated
+      - production-navigation
       - vercel-preview
     runs-on: ubuntu-latest
     steps:
@@ -205,6 +229,7 @@ jobs:
           test "${{ needs.sandbox-toolchain.result }}" = success
           test "${{ needs.package-build.result }}" = success
           test "${{ needs.auth-e2e-emulated.result }}" = success
+          test "${{ needs.production-navigation.result }}" = success
           test "${{ needs.vercel-preview.result }}" = success
 
   promote:

@@ -57,3 +57,6 @@ next-env.d.ts
 storybook-static
 
 certificates
+
+# Disposable production-navigation fixture credentials are never source.
+.navigation-fixture.json

@@ -1,5 +1,6 @@
 // Copied only into the disposable production-navigation snapshot, never app/.
 import { revalidateTag } from "next/cache";
+import { connection } from "next/server";
 
 import { loadNextGatewayModels } from "@/lib/integrations/ai-gateway-models.next";
 import { readProductionNavigationRuntimeConfig } from "@/lib/testing/production-navigation";
@@ -38,6 +39,7 @@ function installCatalogFixture() {
 }
 
 export async function GET() {
+  await connection();
   installCatalogFixture();
   const models = await loadNextGatewayModels();
   return Response.json({ models, upstreamCalls }, { headers: { "Cache-Control": "no-store" } });

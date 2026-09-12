@@ -16,6 +16,7 @@ const flagsStorageState = "test-results/passkey-flags-storage-state.json";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/production-navigation/**",
   outputDir: "test-results/web-product-e2e-emulated",
   fullyParallel: false,
   workers: 1,
