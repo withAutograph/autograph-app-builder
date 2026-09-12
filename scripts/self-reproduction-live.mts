@@ -110,9 +110,9 @@ function answerFor(result: unknown, answers: Record<string, string>) {
 async function main() {
   await mkdir(candidateRoot, { recursive: true, mode: 0o700 });
   await mkdir(stateRoot, { recursive: true, mode: 0o700 });
-  const brief = await readFile(briefPath, "utf8");
+  const brief = await readFile(briefPath, "utf-8");
   const answers = (
-    JSON.parse(await readFile(answersPath, "utf8")) as { responses: Record<string, string> }
+    JSON.parse(await readFile(answersPath, "utf-8")) as { responses: Record<string, string> }
   ).responses;
   const controller = new AbortController();
   const nextPort = await availableLoopbackPort(configuredNextPort);

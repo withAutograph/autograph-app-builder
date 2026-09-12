@@ -198,7 +198,7 @@ async function main() {
   const referenceAudit = auditFramework(referenceFiles);
   const candidateAudit = candidateFiles ? auditFramework(candidateFiles) : undefined;
   const workflowEvidence = candidateFiles
-    ? await readFile(join(candidateRoot, "self-reproduction.workflow-results.json"), "utf8")
+    ? await readFile(join(candidateRoot, "self-reproduction.workflow-results.json"), "utf-8")
         .then((value) => JSON.parse(value) as WorkflowEvidence)
         .catch(() => undefined)
     : undefined;

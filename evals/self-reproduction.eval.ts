@@ -12,11 +12,11 @@ export default defineEval({
   async test(t) {
     const brief = await readFile(
       resolve(process.cwd(), "evals/self-reproduction/brief.md"),
-      "utf8",
+      "utf-8",
     );
     const answers = await readFile(
       resolve(process.cwd(), "evals/self-reproduction/answers.json"),
-      "utf8",
+      "utf-8",
     );
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)

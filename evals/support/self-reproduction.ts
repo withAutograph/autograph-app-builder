@@ -26,7 +26,7 @@ export async function readSource(root: string, current = root): Promise<SourceFi
     const path = join(current, entry.name);
     if (entry.isDirectory()) output.push(...(await readSource(root, path)));
     else if (entry.isFile() && /\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name))
-      output.push({ path: relative(root, path), content: await readFile(path, "utf8") });
+      output.push({ path: relative(root, path), content: await readFile(path, "utf-8") });
   }
   return output;
 }
