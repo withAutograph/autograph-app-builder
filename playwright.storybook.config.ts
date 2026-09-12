@@ -4,6 +4,8 @@ const baseURL = "http://127.0.0.1:6018";
 
 export default defineConfig({
   testDir: ".storybook/visual",
+  // Do not clean the E2E lane's browser-state fixture in test-results/.
+  outputDir: "test-results/storybook-visual",
   forbidOnly: Boolean(process.env.CI),
   reporter: "list",
   retries: 0,

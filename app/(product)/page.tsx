@@ -180,7 +180,8 @@ async function HomeContent({ searchParams }: PageProps) {
 export default function Home(props: PageProps) {
   return (
     <Suspense fallback={<BuilderLoadingShell />}>
-      <ViewTransition>
+      {/* Animate navigation, not autosave updates around editable controls. */}
+      <ViewTransition update="none">
         <HomeContent {...props} />
       </ViewTransition>
     </Suspense>
