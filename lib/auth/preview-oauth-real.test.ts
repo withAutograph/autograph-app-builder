@@ -5,22 +5,20 @@ import { previewOAuthRateLimit } from "./preview-oauth-runtime";
 import { cursorClientId, cursorRedirectUri } from "./cursor-client";
 import { previewOAuthScopes } from "./preview-oauth-contract";
 import {
+  authorizationUrl,
+  clientId,
+  codexClientId,
+  codexClientMetadata,
+  codexRedirectUris,
   grantRealOAuth,
+  issuer,
+  origin,
   refreshRealOAuth,
   registerTestCursorClient,
-} from "./real-oauth-test-harness";
-import {
-  createRealOAuthHarness as setup,
-  authorizationUrl,
-  origin,
-  issuer,
-  resource,
-  clientId,
   redirectUri,
   requestedScope,
-  codexClientId,
-  codexRedirectUris,
-  codexClientMetadata,
+  resource,
+  createRealOAuthHarness as setup,
 } from "./real-oauth-test-harness";
 
 describe("real Better Auth Preview OAuth handler", () => {
