@@ -33,7 +33,6 @@ export default defineConfig({
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-useless-undefined": "off",
     "unicorn/prefer-event-target": "off",
-    "unicorn/require-post-message-target-origin": "off",
     "unicorn/text-encoding-identifier-case": "off",
   },
 });
