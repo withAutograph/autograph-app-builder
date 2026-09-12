@@ -54,7 +54,9 @@ function parseRemote(input: string) {
   } catch {
     throw new Error("The GitHub source remote is invalid.");
   }
-  const match = /^\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})\.git$/u.exec(remote.pathname);
+  const match = /^\/(?<owner>[A-Za-z0-9_.-]{1,100})\/(?<repo>[A-Za-z0-9_.-]{1,100})\.git$/u.exec(
+    remote.pathname,
+  );
   if (
     remote.origin !== "https://github.com" ||
     remote.username !== "" ||

@@ -5,7 +5,7 @@ function headingId(children: ReactNode) {
   return String(children)
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replaceAll(/(^-|-$)/gu, "");
+    .replaceAll(/(?<edge>^-|-$)/gu, "");
 }
 
 const components: MDXComponents = {

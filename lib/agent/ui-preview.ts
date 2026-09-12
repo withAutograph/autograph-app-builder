@@ -95,7 +95,9 @@ function digest(value: unknown) {
 }
 
 function imports(content: string) {
-  return [...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu)]
+  return [
+    ...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu),
+  ]
     .map((match) => match[1]!)
     .toSorted();
 }

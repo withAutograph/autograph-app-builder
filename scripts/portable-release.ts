@@ -48,7 +48,7 @@ export function releaseEndpoint(value: string | undefined) {
 }
 
 export function registeredAutographToolNames(handlerSource: string) {
-  const names = [...handlerSource.matchAll(/server\.registerTool\(\s*"([^"]+)"/gu)].map(
+  const names = [...handlerSource.matchAll(/server\.registerTool\(\s*"(?<name>[^"]+)"/gu)].map(
     (match) => match[1],
   );
   if (

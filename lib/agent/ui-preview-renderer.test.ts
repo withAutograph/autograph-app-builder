@@ -89,7 +89,7 @@ describe("preview stylesheet provenance", () => {
       map: { inline: true, annotation: true, sourcesContent: true },
     });
     const sourceMap = output.css.match(
-      /sourceMappingURL=data:application\/json[^,]*,([^*]+?)\s*\*\//u,
+      /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u,
     )?.[1];
     expect(sourceMap).toBeDefined();
     const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf-8")) as {

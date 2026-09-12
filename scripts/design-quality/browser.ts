@@ -29,7 +29,7 @@ export interface DesktopSize {
 
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
-  const match = /^([1-9]\d*)x([1-9]\d*)$/u.exec(value);
+  const match = /^(?<width>[1-9]\d*)x(?<height>[1-9]\d*)$/u.exec(value);
   if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
   const width = Number(match[1]);
   const height = Number(match[2]);
@@ -95,7 +95,7 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
   const value = unique[0]!;
   if (/var\(--/u.test(value)) return "token-reference" as const;
   if (
-    /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
+    /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
     /%|\d(?:\.\d+)?fr\b/u.test(value)
   )
     return "structural" as const;
@@ -455,7 +455,7 @@ export async function measureStyles(
         .send("CSS.getStyleSheetText", { styleSheetId })
         .then((result: { text: string }) => result.text)
         .catch(() => "");
-      const declared = /\/[*]#\s*sourceMappingURL=([^\s*]+)\s*[*]\//u.exec(css)?.[1];
+      const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
       const url = header?.sourceMapURL || declared;
@@ -528,7 +528,7 @@ export async function measureStyles(
             const relevant = prop.includes("color")
               ? name.startsWith("--color-")
               : prop.includes("font") || prop.includes("line") || prop.includes("letter")
-                ? /--(font|text|leading|tracking)/u.test(name)
+                ? /--(?<category>font|text|leading|tracking)/u.test(name)
                 : prop.includes("radius")
                   ? name.includes("radius")
                   : prop.includes("shadow")
@@ -628,7 +628,7 @@ export async function measureStyles(
             m.rule.origin !== "user-agent" &&
             !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
         );
-        const inherited = /^(font-|line-height|letter-spacing|color$)/u.test(property)
+        const inherited = /^(?<property>font-|line-height|letter-spacing|color$)/u.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
               (i.matchedCSSRules ?? []).filter((m) => m.rule.origin !== "user-agent"),
             )
@@ -788,7 +788,7 @@ export async function measureStyles(
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
-            [...v.matchAll(/var\((--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
+            [...v.matchAll(/var\((?<name>--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
         )
           classification = "unassessed";

@@ -638,8 +638,8 @@ export function parseRemoteImageInspection(
   };
 }
 
-const secretKey = /(authorization|cookie|credential|password|secret|token)/iu;
-const secretValue = /(bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
+const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
+const secretValue = /(?<value>bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
 
 export function assertNoSecretMaterial(value: unknown, path = "receipt"): void {
   if (typeof value === "string") {

@@ -71,7 +71,9 @@ export function inspectSourceContractDigest(
 ): string {
   const contract = contractPaths.map((contractPath) => {
     const entry = fixedGit(sourcePath, ["ls-tree", sourceSha, "--", contractPath], "utf-8").trim();
-    const match = /^(100644|100755) blob ([0-9a-f]{40,64})\t(.+)$/u.exec(entry);
+    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+      entry,
+    );
     if (match === null || match[3] !== contractPath)
       throw new Error(
         `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,

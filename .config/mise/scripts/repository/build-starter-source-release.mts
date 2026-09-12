@@ -8,7 +8,7 @@ import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 const REPOSITORY = "https://github.com/withAutograph/arrusted-development";
-const TREE_ENTRY = /^(100644|100755) blob [0-9a-f]{40}\t(.+)$/u;
+const TREE_ENTRY = /^(?<mode>100644|100755) blob [0-9a-f]{40}\t(?<path>.+)$/u;
 
 function sha256(value: Uint8Array) {
   return createHash("sha256").update(value).digest("hex");

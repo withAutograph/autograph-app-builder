@@ -98,7 +98,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
 
 const schemaVersion = (schema: unknown) => {
   if (typeof schema !== "string") return undefined;
-  return schema.match(/\/schemas\/([^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
+  return schema.match(/\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
 };
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
@@ -163,7 +163,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
   const skillPath = resolve(skillDirectory, "SKILL.md");
   await assertRegularFile(pluginRoot, skillPath);
   const contents = await readFile(skillPath, "utf-8");
-  const match = contents.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
+  const match = contents.match(/^---[\t ]*\r?\n(?<frontmatter>[\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
   if (!match) throw new Error(`${relative(pluginRoot, skillPath)} has invalid frontmatter.`);
   const document = parseDocument(match[1], {
     prettyErrors: false,

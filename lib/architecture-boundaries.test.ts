@@ -27,7 +27,7 @@ describe("library architecture boundaries", () => {
         })),
       )
     )
-      .filter(({ source }) => /from ["']@\/(app|components|agent)\//u.test(source))
+      .filter(({ source }) => /from ["']@\/(?<namespace>app|components|agent)\//u.test(source))
       .map(({ file }) => file);
 
     expect(violations).toEqual([]);

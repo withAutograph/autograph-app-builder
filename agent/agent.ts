@@ -185,7 +185,7 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("component-backed renewal review ui")) {
-    const requestedPath = lastUserMessage?.match(/supported repository at (\/\S+)/iu)?.[1];
+    const requestedPath = lastUserMessage?.match(/supported repository at (?<path>\/\S+)/iu)?.[1];
     if (requestedPath === undefined)
       return "I need the supported project location before I can shape the renewal review.";
     const inspection = toolResults.find(({ name }) => name === "inspect_source");
@@ -232,7 +232,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return "I’ll call this **Vendor Onboarding** and use the requested full-page step-by-step form for a single requester. The conditional Finance review appears only when tax information makes it relevant.";
   if (message.includes("internal vendor-onboarding workflow")) {
     const requestedRepositoryPath = lastUserMessage?.match(
-      /supported repository at (\/\S+)/iu,
+      /supported repository at (?<path>\/\S+)/iu,
     )?.[1];
     if (requestedRepositoryPath === undefined)
       return "I need the supported project location before I can start this prototype.";
@@ -654,7 +654,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         | undefined;
       const existingAppChanges = existing?.files?.flatMap(({ path, content }) => {
         const changed = content.replace(
-          /(return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
+          /(?<opening>return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
           (opening) =>
             `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
         );
@@ -903,7 +903,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("publish fresh repository bootstrap at ")
   ) {
     const destinationPath = lastUserMessage?.match(
-      /(?:inspect|publish) fresh repository bootstrap at (\/\S+)/iu,
+      /(?:inspect|publish) fresh repository bootstrap at (?<path>\/\S+)/iu,
     )?.[1];
     if (destinationPath === undefined) return "The fresh repository destination is missing.";
     const review = [...toolResults]
@@ -1469,9 +1469,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "AppSpec mutation was denied by the terminal publication workflow."
       : "AppSpec mutation unexpectedly succeeded.";
   }
-  const appSpecMatch = /^accept build-ready appspec for ([a-z0-9-]+):\n([\s\S]+)$/iu.exec(
-    lastUserMessage ?? "",
-  );
+  const appSpecMatch =
+    /^accept build-ready appspec for (?<appId>[a-z0-9-]+):\n(?<appSpec>[\s\S]+)$/iu.exec(
+      lastUserMessage ?? "",
+    );
   if (appSpecMatch !== null) {
     const [, appId, appSpec] = appSpecMatch;
     if (appId === undefined || appSpec === undefined) return "The AppSpec request is malformed.";
@@ -1537,7 +1538,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("prepare fresh template at ")
   ) {
     const path = lastUserMessage?.match(
-      /prepare (?:supported repository|fresh template) at (\/\S+)/iu,
+      /prepare (?:supported repository|fresh template) at (?<path>\/\S+)/iu,
     )?.[1];
     const sourceKind = message.includes("prepare fresh template at ")
       ? "fresh-template"

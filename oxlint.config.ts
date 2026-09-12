@@ -11,7 +11,7 @@ export default defineConfig({
     "eslint/no-nested-ternary": "off",
     "eslint/no-use-before-define": "off",
     "eslint/func-style": "off",
-    "eslint/prefer-named-capture-group": "off",
+    "eslint/require-await": "off",
     "eslint/complexity": "off",
     "eslint/sort-keys": "off",
     "promise/avoid-new": "off",

@@ -78,7 +78,9 @@ describe("destination adapters", () => {
       const prompt = buildAppHandoffPrompt(id, destination);
       const url = new URL(buildAppHandoffUrl(destination, id));
       expect(url.searchParams.get(destination === "codex" ? "prompt" : "text")).toBe(prompt);
-      const payload = JSON.parse(prompt.match(/autograph_start with (\{[^\n]+\})\./u)![1]!);
+      const payload = JSON.parse(
+        prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u)![1]!,
+      );
       expect(payload).toEqual({
         handoffId: id,
         clientRequestId: `web-handoff:${id}`,

@@ -35,7 +35,7 @@ export interface SourceAnalysis {
   limitations: string[];
 }
 
-const varReference = /var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/gu;
+const varReference = /var\(\s*(?<name>--[A-Za-z0-9_-]+)\s*(?:,[^)]+)?\)/gu;
 const cssLiteral =
   /(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)|-?(?:\d*\.\d+|\d+)(?:px|rem|em|vh|vw|vmin|vmax|deg|ms|s)\b)/gu;
 const structuralLiteral =
@@ -236,7 +236,7 @@ function containsNativeControl(node: ts.Node): boolean {
   if (
     (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
     ts.isIdentifier(node.tagName) &&
-    /^(button|input|select|textarea)$/u.test(node.tagName.text)
+    /^(?<element>button|input|select|textarea)$/u.test(node.tagName.text)
   )
     return true;
   return ts.forEachChild(node, containsNativeControl) ?? false;
@@ -287,7 +287,7 @@ export function analyzeSource({
       ts.ScriptKind.TSX,
     );
     if (!exportedEntries(source).length) continue;
-    for (const match of file.content.matchAll(/className\s*=\s*["']([^"']+)["']/gu))
+    for (const match of file.content.matchAll(/className\s*=\s*["'](?<className>[^"']+)["']/gu))
       for (const name of match[1].split(/\s+/u))
         if (name && !name.includes("[")) referencedClasses.add(name);
     for (const statement of source.statements)
@@ -492,7 +492,7 @@ export function analyzeSource({
           const name = attribute.name.getText(source);
           const text = jsxAttributeText(attribute);
           if (name === "className" && text) {
-            for (const bracketed of text.matchAll(/\[([^\]]+)\]/gu)) {
+            for (const bracketed of text.matchAll(/\[(?<content>[^\]]+)\]/gu)) {
               const prefix = text.slice(0, bracketed.index).split(/\s/u).at(-1) ?? "";
               if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/u.test(prefix)) continue;
               collectCssLiterals(bracketed[1], literals);
@@ -741,7 +741,10 @@ export function analyzeSource({
               "unresolved-component",
             ),
           );
-        else if (ts.isIdentifier(tag) && /^(button|input|select|textarea)$/u.test(tag.text))
+        else if (
+          ts.isIdentifier(tag) &&
+          /^(?<element>button|input|select|textarea)$/u.test(tag.text)
+        )
           observations.push(
             observation(
               `component:native:${file.path}:${node.getStart(source)}`,

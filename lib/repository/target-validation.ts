@@ -116,13 +116,13 @@ export type TargetValidationResult =
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const compilerDiagnosticPatterns = [
-  /^(.*?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)$/u,
-  /^(.*?):(\d+):(\d+)\s*-\s*error\s+(TS\d+):\s*(.+)$/u,
+  /^(?<file>.*?)\((?<line>\d+),(?<column>\d+)\):\s*error\s+(?<code>TS\d+):\s*(?<message>.+)$/u,
+  /^(?<file>.*?):(?<line>\d+):(?<column>\d+)\s*-\s*error\s+(?<code>TS\d+):\s*(?<message>.+)$/u,
 ] as const;
-const oxcCompilerHeaderPattern = /^\s*x\s+typescript\((TS\d+)\):\s*(.+)$/u;
-const sourceLocationPattern = /^\s*,-\[(.+?):(\d+):(\d+)\]$/u;
-const vitestFailurePattern = /^\s*FAIL\s+(.+?)\s*>\s*(.+)$/u;
-const vitestLocationPattern = /^\s*❯\s+(.+?):(\d+):(\d+)$/u;
+const oxcCompilerHeaderPattern = /^\s*x\s+typescript\((?<code>TS\d+)\):\s*(?<message>.+)$/u;
+const sourceLocationPattern = /^\s*,-\[(?<path>.+?):(?<line>\d+):(?<column>\d+)\]$/u;
+const vitestFailurePattern = /^\s*FAIL\s+(?<file>.+?)\s*>\s*(?<message>.+)$/u;
+const vitestLocationPattern = /^\s*❯\s+(?<path>.+?):(?<line>\d+):(?<column>\d+)$/u;
 
 function safeDiagnosticPath(value: string): string | undefined {
   const normalized = value.replaceAll("\\", "/");

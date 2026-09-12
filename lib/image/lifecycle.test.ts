@@ -1671,7 +1671,7 @@ wait
       "forbidden secret field",
     );
     expect(JSON.stringify(provenance())).not.toMatch(
-      /(authorization|credential|password|secret|token)/iu,
+      /(?<key>authorization|credential|password|secret|token)/iu,
     );
   });
 });
