@@ -16,7 +16,7 @@ import {
 import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 
-import planAppCreation from "./plan-app-creation";
+import planAppCreation from "./plan_app_creation";
 
 /**
  * Planning is the deterministic continuation of a successfully accepted

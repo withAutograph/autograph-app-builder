@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { exactNormalizedChangeSet } from "./change-set-status";
+import { exactNormalizedChangeSet } from "./change_set_status";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
