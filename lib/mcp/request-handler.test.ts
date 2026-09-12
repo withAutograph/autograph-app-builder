@@ -139,14 +139,14 @@ async function mcpResult<T>(response: Response): Promise<T> {
 
 async function toolNames(response: Response): Promise<string[]> {
   const result = await mcpResult<{
-    tools?: Array<{ name?: string }>;
+    tools?: { name?: string }[];
   }>(response);
   return (result.tools ?? []).map((tool) => tool.name ?? "").sort();
 }
 
 describe("branded public tool mapping", () => {
   it("redeems an opaque handoff once and returns the same session after a lost response", async () => {
-    const calls: Array<{ operation: string; input: unknown }> = [];
+    const calls: { operation: string; input: unknown }[] = [];
     const result = {
       sessionId: "session-one",
       status: "waiting" as const,
@@ -413,10 +413,10 @@ describe("branded public tool mapping", () => {
     const handler = createAutographMcpHandler({} as EveSessionService);
     const response = await handler(mcpRequest());
     const result = await mcpResult<{
-      tools?: Array<{
+      tools?: {
         name?: string;
         _meta?: { ui?: { resourceUri?: string; visibility?: string[] } };
-      }>;
+      }[];
     }>(response);
 
     expect((result.tools ?? []).map(({ name }) => name).sort()).toEqual(exactTools);
@@ -429,7 +429,7 @@ describe("branded public tool mapping", () => {
   });
 
   it("maps each public operation to the unchanged Eve session service", async () => {
-    const calls: Array<{ operation: string; input: unknown }> = [];
+    const calls: { operation: string; input: unknown }[] = [];
     const result = {
       sessionId: "session-one",
       status: "waiting" as const,
@@ -609,12 +609,12 @@ describe("request-scoped MCP service selection", () => {
     });
 
     const discovery = await mcpResult<{
-      tools: Array<{
+      tools: {
         name: string;
         _meta?: {
-          securitySchemes?: Array<{ type: string; scopes?: string[] }>;
+          securitySchemes?: { type: string; scopes?: string[] }[];
         };
-      }>;
+      }[];
     }>(await handler(mcpRequest({}, "tools/list")));
     expect(discovery.tools.map(({ name }) => name).sort()).toEqual(exactTools);
     for (const tool of discovery.tools) {
@@ -879,7 +879,7 @@ describe("request-scoped MCP service selection", () => {
     expect(resourceReadResponse.status).toBe(200);
 
     const toolResult = await mcpResult<{
-      tools: Array<{
+      tools: {
         name: string;
         title?: string;
         description?: string;
@@ -889,7 +889,7 @@ describe("request-scoped MCP service selection", () => {
           idempotentHint?: boolean;
           openWorldHint?: boolean;
         };
-      }>;
+      }[];
     }>(toolResponse);
     expect(toolResult.tools.map(({ name }) => name).sort()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(true);
@@ -950,12 +950,12 @@ describe("request-scoped MCP service selection", () => {
     });
 
     const resourceResult = await mcpResult<{
-      resources: Array<{
+      resources: {
         name: string;
         title?: string;
         description?: string;
         _meta?: { ui?: unknown };
-      }>;
+      }[];
     }>(resourceResponse);
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
@@ -979,7 +979,7 @@ describe("request-scoped MCP service selection", () => {
     expect(McpUiResourceMetaSchema.parse(resourceMeta)).toEqual(resourceMeta);
 
     const resourceRead = await mcpResult<{
-      contents: Array<{ _meta?: { ui?: unknown } }>;
+      contents: { _meta?: { ui?: unknown } }[];
     }>(resourceReadResponse);
     expect(resourceRead.contents).toHaveLength(1);
     expect(resourceRead.contents[0]?._meta?.ui).toEqual(resourceMeta);

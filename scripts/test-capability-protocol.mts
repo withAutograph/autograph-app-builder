@@ -15,7 +15,7 @@ export async function relayBoundedFrames(options: {
   )
     throw new Error("Protocol relay configuration was invalid.");
 
-  await new Promise<void>((resolveRelay, rejectRelay) => {
+  await new Promise<void>((resolve, reject) => {
     let buffered = Buffer.alloc(0);
     let frames = 0;
     let settled = false;
@@ -26,7 +26,7 @@ export async function relayBoundedFrames(options: {
       settled = true;
       options.source.destroy();
       options.target.destroy();
-      rejectRelay(error);
+      reject(error);
     };
     const finishIfComplete = () => {
       if (!sourceEnded || waitingForDrain || settled) return;
@@ -34,10 +34,14 @@ export async function relayBoundedFrames(options: {
         return fail(new Error("Protocol relay ended before its exact frames."));
       options.target.end();
     };
+    const resumeAfterDrain = () => {
+      waitingForDrain = false;
+      processBuffered();
+    };
     const processBuffered = () => {
       while (true) {
         const newline = buffered.indexOf(0x0a);
-        if (newline < 0) {
+        if (newline === -1) {
           if (buffered.byteLength > maximumFrameBytes)
             fail(new Error("Protocol frame exceeded its byte limit."));
           else if (sourceEnded) finishIfComplete();
@@ -53,10 +57,7 @@ export async function relayBoundedFrames(options: {
           return fail(new Error("Protocol relay received trailing frames."));
         if (!options.target.write(frame)) {
           waitingForDrain = true;
-          options.target.once("drain", () => {
-            waitingForDrain = false;
-            processBuffered();
-          });
+          options.target.once("drain", resumeAfterDrain);
           return;
         }
         if (frames === options.expectedFrames && buffered.byteLength > 0)
@@ -75,7 +76,7 @@ export async function relayBoundedFrames(options: {
     options.target.once("finish", () => {
       if (settled) return;
       settled = true;
-      resolveRelay();
+      resolve();
     });
     options.source.once("error", (error) => fail(error));
     options.target.once("error", (error) => fail(error));

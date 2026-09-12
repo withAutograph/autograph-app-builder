@@ -2,8 +2,10 @@ import { resolve } from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
 const rootIndex = process.argv.indexOf("--root");
-const pluginRoot = resolve(rootIndex >= 0 ? process.argv[rootIndex + 1] : ".");
-if (rootIndex >= 0 && !process.argv[rootIndex + 1])
+const pluginRoot = resolve(rootIndex === -1 ? "." : process.argv[rootIndex + 1]);
+if (rootIndex === -1 || process.argv[rootIndex + 1]) {
+  // The option is absent or has a value.
+} else
   throw new Error(
     "Usage: pnpm validate:plugin [--root <plugin-directory>] [--artifact] [--release]",
   );

@@ -18,7 +18,7 @@ import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbo
 
 function argument(name: string) {
   const index = process.argv.indexOf(name);
-  const value = index < 0 ? undefined : process.argv[index + 1];
+  const value = index === -1 ? undefined : process.argv[index + 1];
   if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
   return value;
 }
@@ -115,8 +115,8 @@ try {
     "acquired",
   ]);
   const acquired = sameSubject.find((result) => result.disposition === "acquired");
-  assert(acquired?.disposition === "acquired");
-  assert(acquired.lease.acquiredAtEpochMs > Date.now() - 60_000);
+  assert.ok(acquired?.disposition === "acquired");
+  assert.ok(acquired.lease.acquiredAtEpochMs > Date.now() - 60_000);
   const replay = await store.acquire({
     principal: acquired.lease.principal,
     adapterSessionId: acquired.lease.adapterSessionId,
@@ -134,7 +134,7 @@ try {
 
   await clear();
   const rollback = await acquire("user_1", "rollback_session");
-  assert(rollback.disposition === "acquired");
+  assert.ok(rollback.disposition === "acquired");
   await assert.rejects(
     store.acquire({
       principal: rollback.lease.principal,
@@ -162,12 +162,12 @@ try {
     epoch: rollback.lease.epoch,
     nowEpochMs: 0,
   });
-  assert(heartbeat.heartbeatAtEpochMs > rollback.lease.heartbeatAtEpochMs);
+  assert.ok(heartbeat.heartbeatAtEpochMs > rollback.lease.heartbeatAtEpochMs);
   assert.equal(heartbeat.expiresAtEpochMs - heartbeat.heartbeatAtEpochMs, policy.lease.ttlMs);
 
   await expire(heartbeat);
   const [claimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
-  assert(claimed);
+  assert.ok(claimed);
   assert.equal(claimed.state, "orphaned");
   const stopFailed = await store.settleRecovery({
     lease: claimed,
@@ -198,7 +198,7 @@ try {
     ],
   );
   const [reclaimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
-  assert(reclaimed);
+  assert.ok(reclaimed);
   assert.equal(reclaimed.epoch, claimed.epoch + 1);
   assert.deepEqual(
     await store.acquire({
@@ -231,7 +231,7 @@ try {
     policy,
     nowEpochMs: 0,
   });
-  assert(recovered.disposition === "acquired");
+  assert.ok(recovered.disposition === "acquired");
   assert.equal(recovered.lease.epoch, reclaimed.epoch + 1);
   assert.equal(
     await store.settleRecovery({
@@ -246,8 +246,8 @@ try {
   await clear();
   const batchFailed = await acquire("user_failed", "batch_failed");
   const batchStopped = await acquire("user_stopped", "batch_stopped");
-  assert(batchFailed.disposition === "acquired");
-  assert(batchStopped.disposition === "acquired");
+  assert.ok(batchFailed.disposition === "acquired");
+  assert.ok(batchStopped.disposition === "acquired");
   await expire(batchFailed.lease);
   await expire(batchStopped.lease);
   const batch = await reconcileExpiredSandboxLeases({
@@ -283,7 +283,7 @@ try {
   assert.equal((await acquire("user_failed", "batch_failed")).disposition, "acquired");
 
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       databaseClock: true,
       expiry: true,
       heartbeat: true,
@@ -294,7 +294,7 @@ try {
       stopFailureAdmission: true,
       stopFailureBatch: true,
       workspaceCap: true,
-    }) + "\n",
+    })}\n`,
   );
 } finally {
   await client.end({ timeout: 2 });

@@ -24,6 +24,7 @@ export type LocalOidcStartupCommandRunner = (invocation: LocalOidcStartupInvocat
 export class LocalOidcRefreshFailedError extends Error {
   constructor() {
     super("Project Development OIDC refresh could not complete.");
+    this.name = "LocalOidcRefreshFailedError";
   }
 }
 

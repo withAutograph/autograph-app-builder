@@ -92,7 +92,9 @@ export async function loadBuilderIntegrationState(
         accountType: binding.accountType,
       }));
     github = { status: scopes.length ? "connected" : "disconnected", scopes };
-  } catch {}
+  } catch {
+    // Keep the integration unavailable when the provider store cannot be read.
+  }
 
   let vercel: BuilderIntegrationState["vercel"] = unavailable("configuration-unavailable");
   try {
@@ -111,7 +113,9 @@ export async function loadBuilderIntegrationState(
         plan: binding.plan,
       }));
     vercel = { status: scopes.length ? "connected" : "disconnected", scopes };
-  } catch {}
+  } catch {
+    // Keep the integration unavailable when the provider store cannot be read.
+  }
 
   return builderIntegrationStateSchema.parse({
     vercel,

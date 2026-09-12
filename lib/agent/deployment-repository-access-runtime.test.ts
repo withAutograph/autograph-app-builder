@@ -231,7 +231,10 @@ describe("deployment repository access authorization", () => {
       continuations: runtimeFixture().continuations,
       providerFactory: () => ({
         inspectInstallation: async () => {
-          throw { status, response: { headers } };
+          throw Object.assign(new Error("installation inspection failed"), {
+            status,
+            response: { headers },
+          });
         },
         inspectRepositoryByName: async () => undefined,
       }),

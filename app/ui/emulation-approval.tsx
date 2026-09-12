@@ -37,7 +37,7 @@ export function EmulationApproval({
   description: string;
   account: string;
   handle: string;
-  details: ReadonlyArray<{ label: string; value: string }>;
+  details: readonly { label: string; value: string }[];
   scope: string;
   actionLabel: string;
   action: ReactNode;
@@ -102,4 +102,4 @@ export function EmulationApproval({
   );
 }
 
-export { styles as emulationApprovalStyles };
+export { default as emulationApprovalStyles } from "./emulation-approval.module.css";

@@ -21,12 +21,12 @@ try {
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
     `;
     const activeLegacyRows = await transaction<
-      Array<{
+      {
         issuer: string;
         audience: string;
         workspaceId: string;
         userId: string;
-      }>
+      }[]
     >`
       SELECT
         issuer,
@@ -38,13 +38,13 @@ try {
       ORDER BY issuer, audience, workspace_id, owner_user_id
     `;
     const migratedRows = await transaction<
-      Array<{
+      {
         issuer: string;
         audience: string;
         workspaceId: string;
         userId: string;
         role: "owner";
-      }>
+      }[]
     >`
       SELECT
         organization.issuer,
@@ -64,12 +64,12 @@ try {
       ORDER BY issuer, audience, "workspaceId", "userId"
     `;
     const [counts] = await transaction<
-      Array<{
+      {
         inactiveLegacyCount: number;
         pendingInvitationCount: number;
         nativeOrganizationCount: number;
         orphanedActiveSessionCount: number;
-      }>
+      }[]
     >`
       SELECT
         (SELECT count(*)::int FROM hosted_workspace_membership

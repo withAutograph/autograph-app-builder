@@ -8,7 +8,7 @@ export type PublicProp = {
   /** Literal values accepted by a union-typed prop, when TypeScript can prove them. */
   values?: string[];
   /** Broad primitive kinds proven by TypeScript; any and unknown are omitted. */
-  primitiveKinds?: Array<"string" | "number" | "boolean">;
+  primitiveKinds?: ("string" | "number" | "boolean")[];
 };
 
 export type PublicExport = {
@@ -70,7 +70,7 @@ function exportTargets(value: unknown): string[] {
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
 }
 
-function packageEntryPoints(pkg: PackageJson): Array<{ suffix: string; target: string }> {
+function packageEntryPoints(pkg: PackageJson): { suffix: string; target: string }[] {
   if (typeof pkg.exports === "string") return [{ suffix: "", target: pkg.exports }];
   if (pkg.exports && typeof pkg.exports === "object") {
     const entries = Object.entries(pkg.exports as Record<string, unknown>)
@@ -92,7 +92,7 @@ async function aliasEntryPoints(root: string, limitations: string[]): Promise<En
   let parsed: ts.ParsedCommandLine;
   try {
     const config = ts.readConfigFile(join(root, "tsconfig.json"), ts.sys.readFile);
-    if (config.error) throw new Error();
+    if (config.error) throw new Error("Unable to read TypeScript configuration.");
     parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   } catch {
     limitations.push(
@@ -274,8 +274,7 @@ function reliableExpressionType(
   if (depth > 5 || seen.has(type)) return false;
   if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
     return false;
-  const nextSeen = new Set(seen);
-  nextSeen.add(type);
+  const nextSeen = new Set([...seen, type]);
   if (type.isUnion() || type.isIntersection())
     return type.types.every((member) =>
       reliableExpressionType(member, checker, depth + 1, nextSeen),
@@ -383,8 +382,7 @@ function finiteLiteralEvidence(
       !(list.flags & ts.NodeFlags.Const)
     )
       return undefined;
-    const nextSeen = new Set(seen);
-    nextSeen.add(symbol);
+    const nextSeen = new Set([...seen, symbol]);
     return finiteLiteralEvidence(declaration.initializer, expected, checker, depth + 1, nextSeen);
   }
   // A conditional is finite only when every possible branch is independently
@@ -515,7 +513,7 @@ export function checkJsxAttributes({
   files,
 }: {
   arrustedRoot: string;
-  files: Array<{ path: string; content: string }>;
+  files: { path: string; content: string }[];
 }): {
   attributes: TypedJsxAttribute[];
   limitations: string[];
@@ -627,14 +625,7 @@ export function checkJsxAttributes({
                 .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
                 .join("; ")}`,
             });
-          else if (!expected)
-            attributes.push({
-              ...key,
-              verdict: "unassessed",
-              reason:
-                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
-            });
-          else {
+          else if (expected) {
             const finite = finiteLiteralEvidence(expression, expected, checker);
             if (
               finite === undefined &&
@@ -675,7 +666,13 @@ export function checkJsxAttributes({
                       : "The static JSX expression is not assignable to the selected Arrusted prop type.",
                 });
             }
-          }
+          } else
+            attributes.push({
+              ...key,
+              verdict: "unassessed",
+              reason:
+                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
+            });
         }
         ts.forEachChild(node, visit);
       };

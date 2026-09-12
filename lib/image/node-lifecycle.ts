@@ -237,8 +237,8 @@ export async function withLifecycleLock<T>(
     const acquired = await new Promise<boolean>((resolve, reject) => {
       const onError = (error: NodeJS.ErrnoException) => {
         server.removeListener("listening", onListening);
-        if (error.code !== "EADDRINUSE") reject(error);
-        else resolve(false);
+        if (error.code === "EADDRINUSE") resolve(false);
+        else reject(error);
       };
       const onListening = () => {
         server.removeListener("error", onError);
@@ -258,10 +258,10 @@ export async function withLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await new Promise<void>((resolveClose, rejectClose) => {
+    await new Promise<void>((resolve, reject) => {
       server.close((error) => {
-        if (error === undefined) resolveClose();
-        else rejectClose(error);
+        if (error === undefined) resolve();
+        else reject(error);
       });
     });
   }
@@ -1051,9 +1051,9 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
     terminate();
   }, 50_000);
   try {
-    const status = await new Promise<number>((resolveStatus) => {
-      child.once("error", () => resolveStatus(-1));
-      child.once("close", (code) => resolveStatus(code ?? -1));
+    const status = await new Promise<number>((resolve) => {
+      child.once("error", () => resolve(-1));
+      child.once("close", (code) => resolve(code ?? -1));
     });
     if (failed || timedOut || status !== 0)
       throw new Error("GitHub keyring verification failed without recording credential output.");
@@ -1115,7 +1115,7 @@ function execute(
     encoding: "utf8",
     maxBuffer: maximumCommandOutputBytes,
     env: sanitizedEnvironment({
-      ...(command.environment ?? {}),
+      ...command.environment,
       ...extraEnvironment,
     }),
   });

@@ -114,7 +114,7 @@ export function materializeSanitizedGitTree(
         type !== "blob" ||
         path === undefined ||
         path.includes("\\") ||
-        path.includes("\ufffd") ||
+        path.includes("\uFFFD") ||
         path.split("/").some((part) => part === "" || part === "." || part === "..") ||
         path === ".git" ||
         path.startsWith(".git/") ||
@@ -138,7 +138,7 @@ export function materializeSanitizedGitTree(
         if (
           target === "" ||
           target.includes("\0") ||
-          target.includes("\ufffd") ||
+          target.includes("\uFFFD") ||
           isAbsolute(target) ||
           !containsPath(destinationRoot, resolve(parent, target))
         )

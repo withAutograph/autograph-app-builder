@@ -8,7 +8,7 @@ const eveEntry = resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
 const option = (name: string, required = false): string | undefined => {
   const index = args.indexOf(name);
-  if (index < 0) {
+  if (index === -1) {
     if (required) throw new Error(`Missing ${name}.`);
     return undefined;
   }

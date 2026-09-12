@@ -90,8 +90,8 @@ describe("test capability preload", () => {
       evaluation: string | null;
       evaluationRunId: string | null;
       hasGateAEnvironment: boolean;
-    }>((resolveMessage, reject) => {
-      worker.once("message", resolveMessage);
+    }>((resolve, reject) => {
+      worker.once("message", resolve);
       worker.once("error", reject);
     });
     await worker.terminate();
@@ -117,12 +117,10 @@ describe("test capability preload", () => {
     for (const hostileEveDev of [undefined, "0", "hostile"]) {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
-      const hostileResult = await new Promise<{ eveDev: string | null }>(
-        (resolveMessage, reject) => {
-          hostileWorker.once("message", resolveMessage);
-          hostileWorker.once("error", reject);
-        },
-      );
+      const hostileResult = await new Promise<{ eveDev: string | null }>((resolve, reject) => {
+        hostileWorker.once("message", resolve);
+        hostileWorker.once("error", reject);
+      });
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
     }
@@ -132,12 +130,12 @@ describe("test capability preload", () => {
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
-    const timeoutExit = await new Promise<number>((resolveExit, reject) => {
-      timeoutWorker.once("exit", resolveExit);
+    const timeoutExit = await new Promise<number>((resolve, reject) => {
+      timeoutWorker.once("exit", resolve);
       timeoutWorker.once("error", reject);
     });
-    await new Promise((resolveWait) => {
-      setTimeout(resolveWait, 25);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
     });
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
@@ -214,8 +212,8 @@ describe("test capability preload", () => {
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
       });
-      const authorizationClosed = new Promise<void>((resolveClose) => {
-        authorization.once("close", resolveClose);
+      const authorizationClosed = new Promise<void>((resolve) => {
+        authorization.once("close", resolve);
       });
       authorization.end(
         `${JSON.stringify({
@@ -227,9 +225,9 @@ describe("test capability preload", () => {
       let stderr = "";
       child.stdout?.setEncoding("utf8").on("data", (chunk) => (stdout += chunk));
       child.stderr?.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-      const status = await new Promise<number | null>((resolveExit, reject) => {
+      const status = await new Promise<number | null>((resolve, reject) => {
         child.once("error", reject);
-        child.once("exit", resolveExit);
+        child.once("exit", resolve);
       });
       await authorizationClosed;
       expect(status, stderr).toBe(0);

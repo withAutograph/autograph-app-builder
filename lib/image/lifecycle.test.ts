@@ -143,7 +143,7 @@ describe("closed receipt key sets", () => {
   ] as const;
 
   it("accepts the exact GHCR login receipt keys independent of declaration order", () => {
-    const exact = Object.fromEntries([...expected].reverse().map((key) => [key, true]));
+    const exact = Object.fromEntries([...expected].toReversed().map((key) => [key, true]));
 
     expect(hasExactKeys(exact, expected)).toBe(true);
     expect(hasExactKeys({ ...exact, extra: true }, expected)).toBe(false);
@@ -186,15 +186,15 @@ case "$*" in
   version) printf 'gh version 2.98.0 (fixture)\n' ;;
   *)
     [ "\${XDG_STATE_HOME:-}" = '${state}' ] || exit 42
-    /bin/mkdir -p "\$XDG_STATE_HOME/gh"
-    /bin/chmod 700 "\$XDG_STATE_HOME/gh"
-    printf '%s\n' 'fixture-device-id' > "\$XDG_STATE_HOME/gh/device-id"
-    /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"
+    /bin/mkdir -p "$XDG_STATE_HOME/gh"
+    /bin/chmod 700 "$XDG_STATE_HOME/gh"
+    printf '%s\n' 'fixture-device-id' > "$XDG_STATE_HOME/gh/device-id"
+    /bin/chmod 600 "$XDG_STATE_HOME/gh/device-id"
     case "$*" in
       'auth status --active --hostname github.com --json hosts') printf '%s\n' '{"hosts":{"github.com":[{"active":true,"gitProtocol":"https","host":"github.com","login":"withAutograph","scopes":"repo, write:packages","state":"success","tokenSource":"keyring"}]}}' ;;
       'auth token --hostname github.com --user withAutograph') ${
         mutateStateDuringTokenRead
-          ? `printf '%s\n' 'mutated-device-id' > "\$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "\$XDG_STATE_HOME/gh/device-id"; `
+          ? `printf '%s\n' 'mutated-device-id' > "$XDG_STATE_HOME/gh/device-id"; /bin/chmod 600 "$XDG_STATE_HOME/gh/device-id"; `
           : ""
       }printf '%s\n' '${token}' ;;
       'api /user --jq .login') printf '%s\n' 'withAutograph' ;;
@@ -275,10 +275,10 @@ function withFakeGhEnvironment(
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    callback();
+    return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
       else process.env[key] = value;
     }
   }
@@ -299,10 +299,10 @@ async function withFakeGhEnvironmentAsync(
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    await callback();
+    return await callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
       else process.env[key] = value;
     }
   }
@@ -883,20 +883,20 @@ wait
     child.stdin.end("ghcr.io\n");
     try {
       for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1)
-        await new Promise((resolveWait) => {
-          setTimeout(resolveWait, 10);
+        await new Promise((resolve) => {
+          setTimeout(resolve, 10);
         });
       expect(existsSync(descendant)).toBe(true);
       process.kill(-child.pid!, "SIGKILL");
-      await new Promise<void>((resolveClose) => {
-        child.once("close", () => resolveClose());
+      await new Promise<void>((resolve) => {
+        child.once("close", () => resolve());
       });
       const descendantPid = Number(readFileSync(descendant, "utf8").trim());
       for (let attempts = 0; attempts < 100; attempts += 1) {
         try {
           process.kill(descendantPid, 0);
-          await new Promise((resolveWait) => {
-            setTimeout(resolveWait, 10);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 10);
           });
         } catch {
           break;
@@ -907,7 +907,9 @@ wait
       token.fill(0);
       try {
         process.kill(-child.pid!, "SIGKILL");
-      } catch {}
+      } catch {
+        // The process may already have exited.
+      }
       rmSync(root, { force: true, recursive: true });
     }
   });
@@ -1171,46 +1173,42 @@ wait
   it("refuses approval, status, standalone-checkout, and symlink drift", () => {
     expect(() =>
       createExactImageProvenance({
-        ...{
-          builderRoot: "/tmp/exact-builder",
-          stateRoot: "/tmp/exact-image-state",
-          observedBuilderCommit: builderCommit,
-          observedBuilderTree: builderTree,
-          expectedBuilderCommit: "0".repeat(40),
-          expectedBuilderTree: builderTree,
-          builderStatus: "",
-          builderIgnored: "",
-          arrustedRoot: "/tmp/exact-arrusted",
-          observedArrustedCommit: ARRUSTED_IMAGE_TARGET_SHA,
-          observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
-          arrustedStatus: "",
-          arrustedIgnored: "",
-          dockerfileSha256,
-          expectedDockerfileSha256: dockerfileSha256,
-          targetFiles,
-        },
+        builderRoot: "/tmp/exact-builder",
+        stateRoot: "/tmp/exact-image-state",
+        observedBuilderCommit: builderCommit,
+        observedBuilderTree: builderTree,
+        expectedBuilderCommit: "0".repeat(40),
+        expectedBuilderTree: builderTree,
+        builderStatus: "",
+        builderIgnored: "",
+        arrustedRoot: "/tmp/exact-arrusted",
+        observedArrustedCommit: ARRUSTED_IMAGE_TARGET_SHA,
+        observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
+        arrustedStatus: "",
+        arrustedIgnored: "",
+        dockerfileSha256,
+        expectedDockerfileSha256: dockerfileSha256,
+        targetFiles,
       }),
     ).toThrow("Builder commit changed");
     expect(() =>
       createExactImageProvenance({
-        ...{
-          builderRoot: "/tmp/exact-builder",
-          stateRoot: "/tmp/exact-image-state",
-          observedBuilderCommit: builderCommit,
-          observedBuilderTree: builderTree,
-          expectedBuilderCommit: builderCommit,
-          expectedBuilderTree: builderTree,
-          builderStatus: "?? drift",
-          builderIgnored: "",
-          arrustedRoot: "/tmp/exact-arrusted",
-          observedArrustedCommit: ARRUSTED_IMAGE_TARGET_SHA,
-          observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
-          arrustedStatus: "",
-          arrustedIgnored: "",
-          dockerfileSha256,
-          expectedDockerfileSha256: dockerfileSha256,
-          targetFiles,
-        },
+        builderRoot: "/tmp/exact-builder",
+        stateRoot: "/tmp/exact-image-state",
+        observedBuilderCommit: builderCommit,
+        observedBuilderTree: builderTree,
+        expectedBuilderCommit: builderCommit,
+        expectedBuilderTree: builderTree,
+        builderStatus: "?? drift",
+        builderIgnored: "",
+        arrustedRoot: "/tmp/exact-arrusted",
+        observedArrustedCommit: ARRUSTED_IMAGE_TARGET_SHA,
+        observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
+        arrustedStatus: "",
+        arrustedIgnored: "",
+        dockerfileSha256,
+        expectedDockerfileSha256: dockerfileSha256,
+        targetFiles,
       }),
     ).toThrow("dirty paths");
     expect(() =>
@@ -1328,12 +1326,12 @@ wait
   it("serializes concurrent lifecycle operations for one state root", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-lifecycle-lock-")));
     let enter!: () => void;
-    const entered = new Promise<void>((resolveEntered) => {
-      enter = resolveEntered;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
     });
     let release!: () => void;
-    const held = new Promise<void>((resolveRelease) => {
-      release = resolveRelease;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
     });
     let dispatches = 0;
     const first = withLifecycleLock(root, async () => {
@@ -1406,7 +1404,7 @@ wait
       ["--experimental-strip-types", "--input-type=module", "--eval", code],
       { stdio: ["ignore", "pipe", "inherit"] },
     );
-    const interruptedPath = await new Promise<string>((resolvePath, reject) => {
+    const interruptedPath = await new Promise<string>((resolve, reject) => {
       let output = "";
       const timeout = setTimeout(
         () => reject(new Error("Timed out waiting for lifecycle crash fixture.")),
@@ -1418,13 +1416,13 @@ wait
         const [line] = output.split("\n");
         if (line !== "") {
           clearTimeout(timeout);
-          resolvePath(line);
+          resolve(line);
         }
       });
     });
     child.kill("SIGKILL");
-    await new Promise((resolveExit) => {
-      child.once("exit", resolveExit);
+    await new Promise((resolve) => {
+      child.once("exit", resolve);
     });
     expect(readFileSync(interruptedPath)).toHaveLength(0);
     await withLifecycleLock(root, () => reconcileLifecycleTemps(root));
@@ -1525,7 +1523,7 @@ wait
         size: 564,
       },
     ];
-    const indexManifests = [...manifests].reverse();
+    const indexManifests = [...manifests].toReversed();
     const indexRaw = (entries: typeof manifests) =>
       JSON.stringify({
         manifests: entries,

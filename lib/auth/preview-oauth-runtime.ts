@@ -466,14 +466,14 @@ export function readPreviewOAuthRuntimeConfig(
         environment: deploymentEnvironment,
         issuer: resolvedEnvironment.BETTER_AUTH_URL,
         resource: resolvedEnvironment.MCP_RESOURCE_URL,
-        trustedOrigins: Array.from(
-          new Set(
+        trustedOrigins: [
+          ...new Set(
             [
               localEmulation.canonicalOrigin,
               readVercelPreviewOrigin(environment.VERCEL_URL),
             ].filter((origin): origin is string => origin !== undefined),
           ),
-        ),
+        ],
         secret: resolvedEnvironment.BETTER_AUTH_SECRET,
         databaseUrl: resolvedEnvironment.DATABASE_URL,
         githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,

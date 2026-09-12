@@ -355,6 +355,7 @@ export interface GitHubPublicationReceiptStore {
 export class GitHubOutcomeUnknownError extends Error {
   constructor() {
     super("GitHub mutation outcome is unknown; durable intent remains pending.");
+    this.name = "GitHubOutcomeUnknownError";
   }
 }
 
@@ -407,8 +408,8 @@ function safeBranch(value: unknown): value is string {
     !value.includes("..") &&
     !value.includes("@{") &&
     !/[~^:?*[\\\s]/u.test(value) &&
-    !Array.from(value).some((character) => {
-      const code = character.charCodeAt(0);
+    ![...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     }) &&
     value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
@@ -436,7 +437,7 @@ function exactDigest(value: { digest: string }, label: string): void {
 
 export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissions {
   switch (operation) {
-    case "resolve-existing-source":
+    case "resolve-existing-source": {
       return {
         metadata: "read",
         contents: "read",
@@ -445,7 +446,8 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "none",
         variables: "read",
       };
-    case "create-fresh-repository":
+    }
+    case "create-fresh-repository": {
       return {
         metadata: "read",
         contents: "write",
@@ -454,7 +456,8 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "write",
         variables: "read",
       };
-    case "publish-draft-pull-request":
+    }
+    case "publish-draft-pull-request": {
       return {
         metadata: "read",
         contents: "write",
@@ -463,6 +466,10 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
         administration: "none",
         variables: "read",
       };
+    }
+    default: {
+      throw new Error(`Unsupported GitHub operation: ${operation}`);
+    }
   }
 }
 
@@ -745,7 +752,7 @@ export async function readExactGitHubFreshRepositoryContent(input: {
     ...observed,
     files: observed.files.map((file) => ({
       ...file,
-      bytes: file.bytes.slice(),
+      bytes: new Uint8Array(file.bytes),
     })),
   };
   assertExactGitHubFreshRepositoryContent({
@@ -783,7 +790,7 @@ export async function readExactGitHubPublicationContent(input: {
     }
     if (observed === null)
       throw new Error(`The approved publication postimage is missing for ${change.path}.`);
-    const bytes = observed.bytes.slice();
+    const bytes = new Uint8Array(observed.bytes);
     if (
       observed.mode !== change.after.mode ||
       observed.digest !== change.after.digest ||
@@ -1175,8 +1182,8 @@ function safeTitle(value: string): boolean {
     value === value.trim() &&
     value.length > 0 &&
     value.length <= 120 &&
-    !Array.from(value).some((character) => {
-      const code = character.charCodeAt(0);
+    ![...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
     })
   );

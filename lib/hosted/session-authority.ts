@@ -38,8 +38,11 @@ const forwardedSessionAuthSchema = z
 export type HostedSessionTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export class HostedSessionAuthorityError extends Error {
-  constructor(readonly code: "invalid" | "subject" | "mismatch") {
+  readonly code: "invalid" | "subject" | "mismatch";
+
+  constructor(code: "invalid" | "subject" | "mismatch") {
     super("Hosted session authority is invalid.");
+    this.code = code;
     this.name = "HostedSessionAuthorityError";
   }
 }

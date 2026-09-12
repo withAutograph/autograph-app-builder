@@ -61,7 +61,7 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
   });
   const encoded = btoa(
-    Array.from(new TextEncoder().encode(config), (byte) => String.fromCharCode(byte)).join(""),
+    Array.from(new TextEncoder().encode(config), (byte) => String.fromCodePoint(byte)).join(""),
   );
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
 }

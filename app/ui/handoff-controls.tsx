@@ -114,7 +114,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           !complete &&
           document.visibilityState === "visible"
         )
-          timer = setTimeout(() => void refresh(), 5_000);
+          timer = setTimeout(() => {
+            refresh();
+          }, 5_000);
       }
     };
     const visibilityChanged = () => {
@@ -142,12 +144,16 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
         let saved: string | null = null;
         try {
           saved = sessionStorage.getItem(storageKey);
-        } catch {}
+        } catch {
+          // Session storage is optional; generate a new request id below.
+        }
         renewalRequestId.current =
           saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
         try {
           sessionStorage.setItem(storageKey, renewalRequestId.current);
-        } catch {}
+        } catch {
+          // Session storage is optional.
+        }
       }
       const response = await fetch(
         `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}/renew`,
@@ -208,7 +214,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
                 ? "This handoff has expired. Renew it to continue with your saved brief and resources."
                 : "Your app is prepared. Open your client, then review and send the prompt to continue."}
       </p>
-      {access !== "ready" ? <a href={signInUrl}>Sign in with the same account</a> : null}
+      {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
       <fieldset disabled={renewing}>
         <legend>Continue in</legend>
         {(["codex", "cursor"] as const).map((choice) => (
@@ -233,7 +239,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           className={styles.createButton}
           type="button"
           disabled={renewing}
-          onClick={() => void renew()}
+          onClick={() => {
+            renew();
+          }}
         >
           {renewing ? "Renewing…" : "Renew handoff"}
         </button>

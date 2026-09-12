@@ -7,7 +7,7 @@ import {
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
 import { ARRUSTED_APP_VALIDATION_SHA256, type ExecutionDependencyLayout } from "./dependency-cache";
-import { type ApplyCommandResult, type TargetApplyReceipt } from "./target-apply";
+import type { ApplyCommandResult, TargetApplyReceipt } from "./target-apply";
 
 export type TargetValidationCommand =
   | `mise run app:check-build ${string}`
@@ -126,7 +126,7 @@ const vitestLocationPattern = /^\s*❯\s+(.+?):(\d+):(\d+)$/u;
 function safeDiagnosticPath(value: string): string | undefined {
   const normalized = value.replaceAll("\\", "/");
   const appsOffset = normalized.indexOf("apps/");
-  const path = appsOffset >= 0 ? normalized.slice(appsOffset) : normalized;
+  const path = appsOffset === -1 ? normalized : normalized.slice(appsOffset);
   if (
     path.length === 0 ||
     path.length > 500 ||
@@ -178,7 +178,7 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
     return true;
   };
   for (const sourceLine of output
-    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .split("\n")) {
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {

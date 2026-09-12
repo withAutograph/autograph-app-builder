@@ -463,9 +463,10 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
       typeof body.params === "object" &&
       body.params !== null &&
       "name" in body.params &&
-      typeof body.params.name === "string"
+      typeof body.params.name === "string" &&
+      hostedToolNames.has(body.params.name)
     ) {
-      if (hostedToolNames.has(body.params.name)) return [...autographToolScopes];
+      return [...autographToolScopes];
     }
   } catch {
     // Malformed requests remain subject to the session scope and MCP parsing.

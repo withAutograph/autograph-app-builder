@@ -195,8 +195,8 @@ function planningMarker(marker: string, phase: "start" | "finish") {
 
 function parseOutput<T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T {
   const stdout = result.stdout
-    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
-    .replace(/\r/gu, "")
+    .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replaceAll("\r", "")
     .trim();
   if (result.exitCode !== 0) {
     const diagnostic = result.stderr.trim() || result.stdout.trim();

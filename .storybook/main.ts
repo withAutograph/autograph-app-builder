@@ -56,7 +56,7 @@ const config: StorybookConfig = {
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
     viteConfig.define = {
-      ...(viteConfig.define ?? {}),
+      ...viteConfig.define,
       // This resolved Boolean is the only flag data included in the browser
       // bundle. The SDK key and discovery secret remain server-only.
       "process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED": JSON.stringify(
@@ -70,7 +70,7 @@ const config: StorybookConfig = {
       ),
     };
     viteConfig.resolve = {
-      ...(viteConfig.resolve ?? {}),
+      ...viteConfig.resolve,
       alias: [
         {
           find: "@/app/actions/builder-drafts",

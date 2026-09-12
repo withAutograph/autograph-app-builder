@@ -46,7 +46,7 @@ export interface EveSessionService {
   }) => Promise<EveSessionResult>;
   respond: (input: {
     sessionId: string;
-    responses: Array<{
+    responses: {
       requestId: string;
       response:
         | {
@@ -60,7 +60,7 @@ export interface EveSessionService {
             value: string;
             optionId?: string;
           };
-    }>;
+    }[];
     clientRequestId: string;
   }) => Promise<EveSessionResult>;
   cancel: (input: { sessionId: string; turnId?: string }) => Promise<EveSessionResult>;
@@ -139,7 +139,7 @@ async function settleLocalCancellation(operation: Promise<unknown>) {
   try {
     await Promise.race([
       operation,
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(
           () => reject(new HostedCancellationUnsettledError()),
           localCancellationTimeoutMs,
@@ -303,21 +303,24 @@ function consumeResponse(
   };
   const observeEvent = (event: MessageStreamEvent) => {
     switch (event.type) {
-      case "step.started":
+      case "step.started": {
         modelTurnActive = true;
         modelTurnId = event.data.turnId;
         armModelTurnTimer();
         return;
+      }
       case "actions.requested":
       case "input.requested":
       case "session.waiting":
       case "session.completed":
       case "session.failed":
-      case "turn.cancelled":
+      case "turn.cancelled": {
         settleResponseBoundary();
         return;
-      default:
+      }
+      default: {
         if (modelTurnActive) armModelTurnTimer();
+      }
     }
   };
   void (async () => {
@@ -542,11 +545,11 @@ export function createLocalEveSessionService(
             stage:
               result.status === "completed"
                 ? ("complete" as const)
-                : result.implementationPlan !== undefined
-                  ? ("ready" as const)
-                  : result.prototype !== undefined
-                    ? ("prototype" as const)
-                    : ("designing" as const),
+                : result.implementationPlan === undefined
+                  ? result.prototype === undefined
+                    ? ("designing" as const)
+                    : ("prototype" as const)
+                  : ("ready" as const),
             status: result.status,
             resumability: ["completed", "failed", "cancelled"].includes(result.status)
               ? ("terminal" as const)

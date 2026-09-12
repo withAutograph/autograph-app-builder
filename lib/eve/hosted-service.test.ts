@@ -80,10 +80,13 @@ describe("prepared handoff session continuity", () => {
     const store = new InMemoryHostedEveStore();
     let starts = 0;
     const adapter = transport({
-      start: vi.fn(async () => ({
-        adapterSessionId: `eve_${++starts}`,
-        snapshot: { status: "completed" as const, events: [] },
-      })),
+      start: vi.fn(async () => {
+        starts += 1;
+        return {
+          adapterSessionId: `eve_${starts}`,
+          snapshot: { status: "completed" as const, events: [] },
+        };
+      }),
     });
     const createService = () =>
       createHostedEveSessionService({ principal, store, transport: adapter });
@@ -145,10 +148,13 @@ describe("prepared handoff session continuity", () => {
     let missing = false;
     let starts = 0;
     const adapter = transport({
-      start: vi.fn(async () => ({
-        adapterSessionId: `eve_${++starts}`,
-        snapshot,
-      })),
+      start: vi.fn(async () => {
+        starts += 1;
+        return {
+          adapterSessionId: `eve_${starts}`,
+          snapshot,
+        };
+      }),
       get: vi.fn(async () => {
         if (missing) throw new HostedAdapterSessionUnavailableError();
         return snapshot;
@@ -257,24 +263,32 @@ async function invokeHostedOperation(
   operation: keyof typeof hostedEveOperationScopes,
 ) {
   switch (operation) {
-    case "start":
+    case "start": {
       return service.start({ prompt: "Build", clientRequestId: "scope_start" });
-    case "get":
+    }
+    case "get": {
       return service.get({ sessionId: "session_1", cursor: 0, limit: 1 });
-    case "send":
+    }
+    case "send": {
       return service.send({
         sessionId: "session_1",
         message: "Continue",
         clientRequestId: "scope_send",
       });
-    case "respond":
+    }
+    case "respond": {
       return service.respond({
         sessionId: "session_1",
         responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         clientRequestId: "scope_respond",
       });
-    case "cancel":
+    }
+    case "cancel": {
       return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
+    }
+    default: {
+      throw new Error(`Unsupported hosted operation: ${operation}`);
+    }
   }
 }
 
@@ -438,7 +452,7 @@ describe("hosted Eve service core", () => {
     ).toThrow();
   });
 
-  it.each(Object.keys(hostedEveOperationScopes) as Array<keyof typeof hostedEveOperationScopes>)(
+  it.each(Object.keys(hostedEveOperationScopes) as (keyof typeof hostedEveOperationScopes)[])(
     "requires the exact %s scope before store access",
     async (operation) => {
       const store = new InMemoryHostedEveStore();
@@ -1204,7 +1218,7 @@ describe("hosted Eve service core", () => {
     await service.respond(request);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
     await expect(
-      service.respond({ ...request, responses: [...responses].reverse() }),
+      service.respond({ ...request, responses: [...responses].toReversed() }),
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
   });

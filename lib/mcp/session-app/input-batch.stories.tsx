@@ -23,9 +23,15 @@ const meta = {
     canCallTools: true,
     canOpenLinks: true,
     result: mixedResult,
-    onOpenLink: fn(async () => {}),
-    onRefresh: fn(async () => {}),
-    onRespond: fn(async () => {}),
+    onOpenLink: fn(async () => {
+      // Story fixture callback.
+    }),
+    onRefresh: fn(async () => {
+      // Story fixture callback.
+    }),
+    onRespond: fn(async () => {
+      // Story fixture callback.
+    }),
   },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof SessionAppView>;
@@ -92,7 +98,12 @@ export const RepositoryScopeKeyboardSelection: Story = {
 export const SubmittingAndDuplicateProtection: Story = {
   args: {
     result: sessionResult([choiceRequest]),
-    onRespond: fn(() => new Promise<void>(() => {})),
+    onRespond: fn(
+      () =>
+        new Promise<void>(() => {
+          // Keep the pending state visible in the story.
+        }),
+    ),
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);

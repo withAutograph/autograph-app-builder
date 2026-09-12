@@ -27,14 +27,14 @@ const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
   !isAbsolute(repositoryRoot) ||
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
-  (repositoryRootStat.mode & BigInt(0o022)) !== BigInt(0)
+  (repositoryRootStat.mode & 0o022n) !== 0n
 )
   throw new Error("Structural test package root was not owner-bound.");
 const require = createRequire(import.meta.url);
@@ -98,8 +98,8 @@ function readFdFrame() {
     source += buffer.subarray(0, count).toString("utf8");
     const newline = source.indexOf("\n");
     if (
-      (newline < 0 && Buffer.byteLength(source) > maxBytes) ||
-      (newline >= 0 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
+      (newline === -1 && Buffer.byteLength(source) > maxBytes) ||
+      (newline !== -1 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
     )
       throw new Error("Structural test authorization was oversized.");
   }
@@ -117,7 +117,7 @@ function readPortFrame(port) {
   throw new Error("Structural test authorization timed out.");
 }
 function contextForProcess() {
-  return isMainThread ? "main" : `worker:${fileURLToPath(import.meta.url)}`;
+  return isMainThread ? "main" : `worker:${import.meta.filename}`;
 }
 function requestAuthorization() {
   const context = contextForProcess();
@@ -133,16 +133,16 @@ function requestAuthorization() {
       : undefined;
   const request = registry.begin(process, context, delegatedPublicKey);
   let response;
-  if (port !== undefined) {
-    port.postMessage({ version: 2, ...request });
-    response = readPortFrame(port);
-    port.close();
-    delete workerData[workerPortKey];
-  } else {
+  if (port === undefined) {
     if (!fstatSync(authorizationFd).isSocket())
       throw new Error("Structural test authorization was not private IPC.");
     writeSync(authorizationFd, `${JSON.stringify({ version: 2, ...request })}\n`);
     response = readFdFrame();
+  } else {
+    port.postMessage({ version: 2, ...request });
+    response = readPortFrame(port);
+    port.close();
+    Reflect.deleteProperty(workerData, workerPortKey);
   }
   if (
     Buffer.byteLength(JSON.stringify(response)) > maxBytes ||
@@ -340,11 +340,11 @@ try {
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;
   if (eveProfile) installGateAEvalProfile(process.env, gateAEvalProfileToInstall, repositoryRoot);
-  else for (const name of gateAEnvironmentFields) delete process.env[name];
-  if (!isMainThread) delete workerData[gateAEvalProfileKey];
+  else for (const name of gateAEnvironmentFields) Reflect.deleteProperty(process.env, name);
+  if (!isMainThread) Reflect.deleteProperty(workerData, gateAEvalProfileKey);
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
-    delete workerData[eveWorkerEnvelopeKey];
+    Reflect.deleteProperty(workerData, eveWorkerEnvelopeKey);
   } else if (eveProfile) process.env.EVE_DEV = "1";
   else {
     for (const name of [
@@ -356,7 +356,7 @@ try {
       "EVE_EVALUATION",
       "EVE_EVALUATION_RUN_ID",
     ])
-      delete process.env[name];
+      Reflect.deleteProperty(process.env, name);
   }
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;

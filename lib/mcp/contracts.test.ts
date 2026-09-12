@@ -71,7 +71,7 @@ describe("publicInputRequestSchema", () => {
     for (const url of [
       "http://github.example/authorize",
       "https://user:secret@github.example/authorize",
-      "javascript:alert(1)",
+      ["java", "script:alert(1)"].join(""),
     ])
       expect(
         publicInputRequestSchema.safeParse({

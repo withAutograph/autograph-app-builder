@@ -62,28 +62,46 @@ type GitHubStateValidationDiagnostic = {
 };
 
 class GitHubCallbackParseError extends Error {
-  constructor(
-    readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>,
-  ) {
+  readonly reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>;
+
+  constructor(reason: NonNullable<GitHubStateValidationDiagnostic["callbackParseReason"]>) {
     super("invalid-callback");
+    this.name = "GitHubCallbackParseError";
+    this.reason = reason;
   }
 }
 
 class GitHubStateValidationError extends Error {
-  constructor(readonly diagnostic: GitHubStateValidationDiagnostic) {
+  readonly diagnostic: GitHubStateValidationDiagnostic;
+
+  constructor(diagnostic: GitHubStateValidationDiagnostic) {
     super("invalid-state");
+    this.name = "GitHubStateValidationError";
+    this.diagnostic = diagnostic;
   }
 }
 
 export class GitHubInstallationAuthorizationError extends Error {
+  readonly stage: GitHubInstallationAuthorizationFailureStage;
+  readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
+  readonly returnState?: ProviderConnectionReturn;
+  readonly callback?: GitHubCallbackDiagnostic;
+  readonly stateValidation?: GitHubStateValidationDiagnostic;
+
   constructor(
-    readonly stage: GitHubInstallationAuthorizationFailureStage,
-    readonly category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
-    readonly returnState?: ProviderConnectionReturn,
-    readonly callback?: GitHubCallbackDiagnostic,
-    readonly stateValidation?: GitHubStateValidationDiagnostic,
+    stage: GitHubInstallationAuthorizationFailureStage,
+    category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError,
+    returnState?: ProviderConnectionReturn,
+    callback?: GitHubCallbackDiagnostic,
+    stateValidation?: GitHubStateValidationDiagnostic,
   ) {
     super(FAILURE_MESSAGE);
+    this.name = "GitHubInstallationAuthorizationError";
+    this.stage = stage;
+    this.category = category;
+    this.returnState = returnState;
+    this.callback = callback;
+    this.stateValidation = stateValidation;
   }
 }
 
@@ -659,6 +677,7 @@ export function createGitHubAppInstallationAuthorization(input: {
     : request;
   const now = input.now ?? Date.now;
   const nonce = input.nonce ?? (() => randomBytes(32).toString("base64url"));
+  const defaultReturnState: ProviderConnectionReturn = { returnTo: "/" };
   const callbackUrl = new URL("/github/installations/callback", config.issuer).toString();
 
   async function persistInstallationBinding(
@@ -685,7 +704,7 @@ export function createGitHubAppInstallationAuthorization(input: {
   return {
     async begin(
       authorityInput: HostedTenantAuthority,
-      returnState: ProviderConnectionReturn = { returnTo: "/" },
+      returnState: ProviderConnectionReturn = defaultReturnState,
     ) {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
@@ -957,9 +976,10 @@ export function createGitHubAppInstallationAuthorization(input: {
                 appSlug: config.appSlug,
                 requestedInstallationId: state.installationId,
               });
-          if (installation.suspendedAt !== null) throw new Error();
+          if (installation.suspendedAt !== null)
+            throw new Error("GitHub installation is suspended.");
           if (installation.accountType === "User" && installation.accountId !== providerUserId)
-            throw new Error();
+            throw new Error("GitHub installation belongs to another provider user.");
         } catch {
           throw new GitHubInstallationAuthorizationError("installation-identity-validation");
         }

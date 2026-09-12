@@ -43,7 +43,7 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 
-export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY };
+export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY } from "./source-receipt";
 
 type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
 
@@ -98,7 +98,7 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
     .replaceAll(token, "[redacted]")
     .replaceAll(/https?:\/\/[^\s]+/gu, "[url]")
     .replaceAll(/[\r\n]+/gu, " ")
-    .replaceAll(/[^\x20-\x7e]/gu, "?")
+    .replaceAll(/[^\u0020-\u007E]/gu, "?")
     .trim();
   if (sanitized.length <= 512) return sanitized;
 
@@ -282,6 +282,7 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
   }
 
   let result = { exitCode: 1, stdout: "", stderr: "" };
+  let cloneError: unknown;
   try {
     await input.sandbox.writeTextFile({
       path: SANDBOX_CLONE_INSPECTOR,
@@ -328,13 +329,15 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
       );
       throw new Error("The canonical Arrusted workspace clone could not be prepared.");
     }
-  } finally {
-    const cleanup = await Promise.allSettled(
-      [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ path, force: true })),
-    );
-    const failures = cleanup.filter((result) => result.status === "rejected");
-    if (failures.length > 0) throw new AggregateError(failures, "Sandbox clone cleanup failed.");
+  } catch (error) {
+    cloneError = error;
   }
+  const cleanup = await Promise.allSettled(
+    [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ path, force: true })),
+  );
+  const failures = cleanup.filter((result) => result.status === "rejected");
+  if (failures.length > 0) throw new AggregateError(failures, "Sandbox clone cleanup failed.");
+  if (cloneError !== undefined) throw cloneError;
   let observation: {
     sourceSha?: unknown;
     sourceTree?: unknown;
@@ -481,16 +484,8 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   }
   const receipt = parseSourceReceipt(input.receipt);
   const observed =
-    input.githubSource !== undefined
-      ? await inspectGitHubSourceSandboxWorkspace({
-          sandbox: input.sandbox,
-          receipt,
-          githubSource: input.githubSource,
-          ...(input.expectedWorkspace === undefined
-            ? {}
-            : { expectedWorkspace: input.expectedWorkspace }),
-        })
-      : receipt.version === SOURCE_RECEIPT_VERSION
+    input.githubSource === undefined
+      ? receipt.version === SOURCE_RECEIPT_VERSION
         ? await inspectCanonicalArrustedSandboxWorkspace({
             sandbox: input.sandbox,
             receipt,
@@ -499,7 +494,15 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
             if (status.state !== "prepared")
               throw new Error("The prepared source workspace is missing.");
             return status.workspace;
-          });
+          })
+      : await inspectGitHubSourceSandboxWorkspace({
+          sandbox: input.sandbox,
+          receipt,
+          githubSource: input.githubSource,
+          ...(input.expectedWorkspace === undefined
+            ? {}
+            : { expectedWorkspace: input.expectedWorkspace }),
+        });
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== receipt.sourcePath ||

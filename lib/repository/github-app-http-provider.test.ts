@@ -33,7 +33,7 @@ function unicodeDraftMaterial() {
   const changes = [
     ".codex/skills/example/agents/openai.yaml",
     ".codex/skills/example/SKILL.md",
-    "apps/demo/\u{e000}.tsx",
+    "apps/demo/\u{E000}.tsx",
     "apps/demo/\u{10000}.tsx",
   ]
     .map((path) => ({
@@ -164,7 +164,7 @@ function freshProposal(): FreshRepositoryProposal {
 }
 
 function json(value: unknown, status = 200, requestId = "REQUEST_1") {
-  return new Response(JSON.stringify(value), {
+  return Response.json(value, {
     status,
     headers: {
       "content-type": "application/json",
@@ -177,9 +177,9 @@ function providerFetch(input?: {
   extraPermission?: boolean;
   fail?: boolean;
   repositorySelection?: "all" | "selected";
-  repositoryPages?: Array<Array<number | string>>;
+  repositoryPages?: (number | string)[][];
 }) {
-  const calls: Array<{ url: string; init: RequestInit; body: unknown }> = [];
+  const calls: { url: string; init: RequestInit; body: unknown }[] = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     let body: unknown = undefined;

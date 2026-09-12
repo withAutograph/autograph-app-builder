@@ -83,29 +83,37 @@ function organizationError(cause: unknown) {
     });
   }
   switch (cause.reason) {
-    case "access-revoked":
+    case "access-revoked": {
       return APIError.from("FORBIDDEN", {
         code: "AUTOGRAPH_WORKSPACE_ACCESS_REVOKED",
         message: "Your access to this Autograph workspace has been suspended or revoked.",
       });
-    case "signup-disabled":
+    }
+    case "signup-disabled": {
       return APIError.from("FORBIDDEN", {
         code: "AUTOGRAPH_SIGNUP_UNAVAILABLE",
         message: "New Autograph workspaces are not available yet.",
       });
-    case "verified-identity-required":
+    }
+    case "verified-identity-required": {
       return identityUnavailable();
-    case "workspace-ambiguous":
+    }
+    case "workspace-ambiguous": {
       return APIError.from("CONFLICT", {
         code: "AUTOGRAPH_WORKSPACE_AMBIGUOUS",
         message:
           "We found more than one workspace for this account. Choose an existing workspace or contact support.",
       });
-    case "workspace-setup-failed":
+    }
+    case "workspace-setup-failed": {
       return APIError.from("SERVICE_UNAVAILABLE", {
         code: "AUTOGRAPH_WORKSPACE_SETUP_FAILED",
         message: "We couldn’t finish setting up your workspace. Try signing in again.",
       });
+    }
+    default: {
+      throw new Error(`Unsupported organization provisioning reason: ${cause.reason}`);
+    }
   }
 }
 
@@ -142,15 +150,15 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
             activeOrganizationId: ensured.organizationId,
           },
         };
-      } catch (cause) {
+      } catch (error) {
         console.error(
           JSON.stringify({
             level: "error",
             message: "preview_workspace_session_provisioning_failed",
-            reason: cause instanceof OrganizationProvisioningError ? cause.reason : "unexpected",
+            reason: error instanceof OrganizationProvisioningError ? error.reason : "unexpected",
           }),
         );
-        throw organizationError(cause);
+        throw organizationError(error);
       }
     },
   };

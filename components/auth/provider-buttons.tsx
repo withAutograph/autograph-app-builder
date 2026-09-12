@@ -27,7 +27,9 @@ export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: Prov
   // server snapshot deliberately stays false, while the browser snapshot
   // becomes true during hydration without an effect-driven render cascade.
   const isClientReady = useSyncExternalStore(
-    () => () => {},
+    () => () => {
+      // Provider readiness has no external subscription.
+    },
     () => true,
     () => false,
   );

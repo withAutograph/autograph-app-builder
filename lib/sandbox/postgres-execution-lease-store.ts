@@ -23,7 +23,7 @@ async function postgresNowEpochMs(database: Transaction) {
   const value = "rows" in result ? result.rows[0]?.database_now : result[0]?.database_now;
   const parsed = value instanceof Date ? value : new Date(value ?? "invalid");
   if (!Number.isFinite(parsed.getTime())) {
-    throw new Error("PostgreSQL did not return a canonical lease timestamp.");
+    throw new TypeError("PostgreSQL did not return a canonical lease timestamp.");
   }
   return parsed.getTime();
 }

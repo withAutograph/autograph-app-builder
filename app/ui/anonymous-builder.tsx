@@ -13,7 +13,9 @@ const suggestions = [
 ] as const;
 
 function subscribeToClientSnapshot() {
-  return () => {};
+  return () => {
+    // The client snapshot has no external subscription.
+  };
 }
 
 /**

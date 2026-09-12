@@ -497,7 +497,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (tenantKeyFor(parsed.principal) !== tenantKeyFor(principal)) {
       return { disposition: "conflict" };
     }
-    const key = this.operationKey(principal, parsed.operationId);
+    const key = InMemoryHostedEveStore.operationKey(principal, parsed.operationId);
     const existing = this.operations.get(key);
     if (existing !== undefined) {
       return existing.requestDigest === parsed.requestDigest &&
@@ -568,14 +568,14 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       updatedAtEpochMs: input.nowEpochMs,
     });
     if (session !== undefined) {
-      const key = this.sessionKey(input.principal, session.sessionId);
+      const key = InMemoryHostedEveStore.sessionKey(input.principal, session.sessionId);
       if (this.sessions.has(key)) {
         throw new Error("Hosted session already exists.");
       }
       this.sessions.set(key, structuredClone(session));
     }
     this.operations.set(
-      this.operationKey(input.principal, input.operationId),
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
       structuredClone(settled),
     );
     return structuredClone(settled);
@@ -592,7 +592,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       updatedAtEpochMs: input.nowEpochMs,
     });
     this.operations.set(
-      this.operationKey(input.principal, input.operationId),
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
       structuredClone(settled),
     );
     return structuredClone(settled);
@@ -602,7 +602,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     sessionId: string,
   ): Promise<HostedSessionRecord | null> {
-    const session = this.sessions.get(this.sessionKey(principal, sessionId));
+    const session = this.sessions.get(InMemoryHostedEveStore.sessionKey(principal, sessionId));
     return session === undefined ? null : structuredClone(session);
   }
 
@@ -632,7 +632,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     appId?: string;
     nowEpochMs: number;
   }): Promise<HostedSessionRecord> {
-    const key = this.sessionKey(input.principal, input.sessionId);
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
     if (current === undefined) throw new Error("Hosted session was not found.");
     const durable = toDurableHostedSessionRecord(current);
@@ -667,7 +667,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     appId?: string;
     nowEpochMs: number;
   }): Promise<HostedSessionRecord> {
-    const key = this.sessionKey(input.principal, input.sessionId);
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
     if (current === undefined) throw new Error("Hosted session was not found.");
     const durable = toDurableHostedSessionRecord(current);
@@ -699,7 +699,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     operationId: string;
     requestDigest: string;
   }): HostedOperationRecord {
-    const operation = this.operations.get(this.operationKey(input.principal, input.operationId));
+    const operation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
+    );
     if (
       operation === undefined ||
       operation.state !== "reserved" ||
@@ -710,14 +712,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return operation;
   }
 
-  private operationKey(
+  private static operationKey(
     principal: z.infer<typeof hostedPrincipalSchema>,
     operationId: string,
   ): string {
     return `${tenantKeyFor(principal)}\u0000${operationId}`;
   }
 
-  private sessionKey(principal: z.infer<typeof hostedPrincipalSchema>, sessionId: string): string {
+  private static sessionKey(
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    sessionId: string,
+  ): string {
     return `${tenantKeyFor(principal)}\u0000${sessionId}`;
   }
 }

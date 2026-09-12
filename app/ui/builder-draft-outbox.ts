@@ -18,7 +18,10 @@ export type BuilderDraftOutbox<T> = {
   write: (entry: BuilderDraftOutboxEntry<T>) => Promise<void>;
   clearIfMutationId: (mutationId: string) => Promise<boolean>;
   /** Clears only the snapshot represented by this server acknowledgement. */
-  clearIfAcknowledged?(acknowledgement: { mutationId: string; revision: number }): Promise<boolean>;
+  clearIfAcknowledged?: (acknowledgement: {
+    mutationId: string;
+    revision: number;
+  }) => Promise<boolean>;
   /** Drops a snapshot superseded by an authoritative server revision. */
   clear: () => Promise<void>;
 };

@@ -74,7 +74,7 @@ export function createPostgresPreviewEmulateStateStore(
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   return {
     async read(namespace) {
-      const rows = await sql<Array<{ state: string }>>`
+      const rows = await sql<{ state: string }[]>`
         SELECT "state"
         FROM "emulate_preview_state"
         WHERE "namespace" = ${namespace}
@@ -93,7 +93,7 @@ export function createPostgresPreviewEmulateStateStore(
       `;
     },
     async reset(namespace) {
-      const rows = await sql<Array<{ namespace: string }>>`
+      const rows = await sql<{ namespace: string }[]>`
         DELETE FROM "emulate_preview_state"
         WHERE "namespace" = ${namespace}
         RETURNING "namespace"
@@ -106,7 +106,7 @@ export function createPostgresPreviewEmulateStateStore(
 export async function resetPostgresPreviewEmulateState(databaseUrl: string, namespace: string) {
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
   try {
-    const rows = await sql<Array<{ namespace: string }>>`
+    const rows = await sql<{ namespace: string }[]>`
       DELETE FROM "emulate_preview_state"
       WHERE "namespace" = ${namespace}
       RETURNING "namespace"

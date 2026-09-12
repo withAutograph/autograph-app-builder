@@ -364,9 +364,9 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
     terminate();
   }, ghTimeoutMs);
   try {
-    const status = await new Promise<number>((resolveStatus, rejectStatus) => {
-      child.once("error", rejectStatus);
-      child.once("close", (code) => resolveStatus(code ?? -1));
+    const status = await new Promise<number>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code) => resolve(code ?? -1));
     });
     if (timedOut || overflow || status !== 0)
       throw new Error("GitHub credential read-back failed.");
@@ -452,9 +452,9 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   const suffix = Buffer.from('"}\n', "utf8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
-    await new Promise<void>((resolveWrite, rejectWrite) => {
+    await new Promise<void>((resolve, reject) => {
       process.stdout.write(payload, (error) =>
-        error === undefined || error === null ? resolveWrite() : rejectWrite(error),
+        error === undefined || error === null ? resolve() : reject(error),
       );
     });
   } finally {
@@ -471,17 +471,17 @@ async function writeVerifiedLogin(
 ): Promise<void> {
   assertExpectedGithubState();
   const payload = Buffer.from(
-    JSON.stringify({
+    `${JSON.stringify({
       Username: username,
       identityDigest,
       provenanceDigest,
-    }) + "\n",
+    })}\n`,
     "utf8",
   );
   try {
-    await new Promise<void>((resolveWrite, rejectWrite) => {
+    await new Promise<void>((resolve, reject) => {
       process.stdout.write(payload, (error) =>
-        error === undefined || error === null ? resolveWrite() : rejectWrite(error),
+        error === undefined || error === null ? resolve() : reject(error),
       );
     });
   } finally {
@@ -490,7 +490,7 @@ async function writeVerifiedLogin(
 }
 
 async function run(): Promise<void> {
-  const [, , mode] = process.argv;
+  const { 2: mode } = process.argv;
   if (process.argv.length !== 3 || (mode !== "get" && mode !== "verify-login"))
     throw new Error("Only the closed GHCR credential protocols are supported.");
   if (mode === "get") {

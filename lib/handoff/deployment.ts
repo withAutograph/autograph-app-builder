@@ -19,7 +19,9 @@ import {
 const noStore = { "Cache-Control": "no-store" } as const;
 const maximumRequestBytes = 64 * 1_024;
 
-class BuilderHandoffRequestError extends Error {}
+class BuilderHandoffRequestError extends Error {
+  name = "BuilderHandoffRequestError";
+}
 
 function hasCanonicalRequestOrigin(request: Request, origin: string) {
   const requestUrl = new URL(request.url);

@@ -106,7 +106,7 @@ describe("local Eve acceptance", () => {
     const session = {
       state: { sessionId: "wrun_stream_recovery", streamIndex: 0 },
       snapshot,
-      stream: vi.fn(async function* () {
+      stream: vi.fn(async function* durableEventStream() {
         yield durableEvents[1]!;
       }),
       send: vi.fn(async () => response),
@@ -166,7 +166,7 @@ describe("local Eve acceptance", () => {
     const session = {
       state: { sessionId: "wrun_clean_close", streamIndex: 0 },
       snapshot,
-      stream: vi.fn(async function* () {
+      stream: vi.fn(async function* tailStream() {
         await tailReady;
         yield { type: "session.waiting", data: {} } as MessageStreamEvent;
       }),
@@ -221,8 +221,9 @@ describe("local Eve acceptance", () => {
       };
       const session = {
         state: { sessionId: "wrun_closed_response", streamIndex: 0 },
-        stream: vi.fn(async function* () {
+        stream: vi.fn(async function* closedResponseStream() {
           await never;
+          yield* [];
         }),
         send: vi.fn(async () => response),
         respond: vi.fn(async () => response),
@@ -676,7 +677,7 @@ describe("local Eve acceptance", () => {
 
     const first = await Promise.race([
       service.start({ prompt: "Build", clientRequestId: "prompt-return-1" }),
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         setTimeout(() => {
           reject(new Error("start blocked"));
         }, 100);

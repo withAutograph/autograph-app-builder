@@ -83,7 +83,7 @@ async function expectProviderCheckpoint(
 
 function expectGitHubControlAndNoOAuthLeak(
   page: import("playwright/test").Page,
-  rawValues: ReadonlyArray<string>,
+  rawValues: readonly string[],
 ) {
   const messages: string[] = [];
   page.on("console", (message) => messages.push(message.text()));

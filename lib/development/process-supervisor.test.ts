@@ -60,7 +60,7 @@ describe("development process supervision", () => {
     if (process.platform === "win32") return;
     const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
-    const groupSignals: Array<Parameters<typeof process.kill>[1]> = [];
+    const groupSignals: Parameters<typeof process.kill>[1][] = [];
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },

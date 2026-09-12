@@ -574,7 +574,7 @@ export function proposalFromFreshBootstrapJournal(
     "recoveryRequired",
     "digest",
   ])
-    delete candidate[key];
+    Reflect.deleteProperty(candidate, key);
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 }
 

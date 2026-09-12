@@ -118,6 +118,5 @@ const summary = [
   `- Hard Arrusted composition gate: **${report.hardGates.componentComposition}**`,
   `- Quality report: \`product-quality-report.json\``,
 ].join("\n");
-if (process.env.GITHUB_STEP_SUMMARY !== undefined)
-  await appendFile(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
-else process.stdout.write(`${summary}\n`);
+if (process.env.GITHUB_STEP_SUMMARY === undefined) process.stdout.write(`${summary}\n`);
+else await appendFile(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

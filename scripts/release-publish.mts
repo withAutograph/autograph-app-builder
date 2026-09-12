@@ -152,7 +152,7 @@ try {
     vercel: requiredExecutable("APP_BUILDER_RELEASE_VERCEL_BIN"),
   };
 
-  async function exactGithubReleaseExists() {
+  const exactGithubReleaseExists = async () => {
     let metadataRaw: string;
     try {
       const result = await execFileAsync(
@@ -241,7 +241,7 @@ try {
       await rm(downloadRoot, { recursive: true, force: true });
     }
     return true;
-  }
+  };
   const outputs: { tool: string; stdoutSha256: string }[] = [];
   const commands = releasePublicationCommands(receipt);
   const releaseCommand = commands.at(-1);
@@ -324,12 +324,14 @@ try {
   const deployedTools = await hostedClient.listTools();
   if (JSON.stringify(deployedTools) !== JSON.stringify(TOOL_NAMES))
     throw new Error("Deployed MCP endpoint did not expose the exact five tools.");
-  if (!(await exactGithubReleaseExists())) {
-    await execute(releaseCommand);
-    if (!(await exactGithubReleaseExists()))
-      throw new Error("GitHub release readback was unavailable after publish.");
-  } else {
+  const releaseExists = await exactGithubReleaseExists();
+  if (releaseExists) {
     outputs.push({ tool: "gh", stdoutSha256: sha256("reconciled") });
+  } else {
+    await execute(releaseCommand);
+    const releaseExistsAfterPublish = await exactGithubReleaseExists();
+    if (releaseExistsAfterPublish) outputs.push({ tool: "gh", stdoutSha256: sha256("published") });
+    else throw new Error("GitHub release readback was unavailable after publish.");
   }
 
   const unsigned = {

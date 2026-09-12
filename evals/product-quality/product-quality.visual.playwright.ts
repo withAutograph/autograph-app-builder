@@ -32,8 +32,8 @@ test.beforeAll(async () => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(vendorOnboardingPrototype);
   });
-  await new Promise<void>((resolveServer) => {
-    prototypeServer?.listen(0, "127.0.0.1", resolveServer);
+  await new Promise<void>((resolve) => {
+    prototypeServer?.listen(0, "127.0.0.1", resolve);
   });
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
@@ -41,10 +41,10 @@ test.beforeAll(async () => {
 
 test.afterAll(
   async () =>
-    await new Promise<void>((resolveServer, rejectServer) => {
+    await new Promise<void>((resolve, reject) => {
       prototypeServer?.close((error) => {
-        if (error === undefined) resolveServer();
-        else rejectServer(error);
+        if (error === undefined) resolve();
+        else reject(error);
       });
     }),
 );

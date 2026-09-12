@@ -645,15 +645,17 @@ function boundedOutput(stdout: string, stderr: string, label: string) {
 
 function commandPayload(output: string) {
   return output
-    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .replaceAll("\r", "");
 }
 
+const DEFAULT_FIXTURE_TARGET: ExactSourceBinding = {
+  sourceSha: ARRUSTED_TARGET_SHA,
+  sourceTree: ARRUSTED_TARGET_TREE,
+};
+
 function fixtureManifest(
-  target: ExactSourceBinding = {
-    sourceSha: ARRUSTED_TARGET_SHA,
-    sourceTree: ARRUSTED_TARGET_TREE,
-  },
+  target: ExactSourceBinding = DEFAULT_FIXTURE_TARGET,
 ): z.infer<typeof dependencyCacheManifestShapeSchema> {
   return {
     version: 1,

@@ -27,7 +27,7 @@ function readerFetch(input?: {
   totalCount?: number;
   status?: number;
 }) {
-  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const calls: { url: string; init: RequestInit }[] = [];
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     calls.push({ url, init });

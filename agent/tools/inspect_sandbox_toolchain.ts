@@ -57,7 +57,7 @@ export default defineTool({
             }
           })();
     const required = (
-      Object.keys(requiredToolVersions) as Array<keyof typeof requiredToolVersions>
+      Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]
     ).map((command) => {
       const observed = tools.find((tool) => tool.command === command);
       return {

@@ -5,6 +5,9 @@ import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig } from "vitest/config";
 
+// Vitest evaluates this config from its generated `.vite-temp` directory.
+// Keep the URL-derived path so Storybook resolves the repository config.
+// oxlint-disable-next-line unicorn/prefer-import-meta-properties
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({

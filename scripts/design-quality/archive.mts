@@ -26,8 +26,8 @@ if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
 const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf8"));
 const timestamp = new Date(report.createdAt).toISOString();
-const date = timestamp.slice(0, 10),
-  time = timestamp.slice(11, 23).replace(/[:.]/g, "");
+const date = timestamp.slice(0, 10);
+const time = timestamp.slice(11, 23).replaceAll(/[:.]/g, "");
 const archiveRoot = resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
 const destination = join(archiveRoot, relative);
@@ -45,10 +45,10 @@ report.archive = {
   archivedAt: new Date().toISOString(),
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
-await writeFile(join(destination, "report.json"), JSON.stringify(report, null, 2) + "\n");
+await writeFile(join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replace(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
+  String(v).replaceAll(/[<>|]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
 const lines = [
   `# ${values.name} — ${timestamp}`,
   "",
@@ -82,7 +82,7 @@ if (report.adherence) {
         assessed: number;
         percent: number | null;
       };
-      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : Math.round(d.percent) + "%"} (${d.conforming}/${d.assessed}) |`;
+      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : `${Math.round(d.percent)}%`} (${d.conforming}/${d.assessed}) |`;
     }),
     "",
     "Scores from different evaluator versions or captured states are not directly comparable.",
@@ -134,13 +134,13 @@ for (const capture of report.captures)
 lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
 for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
-await writeFile(join(destination, "README.md"), lines.join("\n") + "\n");
-const rows: Array<{
+await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
+const rows: {
   path: string;
   name: string;
   date: string;
   score: unknown;
-}> = [];
+}[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
   if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(day.name)) continue;
   for (const run of await readdir(join(archiveRoot, day.name), {

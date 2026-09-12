@@ -473,8 +473,8 @@ describe("Preview OAuth runtime configuration", () => {
         ...environment,
         GITHUB_CLIENT_SECRET: secret,
       });
-    } catch (cause) {
-      message = cause instanceof Error ? cause.message : String(cause);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
     }
     expect(message).not.toContain(secret);
   });

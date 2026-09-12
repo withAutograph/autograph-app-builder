@@ -83,23 +83,29 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
       throw new Error("Development arguments must use named options.");
     const value = argumentValue(args, index, name);
     switch (name) {
-      case "--arrusted-root":
+      case "--arrusted-root": {
         parsed.arrustedRoot = value;
         break;
-      case "--state-root":
+      }
+      case "--state-root": {
         parsed.stateRoot = value;
         break;
-      case "--destination-root":
+      }
+      case "--destination-root": {
         parsed.destinationRoot = value;
         break;
-      case "--next-port":
+      }
+      case "--next-port": {
         parsed.nextPort = port(value, name);
         break;
-      case "--eve-port":
+      }
+      case "--eve-port": {
         parsed.evePort = port(value, name);
         break;
-      default:
+      }
+      default: {
         throw new Error(`Development option ${name} is unsupported.`);
+      }
     }
   }
   if (parsed.arrustedRoot === undefined)
@@ -307,7 +313,7 @@ export function waitForDevelopmentSourceChange(input: {
   debounceMs?: number;
   auditMs?: number;
 }) {
-  return new Promise<boolean>((resolveChanged) => {
+  return new Promise<boolean>((resolve) => {
     let checking = false;
     let pending = false;
     let settled = false;
@@ -321,7 +327,7 @@ export function waitForDevelopmentSourceChange(input: {
       if (timers.audit !== undefined) clearInterval(timers.audit);
       watcher?.close();
       input.signal?.removeEventListener("abort", aborted);
-      resolveChanged(changed);
+      resolve(changed);
     };
     const aborted = () => finish(false);
     const check = async () => {
@@ -349,7 +355,9 @@ export function waitForDevelopmentSourceChange(input: {
     function schedule(delay = 0) {
       if (settled) return;
       if (debounce !== undefined) clearTimeout(debounce);
-      debounce = setTimeout(() => void check(), delay);
+      debounce = setTimeout(() => {
+        check();
+      }, delay);
     }
     if (input.signal?.aborted) {
       finish(false);

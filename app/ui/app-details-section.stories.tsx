@@ -55,7 +55,9 @@ function GeneratedNameHarness() {
       appName={appName}
       brief={brief}
       onAppNameChange={setAppName}
-      onCycleBrief={() => {}}
+      onCycleBrief={() => {
+        // Story fixture callback.
+      }}
       onBriefChange={(value) => {
         setBrief(value);
         setAppName(appNameFromBrief(value));

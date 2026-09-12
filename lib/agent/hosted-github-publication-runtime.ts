@@ -44,7 +44,7 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
     return exactForwardedSessionAuthority(sessionAuth);
   } catch (error) {
     if (error instanceof HostedSessionAuthorityError) {
-      throw new Error(
+      throw new TypeError(
         error.code === "mismatch"
           ? "Hosted GitHub publication requires matching current and initiating authority."
           : error.code === "subject"

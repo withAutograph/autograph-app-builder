@@ -93,7 +93,7 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
  * mechanical enum that the builder can resolve deterministically.
  */
 export function normalizeBuildReadyAppSpec(content: string): string {
-  const normalizedContent = content.replace(/\r\n?/gu, "\n");
+  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
   const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
   if (heading === null) return normalizedContent;
   const section = normalizedContent.slice(heading.index + heading[0].length);
@@ -130,7 +130,7 @@ export function normalizeBuildReadyAppSpec(content: string): string {
 }
 
 export function validateBuildReadyAppSpec(content: string): AppSpecValidationResult {
-  const normalizedContent = content.replace(/\r\n?/gu, "\n");
+  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
   const issues: AppSpecValidationIssue[] = [];
   for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
     const count = normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ?? 0;

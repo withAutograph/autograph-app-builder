@@ -123,7 +123,7 @@ describe("Browser prototype preview", () => {
         prototype: new Error("private resolver failure"),
       },
     ];
-    const projections: Array<Record<string, string | number | null>> = [];
+    const projections: Record<string, string | number | null>[] = [];
     for (const candidate of cases) {
       const handler = createPrototypePreviewRequestHandler({
         resolvePrototype: async () => {

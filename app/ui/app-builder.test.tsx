@@ -4,6 +4,12 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
+import { AnonymousBuilder } from "./anonymous-builder";
+import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
+import { Header } from "./builder-shell";
+import * as draftOutbox from "./builder-draft-outbox";
+import styles from "./app-builder.module.css";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -84,12 +90,12 @@ const draftFetch = vi.hoisted(() =>
       draftId: string;
       expectedRevision: number;
     };
-    return new Response(
-      JSON.stringify({
+    return Response.json(
+      {
         draftId: input.draftId,
         revision: input.expectedRevision + 1,
         updatedAt: "2030-01-01T00:00:00.000Z",
-      }),
+      },
       { status: 200 },
     );
   }),
@@ -109,12 +115,6 @@ vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
 
-import { appNameFromBrief, repositoryNameFromAppName } from "./app-builder";
-import { AnonymousBuilder } from "./anonymous-builder";
-import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
-import { Header } from "./builder-shell";
-import * as draftOutbox from "./builder-draft-outbox";
-import styles from "./app-builder.module.css";
 const integrationState = {
   vercel: {
     status: "connected" as const,

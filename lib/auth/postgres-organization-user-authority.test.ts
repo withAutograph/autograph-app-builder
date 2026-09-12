@@ -23,7 +23,7 @@ const organization = {
 function createDatabase(results: unknown[]) {
   const execute = vi.fn(async () => {
     if (results.length === 0) throw new Error("Unexpected database query.");
-    return Promise.resolve(results.shift());
+    return results.shift();
   });
   const transaction = vi.fn(async (callback: (database: { execute: typeof execute }) => unknown) =>
     callback({ execute }),

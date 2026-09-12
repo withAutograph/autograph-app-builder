@@ -72,10 +72,10 @@ describe("development Codex package", () => {
 
   it("installs development guidance without enabling it globally", async () => {
     const codexHome = await mkdtemp(join(tmpdir(), "codex-scope-"));
-    const commands: Array<{
+    const commands: {
       args: readonly string[];
       allowFailure: boolean;
-    }> = [];
+    }[] = [];
     try {
       await registerDevelopmentPackage({
         codexBin: "/mise/bin/codex",

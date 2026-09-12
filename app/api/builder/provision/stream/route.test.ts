@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
+import { GET } from "./route";
 
 const deployment = vi.hoisted(() => ({
   handler: vi.fn(),
@@ -9,8 +10,6 @@ const deployment = vi.hoisted(() => ({
 vi.mock("@/lib/provisioning/deployment", () => ({
   getBuilderProvisioningDeploymentHandler: vi.fn(() => deployment.handler),
 }));
-
-import { GET } from "./route";
 
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 

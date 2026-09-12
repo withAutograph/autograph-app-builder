@@ -1,7 +1,9 @@
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import { setTimeout as delay } from "node:timers/promises";
 
-class UnexpectedDevelopmentToolsError extends Error {}
+class UnexpectedDevelopmentToolsError extends Error {
+  name = "UnexpectedDevelopmentToolsError";
+}
 
 function abortReason(signal: AbortSignal | undefined) {
   return signal?.reason ?? new Error("Development MCP readiness was aborted.");
@@ -15,7 +17,7 @@ function jsonRpcBody(text: string) {
     .find((line) => line.length > 0);
   return JSON.parse(data ?? text) as {
     error?: { message?: string };
-    result?: { tools?: Array<{ name?: string }> };
+    result?: { tools?: { name?: string }[] };
   };
 }
 

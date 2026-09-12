@@ -354,7 +354,7 @@ function cancellationSettled(
     (event) => event.type === "turn.cancelled" && event.data.turnId === turnId,
   );
   return (
-    cancelledAt >= 0 &&
+    cancelledAt !== -1 &&
     next.slice(cancelledAt + 1).some((event) => event.type === "session.waiting")
   );
 }

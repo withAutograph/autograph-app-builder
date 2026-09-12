@@ -28,8 +28,8 @@ let nestedWorkflowHeadersTimeout = null;
 if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));
-  const nestedResult = await new Promise((resolveMessage, reject) => {
-    nested.once("message", resolveMessage);
+  const nestedResult = await new Promise((resolve, reject) => {
+    nested.once("message", resolve);
     nested.once("error", reject);
   });
   nestedCapability = nestedResult.capability;

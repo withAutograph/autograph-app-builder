@@ -302,13 +302,13 @@ function supportsReleaseGate(workflowSource: string): boolean {
     templateSafety.name === "Authorize (Template instance safety)" &&
     JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
     JSON.stringify(templateSafety.outputs) ===
-      JSON.stringify({ enabled: "${{ steps.safety.outputs.enabled }}" }) &&
+      JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) &&
     steps.length === 1 &&
     safety.id === "safety" &&
     safety.name === "Read active repository safety flag" &&
     JSON.stringify(safety.env) ===
       JSON.stringify({
-        REPOSITORY_RELEASE_ENABLED: "${{ vars.REPOSITORY_RELEASE_ENABLED }}",
+        REPOSITORY_RELEASE_ENABLED: `\${{ vars.REPOSITORY_RELEASE_ENABLED }}`,
       }) &&
     safety.run === checkoutFreeReleaseGate &&
     scope.needs === "template-safety" &&
@@ -905,7 +905,7 @@ async function verifyDevelopmentSandboxWorkspace(
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
   });
   const normalizedStdout = inspection.stdout
-    .replaceAll(new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
+    .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
@@ -925,8 +925,9 @@ export async function inspectPreparedSandboxWorkspace(
 ): Promise<PreparedSandboxWorkspaceStatus> {
   const record = await readPreparedSandboxWorkspaceRecord(sandbox);
   if (record === undefined) return { state: "absent" };
-  if (mode === "development-live") await verifyDevelopmentSandboxWorkspace(sandbox, record);
-  else await verifyPreparedSandboxWorkspace(sandbox, record);
+  await (mode === "development-live"
+    ? verifyDevelopmentSandboxWorkspace(sandbox, record)
+    : verifyPreparedSandboxWorkspace(sandbox, record));
   return { state: "prepared", workspace: record };
 }
 
@@ -1021,9 +1022,9 @@ export async function recordPreparedSandboxWorkspace(input: {
     eligibilityDigest: input.eligibilityDigest,
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
+  if (existing !== undefined && existing.workspaceId !== input.sandbox.id)
+    throw new Error("This app build already owns a different workspace.");
   if (existing !== undefined) {
-    if (existing.workspaceId !== input.sandbox.id)
-      throw new Error("This app build already owns a different workspace.");
     // Source changes and generated files are ordinary work inside the same
     // session-owned checkout. Refresh the diagnostic metadata below.
   }

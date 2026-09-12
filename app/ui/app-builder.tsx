@@ -134,7 +134,9 @@ const defaultBrief =
   "# Product\n\nBuild a focused app that helps people complete one important workflow. Define the users, the desired outcome, the repository constraints, and the acceptance criteria. Match the requested product tone and interface, verify assumptions before building, and make the final checks explicit.";
 
 function subscribeToClientSnapshot() {
-  return () => {};
+  return () => {
+    // The client snapshot has no external subscription.
+  };
 }
 
 const briefExamples = [
@@ -208,7 +210,7 @@ const preferredModelId = activeBuilderModelId;
 export function repositoryNameFromAppName(appName: string) {
   return appName
     .normalize("NFKD")
-    .replaceAll(/[\u0300-\u036f]/gu, "")
+    .replaceAll(/[\u0300-\u036F]/gu, "")
     .toLowerCase()
     .replaceAll("&", " and ")
     .replaceAll(/[^a-z0-9]+/gu, "-")
@@ -250,7 +252,7 @@ function randomAppName(seed?: string) {
     return `${adjective} ${noun}`;
   }
   const hash = [...seed].reduce(
-    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
     0,
   );
   const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
@@ -314,11 +316,11 @@ export function ModelControls({
         prefix={<Search size={15} />}
         showSelectedCheck={false}
       />
-      {!available ? (
+      {available ? null : (
         <button className={styles.retryModels} type="button" onClick={onRetry}>
           Retry models
         </button>
-      ) : null}
+      )}
     </fieldset>
   );
 }
@@ -915,20 +917,20 @@ export function Builder({
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
-      const current = formSnapshot.current;
+      const { current } = formSnapshot;
       const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
-      (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
+      for (const field of Object.keys(next) as (keyof BuilderForm)[]) {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
         // arrive after a later input event and overwrite it (for example, a
         // generated name replacing a manually edited name before OAuth).
-        if (Object.is(current[field], next[field])) return;
+        if (Object.is(current[field], next[field])) continue;
         builderForm.setValue(field, next[field], {
           shouldDirty: true,
           shouldValidate: true,
         });
-      });
+      }
     },
     [builderForm],
   );
@@ -1281,7 +1283,9 @@ export function Builder({
   try {
     deriveBuilderAppId(form.appName);
     validAppId = true;
-  } catch {}
+  } catch {
+    // Invalid app names simply keep submission disabled.
+  }
   const canSubmit = Boolean(
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
@@ -1290,11 +1294,11 @@ export function Builder({
   const submitGuidance =
     form.appName.trim() && !validAppId
       ? "Use an app name that can form a lowercase, URL-safe app ID."
-      : !form.brief.trim()
-        ? "Add an app brief to continue."
-        : form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
+      : form.brief.trim()
+        ? form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
           ? "Choose an available model to continue."
-          : undefined;
+          : undefined
+        : "Add an app brief to continue.";
   const updateBrief = (brief: string) => {
     setForm((current) => {
       // `formSnapshot` is updated atomically by every builder field handler.
@@ -1360,7 +1364,7 @@ export function Builder({
             : undefined;
     if (!id) return;
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById(id)?.focus();
+      document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [initialDraft, interactive, resumedGitHubConnection, resumedVercelConnection]);
@@ -1446,7 +1450,9 @@ export function Builder({
       // paint; only refresh after this document has actually been backgrounded.
       if (wasHidden) void checkForServerDraft();
     };
-    const timer = setInterval(() => void checkForServerDraft(), 10_000);
+    const timer = setInterval(() => {
+      checkForServerDraft();
+    }, 10_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
@@ -1563,19 +1569,17 @@ export function Builder({
     <main className={styles.authenticatedPage} id="main-content">
       <form className={styles.builderCard} onSubmit={submit}>
         <p className={styles.draftStatus} role="status" aria-live="polite">
-          {draftSaveError
-            ? draftSaveError
-            : draftSyncNotice
-              ? draftSyncNotice
-              : autosave.status === "saving"
-                ? "Saving your draft…"
-                : autosave.status === "saved"
-                  ? "Draft saved"
-                  : autosave.status === "offline"
-                    ? "Offline — your draft will retry when you’re back online."
-                    : autosave.status === "error"
-                      ? "Your latest edit is safe on this device and will retry."
-                      : "Your draft saves automatically."}
+          {draftSaveError ||
+            draftSyncNotice ||
+            (autosave.status === "saving"
+              ? "Saving your draft…"
+              : autosave.status === "saved"
+                ? "Draft saved"
+                : autosave.status === "offline"
+                  ? "Offline — your draft will retry when you’re back online."
+                  : autosave.status === "error"
+                    ? "Your latest edit is safe on this device and will retry."
+                    : "Your draft saves automatically.")}
           {autosave.status === "error" || draftSaveError ? (
             <button
               type="button"
@@ -1624,7 +1628,7 @@ export function Builder({
               const currentIndex = briefExamples.indexOf(
                 form.brief as (typeof briefExamples)[number],
               );
-              const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % briefExamples.length;
+              const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
               updateBrief(briefExamples[nextIndex]);
             }}
           />

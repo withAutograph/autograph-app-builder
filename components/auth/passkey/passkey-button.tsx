@@ -1,6 +1,6 @@
 "use client";
 
-import { type AuthView } from "@better-auth-ui/core";
+import type { AuthView } from "@better-auth-ui/core";
 import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import {

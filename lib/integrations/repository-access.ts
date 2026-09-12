@@ -217,11 +217,11 @@ export async function classifyGitHubRepositoryAccess(input: {
     });
   }
 
-  const matches: Array<{
+  const matches: {
     binding: HostedGitHubInstallationBinding;
     snapshot: RepositoryAccessSnapshot;
     installation: z.infer<typeof installationReadBackSchema>;
-  }> = [];
+  }[] = [];
   let providerFailures = 0;
   for (const binding of active) {
     try {
