@@ -4,7 +4,6 @@ import core from "ultracite/oxlint/core";
 const deferredRules = Object.fromEntries(
   [
     "eslint/max-classes-per-file",
-    "typescript/method-signature-style",
     "typescript/no-confusing-non-null-assertion",
     "typescript/no-dynamic-delete",
     "typescript/no-import-type-side-effects",

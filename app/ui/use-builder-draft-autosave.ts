@@ -35,7 +35,7 @@ export type BuilderDraftAutosaveOptions<T> = {
   /** Called after a hidden/pagehide flush is requested, for transport telemetry. */
   onVisibilityFlush?: (reason: "visibilitychange" | "pagehide") => void;
   /** Acknowledgements advance local revision knowledge but never reset the form. */
-  onAcknowledged?(acknowledgement: BuilderDraftSaveAcknowledgement): void;
+  onAcknowledged?: (acknowledgement: BuilderDraftSaveAcknowledgement) => void;
 };
 
 export type BuilderDraftAutosave<T> = {
