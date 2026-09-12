@@ -302,13 +302,13 @@ function supportsReleaseGate(workflowSource: string): boolean {
     templateSafety.name === "Authorize (Template instance safety)" &&
     JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
     JSON.stringify(templateSafety.outputs) ===
-      JSON.stringify({ enabled: "${{ steps.safety.outputs.enabled }}" }) &&
+      JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) &&
     steps.length === 1 &&
     safety.id === "safety" &&
     safety.name === "Read active repository safety flag" &&
     JSON.stringify(safety.env) ===
       JSON.stringify({
-        REPOSITORY_RELEASE_ENABLED: "${{ vars.REPOSITORY_RELEASE_ENABLED }}",
+        REPOSITORY_RELEASE_ENABLED: `\${{ vars.REPOSITORY_RELEASE_ENABLED }}`,
       }) &&
     safety.run === checkoutFreeReleaseGate &&
     scope.needs === "template-safety" &&

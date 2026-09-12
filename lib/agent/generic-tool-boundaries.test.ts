@@ -21,7 +21,7 @@ describe("generic sandbox tool boundaries", () => {
     expect(router).not.toContain("and read_file respectively");
     expect(inspector).toContain("await ctx.getSandbox()");
     expect(inspector).not.toContain("inspectSourceBoundSandboxWorkspace");
-    expect(inspector).toContain("path: `repository/${path}`");
+    expect(inspector).toContain("path: `repository/" + "${" + "path}`");
     expect(inspector).not.toContain("allowed.has(path)");
   });
 
@@ -38,6 +38,6 @@ describe("generic sandbox tool boundaries", () => {
     expect(router).toContain("sourceWorkflowState.update");
     expect(router).toContain("await ctx.getSandbox()");
     expect(router).toContain("const sandboxOverviewPaths");
-    expect(router).toContain("path: `repository/${overviewPath}`");
+    expect(router).toContain("path: `repository/" + "${" + "overviewPath}`");
   });
 });

@@ -1063,9 +1063,9 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
     expect(dockerfile).toContain("record_workspace_targets() {");
     expect(dockerfile).toContain(
-      'find "${node_root}" -type l -print0 > "${link_list}" || return 1',
+      `find "\${node_root}" -type l -print0 > "\${link_list}" || return 1`,
     );
-    expect(dockerfile).toContain('done < "${link_list}"');
+    expect(dockerfile).toContain(`done < "\${link_list}"`);
     expect(dockerfile).toContain("LC_ALL=C sort -u /tmp/workspace-closure.unsorted");
     expect(dockerfile).toContain(
       "cmp -s /tmp/workspace-closure.expected /tmp/workspace-closure.list",
@@ -1076,12 +1076,12 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain(
       "domain-libs/vendor|domain-libs/vendor/*) dependency_owner=domain-libs/vendor",
     );
-    expect(dockerfile).toContain('"${node_root}"/*) continue');
+    expect(dockerfile).toContain(`"\${node_root}"/*) continue`);
     expect(dockerfile).toContain(
-      '"${source_root}"/*) dependency_relative="${dependency_target#"${source_root}"/}"',
+      `"\${source_root}"/*) dependency_relative="\${dependency_target#"\${source_root}"/}"`,
     );
     expect(dockerfile).toContain("*) exit 1");
-    expect(dockerfile).toContain('test -e "${dependency_target}"');
+    expect(dockerfile).toContain(`test -e "\${dependency_target}"`);
     expect(dockerfile).toContain("workspace-closure-fixtures");
     expect(dockerfile).toContain("@autograph/missing");
     expect(dockerfile).toContain("@autograph/outside");
@@ -1089,9 +1089,9 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("grep -Fx 'packages/vite-config'");
     expect(dockerfile).toContain("--files-from /tmp/workspace-closure.list");
     expect(dockerfile).toContain("--exclude='packages/*/node_modules'");
-    expect(dockerfile).toContain('case "${workspace_target}" in "${dependency_root}"/*)');
+    expect(dockerfile).toContain(`case "\${workspace_target}" in "\${dependency_root}"/*)`);
     expect(dockerfile).toContain(
-      'require("\'"${dependency_root}"\'/node_modules/@autograph/vite-config/package.json").name',
+      `require("'"\${dependency_root}"'/node_modules/@autograph/vite-config/package.json").name`,
     );
     expect(dockerfile).toContain(`ARG CARGO_LOCK_SHA256=${manifest.target.cargoLockSha256}`);
     expect(dockerfile).toContain(
@@ -1111,7 +1111,7 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("gzip --no-name --best");
     expect(dockerfile).toContain("@vercel/microfrontends");
-    expect(dockerfile).toContain("/opt/app-builder/dependencies/${archive_sha}");
+    expect(dockerfile).toContain(`/opt/app-builder/dependencies/\${archive_sha}`);
     expect(dockerfile).toContain(
       "tar --extract --gzip --file /opt/app-builder/dependency-cache/node-modules.tar.gz",
     );
@@ -1123,7 +1123,7 @@ describe("offline dependency cache", () => {
     expect(dockerfile).toContain("CARGO_HOME=/opt/app-builder/cargo");
     expect(dockerfile).toContain("RUSTUP_HOME=/opt/app-builder/rustup");
     expect(dockerfile).toContain("RUSTUP_TOOLCHAIN=1.97.1");
-    expect(dockerfile).toContain('mise install "rust@${RUST_VERSION}"');
+    expect(dockerfile).toContain(`mise install "rust@\${RUST_VERSION}"`);
     expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/rustup");
     expect(dockerfile).toContain("chmod -R a-w,a+rX /opt/app-builder/cargo");
     expect(dockerfile).toContain(`mise exec rust@${ARRUSTED_RUST_VERSION} -- cargo --version`);
