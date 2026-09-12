@@ -280,7 +280,7 @@ export function createPostgresPreviewOrganizationAuthority(
 
     async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
       if (issuer !== authority.issuer || audience !== authority.audience) {
-        return undefined;
+        return;
       }
       return (await exactActiveOrganization(database, authority, ownerUserId))?.workspaceId;
     },
