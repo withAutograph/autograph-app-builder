@@ -46,7 +46,7 @@ function observed(input: ParityEvidence, id: string) {
   return input.candidate.observations.at(-1)!;
 }
 async function status(input: ParityEvidence, id: string, retained = true) {
-  return (await assessParity(input, async () => retained)).rows.find(
+  return (await assessParity(input, () => Promise.resolve(retained))).rows.find(
     (row) => row.side === "candidate" && row.requirementId === id,
   )?.status;
 }
@@ -94,7 +94,7 @@ describe("evaluator-owned parity assessment", () => {
     expect(await status(input, id)).toBe("passed");
   });
   it("retains all requirements independently on both sides without an aggregate verdict", async () => {
-    const report = await assessParity(fixture(), async () => false);
+    const report = await assessParity(fixture(), () => Promise.resolve(false));
     expect(report.rows).toHaveLength(requirements.length * 2);
     expect(report.rows.every((row) => row.status === "unassessed")).toBe(true);
     expect(report).not.toHaveProperty("passed");

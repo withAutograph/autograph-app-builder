@@ -10,15 +10,18 @@ import { requirements } from "./self-reproduction-parity";
 describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(join(tmpdir(), "parity-capture-test-"));
-    const close = vi.fn(async () => {});
-    const newContext = vi.fn(async () => ({
-      newPage: async () => ({
-        screenshot: async ({ path }: { path: string }) => writeFile(path, "test screenshot bytes"),
+    const close = vi.fn(() => Promise.resolve());
+    const newContext = vi.fn(() =>
+      Promise.resolve({
+        newPage: () =>
+          Promise.resolve({
+            screenshot: ({ path }: { path: string }) => writeFile(path, "test screenshot bytes"),
+          }),
+        close,
       }),
-      close,
-    }));
+    );
     const adapter: CaptureAdapter = {
-      prepare: async () => ({ ready: true }),
+      prepare: () => Promise.resolve({ ready: true }),
       exercise: async (_page, state, capture) => {
         await capture();
         return requirements
@@ -72,9 +75,7 @@ describe("paired capture orchestration", () => {
     };
     try {
       const browser = {
-        newContext: async () => {
-          throw new Error("Browser disconnected");
-        },
+        newContext: () => Promise.reject(new Error("Browser disconnected")),
       } as unknown as Browser;
       const result = await captureParity({
         browser,

@@ -1,9 +1,4 @@
-import {
-  createHash,
-  generateKeyPairSync,
-  randomBytes,
-  sign,
-} from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, resolve as pathResolve } from "node:path";
@@ -67,22 +62,17 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return environment as NodeJS.ProcessEnv;
 }
 
-export function gateAEvalWorkflowBodyTimeout(
-  profile: unknown,
-): string | undefined {
+export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
   if (
     typeof profile !== "object" ||
     profile === null ||
     !Object.isFrozen(profile) ||
-    Object.keys(profile).sort().join(",") !==
-      "image,profile,sourceRoot,version" ||
+    Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   )
     return undefined;
   const name = (profile as { profile?: unknown }).profile;
-  return name === "sandbox" || name === "hosted-artifact"
-    ? "360000"
-    : undefined;
+  return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
 }
 
 function canonical(proof: Record<string, unknown>) {
@@ -134,20 +124,13 @@ function exactParentArguments(): readonly string[] {
         env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
       }),
     ) as unknown;
-    if (
-      !Array.isArray(observed) ||
-      observed.some((entry) => typeof entry !== "string")
-    )
+    if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string"))
       throw new Error("The structural test launcher argv was invalid.");
-    const cwd = execFileSync(
-      "/usr/sbin/lsof",
-      ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
-      {
-        encoding: "utf-8",
-        env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
-        stdio: ["ignore", "pipe", "ignore"],
-      },
-    )
+    const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
+      encoding: "utf-8",
+      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+      stdio: ["ignore", "pipe", "ignore"],
+    })
       .split("\n")
       .find((line) => line.startsWith("n"))
       ?.slice(1);
@@ -167,14 +150,10 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     launcherStat.nlink !== BigInt(ONE) ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO) ||
-    createHash("sha256").update(readFileSync(launcher)).digest("hex") !==
-      launcherDigest
+    createHash("sha256").update(readFileSync(launcher)).digest("hex") !== launcherDigest
   )
     throw new Error("The structural test launcher source was invalid.");
-  const wrapper =
-    profile === "vitest"
-      ? "scripts/run-vitest.mts"
-      : "scripts/run-eve-eval.mts";
+  const wrapper = profile === "vitest" ? "scripts/run-vitest.mts" : "scripts/run-eve-eval.mts";
   const expected = [
     "/bin/sh",
     launcher,
@@ -205,9 +184,7 @@ export async function runWithTestCapability(options: {
     throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
   const expectedEntry = pathResolve(
     repositoryRoot,
-    options.profile === "vitest"
-      ? "node_modules/vitest/vitest.mjs"
-      : "node_modules/eve/bin/eve.js",
+    options.profile === "vitest" ? "node_modules/vitest/vitest.mjs" : "node_modules/eve/bin/eve.js",
   );
   if (
     options.command !== process.execPath ||
@@ -218,14 +195,9 @@ export async function runWithTestCapability(options: {
   )
     throw new Error("The structural test wrapper profile was invalid.");
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const publicKeySource = publicKey
-    .export({ format: "der", type: "spki" })
-    .toString("base64");
-  const privateKeySource = privateKey
-    .export({ format: "der", type: "pkcs8" })
-    .toString("base64");
-  const evalRuntime =
-    options.profile === "eve" ? createEveEvalRuntimeDirectories() : undefined;
+  const publicKeySource = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  const privateKeySource = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
+  const evalRuntime = options.profile === "eve" ? createEveEvalRuntimeDirectories() : undefined;
   const child = spawn(options.command, [...options.args], {
     cwd: repositoryRoot,
     detached: options.profile === "eve" && process.platform !== "win32",
@@ -233,36 +205,27 @@ export async function runWithTestCapability(options: {
     env: {
       ...childEnvironment(),
       HOME: evalRuntime?.home ?? process.env.HOME,
-      EVE_DEV_WORKER_APP_ROOT:
-        options.profile === "eve" ? repositoryRoot : undefined,
+      EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
       // Never recover another eval's unfinished queues. Failed runs retain
       // this task-owned directory for diagnostics; successful runs remove it.
-      WORKFLOW_LOCAL_DATA_DIR:
-        options.profile === "eve" ? evalRuntime?.workflowData : undefined,
-      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
-        options.gateAEvalProfile,
-      ),
-      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(
-        options.gateAEvalProfile,
-      ),
+      WORKFLOW_LOCAL_DATA_DIR: options.profile === "eve" ? evalRuntime?.workflowData : undefined,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
       NODE_OPTIONS:
         options.profile === "eve"
           ? `--import=${preload} --import=${evalFetchPreload}`
           : `--import=${preload}`,
-      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD:
-        options.profile === "eve" ? "1" : undefined,
+      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
       APP_BUILDER_TEST_MODEL: undefined,
       APP_BUILDER_TEST_CAPABILITY_ID: undefined,
     },
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
-  if (authorization == null)
+  if (authorization === null || authorization === undefined)
     throw new Error("The structural test authorization pipe was not created.");
   let buffered = "";
   let answered = false;
-  authorization.write(
-    `${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`,
-  );
+  authorization.write(`${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`);
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
   authorization.setEncoding("utf-8");
@@ -270,9 +233,9 @@ export async function runWithTestCapability(options: {
     if (answered) return;
     buffered += chunk;
     const newline = buffered.indexOf("\n");
-    if (newline < 0 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
+    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
     if (
-      newline < 0 ||
+      newline === -1 ||
       Buffer.byteLength(buffered.slice(0, newline + 1)) > maximumFrameBytes ||
       newline !== buffered.length - 1
     ) {
@@ -286,7 +249,7 @@ export async function runWithTestCapability(options: {
         context?: unknown;
       };
       if (
-        Object.keys(request).sort().join(",") !== "context,nonce,version" ||
+        Object.keys(request).toSorted().join(",") !== "context,nonce,version" ||
         request.version !== 2 ||
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
@@ -298,16 +261,12 @@ export async function runWithTestCapability(options: {
         nonce: request.nonce,
         context: request.context,
         authorization: randomBytes(32).toString("hex"),
-        expiresAt: Date.now() + 5_000,
+        expiresAt: Date.now() + 5000,
         capabilities: options.capabilities,
         publicKey: publicKeySource,
         gateAEvalProfile: options.gateAEvalProfile ?? null,
       };
-      const signature = sign(
-        null,
-        Buffer.from(canonical(proof)),
-        privateKey,
-      ).toString("base64");
+      const signature = sign(null, Buffer.from(canonical(proof)), privateKey).toString("base64");
       answered = true;
       authorization.write(
         `${JSON.stringify({ ...proof, signature, delegationPrivateKey: privateKeySource })}\n`,

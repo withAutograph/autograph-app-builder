@@ -140,6 +140,7 @@ describe("Eve eval resource lifecycle", () => {
     ]) {
       const info = lstatSync(path);
       expect(info.isDirectory()).toBe(true);
+      // oxlint-disable-next-line eslint/no-bitwise -- File permission mask assertion.
       expect(info.mode & 0o077).toBe(0);
     }
   });

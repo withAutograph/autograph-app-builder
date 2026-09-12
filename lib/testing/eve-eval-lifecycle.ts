@@ -31,6 +31,7 @@ function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
     typeof info.mode === "number" &&
     info.uid === process.getuid?.() &&
     !info.isSymbolicLink() &&
+    // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
     (info.mode & 0o022) === 0
   );
 }
@@ -207,6 +208,7 @@ export function createEveEvalRuntimeDirectories(
       !info.isDirectory() ||
       info.isSymbolicLink() ||
       info.uid !== process.getuid?.() ||
+      // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
       (info.mode & 0o077) !== 0
     )
       throw new Error("The Eve eval runtime directory was not owner-only.");
