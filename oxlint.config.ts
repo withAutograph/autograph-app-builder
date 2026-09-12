@@ -29,9 +29,8 @@ export default defineConfig({
     "unicorn/consistent-function-scoping": "off",
     "unicorn/filename-case": "off",
     "unicorn/import-style": "off",
-    "unicorn/no-useless-undefined": "off",
     "unicorn/no-await-expression-member": "off",
-    "unicorn/prefer-event-target": "off",
+    "unicorn/no-useless-undefined": "off",
     "unicorn/text-encoding-identifier-case": "off",
   },
 });

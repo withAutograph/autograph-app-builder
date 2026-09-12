@@ -35,6 +35,8 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
     (url: URL, options: RequestOptions, responseListener: (response: IncomingMessage) => void) => {
       observed.url = url;
       observed.options = options;
+      // ClientRequest is a Node EventEmitter by contract.
+      // oxlint-disable-next-line unicorn/prefer-event-target
       const request = new EventEmitter() as ClientRequest;
       request.end = () => {
         options.lookup!(url.hostname, input.lookupOptions, (error, address) => {
