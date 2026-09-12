@@ -144,15 +144,15 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
             activeOrganizationId: ensured.organizationId,
           },
         };
-      } catch (cause) {
+      } catch (error) {
         console.error(
           JSON.stringify({
             level: "error",
             message: "preview_workspace_session_provisioning_failed",
-            reason: cause instanceof OrganizationProvisioningError ? cause.reason : "unexpected",
+            reason: error instanceof OrganizationProvisioningError ? error.reason : "unexpected",
           }),
         );
-        throw organizationError(cause);
+        throw organizationError(error);
       }
     },
   };

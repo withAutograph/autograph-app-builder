@@ -474,17 +474,17 @@ describe("public GitHub App installation authorization", () => {
     const request = vi.fn<typeof fetch>();
     const { authorization, bind } = harness({ fetch: request });
 
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(
         "https://builder.example/github/installations/callback?code=one-time-code",
         authority,
       );
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
-    expect(error).toBeInstanceOf(Error);
-    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
+    expect(failure).toBeInstanceOf(Error);
+    expect(githubInstallationAuthorizationDiagnostic(failure)).toMatchObject({
       stage: "callback-state-validation",
       callback: { queryKeys: ["code"], statePresent: false },
       stateValidation: { substage: "callback-parse" },
@@ -500,14 +500,14 @@ describe("public GitHub App installation authorization", () => {
     const replacement = authorizeState.endsWith("A") ? "B" : "A";
     const callback = authorizationCallbackUrl(`${authorizeState.slice(0, -1)}${replacement}`);
 
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(callback, authority);
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
 
-    const diagnostic = githubInstallationAuthorizationDiagnostic(error);
+    const diagnostic = githubInstallationAuthorizationDiagnostic(failure);
     expect(diagnostic).toMatchObject({
       stage: "callback-state-validation",
       callback: { queryKeys: ["code", "state"], statePresent: true },
@@ -527,17 +527,17 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
 
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(authorizationCallbackUrl(authorizeState), {
         ...authority,
         workspaceId: "workspace_other",
       });
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
 
-    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
+    expect(githubInstallationAuthorizationDiagnostic(failure)).toMatchObject({
       stage: "callback-state-validation",
       stateValidation: {
         substage: "state-authority-digest",
@@ -570,13 +570,13 @@ describe("public GitHub App installation authorization", () => {
     const callback = new URL(authorizationCallbackUrl(authorizeState));
     callback.searchParams.append("code", "second-code");
 
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(callback.toString(), authority);
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
-    expect(githubInstallationAuthorizationDiagnostic(error)).toMatchObject({
+    expect(githubInstallationAuthorizationDiagnostic(failure)).toMatchObject({
       stage: "callback-state-validation",
       callback: {
         queryKeys: ["code", "state"],
@@ -702,18 +702,18 @@ describe("public GitHub App installation authorization", () => {
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
 
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(authorizationCallbackUrl(authorizeState), authority);
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
-    expect(error).toBeInstanceOf(Error);
-    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+    expect(failure).toBeInstanceOf(Error);
+    expect(githubInstallationAuthorizationDiagnostic(failure)).toEqual({
       stage: "token-exchange-non-2xx",
       category: "bad_verification_code",
     });
-    expect(String(error)).not.toContain("provider-detail-sentinel");
+    expect(String(failure)).not.toContain("provider-detail-sentinel");
     expect(bind).not.toHaveBeenCalled();
   });
 
@@ -726,18 +726,18 @@ describe("public GitHub App installation authorization", () => {
     );
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);
-    let error: unknown;
+    let failure: unknown;
     try {
       await authorization.complete(authorizationCallbackUrl(authorizeState), authority);
-    } catch (caught) {
-      error = caught;
+    } catch (error) {
+      failure = error;
     }
 
-    expect(githubInstallationAuthorizationDiagnostic(error)).toEqual({
+    expect(githubInstallationAuthorizationDiagnostic(failure)).toEqual({
       stage: "token-exchange-oauth-error",
       category: "redirect_uri_mismatch",
     });
-    expect(String(error)).not.toContain("provider-detail-sentinel");
+    expect(String(failure)).not.toContain("provider-detail-sentinel");
     expect(bind).not.toHaveBeenCalled();
   });
 

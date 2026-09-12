@@ -37,10 +37,10 @@ function getPreviewOAuthDeploymentRuntime(
   let providerEmulation: ReturnType<typeof readProviderEmulation>;
   try {
     providerEmulation = readProviderEmulation(environment);
-  } catch (cause) {
+  } catch (error) {
     const invalidFields =
-      cause && typeof cause === "object" && "issues" in cause && Array.isArray(cause.issues)
-        ? cause.issues
+      error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)
+        ? error.issues
             .map((issue) =>
               issue && typeof issue === "object" && "path" in issue
                 ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
@@ -49,14 +49,14 @@ function getPreviewOAuthDeploymentRuntime(
             .join(",")
         : "unknown";
     throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
-      cause,
+      cause: error,
     });
   }
   let config: ReturnType<typeof readPreviewOAuthRuntimeConfig>;
   try {
     config = readPreviewOAuthRuntimeConfig(environment);
-  } catch (cause) {
-    throw new Error("preview-oauth-config", { cause });
+  } catch (error) {
+    throw new Error("preview-oauth-config", { cause: error });
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
@@ -93,8 +93,8 @@ function getPreviewOAuthDeploymentRuntime(
           environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY === "verified-v1",
       },
     });
-  } catch (cause) {
-    throw new Error("preview-oauth-server", { cause });
+  } catch (error) {
+    throw new Error("preview-oauth-server", { cause: error });
   }
   deploymentRuntime = {
     organizationAuthority,
