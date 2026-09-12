@@ -13,6 +13,7 @@ export type ProviderChoice<Provider extends string> = {
 };
 
 export function ProviderChoiceSection<Provider extends string>({
+  bare = false,
   children,
   className,
   description,
@@ -26,6 +27,7 @@ export function ProviderChoiceSection<Provider extends string>({
   title,
   unavailableClassName,
 }: {
+  bare?: boolean;
   children?: ReactNode;
   className?: string;
   description: string;
@@ -39,8 +41,8 @@ export function ProviderChoiceSection<Provider extends string>({
   title: string;
   unavailableClassName?: string;
 }) {
-  return (
-    <SectionShell className={className} section={section} title={title} description={description}>
+  const controls = (
+    <>
       <div className={gridClassName} role="group" aria-label={label}>
         {options.map((option) => {
           const Icon = option.icon;
@@ -63,6 +65,13 @@ export function ProviderChoiceSection<Provider extends string>({
         })}
       </div>
       {children}
+    </>
+  );
+  return bare ? (
+    controls
+  ) : (
+    <SectionShell className={className} section={section} title={title} description={description}>
+      {controls}
     </SectionShell>
   );
 }
