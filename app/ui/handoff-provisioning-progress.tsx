@@ -4,23 +4,14 @@ import { startTransition, useActionState, useEffect, useRef, useState } from "re
 import { useRouter } from "next/navigation";
 
 import { continueHandoffProvisioning } from "@/app/actions/builder";
-import type {
-  BuilderProvisionProjection,
-  BuilderProvisionResponse,
-} from "@/lib/provisioning/contracts";
+import {
+  builderProvisionProjectionSchema,
+  type BuilderProvisionProjection,
+} from "@/lib/provisioning/contracts-schema";
 
 function readProjection(value: unknown): BuilderProvisionProjection | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const projection = value as {
-    revision?: unknown;
-    provisioning?: BuilderProvisionResponse;
-  };
-  return typeof projection.revision === "number" &&
-    Number.isSafeInteger(projection.revision) &&
-    projection.revision > 0 &&
-    projection.provisioning?.status
-    ? (projection as BuilderProvisionProjection)
-    : undefined;
+  const parsed = builderProvisionProjectionSchema.safeParse(value);
+  return parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;
 }
 
 /**
@@ -37,6 +28,10 @@ export function HandoffProvisioningProgress({
 }) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(initial);
+  const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">(
+    "connecting",
+  );
+  const [streamAttempt, setStreamAttempt] = useState(0);
   const latestRevision = useRef(initial.revision);
   const settledRefresh = useRef(false);
   const dispatched = useRef(false);
@@ -69,12 +64,18 @@ export function HandoffProvisioningProgress({
       source = new EventSource(
         `/api/builder/provision/stream?requestId=${encodeURIComponent(
           snapshot.provisioning.requestId,
-        )}`,
+        )}&afterRevision=${latestRevision.current}`,
       );
       const receive = (event: MessageEvent<string>) => {
+        if (closed) return;
         try {
           const next = readProjection(JSON.parse(event.data));
-          if (!next || next.revision <= latestRevision.current) return;
+          if (
+            !next ||
+            next.provisioning.requestId !== snapshot.provisioning.requestId ||
+            next.revision <= latestRevision.current
+          )
+            return;
           latestRevision.current = next.revision;
           setSnapshot(next);
         } catch {
@@ -83,8 +84,12 @@ export function HandoffProvisioningProgress({
       };
       source.addEventListener("snapshot", receive);
       source.addEventListener("end", receive);
+      source.onopen = () => {
+        if (!closed) setConnection("connected");
+      };
       source.onerror = () => {
         if (closed) return;
+        setConnection("reconnecting");
         // Keep this EventSource alive: its native reconnect sends the most
         // recent SSE event id as Last-Event-ID. Replacing it here would lose
         // that cursor and turn a transient disconnect into a full replay.
@@ -95,7 +100,7 @@ export function HandoffProvisioningProgress({
       closed = true;
       source?.close();
     };
-  }, [snapshot.provisioning.requestId, snapshot.provisioning.status]);
+  }, [snapshot.provisioning.requestId, snapshot.provisioning.status, streamAttempt]);
 
   const failure = actionState?.status === "error" && !pending;
   const retry = () => {
@@ -113,6 +118,24 @@ export function HandoffProvisioningProgress({
               ? "Provider setup paused. Your handoff is saved."
               : "Preparing your selected providers…"}
       </p>
+      {snapshot.provisioning.status !== "settled" && connection !== "connected" ? (
+        <p role="status" aria-live="polite">
+          {connection === "reconnecting"
+            ? "Progress connection interrupted. Reconnecting… Your handoff is saved."
+            : "Connecting to saved progress…"}
+        </p>
+      ) : null}
+      {snapshot.provisioning.status !== "settled" && connection === "reconnecting" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setConnection("connecting");
+            setStreamAttempt((attempt) => attempt + 1);
+          }}
+        >
+          Reconnect progress
+        </button>
+      ) : null}
       {failure ? (
         <button type="button" onClick={retry}>
           Retry provider setup
