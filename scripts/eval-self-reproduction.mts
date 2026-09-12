@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
@@ -13,9 +14,8 @@ import {
   frameworkRequirements,
   prioritizedGaps,
   readSource,
-  type Requirement,
-  type WorkflowEvidence,
 } from "../evals/support/self-reproduction";
+import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   digest,
   evidenceCompletion,

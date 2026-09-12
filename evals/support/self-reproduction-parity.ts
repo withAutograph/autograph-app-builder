@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- assessment rows retain deterministic requirement order while checking artifacts. */
 import { z } from "zod";
 
 export const parityVersion = "self-reproduction-parity/v1" as const;

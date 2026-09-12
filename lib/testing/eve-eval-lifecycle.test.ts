@@ -1,5 +1,6 @@
 /* eslint-disable unicorn/prefer-event-target -- Node ChildProcess lifecycle tests require EventEmitter semantics. */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   existsSync,

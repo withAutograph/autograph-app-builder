@@ -4,8 +4,8 @@ import {
   parityEvidenceSchema,
   parityVersion,
   requirements,
-  type ParityEvidence,
 } from "./self-reproduction-parity";
+import type { ParityEvidence } from "./self-reproduction-parity";
 import { independenceAssertions } from "./self-reproduction-independence";
 
 function fixture(): ParityEvidence {

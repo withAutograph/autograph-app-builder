@@ -1,12 +1,9 @@
+/* oxlint-disable eslint/no-await-in-loop -- paired browser states must execute sequentially to preserve isolation and deterministic evidence. */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
-import {
-  captureStates,
-  desktopViewports,
-  sides,
-  type Observation,
-} from "./self-reproduction-parity";
+import { captureStates, desktopViewports, sides } from "./self-reproduction-parity";
+import type { Observation } from "./self-reproduction-parity";
 
 export type CaptureState = (typeof captureStates)[number];
 export type CaptureAdapter = {

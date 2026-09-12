@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- lock ownership checks and quarantine mutations must remain sequential. */
 import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";

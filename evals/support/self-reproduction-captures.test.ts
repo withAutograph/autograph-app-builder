@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
-import { captureParity, type CaptureAdapter } from "./self-reproduction-captures";
+import { captureParity } from "./self-reproduction-captures";
+import type { CaptureAdapter } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
 describe("paired capture orchestration", () => {

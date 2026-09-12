@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- readiness retries and model turns must remain sequential. */
 import { spawn } from "node:child_process";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
