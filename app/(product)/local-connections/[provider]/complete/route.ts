@@ -18,7 +18,7 @@ function validEmulatorRedirect(input: {
   state: string;
 }) {
   const location = input.response.headers.get("location");
-  if (!location || input.response.status < 300 || input.response.status >= 400) return undefined;
+  if (!location || input.response.status < 300 || input.response.status >= 400) return;
   const destination = new URL(location);
   if (
     destination.origin !== input.origin ||
@@ -27,7 +27,7 @@ function validEmulatorRedirect(input: {
     destination.searchParams.getAll("state").length !== 1 ||
     destination.searchParams.get("state") !== input.state
   )
-    return undefined;
+    return;
   return destination;
 }
 
