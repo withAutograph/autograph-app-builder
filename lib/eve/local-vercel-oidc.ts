@@ -132,7 +132,7 @@ function closedObject(value: unknown, name: string): Record<string, unknown> {
 function requiredString(value: Record<string, unknown>, key: string): string {
   const candidate = value[key];
   if (typeof candidate !== "string" || candidate.length === 0) {
-    throw new Error(`Required ${key} was unavailable.`);
+    throw new TypeError(`Required ${key} was unavailable.`);
   }
   return candidate;
 }
@@ -140,7 +140,7 @@ function requiredString(value: Record<string, unknown>, key: string): string {
 function requiredInteger(value: Record<string, unknown>, key: string): number {
   const candidate = value[key];
   if (!Number.isSafeInteger(candidate)) {
-    throw new Error(`Required ${key} was unavailable.`);
+    throw new TypeError(`Required ${key} was unavailable.`);
   }
   return candidate as number;
 }

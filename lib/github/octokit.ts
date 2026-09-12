@@ -138,7 +138,7 @@ export function createGitHubOAuthApp(input: {
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {
-          throw new Error("github-oauth-request-invalid", { cause: error });
+          throw new TypeError("github-oauth-request-invalid", { cause: error });
         }
       }
       return request(resource, { ...init, body });

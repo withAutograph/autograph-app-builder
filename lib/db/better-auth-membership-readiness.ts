@@ -36,7 +36,7 @@ function sha256(value: string): `sha256:${string}` {
 export function verifyBetterAuthMembershipReadBack(input: { readBack: unknown; observedAt: Date }) {
   const readBack = betterAuthMembershipReadBackSchema.parse(input.readBack);
   if (!Number.isFinite(input.observedAt.getTime())) {
-    throw new Error("Better Auth membership observation time is invalid.");
+    throw new TypeError("Better Auth membership observation time is invalid.");
   }
 
   const legacyRows = canonicalRows(readBack.activeLegacyRows);

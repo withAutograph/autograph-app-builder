@@ -2,9 +2,7 @@ import { defineConfig } from "oxlint";
 import core from "ultracite/oxlint/core";
 
 const deferredRules = Object.fromEntries(
-  ["eslint/max-classes-per-file", "unicorn/prefer-type-error", "unicorn/switch-case-braces"].map(
-    (rule) => [rule, "off"],
-  ),
+  ["eslint/max-classes-per-file", "unicorn/switch-case-braces"].map((rule) => [rule, "off"]),
 );
 
 export default defineConfig({
