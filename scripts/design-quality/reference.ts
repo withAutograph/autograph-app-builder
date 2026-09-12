@@ -274,8 +274,7 @@ function reliableExpressionType(
   if (depth > 5 || seen.has(type)) return false;
   if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.TypeParameter))
     return false;
-  const nextSeen = new Set(seen);
-  nextSeen.add(type);
+  const nextSeen = new Set([...seen, type]);
   if (type.isUnion() || type.isIntersection())
     return type.types.every((member) =>
       reliableExpressionType(member, checker, depth + 1, nextSeen),
@@ -383,8 +382,7 @@ function finiteLiteralEvidence(
       !(list.flags & ts.NodeFlags.Const)
     )
       return undefined;
-    const nextSeen = new Set(seen);
-    nextSeen.add(symbol);
+    const nextSeen = new Set([...seen, symbol]);
     return finiteLiteralEvidence(declaration.initializer, expected, checker, depth + 1, nextSeen);
   }
   // A conditional is finite only when every possible branch is independently
