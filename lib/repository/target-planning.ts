@@ -415,12 +415,10 @@ export async function executeTargetIdentityAndPlanning(input: {
     throw new Error("Target identity did not match the accepted AppSpec.");
   // Discover the actual prepared checkout. Authored changes may describe a
   // new app, and existing apps do not need a package manifest to be iterable.
-  const existingApplication =
-    (
-      await input.sandbox.run({
-        command: `test -d /workspace/repository/${identity.workspacePath}`,
-      })
-    ).exitCode === 0;
+  const existingApplicationResult = await input.sandbox.run({
+    command: `test -d /workspace/repository/${identity.workspacePath}`,
+  });
+  const existingApplication = existingApplicationResult.exitCode === 0;
   if (existingApplication && input.existingAppChanges === undefined)
     throw new ExistingApplicationChangesRequiredError();
   if (existingApplication && input.existingAppChanges !== undefined) {
