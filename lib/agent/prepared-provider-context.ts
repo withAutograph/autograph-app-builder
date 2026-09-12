@@ -351,7 +351,8 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
     async github(auth, value) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");
-      return (await repositoryAccessRuntimeForSession(auth)).classify(value);
+      const runtime = await repositoryAccessRuntimeForSession(auth);
+      return runtime.classify(value);
     },
     async vercel(auth, intent) {
       const { authority, principal } = exactForwardedSessionAuthority(auth);
