@@ -48,7 +48,7 @@ function storage() {
       try {
         return await operation(database);
       } catch (error) {
-        [...rows.keys()].forEach((key, i) => rows.set(key, before[i]));
+        for (const [i, key] of [...rows.keys()].entries()) rows.set(key, before[i]);
         throw error;
       }
     },

@@ -320,7 +320,7 @@ export async function measurePage(page: Page) {
         ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(visible)
         : [];
       if (headers.length === cells.length)
-        headers.forEach((h, i) => {
+        for (const [i, h] of headers.entries()) {
           if (Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4)
             findings.push({
               kind: "possible-column-misalignment",
@@ -328,7 +328,7 @@ export async function measurePage(page: Page) {
               region: rect(h),
               reviewRequired: true,
             });
-        });
+        }
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
     for (let i = 0; i < Math.min(controls.length, 150); i += 1)
@@ -1032,10 +1032,10 @@ export async function capturePreview(input: {
               )
             : undefined;
         if (styles)
-          styles.observations.forEach((observation) => {
+          for (const observation of styles.observations) {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
-          });
+          }
         const path = join(input.output, `${name}.png`);
         await settleFiniteMotion(page);
         await page.screenshot({ path, fullPage: true });

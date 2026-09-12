@@ -17,7 +17,7 @@ const resultListeners = new Set<() => void>();
 
 function publishResult(result?: EveSessionResult) {
   latestResult = result;
-  resultListeners.forEach((listener) => listener());
+  for (const listener of resultListeners) listener();
 }
 
 app.ontoolresult = ({ structuredContent }) => {

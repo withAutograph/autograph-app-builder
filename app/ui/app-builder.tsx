@@ -920,7 +920,7 @@ export function Builder({
       const { current } = formSnapshot;
       const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
-      (Object.keys(next) as Array<keyof BuilderForm>).forEach((field) => {
+      for (const field of Object.keys(next) as Array<keyof BuilderForm>) {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
         // arrive after a later input event and overwrite it (for example, a
@@ -930,7 +930,7 @@ export function Builder({
           shouldDirty: true,
           shouldValidate: true,
         });
-      });
+      }
     },
     [builderForm],
   );
