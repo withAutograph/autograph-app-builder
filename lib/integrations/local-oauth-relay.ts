@@ -21,14 +21,20 @@ export function verifyLocalVercelRelay(
   expectedOrigin?: string,
 ) {
   const [payload, signature, extra] = value.split(".");
-  if (!payload || !signature || extra) throw new Error("invalid-relay");
+  if (!payload || !signature || extra) {
+    throw new Error("invalid-relay");
+  }
   const expected = createHmac("sha256", secret).update(payload).digest();
   const provided = Buffer.from(signature, "base64url");
-  if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     throw new Error("invalid-relay");
+  }
   const result = schema.parse(JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")));
-  if (result.expiresAt <= now) throw new Error("expired-relay");
-  if (expectedOrigin !== undefined && result.origin !== expectedOrigin)
+  if (result.expiresAt <= now) {
+    throw new Error("expired-relay");
+  }
+  if (expectedOrigin !== undefined && result.origin !== expectedOrigin) {
     throw new Error("invalid-relay-origin");
+  }
   return result;
 }

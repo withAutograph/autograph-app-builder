@@ -194,7 +194,9 @@ export function parseLocalVercelOidcToken(source: string): string {
 
 function decodeClaims(token: string): VercelOidcClaims {
   const [, payload] = token.split(".");
-  if (payload === undefined) throw new Error("OIDC payload was unavailable.");
+  if (payload === undefined) {
+    throw new Error("OIDC payload was unavailable.");
+  }
   let decoded: unknown;
   try {
     decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));

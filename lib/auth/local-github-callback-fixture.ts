@@ -25,11 +25,15 @@ export type LocalGitHubCallbackFixture = keyof typeof fixtures;
 
 function cookieValue(request: Request, name: string) {
   const cookie = request.headers.get("cookie");
-  if (!cookie) return;
+  if (!cookie) {
+    return;
+  }
 
   for (const part of cookie.split(";")) {
     const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
+    if (key === name) {
+      return decodeURIComponent(value.join("="));
+    }
   }
 }
 
@@ -37,17 +41,23 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
   if (
     environment.NODE_ENV === "production" ||
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1"
-  )
+  ) {
     return { applied: false, request };
+  }
 
   const url = new URL(request.url);
-  if (!url.searchParams.has("code")) return { applied: false, request };
+  if (!url.searchParams.has("code")) {
+    return { applied: false, request };
+  }
 
   const fixture = cookieValue(request, localGitHubCallbackFixtureCookie);
-  if (!fixture || !(fixture in fixtures)) return { applied: false, request };
+  if (!fixture || !(fixture in fixtures)) {
+    return { applied: false, request };
+  }
 
-  for (const [key, value] of fixtures[fixture as LocalGitHubCallbackFixture])
+  for (const [key, value] of fixtures[fixture as LocalGitHubCallbackFixture]) {
     url.searchParams.append(key, value);
+  }
 
   return {
     applied: true,

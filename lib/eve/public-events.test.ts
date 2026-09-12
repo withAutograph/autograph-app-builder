@@ -286,8 +286,9 @@ describe("installed Eve 0.43 projection", () => {
       request.data.actions[0]?.kind !== "tool-call" ||
       typeof request.data.actions[0].input !== "object" ||
       request.data.actions[0].input === null
-    )
+    ) {
       throw new Error("expected a plan request fixture");
+    }
     const input = request.data.actions[0].input as {
       existingAppChanges: { content: string }[];
     };

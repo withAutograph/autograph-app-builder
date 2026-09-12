@@ -96,7 +96,9 @@ export class BearerAuthorizationError extends Error {
 const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/u;
 
 export function parseStrictBearerAuthorization(authorization: string | null): string {
-  if (authorization === null) throw new BearerAuthorizationError();
+  if (authorization === null) {
+    throw new BearerAuthorizationError();
+  }
   const match = /^Bearer ([^ ]+)$/iu.exec(authorization);
   if (match === null || !bearerTokenPattern.test(match[1]) || match[1].includes(",")) {
     throw new BearerAuthorizationError();

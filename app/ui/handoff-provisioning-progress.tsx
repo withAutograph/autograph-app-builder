@@ -51,44 +51,57 @@ export function HandoffProvisioningProgress({
   );
 
   useEffect(() => {
-    if (initial.revision <= latestRevision.current) return;
+    if (initial.revision <= latestRevision.current) {
+      return;
+    }
     latestRevision.current = initial.revision;
     setSnapshot(initial);
   }, [initial]);
 
   useEffect(() => {
-    if (snapshot.provisioning.status !== "settled" || settledRefresh.current) return;
+    if (snapshot.provisioning.status !== "settled" || settledRefresh.current) {
+      return;
+    }
     settledRefresh.current = true;
     router.refresh();
   }, [router, snapshot.provisioning.status]);
 
   useEffect(() => {
-    if (snapshot.provisioning.status === "settled" || dispatched.current) return;
+    if (snapshot.provisioning.status === "settled" || dispatched.current) {
+      return;
+    }
     dispatched.current = true;
     startTransition(() => dispatch({ handoffId }));
   }, [dispatch, handoffId, snapshot.provisioning.status]);
 
   useEffect(() => {
-    if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") return;
+    if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") {
+      return;
+    }
     let closed = false;
     let source: EventSource | undefined;
     const connect = () => {
-      if (closed || latestRevision.current <= 0) return;
+      if (closed || latestRevision.current <= 0) {
+        return;
+      }
       source = new EventSource(
         `/api/builder/provision/stream?requestId=${encodeURIComponent(
           snapshot.provisioning.requestId,
         )}&afterRevision=${latestRevision.current}`,
       );
       const receive = (event: MessageEvent<string>) => {
-        if (closed) return;
+        if (closed) {
+          return;
+        }
         try {
           const next = readProjection(JSON.parse(event.data));
           if (
             !next ||
             next.provisioning.requestId !== snapshot.provisioning.requestId ||
             next.revision <= latestRevision.current
-          )
+          ) {
             return;
+          }
           latestRevision.current = next.revision;
           setSnapshot(next);
         } catch {
@@ -98,10 +111,14 @@ export function HandoffProvisioningProgress({
       source.addEventListener("snapshot", receive);
       source.addEventListener("end", receive);
       source.addEventListener("open", () => {
-        if (!closed) setConnection("connected");
+        if (!closed) {
+          setConnection("connected");
+        }
       });
       source.addEventListener("error", () => {
-        if (closed) return;
+        if (closed) {
+          return;
+        }
         setConnection("reconnecting");
         // Keep this EventSource alive: its native reconnect sends the most
         // recent SSE event id as Last-Event-ID. Replacing it here would lose
@@ -117,7 +134,9 @@ export function HandoffProvisioningProgress({
 
   const failure = actionState?.status === "error" && !pending;
   const retry = () => {
-    if (pending) return;
+    if (pending) {
+      return;
+    }
     startTransition(() => dispatch({ handoffId }));
   };
   return (

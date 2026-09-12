@@ -26,10 +26,12 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("new deterministic branch worktree"));
     t.check(t.reply, includes("no commit, push, GitHub, provider"));
-    if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead)
+    if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead) {
       throw new Error("The original checkout HEAD changed.");
-    if (git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]) !== beforeStatus)
+    }
+    if (git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]) !== beforeStatus) {
       throw new Error("The original checkout status changed.");
+    }
     t.check(
       git(repository, ["branch", "--list", "app-builder/*"]),
       includes("app-builder/review-"),

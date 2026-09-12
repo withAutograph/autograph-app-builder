@@ -58,7 +58,9 @@ function visibility(value: "visible" | "hidden") {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   root = undefined;
   container?.remove();
   sessionStorage.clear();

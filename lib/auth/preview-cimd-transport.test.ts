@@ -24,8 +24,11 @@ function runLookup(options: LookupOptions) {
       // Node's dns.lookup contract is callback-based.
       // oxlint-disable-next-line promise/prefer-await-to-callbacks
       (error, address, family) => {
-        if (error) reject(error);
-        else resolve({ address, family });
+        if (error) {
+          reject(error);
+        } else {
+          resolve({ address, family });
+        }
       },
     );
   });

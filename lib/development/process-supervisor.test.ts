@@ -43,7 +43,9 @@ describe("development process supervision", () => {
   });
 
   it("stops a detached Eve-style process group as one local cycle", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {
+      return;
+    }
     const child = spawn(
       process.execPath,
       [
@@ -62,7 +64,9 @@ describe("development process supervision", () => {
   });
 
   it("signals the Eve wrapper once before forcing its task-owned group", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {
+      return;
+    }
     // ChildProcess is an EventEmitter in Node, not an EventTarget.
     // oxlint-disable-next-line unicorn/prefer-event-target
     const child = new EventEmitter() as ChildProcess;
@@ -79,7 +83,9 @@ describe("development process supervision", () => {
     }) as ChildProcess["kill"];
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
-      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+      if (signal === "SIGKILL") {
+        child.emit("exit", null, "SIGKILL");
+      }
       return true;
     });
 
@@ -96,7 +102,9 @@ describe("development process supervision", () => {
   });
 
   it("cleans up a listener when the Eve wrapper exits before its descendant", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {
+      return;
+    }
     const port = 43_987;
     const child = spawn(
       process.execPath,
@@ -113,7 +121,9 @@ describe("development process supervision", () => {
   });
 
   it("allows Eve's nested detached server time to settle after the wrapper exits", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {
+      return;
+    }
     const port = 43_988;
     const child = spawn(
       process.execPath,

@@ -33,9 +33,13 @@ export function projectHostedSnapshot(
   const snapshot = hostedSnapshotSchema.parse(snapshotInput);
   const projected = snapshot.events
     .flatMap((candidate) => {
-      if (candidate === null || typeof candidate !== "object") return [];
+      if (candidate === null || typeof candidate !== "object") {
+        return [];
+      }
       const projected = toPublicEvent(candidate as InternalEveEvent);
-      if (projected === null) return [];
+      if (projected === null) {
+        return [];
+      }
       const parsed = publicEveEventSchema.safeParse(projected);
       return parsed.success ? [parsed.data] : [];
     })

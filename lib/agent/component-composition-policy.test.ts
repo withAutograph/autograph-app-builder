@@ -23,7 +23,9 @@ function binding() {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
   });
-  if (result.status !== "available") throw new Error("Expected policy binding.");
+  if (result.status !== "available") {
+    throw new Error("Expected policy binding.");
+  }
   return result.binding;
 }
 
@@ -95,7 +97,8 @@ describe("Arrusted component composition policy", () => {
       files: [{ path, content }],
     });
     expect(result.status).toBe("failed");
-    if (result.status === "failed")
+    if (result.status === "failed") {
       expect(result.violations.map((violation) => violation.code)).toContain(code);
+    }
   });
 });

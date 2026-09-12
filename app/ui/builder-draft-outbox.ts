@@ -67,7 +67,9 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       "upgradeneeded",
       () => {
         const database = request.result;
-        if (!database.objectStoreNames.contains(storeName)) database.createObjectStore(storeName);
+        if (!database.objectStoreNames.contains(storeName)) {
+          database.createObjectStore(storeName);
+        }
       },
       { once: true },
     );
@@ -111,7 +113,9 @@ export function createBuilderDraftOutbox<T>(
     operation: (database: IDBDatabase) => Promise<Result>,
     fallback: () => Result,
   ): Promise<Result> {
-    if (!factory) return fallback();
+    if (!factory) {
+      return fallback();
+    }
     try {
       const database = await openDatabase(factory);
       try {
@@ -160,13 +164,17 @@ export function createBuilderDraftOutbox<T>(
               | BuilderDraftOutboxEntry<T>
               | undefined;
             const cleared = entry?.mutationId === mutationId;
-            if (cleared) store.delete(options.key);
+            if (cleared) {
+              store.delete(options.key);
+            }
             await transactionResult(transaction);
             return cleared;
           },
           () => {
             const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
-            if (entry?.mutationId !== mutationId) return false;
+            if (entry?.mutationId !== mutationId) {
+              return false;
+            }
             memoryFallback.delete(options.key);
             return true;
           },
@@ -182,13 +190,17 @@ export function createBuilderDraftOutbox<T>(
               | BuilderDraftOutboxEntry<T>
               | undefined;
             const cleared = entry?.mutationId === acknowledgement.mutationId;
-            if (cleared) store.delete(options.key);
+            if (cleared) {
+              store.delete(options.key);
+            }
             await transactionResult(transaction);
             return cleared;
           },
           () => {
             const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
-            if (entry?.mutationId !== acknowledgement.mutationId) return false;
+            if (entry?.mutationId !== acknowledgement.mutationId) {
+              return false;
+            }
             memoryFallback.delete(options.key);
             return true;
           },

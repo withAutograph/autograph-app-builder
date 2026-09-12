@@ -36,7 +36,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     e.target.value = "";
 

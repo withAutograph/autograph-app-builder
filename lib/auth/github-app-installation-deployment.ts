@@ -110,7 +110,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           },
         });
       }
-      if (authority === undefined)
+      if (authority === undefined) {
         return new Response(null, {
           status: 303,
           headers: {
@@ -118,6 +118,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
             Location: signInForWorkspaceRedirect(origin),
           },
         });
+      }
 
       try {
         const returnState = providerConnectionReturnFromFormData(await request.formData());
@@ -151,7 +152,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         });
         return redirect("failed", reason, returnState);
       };
-      if (request.method !== "GET") return fail("request-invalid");
+      if (request.method !== "GET") {
+        return fail("request-invalid");
+      }
 
       let authority: Authority | undefined;
       try {
@@ -165,7 +168,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           },
         });
       }
-      if (authority === undefined)
+      if (authority === undefined) {
         return new Response(null, {
           status: 303,
           headers: {
@@ -173,6 +176,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
             Location: signInForWorkspaceRedirect(origin),
           },
         });
+      }
 
       try {
         const result = await input.authorization.complete(request.url, authority);
@@ -209,7 +213,9 @@ let deploymentHandlers: ReturnType<typeof createGitHubAppInstallationRouteHandle
 export function getGitHubAppInstallationDeploymentHandlers(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (deploymentHandlers !== undefined) return deploymentHandlers;
+  if (deploymentHandlers !== undefined) {
+    return deploymentHandlers;
+  }
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const config = readGitHubAppInstallationEnvironment(resolvedEnvironment);
   const previewConfig = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
@@ -248,7 +254,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
     origin: new URL(config.issuer).origin,
     authorization,
     async onConnected({ authority, returnState }) {
-      if (!returnState.resumeKey) return undefined;
+      if (!returnState.resumeKey) {
+        return undefined;
+      }
       return repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,
@@ -259,7 +267,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
         environment: resolvedEnvironment,
         headers: request.headers,
       });
-      if (session === undefined) return undefined;
+      if (session === undefined) {
+        return undefined;
+      }
       return {
         issuer: config.issuer,
         audience: config.resource,

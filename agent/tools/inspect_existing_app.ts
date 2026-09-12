@@ -31,7 +31,9 @@ export default defineDynamic({
             try {
               await sourceStatus.execute({}, ctx);
               const source = sourceWorkflowState.get();
-              if (source.phase !== "empty") await prepareWorkspace.execute({}, ctx);
+              if (source.phase !== "empty") {
+                await prepareWorkspace.execute({}, ctx);
+              }
             } catch {
               // The session sandbox remains the authority for a best-effort
               // read of newly generated files, even before its workflow state
@@ -40,8 +42,9 @@ export default defineDynamic({
             state = appBuilderWorkflowState.get();
           }
           const prefix = `apps/${appId}/`;
-          if (!safeSourcePath(appId) || appId.includes("/"))
+          if (!safeSourcePath(appId) || appId.includes("/")) {
             throw new Error("The requested application cannot be read safely.");
+          }
           const requestedPaths = paths.flatMap((path) =>
             safeSourcePath(path) ? [path.startsWith(prefix) ? path : `${prefix}${path}`] : [],
           );

@@ -30,11 +30,14 @@ export interface DesktopSize {
 /** Parses an opt-in desktop window size without imposing a width policy. */
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^([1-9]\d*)x([1-9]\d*)$/u.exec(value);
-  if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
+  if (!match) {
+    throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
+  }
   const width = Number(match[1]);
   const height = Number(match[2]);
-  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
-    throw new Error("Desktop dimensions must be safe integers");
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+    throw new TypeError("Desktop dimensions must be safe integers");
+  }
   return { width, height };
 }
 
@@ -91,14 +94,19 @@ export const properties: Record<string, Category> = {
 };
 export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
   const unique = [...new Set(values)];
-  if (unique.length !== 1) return "unassessed" as const;
+  if (unique.length !== 1) {
+    return "unassessed" as const;
+  }
   const value = unique[0]!;
-  if (/var\(--/u.test(value)) return "token-reference" as const;
+  if (/var\(--/u.test(value)) {
+    return "token-reference" as const;
+  }
   if (
     /^(0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
     /%|\d(?:\.\d+)?fr\b/u.test(value)
-  )
+  ) {
     return "structural" as const;
+  }
   return tokenValues.includes(computed)
     ? ("matching-literal" as const)
     : ("unmatched-literal" as const);
@@ -136,9 +144,13 @@ function matchedSelector(match: {
   rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
-  if (!selectors?.length) return undefined;
+  if (!selectors?.length) {
+    return undefined;
+  }
   const indexes = match.matchingSelectors;
-  if (indexes?.length === 1) return selectors[indexes[0]]?.text;
+  if (indexes?.length === 1) {
+    return selectors[indexes[0]]?.text;
+  }
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
@@ -149,20 +161,29 @@ function matchedSelector(match: {
  */
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) return undefined;
+  if (!candidate) {
+    return undefined;
+  }
   let depth = 0;
   for (const character of candidate) {
-    if (character === "(") depth += 1;
-    else if (character === ")") {
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
       depth -= 1;
-      if (depth < 0) return undefined;
-    } else if (depth === 0 && /\s/u.test(character)) return undefined;
+      if (depth < 0) {
+        return undefined;
+      }
+    } else if (depth === 0 && /\s/u.test(character)) {
+      return undefined;
+    }
   }
   return depth === 0 ? candidate : undefined;
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) return undefined;
+  if (!value) {
+    return undefined;
+  }
   try {
     const url = new URL(value);
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
@@ -172,7 +193,9 @@ export const sourcePath = (value: string | undefined) => {
 };
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
-  if (!path) return false;
+  if (!path) {
+    return false;
+  }
   const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
@@ -206,16 +229,22 @@ export function mappedSharedCssRule(input: {
   sharedCssSourceFiles: CssSourceFile[];
 }) {
   const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } = input;
-  if (!map || !mapped || value === undefined) return undefined;
+  if (!map || !mapped || value === undefined) {
+    return undefined;
+  }
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
-  if (typeof sourceContent !== "string") return undefined;
+  if (typeof sourceContent !== "string") {
+    return undefined;
+  }
   const files = sharedCssSourceFiles.filter(
     (file) =>
       arrustedSharedSource(file.path) &&
       generatedSource(mapped.path, [file.path]) &&
       file.content === sourceContent,
   );
-  if (files.length !== 1) return undefined;
+  if (files.length !== 1) {
+    return undefined;
+  }
   const declarations = sharedCssRules.filter(
     (candidate) =>
       candidate.source.path === files[0]!.path &&
@@ -238,7 +267,9 @@ export async function settleFiniteMotion(page: Page) {
       });
     });
     const finite = document.getAnimations().filter((motion) => {
-      if (motion.playState !== "running" && !motion.pending) return false;
+      if (motion.playState !== "running" && !motion.pending) {
+        return false;
+      }
       const timing = motion.effect?.getComputedTiming();
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
@@ -278,13 +309,17 @@ export async function measurePage(page: Page) {
       reviewRequired: boolean;
     }[] = [];
     const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
-      if (!visible(el)) return [];
+      if (!visible(el)) {
+        return [];
+      }
       const style = getComputedStyle(el);
       const axes: ("x" | "y")[] = [];
-      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/u.test(style.overflowX))
+      if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/u.test(style.overflowX)) {
         axes.push("x");
-      if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/u.test(style.overflowY))
+      }
+      if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/u.test(style.overflowY)) {
         axes.push("y");
+      }
       return axes.map((axis) => ({
         el,
         axis,
@@ -294,7 +329,7 @@ export async function measurePage(page: Page) {
         clientHeight: el.clientHeight,
       }));
     });
-    if (document.documentElement.scrollWidth > innerWidth + 2)
+    if (document.documentElement.scrollWidth > innerWidth + 2) {
       findings.push({
         kind: "document-overflow",
         description:
@@ -302,6 +337,7 @@ export async function measurePage(page: Page) {
         region: rect(document.documentElement),
         reviewRequired: true,
       });
+    }
     const controls = [
       ...document.querySelectorAll("button,input,select,textarea,a[href],[role=button]"),
     ].filter(visible);
@@ -331,36 +367,44 @@ export async function measurePage(page: Page) {
       const cells = row
         ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(visible)
         : [];
-      if (headers.length === cells.length)
+      if (headers.length === cells.length) {
         for (const [i, h] of headers.entries()) {
-          if (Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4)
+          if (
+            Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4
+          ) {
             findings.push({
               kind: "possible-column-misalignment",
               description: `Column ${label(h)} and its first cell have different left edges.`,
               region: rect(h),
               reviewRequired: true,
             });
+          }
         }
+      }
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
-    for (let i = 0; i < Math.min(controls.length, 150); i += 1)
+    for (let i = 0; i < Math.min(controls.length, 150); i += 1) {
       for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
         const a = controls[i]!;
         const b = controls[j]!;
-        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
+        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {
+          continue;
+        }
         const x = a.getBoundingClientRect();
         const y = b.getBoundingClientRect();
         if (
           Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
           Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
-        )
+        ) {
           findings.push({
             kind: "possible-overlap",
             description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
             region: rect(a),
             reviewRequired: true,
           });
+        }
       }
+    }
     const result = await (
       window as unknown as {
         axe: {
@@ -448,8 +492,12 @@ export async function measureStyles(
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
-      if (!styleSheetId) return undefined;
-      if (sourceMaps.has(styleSheetId)) return sourceMaps.get(styleSheetId);
+      if (!styleSheetId) {
+        return undefined;
+      }
+      if (sourceMaps.has(styleSheetId)) {
+        return sourceMaps.get(styleSheetId);
+      }
       const header = headers.get(styleSheetId);
       const css = await session
         .send("CSS.getStyleSheetText", { styleSheetId })
@@ -477,11 +525,12 @@ export async function measureStyles(
           const target = new URL(url, header?.sourceURL || page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
-          if (target.origin === new URL(page.url()).origin)
+          if (target.origin === new URL(page.url()).origin) {
             text = await page.evaluate(async (href) => {
               const response = await fetch(href);
               return response.ok ? response.text() : undefined;
             }, target.href);
+          }
         } catch {
           /* Missing or malformed maps remain unassigned. */
         }
@@ -496,8 +545,9 @@ export async function measureStyles(
           parsed.sources.every((source: unknown) => typeof source === "string") &&
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
-        )
+        ) {
           map = parsed;
+        }
       } catch {
         /* Source maps are optional evidence. */
       }
@@ -534,11 +584,14 @@ export async function measureStyles(
                   : prop.includes("shadow")
                     ? name.includes("shadow")
                     : /spacing|space|radius|border/u.test(name);
-            if (!relevant) continue;
+            if (!relevant) {
+              continue;
+            }
             el.style.removeProperty(prop);
             el.style.setProperty(prop, `var(${name})`);
-            if (el.style.getPropertyValue(prop))
+            if (el.style.getPropertyValue(prop)) {
               result[prop].push(getComputedStyle(el).getPropertyValue(prop));
+            }
           }
         }
         el.remove();
@@ -558,7 +611,9 @@ export async function measureStyles(
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
         .catch(() => ({ model: null }));
-      if (!model || model.width <= 0 || model.height <= 0) continue;
+      if (!model || model.width <= 0 || model.height <= 0) {
+        continue;
+      }
       const y = model.content[1] ?? 0;
       candidates.push({
         nodeId,
@@ -578,19 +633,25 @@ export async function measureStyles(
     // region and control/non-control bucket.
     for (const bucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
       const candidate = bucket.shift();
-      if (candidate) selected.push(candidate);
+      if (candidate) {
+        selected.push(candidate);
+      }
     }
     while (selected.length < 120) {
       let added = false;
       for (const bucket of buckets) {
-        if (selected.length >= 120) break;
+        if (selected.length >= 120) {
+          break;
+        }
         const candidate = bucket.shift();
         if (candidate) {
           selected.push(candidate);
           added = true;
         }
       }
-      if (!added) break;
+      if (!added) {
+        break;
+      }
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
@@ -611,7 +672,9 @@ export async function measureStyles(
         nodeId,
       });
       const cv = Object.fromEntries(computed.computedStyle.map((p) => [p.name, p.value]));
-      if (cv.display === "none" || cv.visibility === "hidden") continue;
+      if (cv.display === "none" || cv.visibility === "hidden") {
+        continue;
+      }
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
       });
@@ -779,30 +842,40 @@ export async function measureStyles(
           cv[property] ?? "",
           normalized[property] ?? [],
         );
-        if (unsupportedGap) classification = "unknown";
+        if (unsupportedGap) {
+          classification = "unknown";
+        }
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
             [...v.matchAll(/var\((--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
-        )
+        ) {
           classification = "unassessed";
-        if (classification === "token-reference") classification = "semantic-token-reference";
-        if (generated && classification === "unmatched-literal")
+        }
+        if (classification === "token-reference") {
+          classification = "semantic-token-reference";
+        }
+        if (generated && classification === "unmatched-literal") {
           classification = "generated-override";
+        }
         if (
           !generated &&
           (arrustedSharedSource(path) || Boolean(mappedShared)) &&
           classification !== "semantic-token-reference" &&
           classification !== "matching-literal" &&
           classification !== "structural"
-        )
+        ) {
           classification = "inherited-shared";
-        if (classification === "unassessed" || classification === "unmatched-literal")
+        }
+        if (classification === "unassessed" || classification === "unmatched-literal") {
           classification = "unknown";
+        }
         // Structural layout values are not adherence evidence, so exclude them
         // entirely rather than allowing downstream global scores to count them.
-        if (classification === "structural") continue;
+        if (classification === "structural") {
+          continue;
+        }
         const provenance: Observation["provenance"] = generated
           ? "generated"
           : arrustedSharedSource(path) || mappedShared
@@ -986,7 +1059,9 @@ export async function capturePreview(input: {
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
       const response = await page.goto(input.url, { waitUntil: "load" });
-      if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
+      if (response && !response.ok()) {
+        throw new Error(`Preview returned HTTP ${response.status()}`);
+      }
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index += 1) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];
@@ -995,8 +1070,9 @@ export async function capturePreview(input: {
         };
         if (scenario) {
           const refreshed = await page.reload({ waitUntil: "load" });
-          if (refreshed && !refreshed.ok())
+          if (refreshed && !refreshed.ok()) {
             throw new Error(`Preview returned HTTP ${refreshed.status()}`);
+          }
           try {
             for (const step of scenario.steps) {
               const locator = step.selector
@@ -1005,15 +1081,20 @@ export async function capturePreview(input: {
                     name: step.name,
                     exact: true,
                   });
-              if (step.action === "click") await locator.click();
-              else if (step.action === "fill") await locator.fill(step.value ?? "");
-              else await locator.selectOption({ label: step.value ?? "" });
+              if (step.action === "click") {
+                await locator.click();
+              } else if (step.action === "fill") {
+                await locator.fill(step.value ?? "");
+              } else {
+                await locator.selectOption({ label: step.value ?? "" });
+              }
             }
-            if (scenario.expect?.text)
+            if (scenario.expect?.text) {
               await page
                 .getByText(scenario.expect.text, { exact: false })
                 .first()
                 .waitFor({ state: "visible" });
+            }
             interaction = {
               status: "passed",
               expectedText: scenario.expect?.text,
@@ -1043,11 +1124,12 @@ export async function capturePreview(input: {
                 input.sharedClassTokens,
               )
             : undefined;
-        if (styles)
+        if (styles) {
           for (const observation of styles.observations) {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
           }
+        }
         const path = join(input.output, `${name}.png`);
         await settleFiniteMotion(page);
         await page.screenshot({ path, fullPage: true });

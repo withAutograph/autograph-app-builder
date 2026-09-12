@@ -23,7 +23,9 @@ function heartbeat() {
 export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
-  if (!requestId) return Response.json({ error: "request_invalid" }, { status: 400 });
+  if (!requestId) {
+    return Response.json({ error: "request_invalid" }, { status: 400 });
+  }
 
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
@@ -37,7 +39,9 @@ export async function GET(request: Request) {
     );
 
   const first = await read();
-  if (!first.ok) return first;
+  if (!first.ok) {
+    return first;
+  }
   const initial = builderProvisionProjectionSchema.parse(await first.json());
   // Native reconnects advance the header; a new EventSource can only provide
   // its acknowledged cursor in the URL. Never let the initial URL override it.
@@ -60,7 +64,9 @@ export async function GET(request: Request) {
     cancel() {
       // The polling loop observes this flag before and after each await.
       cancelled = true;
-      if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       timer = undefined;
     },
     async start(controller) {
@@ -69,7 +75,9 @@ export async function GET(request: Request) {
       let current: BuilderProvisionProjection = initial;
       try {
         while (true) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           if (current.revision > lastRevision) {
             controller.enqueue(event(current, String(current.revision)));
             lastRevision = current.revision;
@@ -85,7 +93,9 @@ export async function GET(request: Request) {
             lastWrite = Date.now();
           }
           await delay(pollIntervalMs);
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const response = await read();
           if (!response.ok) {
             controller.enqueue(event({ error: "provisioning_unavailable" }, "error", "error"));

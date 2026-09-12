@@ -12,11 +12,12 @@ const localOrigin = z
     const local =
       (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
       (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
-    if (!local || url.pathname !== "/" || url.search || url.hash)
+    if (!local || url.pathname !== "/" || url.search || url.hash) {
       context.addIssue({
         code: "custom",
         message: "Emulator origin must be a loopback origin.",
       });
+    }
     return url.origin;
   });
 
@@ -29,11 +30,12 @@ const vercelHost = z
     if (
       !normalized.endsWith(".vercel.app") ||
       !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.vercel\.app$/u.test(normalized)
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Preview emulator origin must be a Vercel hostname.",
       });
+    }
     return `https://${normalized}`;
   });
 
@@ -83,13 +85,16 @@ export function previewEmulationNamespace(input: {
 export function readPreviewProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): PreviewProviderEmulation | undefined {
-  if (environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === undefined) return undefined;
+  if (environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION === undefined) {
+    return undefined;
+  }
   if (
     environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
     environment.VERCEL_ENV !== "preview" ||
     environment.NODE_ENV !== "production"
-  )
+  ) {
     throw new Error("Preview provider emulation is unavailable.");
+  }
 
   const parsed = z
     .object({
@@ -139,13 +144,16 @@ export function readPreviewProviderEmulation(
 export function readLocalProviderEmulation(
   environment: Readonly<Record<string, string | undefined>>,
 ): LocalProviderEmulation | undefined {
-  if (environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === undefined) return undefined;
+  if (environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === undefined) {
+    return undefined;
+  }
   if (
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "1" ||
     environment.NODE_ENV === "production" ||
     environment.VERCEL_ENV !== undefined
-  )
+  ) {
     throw new Error("Local provider emulation is unavailable.");
+  }
   const parsed = z
     .object({
       canonicalOrigin: z.string().url(),
@@ -180,7 +188,9 @@ export function readProviderEmulation(
 ): ProviderEmulation | undefined {
   const local = readLocalProviderEmulation(environment);
   const preview = readPreviewProviderEmulation(environment);
-  if (local && preview) throw new Error("Provider emulation mode is ambiguous.");
+  if (local && preview) {
+    throw new Error("Provider emulation mode is ambiguous.");
+  }
   return local ?? preview;
 }
 
@@ -188,8 +198,12 @@ export function providerEmulationEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
   const emulation = readProviderEmulation(environment);
-  if (!emulation) return environment;
-  if (emulation.mode === "local") return { ...environment, APP_ORIGIN: emulation.canonicalOrigin };
+  if (!emulation) {
+    return environment;
+  }
+  if (emulation.mode === "local") {
+    return { ...environment, APP_ORIGIN: emulation.canonicalOrigin };
+  }
   return {
     ...environment,
     APP_ORIGIN: emulation.canonicalOrigin,

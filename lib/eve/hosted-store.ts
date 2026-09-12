@@ -135,55 +135,66 @@ export const durableHostedSessionRecordSchema = z
   })
   .strict()
   .superRefine((record, context) => {
-    if (record.updatedAtEpochMs < record.createdAtEpochMs)
+    if (record.updatedAtEpochMs < record.createdAtEpochMs) {
       context.addIssue({
         code: "custom",
         message: "Hosted session updates cannot precede creation.",
       });
+    }
     if (
       record.lastProgressAtEpochMs < record.createdAtEpochMs ||
       record.lastProgressAtEpochMs > record.updatedAtEpochMs
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Hosted session progress must be within its durable lifetime.",
       });
-    if ((record.checkpoint === undefined) !== (record.checkpointDigest === undefined))
+    }
+    if ((record.checkpoint === undefined) !== (record.checkpointDigest === undefined)) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their exact digest.",
       });
-    if ((record.checkpoint === undefined) !== (record.checkpointProgressDigest === undefined))
+    }
+    if ((record.checkpoint === undefined) !== (record.checkpointProgressDigest === undefined)) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their progress digest.",
       });
+    }
     if (
       record.checkpoint !== undefined &&
       hostedSessionCheckpointDigest(record.checkpoint) !== record.checkpointDigest
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoint digest mismatch.",
       });
+    }
     if (
       record.checkpoint !== undefined &&
       hostedSessionCheckpointProgressDigest(record.checkpoint) !== record.checkpointProgressDigest
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoint progress digest mismatch.",
       });
-    if (record.checkpoint !== undefined && record.checkpoint.status !== record.status)
+    }
+    if (record.checkpoint !== undefined && record.checkpoint.status !== record.status) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoint status mismatch.",
       });
-    if (record.adapterGeneration === 1 && record.adapterSessionId !== record.originAdapterSessionId)
+    }
+    if (
+      record.adapterGeneration === 1 &&
+      record.adapterSessionId !== record.originAdapterSessionId
+    ) {
       context.addIssue({
         code: "custom",
         message: "The first adapter generation must retain its origin binding.",
       });
+    }
   });
 
 export const hostedSessionRecordSchema = z.discriminatedUnion("version", [
@@ -197,8 +208,12 @@ export type DurableHostedSessionRecord = z.infer<typeof durableHostedSessionReco
 function legacySessionStage(
   status: z.infer<typeof sessionStatusSchema>,
 ): z.infer<typeof publicSessionStageSchema> {
-  if (status === "completed") return "complete";
-  if (["failed", "cancelled", "input_required"].includes(status)) return "needs_attention";
+  if (status === "completed") {
+    return "complete";
+  }
+  if (["failed", "cancelled", "input_required"].includes(status)) {
+    return "needs_attention";
+  }
   return "designing";
 }
 
@@ -206,7 +221,9 @@ export function toDurableHostedSessionRecord(
   input: HostedSessionRecord,
 ): DurableHostedSessionRecord {
   const record = hostedSessionRecordSchema.parse(input);
-  if (record.version === 2) return record;
+  if (record.version === 2) {
+    return record;
+  }
   return durableHostedSessionRecordSchema.parse({
     version: 2,
     sessionId: record.sessionId,
@@ -370,17 +387,19 @@ export const hostedOperationRecordSchema = z
         record.resumeSessionId !== undefined &&
         record.state === "succeeded" &&
         record.resumeSessionId === record.sessionId
-      )
+      ) {
         context.addIssue({
           code: "custom",
           message: "A resumed child must not replace its parent session ID.",
         });
+      }
     } else {
-      if (record.resumeSessionId !== undefined)
+      if (record.resumeSessionId !== undefined) {
         context.addIssue({
           code: "custom",
           message: "Only a child-session start may bind a resume parent.",
         });
+      }
       if (record.sessionId === undefined) {
         context.addIssue({
           code: "custom",
@@ -634,7 +653,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   }): Promise<HostedSessionRecord> {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
-    if (current === undefined) throw new Error("Hosted session was not found.");
+    if (current === undefined) {
+      throw new Error("Hosted session was not found.");
+    }
     const durable = toDurableHostedSessionRecord(current);
     const observed = durableHostedSessionRecordSchema.parse({
       ...durable,
@@ -669,13 +690,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   }): Promise<HostedSessionRecord> {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
-    if (current === undefined) throw new Error("Hosted session was not found.");
+    if (current === undefined) {
+      throw new Error("Hosted session was not found.");
+    }
     const durable = toDurableHostedSessionRecord(current);
     if (
       durable.adapterGeneration !== input.expectedAdapterGeneration ||
       durable.checkpointDigest !== input.expectedCheckpointDigest
-    )
+    ) {
       throw new Error("Hosted session recovery raced another continuation.");
+    }
     const replaced = durableHostedSessionRecordSchema.parse({
       ...durable,
       adapterSessionId: input.adapterSessionId,

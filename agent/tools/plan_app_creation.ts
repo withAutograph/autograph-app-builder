@@ -31,10 +31,11 @@ export default defineTool({
       state.phase === "prepared" ||
       state.phase === "ui_previewed" ||
       state.phase === "ui_accepted"
-    )
+    ) {
       throw new Error(
         "Finalize the UI and accept a build-ready AppSpec before running target planning.",
       );
+    }
     const prepared = await prepareOrReuseDependencies({
       current: state,
       callId: ctx.callId,
@@ -51,8 +52,9 @@ export default defineTool({
       current.phase === "validation_failed" ||
       current.phase === "validated" ||
       current.phase === "reviewed"
-    )
+    ) {
       return { ...current.proposal, reused: true };
+    }
 
     const binding = {
       sourceSha: current.workspace.sourceSha,
@@ -81,7 +83,9 @@ export default defineTool({
       sourceReceipt: current.sourceReceipt,
       environment: process.env,
       onIdentity(identity) {
-        if (identityReceipt !== undefined) return;
+        if (identityReceipt !== undefined) {
+          return;
+        }
         const unsigned = {
           version: 1 as const,
           ...binding,
@@ -112,7 +116,9 @@ export default defineTool({
         workflowBeforeProposal = identityState;
       },
     });
-    if (identityReceipt === undefined) throw new Error("Target identity receipt was not recorded.");
+    if (identityReceipt === undefined) {
+      throw new Error("Target identity receipt was not recorded.");
+    }
     const recordedIdentity = identityReceipt;
     const unsigned = {
       version: 1 as const,

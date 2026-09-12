@@ -115,7 +115,9 @@ export async function applicationCounts() {
 export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
-    if (!response.ok()) return null;
+    if (!response.ok()) {
+      return null;
+    }
     return response.json();
   } catch {
     return null;
@@ -201,15 +203,17 @@ export async function advanceProviderConnectionToApproval(page: Page, provider: 
   const descriptor = providerDescriptor(provider);
   await page.getByRole("button", { name: descriptor.installationButton }).click();
   await expect(page).toHaveURL(new RegExp(`/local-connections/${descriptor.slug}`, "u"));
-  for (const scope of descriptor.seededScopes)
+  for (const scope of descriptor.seededScopes) {
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
+  }
 }
 
 export async function selectProviderIdentity(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
-  for (const scope of descriptor.seededScopes)
+  for (const scope of descriptor.seededScopes) {
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
+  }
   await page.getByRole("button", { name: descriptor.approvalButton }).click();
   if (provider === "GitHub") {
     await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
@@ -240,7 +244,9 @@ export async function reopenProviderConnection(page: Page, provider: EmulatedPro
   const reconnect = page.getByRole("button", {
     name: descriptor.reconnectButton,
   });
-  if (!(await reconnect.isVisible())) await page.getByLabel(descriptor.selectedControl).click();
+  if (!(await reconnect.isVisible())) {
+    await page.getByLabel(descriptor.selectedControl).click();
+  }
   await reconnect.click();
   await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"));
 }
@@ -269,15 +275,21 @@ export async function installBrowserBoundaries(
       configurable: true,
       value: {
         writeText: async (value: string) => {
-          if (boundaryMode === "blocked") throw new Error("Clipboard blocked");
+          if (boundaryMode === "blocked") {
+            throw new Error("Clipboard blocked");
+          }
           state.clipboard.push(value);
         },
       },
     });
     window.open = ((url?: string | URL) => {
-      if (boundaryMode === "blocked") throw new Error("Protocol blocked");
+      if (boundaryMode === "blocked") {
+        throw new Error("Protocol blocked");
+      }
       const value = String(url ?? "");
-      if (value !== "about:blank") state.opened.push(value);
+      if (value !== "about:blank") {
+        state.opened.push(value);
+      }
       return {
         close() {
           // The emulated window has no resources to close.

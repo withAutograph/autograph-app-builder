@@ -26,12 +26,13 @@ export const githubRepositoryAccessSchema = z
       })
       .strict()
       .superRefine((repository, context) => {
-        if (repository.fullName !== `${repository.owner}/${repository.name}`)
+        if (repository.fullName !== `${repository.owner}/${repository.name}`) {
           context.addIssue({
             code: "custom",
             path: ["fullName"],
             message: "Repository fullName must match owner and name.",
           });
+        }
       })
       .optional(),
     scopes: z

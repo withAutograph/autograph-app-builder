@@ -80,8 +80,12 @@ export function createPostgresBuilderProvisionJournalStore(
       const row = rows[0]
         ? parseRow(rows[0])
         : await read({ authority, requestId: input.request.requestId });
-      if (!row) throw new Error("provision-journal-not-durable");
-      if (row.requestDigest !== requestDigest) throw new Error("provision-request-id-reused");
+      if (!row) {
+        throw new Error("provision-journal-not-durable");
+      }
+      if (row.requestDigest !== requestDigest) {
+        throw new Error("provision-request-id-reused");
+      }
       return row;
     },
     read,

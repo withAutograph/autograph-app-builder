@@ -39,7 +39,9 @@ function storage() {
     insert: vi.fn((table: unknown) => ({
       values: (row: Record<string, unknown>) => ({
         onConflictDoNothing: async () => {
-          if (!rows.get(table)!.length) rows.get(table)!.push(row);
+          if (!rows.get(table)!.length) {
+            rows.get(table)!.push(row);
+          }
         },
       }),
     })),
@@ -48,7 +50,9 @@ function storage() {
       try {
         return await operation(database);
       } catch (error) {
-        for (const [i, key] of [...rows.keys()].entries()) rows.set(key, before[i]);
+        for (const [i, key] of [...rows.keys()].entries()) {
+          rows.set(key, before[i]);
+        }
         throw error;
       }
     },

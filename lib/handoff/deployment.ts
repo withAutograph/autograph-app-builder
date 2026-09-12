@@ -26,7 +26,9 @@ class BuilderHandoffRequestError extends Error {
 
 function hasCanonicalRequestOrigin(request: Request, origin: string) {
   const requestUrl = new URL(request.url);
-  if (requestUrl.origin === origin) return true;
+  if (requestUrl.origin === origin) {
+    return true;
+  }
   const canonicalUrl = new URL(origin);
   return (
     requestUrl.protocol === canonicalUrl.protocol &&
@@ -35,13 +37,17 @@ function hasCanonicalRequestOrigin(request: Request, origin: string) {
 }
 
 async function readBoundedJson(request: Request) {
-  if (request.body === null) throw new BuilderHandoffRequestError();
+  if (request.body === null) {
+    throw new BuilderHandoffRequestError();
+  }
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   while (true) {
     const next = await reader.read();
-    if (next.done) break;
+    if (next.done) {
+      break;
+    }
     bytes += next.value.byteLength;
     if (bytes > maximumRequestBytes) {
       await reader.cancel();
@@ -116,20 +122,23 @@ export function createBuilderHandoffRouteHandler(input: {
         !hasCanonicalRequestOrigin(request, origin) ||
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
-      )
+      ) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
+      }
       const contentLength = request.headers.get("content-length");
       if (
         contentLength &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
-      )
+      ) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
           { status: 401, headers: noStore },
         );
+      }
       const body = builderHandoffCreateRequestSchema.parse(await readBoundedJson(request));
       const provision = body.provisioningRequestId
         ? await input.journal.read({
@@ -137,8 +146,9 @@ export function createBuilderHandoffRouteHandler(input: {
             requestId: body.provisioningRequestId,
           })
         : undefined;
-      if (body.provisioningRequestId && !provision)
+      if (body.provisioningRequestId && !provision) {
         return Response.json({ error: "handoff_unavailable" }, { status: 404, headers: noStore });
+      }
       const github = provision?.record.response.github;
       const appName = provision?.record.request.appName ?? body.appName;
       const repository = provision?.record.request.repository ?? body.repository;
@@ -176,22 +186,27 @@ export function createBuilderHandoffRouteHandler(input: {
         { headers: noStore },
       );
     } catch (error) {
-      if (error instanceof BuilderHandoffRequestError || error instanceof z.ZodError)
+      if (error instanceof BuilderHandoffRequestError || error instanceof z.ZodError) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
-      if (error instanceof BuilderHandoffConflictError)
+      }
+      if (error instanceof BuilderHandoffConflictError) {
         return Response.json({ error: "request_id_conflict" }, { status: 409, headers: noStore });
+      }
       return Response.json({ error: "handoff_unavailable" }, { status: 503, headers: noStore });
     }
   };
 }
 
 function handoffErrorResponse(error: unknown) {
-  if (error instanceof BuilderHandoffUnavailableError)
+  if (error instanceof BuilderHandoffUnavailableError) {
     return Response.json({ error: "handoff_unavailable" }, { status: 404, headers: noStore });
-  if (error instanceof BuilderHandoffConflictError)
+  }
+  if (error instanceof BuilderHandoffConflictError) {
     return Response.json({ error: "request_id_conflict" }, { status: 409, headers: noStore });
-  if (error instanceof BuilderHandoffRequestError || error instanceof z.ZodError)
+  }
+  if (error instanceof BuilderHandoffRequestError || error instanceof z.ZodError) {
     return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
+  }
   return Response.json({ error: "handoff_unavailable" }, { status: 503, headers: noStore });
 }
 
@@ -223,20 +238,23 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         !hasCanonicalRequestOrigin(request, origin) ||
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
-      )
+      ) {
         throw new BuilderHandoffRequestError();
+      }
       const contentLength = request.headers.get("content-length");
       if (
         contentLength &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
-      )
+      ) {
         throw new BuilderHandoffRequestError();
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
           { status: 401, headers: noStore },
         );
+      }
       const body = z
         .object({ creationRequestId: z.string().uuid() })
         .strict()
@@ -300,7 +318,9 @@ export async function getBuilderHandoffPageData(input: {
 }): Promise<BuilderHandoffPageData | undefined> {
   const context = deploymentContext(input.environment);
   const authority = await context.authorityForHeaders(input.headers);
-  if (!authority) return undefined;
+  if (!authority) {
+    return undefined;
+  }
   const { status, record } = await context.handoffs.status({
     authority,
     handoffId: input.handoffId,
@@ -338,7 +358,9 @@ export async function findAuthenticatedPendingBuilderHandoff(input: {
 }): Promise<{ handoffId: string } | undefined> {
   const context = deploymentContext(input.environment);
   const authority = await context.authorityForHeaders(input.headers);
-  if (!authority) return undefined;
+  if (!authority) {
+    return undefined;
+  }
   const record = await context.handoffs.findLatestPending({ authority });
   return record ? { handoffId: record.handoffId } : undefined;
 }

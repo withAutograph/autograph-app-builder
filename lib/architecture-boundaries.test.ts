@@ -8,7 +8,9 @@ async function sourceFiles(directory: string): Promise<string[]> {
   const nested = await Promise.all(
     entries.map(async (entry) => {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFiles(path);
+      if (entry.isDirectory()) {
+        return sourceFiles(path);
+      }
       return entry.isFile() && /\.[jt]sx?$/u.test(entry.name) ? [path] : [];
     }),
   );

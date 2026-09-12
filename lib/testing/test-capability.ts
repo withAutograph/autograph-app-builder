@@ -27,9 +27,15 @@ export function testCapabilityEnabled(
   environment: Readonly<Record<string, string | undefined>>,
   injected: unknown,
 ): boolean {
-  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1") return false;
-  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== "mock-model") return false;
-  if (typeof injected !== "object" || injected === null) return false;
+  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1") {
+    return false;
+  }
+  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== "mock-model") {
+    return false;
+  }
+  if (typeof injected !== "object" || injected === null) {
+    return false;
+  }
   const candidate = injected as Partial<InjectedTestCapability>;
   return (
     Object.isFrozen(candidate) &&

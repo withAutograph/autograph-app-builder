@@ -60,7 +60,9 @@ export function SearchCombobox({
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
@@ -72,7 +74,9 @@ export function SearchCombobox({
     setActive(0);
   };
   const choose = (option: ComboOption) => {
-    if (option.value.startsWith("create-") || option.value.startsWith("add-")) return;
+    if (option.value.startsWith("create-") || option.value.startsWith("add-")) {
+      return;
+    }
     onChange(option.value);
     setQuery(option.label);
     setFiltering(false);
@@ -115,7 +119,9 @@ export function SearchCombobox({
           setActive(0);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Escape") restore();
+          if (event.key === "Escape") {
+            restore();
+          }
           if (event.key === "ArrowDown") {
             event.preventDefault();
             setOpen(true);

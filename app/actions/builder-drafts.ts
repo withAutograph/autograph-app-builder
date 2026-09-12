@@ -14,7 +14,9 @@ async function context() {
     environment: process.env,
     headers: await headers(),
   });
-  if (!value) throw new Error("builder-draft-unauthorized");
+  if (!value) {
+    throw new Error("builder-draft-unauthorized");
+  }
   return value;
 }
 

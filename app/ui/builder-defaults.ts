@@ -85,7 +85,9 @@ export function appNameFromBrief(brief: string) {
     .split("\n")
     .map((line) => line.replace(/^\s*#+\s*/u, "").trim())
     .find(Boolean);
-  if (!firstContentLine) return "";
+  if (!firstContentLine) {
+    return "";
+  }
 
   const words = firstContentLine
     .replaceAll(/[*_`[\](){}]/gu, " ")

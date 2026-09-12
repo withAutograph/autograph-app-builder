@@ -51,7 +51,9 @@ export function isHostedSandboxExecutionEnabled(
 }
 
 function hostedLeaseEnabled(environment: Readonly<Record<string, string | undefined>>) {
-  if (!isHostedSandboxExecutionEnabled(environment)) return false;
+  if (!isHostedSandboxExecutionEnabled(environment)) {
+    return false;
+  }
   readHostedDeploymentEnvironment(environment);
   return true;
 }
@@ -142,7 +144,9 @@ export async function acquireHostedSandboxExecutionLease(input: {
     const evidence = await stopWithin(input.sandbox);
     throw errorWithCleanupEvidence(error, evidence);
   }
-  if (!enabled) return undefined;
+  if (!enabled) {
+    return undefined;
+  }
   try {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
     if (
@@ -183,7 +187,9 @@ export async function assertHostedSandboxCommandAuthority(input: {
   nowEpochMs?: number;
 }) {
   const environment = input.environment ?? process.env;
-  if (!dependencies.enabled(environment)) return undefined;
+  if (!dependencies.enabled(environment)) {
+    return undefined;
+  }
   const active = commandAuthorities.get(input.sessionId);
   if (active === undefined) {
     throw new Error("Hosted sandbox command authority is unavailable.");
@@ -219,7 +225,9 @@ export async function releaseHostedSandboxExecutionLease(input: {
   nowEpochMs?: number;
 }) {
   const environment = input.environment ?? process.env;
-  if (!dependencies.enabled(environment)) return { released: false } as const;
+  if (!dependencies.enabled(environment)) {
+    return { released: false } as const;
+  }
   let principal: HostedPrincipal;
   try {
     ({ principal } = exactForwardedSessionAuthority(input.sessionAuth));

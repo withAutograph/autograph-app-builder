@@ -6,7 +6,6 @@ export default defineConfig({
   ignorePatterns: core.ignorePatterns,
   rules: {
     "unicorn/import-style": "off",
-    "eslint/curly": "off",
     "eslint/no-await-in-loop": "off",
     "eslint/no-bitwise": "off",
     "eslint/no-shadow": "off",

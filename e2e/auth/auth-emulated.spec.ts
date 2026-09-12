@@ -60,7 +60,9 @@ function reportPasskeyFailures(page: Page) {
       return;
     }
     const body = await response.text().catch(() => undefined);
-    if (body === undefined) return;
+    if (body === undefined) {
+      return;
+    }
     console.error(
       "passkey request failed",
       response.status(),
@@ -235,7 +237,9 @@ test("passkey registration guards Sign Up and supports returning login", async (
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.addInitScript(() => {
-      if (!window.PublicKeyCredential) return;
+      if (!window.PublicKeyCredential) {
+        return;
+      }
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -304,7 +308,9 @@ test("passkey registration keeps the alternate authenticator flow when platform 
 }) => {
   reportPasskeyFailures(page);
   await page.addInitScript(() => {
-    if (!window.PublicKeyCredential) return;
+    if (!window.PublicKeyCredential) {
+      return;
+    }
     Object.defineProperty(
       window.PublicKeyCredential,
       "isUserVerifyingPlatformAuthenticatorAvailable",

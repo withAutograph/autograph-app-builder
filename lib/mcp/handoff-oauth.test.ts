@@ -47,15 +47,24 @@ function handoffStore(): BuilderHandoffStore {
           candidate.creationRequestId === record.creationRequestId &&
           candidate.requestDigest === record.requestDigest,
       );
-      if (existing) return { disposition: "existing", record: existing };
+      if (existing) {
+        return { disposition: "existing", record: existing };
+      }
       records.set(record.handoffId, record);
       return { disposition: "created", record };
     },
     async bindSession(input) {
       const record = await read(input);
-      if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
+      if (
+        !record ||
+        record.requestDigest !== input.requestDigest ||
+        input.now >= record.expiresAt
+      ) {
         return undefined;
-      if (record.sessionId) return record;
+      }
+      if (record.sessionId) {
+        return record;
+      }
       const bound = {
         ...record,
         sessionId: input.sessionId,
@@ -141,8 +150,9 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             Object.entries(authority).some(
               ([key, expected]) => value.authority[key as keyof typeof authority] !== expected,
             )
-          )
+          ) {
             return undefined;
+          }
           return structuredClone(journalRow);
         },
       );
@@ -158,9 +168,13 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           const session = await auth.auth.api.getSession({
             headers: request.headers,
           });
-          if (!session) return undefined;
+          if (!session) {
+            return undefined;
+          }
           const workspaces = auth.membershipState.activeWorkspaces;
-          if (workspaces.length !== 1) return undefined;
+          if (workspaces.length !== 1) {
+            return undefined;
+          }
           return {
             issuer,
             audience: resource,
@@ -366,8 +380,9 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         sourceHandoffId: handoffId,
       });
       const persisted = await store.getSession(principal, result.structuredContent.sessionId);
-      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId)
+      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId) {
         throw new Error("Durable prepared session missing.");
+      }
       const restartedAuth = sessionEnvelope(persisted.principal, persisted.sourceHandoffId);
       providers.rotateCredentials();
       const credentialReadsBeforeRestart = providers.credentialRead.mock.calls.length;

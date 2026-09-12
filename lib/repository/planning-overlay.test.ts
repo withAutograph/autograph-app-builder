@@ -10,7 +10,9 @@ import {
 describe("planning from the current checkout", () => {
   it("completes identity and planning without a source inventory", async () => {
     const readTextFile = vi.fn(async ({ path }: { path: string }) => {
-      if (path.includes("source-files")) throw new Error("Inventory must not be required");
+      if (path.includes("source-files")) {
+        throw new Error("Inventory must not be required");
+      }
       return null;
     });
     const executor = vi.fn(fixtureTargetCommandExecutor());

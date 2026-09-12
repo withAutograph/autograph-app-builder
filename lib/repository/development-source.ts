@@ -28,17 +28,20 @@ export function canAutoSelectDevelopmentSource(environment: Environment = proces
 
 function required(environment: Environment, name: string) {
   const value = environment[name];
-  if (value === undefined || value.length === 0)
+  if (value === undefined || value.length === 0) {
     throw new Error(`Development source ${name} binding was unavailable.`);
+  }
   return value;
 }
 
 function exactDevelopmentSourceRoot(path: string) {
-  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
+  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path) {
     throw new Error("Development source root was not canonical.");
+  }
   const info = lstatSync(path);
-  if (!info.isDirectory() || info.isSymbolicLink())
+  if (!info.isDirectory() || info.isSymbolicLink()) {
     throw new Error("Development source root was not a directory.");
+  }
   return path;
 }
 
@@ -52,14 +55,20 @@ export async function developmentSourceReceipt(
   suppliedPath?: string,
   environment: Environment = process.env,
 ): Promise<SourceReceipt | undefined> {
-  if (isHostedVercelRuntime(environment)) return undefined;
-  if (environment.APP_BUILDER_EXECUTION_MODE !== "development") return undefined;
-  if (!closedDevelopmentBinding(environment))
+  if (isHostedVercelRuntime(environment)) {
+    return undefined;
+  }
+  if (environment.APP_BUILDER_EXECUTION_MODE !== "development") {
+    return undefined;
+  }
+  if (!closedDevelopmentBinding(environment)) {
     throw new Error("Development source binding was not closed.");
+  }
 
   const sourceRoot = exactDevelopmentSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
-  if (suppliedPath !== undefined && suppliedPath !== sourceRoot)
+  if (suppliedPath !== undefined && suppliedPath !== sourceRoot) {
     throw new Error("Development source path did not match the selected snapshot.");
+  }
   // Development deliberately re-observes a live checkout.  Source edits are
   // normal planning input, not authority failures; the sandbox materializer
   // computes the current working-tree generation when it synchronizes bytes.

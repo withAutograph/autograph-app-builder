@@ -63,7 +63,9 @@ const oauthInitializeSchema = z
 export const previewActivationPlanRequestSchema = z
   .discriminatedUnion("action", [invitedUserSchema, runtimeRoleSchema, oauthInitializeSchema])
   .superRefine((request, context) => {
-    if (request.action === "runtime-role.configure") return;
+    if (request.action === "runtime-role.configure") {
+      return;
+    }
     const issuer = new URL(request.issuer);
     const resource = new URL(request.resource);
     if (

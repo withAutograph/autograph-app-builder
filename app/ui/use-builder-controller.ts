@@ -150,7 +150,9 @@ export function useBuilderController({
         // unchanged field from an older composite snapshot can otherwise
         // arrive after a later input event and overwrite it (for example, a
         // generated name replacing a manually edited name before OAuth).
-        if (Object.is(current[field], next[field])) continue;
+        if (Object.is(current[field], next[field])) {
+          continue;
+        }
         builderForm.setValue(field, next[field], {
           shouldDirty: true,
           shouldValidate: true,
@@ -245,11 +247,12 @@ export function useBuilderController({
       _previous: ServerSaveState,
       input: SaveActiveBuilderDraftInput,
     ): Promise<ServerSaveState> => {
-      if (!saveActiveBuilderDraftAction)
+      if (!saveActiveBuilderDraftAction) {
         return {
           mutationId: input.clientMutationId,
           error: "builder-draft-action-unavailable",
         };
+      }
       try {
         return {
           mutationId: input.clientMutationId,
@@ -274,17 +277,25 @@ export function useBuilderController({
     >(),
   );
   useEffect(() => {
-    if (!serverSaveState) return;
+    if (!serverSaveState) {
+      return;
+    }
     const waiter = serverSaveWaiters.current.get(serverSaveState.mutationId);
-    if (!waiter) return;
+    if (!waiter) {
+      return;
+    }
     serverSaveWaiters.current.delete(serverSaveState.mutationId);
-    if ("saved" in serverSaveState) waiter.resolve(serverSaveState.saved);
-    else waiter.reject(new Error(serverSaveState.error));
+    if ("saved" in serverSaveState) {
+      waiter.resolve(serverSaveState.saved);
+    } else {
+      waiter.reject(new Error(serverSaveState.error));
+    }
   }, [serverSaveState]);
   useEffect(
     () => () => {
-      for (const waiter of serverSaveWaiters.current.values())
+      for (const waiter of serverSaveWaiters.current.values()) {
         waiter.reject(new Error("builder-draft-unmounted"));
+      }
       serverSaveWaiters.current.clear();
     },
     [],
@@ -341,7 +352,9 @@ export function useBuilderController({
               body: JSON.stringify(input),
               keepalive: true,
             }).then(async (response) => {
-              if (!response.ok) throw new Error("builder-draft-save-failed");
+              if (!response.ok) {
+                throw new Error("builder-draft-save-failed");
+              }
               return (await response.json()) as {
                 draftId: string;
                 revision: number;
@@ -358,8 +371,9 @@ export function useBuilderController({
         // and only after durable acknowledgement. Never erase a newer tab's brief.
         if (initialBrief) {
           try {
-            if (sessionStorage.getItem("autograph-app-brief") === initialBrief)
+            if (sessionStorage.getItem("autograph-app-brief") === initialBrief) {
               sessionStorage.removeItem("autograph-app-brief");
+            }
           } catch {
             // The acknowledged server draft remains authoritative without browser storage.
           }
@@ -370,7 +384,9 @@ export function useBuilderController({
           savedAt: saved.updatedAt,
         };
       } finally {
-        if (!keepalive) pendingActionExpectedRevisions.current.delete(input.expectedRevision);
+        if (!keepalive) {
+          pendingActionExpectedRevisions.current.delete(input.expectedRevision);
+        }
       }
     },
     [initialBrief, requestServerSave, saveActiveBuilderDraftAction],
@@ -460,18 +476,24 @@ export function useBuilderController({
       if (
         expectedLocalMutationVersion !== undefined &&
         localFormMutationVersion.current !== expectedLocalMutationVersion
-      )
+      ) {
         return;
-      if (remote.revision <= draftRevision.current) return;
+      }
+      if (remote.revision <= draftRevision.current) {
+        return;
+      }
       await discardSupersededByRemoteRevision(remote.revision);
       // A newer server snapshot or save acknowledgement can settle while
       // device outbox I/O is pending. Never move the applied revision backward.
-      if (remote.revision <= draftRevision.current) return;
+      if (remote.revision <= draftRevision.current) {
+        return;
+      }
       if (
         expectedLocalMutationVersion !== undefined &&
         localFormMutationVersion.current !== expectedLocalMutationVersion
-      )
+      ) {
         return;
+      }
       draftRevision.current = remote.revision;
       draftUpdatedAt.current = remote.updatedAt;
       activeDraftId.current = remote.draftId;
@@ -551,8 +573,9 @@ export function useBuilderController({
       if (
         appNameEditedByUser.current ||
         (generatedAppName.current !== undefined && generatedAppName.current !== currentAppName)
-      )
+      ) {
         return { ...current, appName: currentAppName, brief };
+      }
       const appName = appNameFromBrief(brief) || randomAppName(generatedNameSeed);
       generatedAppName.current = appName;
       return {
@@ -566,7 +589,9 @@ export function useBuilderController({
     });
   };
   const addConnection = (name: string) => {
-    if (comingSoonConnections.has(name)) return;
+    if (comingSoonConnections.has(name)) {
+      return;
+    }
     setForm((current) => ({
       ...current,
       connections: current.connections.includes(name)
@@ -582,14 +607,18 @@ export function useBuilderController({
     setConnectedConnections((current) => current.filter((item) => item !== name));
   };
   const completeConnection = () => {
-    if (!connectionFlow) return;
+    if (!connectionFlow) {
+      return;
+    }
     setConnectedConnections((current) =>
       current.includes(connectionFlow.name) ? current : [...current, connectionFlow.name],
     );
     setConnectionFlow(null);
   };
   useEffect(() => {
-    if (!interactive) return;
+    if (!interactive) {
+      return;
+    }
     const id = resumedVercelConnection
       ? "vercel-team"
       : resumedGitHubConnection
@@ -599,7 +628,9 @@ export function useBuilderController({
           : initialDraft
             ? "git-scope"
             : undefined;
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
@@ -614,7 +645,9 @@ export function useBuilderController({
     // oxlint-disable-next-line promise/prefer-await-to-then
     void restorePending()
       .then((entry) => {
-        if (disposed || !entry) return;
+        if (disposed || !entry) {
+          return;
+        }
         // IndexedDB can resolve after the user has already started editing the
         // hydrated form. Never let that older recovery snapshot replace those
         // edits or reset the user-edited field markers. The new local snapshot
@@ -646,12 +679,16 @@ export function useBuilderController({
         generatedAppName.current = snapshot.appNameEditedByUser ? undefined : snapshot.form.appName;
         repositoryEditedByUser.current = snapshot.repositoryEditedByUser;
         autosaveSnapshotFingerprint.current = JSON.stringify(snapshot);
-        if (!disposed) void resumePending();
+        if (!disposed) {
+          void resumePending();
+        }
       })
       // Complete the recovery indicator for both success and failure.
       // oxlint-disable-next-line promise/prefer-await-to-then
       .finally(() => {
-        if (!disposed) setDraftRecoveryComplete(true);
+        if (!disposed) {
+          setDraftRecoveryComplete(true);
+        }
       });
     // oxlint-enable promise/prefer-await-to-callbacks
     // oxlint-enable promise/prefer-await-to-then
@@ -663,23 +700,30 @@ export function useBuilderController({
     let disposed = false;
     let wasHidden = document.visibilityState === "hidden";
     const checkForServerDraft = async () => {
-      if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      if (document.visibilityState === "hidden" || !navigator.onLine) {
+        return;
+      }
       const localMutationVersion = localFormMutationVersion.current;
       // A completed foreground action can become visible to this read before
       // its acknowledgement advances draftRevision. Do not reinterpret that
       // device-local save as a remote revision and replace edits made while
       // the action was in flight.
-      if (pendingActionExpectedRevisions.current.size > 0) return;
+      if (pendingActionExpectedRevisions.current.size > 0) {
+        return;
+      }
       try {
-        if (!loadActiveBuilderDraftAction) return;
+        if (!loadActiveBuilderDraftAction) {
+          return;
+        }
         const remote = await loadActiveBuilderDraftAction();
         if (
           disposed ||
           !remote ||
           pendingActionExpectedRevisions.current.size > 0 ||
           localFormMutationVersion.current !== localMutationVersion
-        )
+        ) {
           return;
+        }
         await applyAuthoritativeDraft(remote, localMutationVersion);
       } catch {
         // Autosave owns retry/error presentation; sync polling stays quiet.
@@ -693,7 +737,9 @@ export function useBuilderController({
       // Browsers can emit an initial visible event while the builder hydrates.
       // The server-rendered snapshot is already authoritative for that first
       // paint; only refresh after this document has actually been backgrounded.
-      if (wasHidden) void checkForServerDraft();
+      if (wasHidden) {
+        void checkForServerDraft();
+      }
     };
     const timer = setInterval(() => {
       checkForServerDraft();
@@ -706,8 +752,12 @@ export function useBuilderController({
     };
   }, [applyAuthoritativeDraft, loadActiveBuilderDraftAction]);
   useEffect(() => {
-    if (durableDraftRevision <= draftRevision.current) return;
-    if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) return;
+    if (durableDraftRevision <= draftRevision.current) {
+      return;
+    }
+    if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) {
+      return;
+    }
     const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
     if (pendingActionExpectedRevisions.current.has(durableDraftRevision - 1)) {
       activeDraftId.current = durableDraftId;
@@ -725,8 +775,9 @@ export function useBuilderController({
       localActionMutationVersions.current.delete(durableDraftRevision);
       return;
     }
-    if (actionMutationVersion !== undefined)
+    if (actionMutationVersion !== undefined) {
       localActionMutationVersions.current.delete(durableDraftRevision);
+    }
     void applyAuthoritativeDraft({
       draftId: durableDraftId,
       revision: durableDraftRevision,
@@ -741,7 +792,9 @@ export function useBuilderController({
     initialDraft,
   ]);
   useEffect(() => {
-    if (!draftSyncNotice) return;
+    if (!draftSyncNotice) {
+      return;
+    }
     const timer = window.setTimeout(() => setDraftSyncNotice(""), 4000);
     return () => window.clearTimeout(timer);
   }, [draftSyncNotice]);
@@ -752,10 +805,14 @@ export function useBuilderController({
       // Establish the hydrated server/form state as the baseline. The first
       // deliberate edit (including a non-RHF builder control) will differ.
       autosaveSnapshotFingerprint.current = fingerprint;
-      if (initialBrief && !initialDraft) scheduleAutosave(snapshot);
+      if (initialBrief && !initialDraft) {
+        scheduleAutosave(snapshot);
+      }
       return;
     }
-    if (autosaveSnapshotFingerprint.current === fingerprint) return;
+    if (autosaveSnapshotFingerprint.current === fingerprint) {
+      return;
+    }
     autosaveSnapshotFingerprint.current = fingerprint;
     scheduleAutosave(snapshot);
   }, [draftSnapshot, form, initialBrief, initialDraft, scheduleAutosave]);
@@ -780,11 +837,15 @@ export function useBuilderController({
   };
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (checkpointing.current || submissionPending || !canSubmit) return;
+    if (checkpointing.current || submissionPending || !canSubmit) {
+      return;
+    }
     checkpointing.current = true;
     setPreparingSubmission(true);
     try {
-      if (!(await builderForm.trigger())) return;
+      if (!(await builderForm.trigger())) {
+        return;
+      }
       // `useWatch` intentionally updates on React's render cadence. A click
       // immediately after the final input event can therefore observe the
       // prior rendered value here. Read RHF synchronously at this action

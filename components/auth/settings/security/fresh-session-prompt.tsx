@@ -35,7 +35,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
-    if (!email) return;
+    if (!email) {
+      return;
+    }
     signIn.mutate({ email, password });
   };
 

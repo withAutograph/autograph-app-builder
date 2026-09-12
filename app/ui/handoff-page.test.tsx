@@ -75,7 +75,9 @@ describe("authenticated handoff page", () => {
         expect(html).toContain(
           `/vercel/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`,
         );
-      } else expect(html).not.toContain("Reconnect");
+      } else {
+        expect(html).not.toContain("Reconnect");
+      }
     },
   );
 });

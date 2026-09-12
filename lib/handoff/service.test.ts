@@ -34,7 +34,9 @@ function memoryStore(): BuilderHandoffStore {
     async reserve(record) {
       const key = JSON.stringify([record.authority, record.creationRequestId]);
       const existing = byRequest.get(key);
-      if (existing) return { disposition: "existing", record: existing };
+      if (existing) {
+        return { disposition: "existing", record: existing };
+      }
       byId.set(record.handoffId, record);
       byRequest.set(key, record);
       return { disposition: "created", record };
@@ -44,9 +46,12 @@ function memoryStore(): BuilderHandoffStore {
     },
     async renewExpired(input) {
       const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest) return undefined;
-      if (record.sessionId !== undefined || record.expiresAt > input.now)
+      if (!record || record.requestDigest !== input.requestDigest) {
+        return undefined;
+      }
+      if (record.sessionId !== undefined || record.expiresAt > input.now) {
         return { disposition: "existing", record };
+      }
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
@@ -54,9 +59,16 @@ function memoryStore(): BuilderHandoffStore {
     },
     async bindSession(input) {
       const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
+      if (
+        !record ||
+        record.requestDigest !== input.requestDigest ||
+        input.now >= record.expiresAt
+      ) {
         return undefined;
-      if (record.sessionId !== undefined) return record;
+      }
+      if (record.sessionId !== undefined) {
+        return record;
+      }
       const updated = {
         ...record,
         redeemedAt: input.now,
@@ -217,11 +229,15 @@ describe("opaque App Builder handoffs", () => {
     const lookup = { authority, handoffId: created.handoffId };
     time = new Date(created.expiresAt.getTime() - 1);
     const before = await service.resolve(lookup);
-    if (before.status !== "unredeemed") throw new Error("unexpected state");
+    if (before.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     // Models a durable engine start, deduplicated by the supplied client key.
     const starts = new Map<string, string>();
     const start = (key: string) => {
-      if (!starts.has(key)) starts.set(key, randomUUID());
+      if (!starts.has(key)) {
+        starts.set(key, randomUUID());
+      }
       return starts.get(key)!;
     };
     const sessionId = start(before.deterministicClientRequestId);
@@ -238,7 +254,9 @@ describe("opaque App Builder handoffs", () => {
     await service.renew({ ...lookup, creationRequestId: randomUUID() });
     const restarted = createBuilderHandoffService(options);
     const after = await restarted.resolve(lookup);
-    if (after.status !== "unredeemed") throw new Error("unexpected state");
+    if (after.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     expect(after.deterministicClientRequestId).toBe(before.deterministicClientRequestId);
     expect(after.prompt).toBe(before.prompt);
     expect(after.record.handoffId).toBe(before.record.handoffId);
@@ -342,8 +360,9 @@ describe("opaque App Builder handoffs", () => {
               },
             };
       vi.spyOn(store, "read").mockResolvedValue(forged);
-      for (const read of [service.read, service.status, service.resolve])
+      for (const read of [service.read, service.status, service.resolve]) {
         await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+      }
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),
       ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
@@ -517,7 +536,9 @@ describe("opaque App Builder handoffs", () => {
       handoffId: created.handoffId,
     });
     expect(resolved.status).toBe("unredeemed");
-    if (resolved.status !== "unredeemed") throw new Error("unexpected state");
+    if (resolved.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     expect(resolved.prompt).not.toMatch(/installation(?: id)?|repository id|head sha|head tree/iu);
 
     await service.bindSession({

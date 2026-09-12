@@ -59,7 +59,9 @@ function requireOwnedRecord(
   expected: { authority: Authority; handoffId?: string },
 ) {
   const parsed = builderHandoffRecordSchema.safeParse(value);
-  if (!parsed.success) throw new BuilderHandoffUnavailableError();
+  if (!parsed.success) {
+    throw new BuilderHandoffUnavailableError();
+  }
   const record = parsed.data;
   if (
     (expected.handoffId !== undefined && record.handoffId !== expected.handoffId) ||
@@ -67,8 +69,9 @@ function requireOwnedRecord(
     record.authority.audience !== expected.authority.audience ||
     record.authority.workspaceId !== expected.authority.workspaceId ||
     record.authority.ownerUserId !== expected.authority.ownerUserId
-  )
+  ) {
     throw new BuilderHandoffUnavailableError();
+  }
   return record;
 }
 
@@ -105,18 +108,23 @@ export function createBuilderHandoffService(input: {
     !Number.isSafeInteger(lifetimeMs) ||
     lifetimeMs < 60_000 ||
     lifetimeMs > 7 * 24 * 60 * 60 * 1000
-  )
+  ) {
     throw new Error("builder-handoff-lifetime-invalid");
+  }
 
   const read = async (value: { authority: Authority; handoffId: string }) => {
     const authority = hostedTenantAuthoritySchema.parse(value.authority);
     const parsedId = builderHandoffIdSchema.safeParse(value.handoffId);
-    if (!parsedId.success) throw new BuilderHandoffUnavailableError();
+    if (!parsedId.success) {
+      throw new BuilderHandoffUnavailableError();
+    }
     const stored = await input.store.read({
       authority,
       handoffId: parsedId.data,
     });
-    if (!stored) throw new BuilderHandoffUnavailableError();
+    if (!stored) {
+      throw new BuilderHandoffUnavailableError();
+    }
     return requireOwnedRecord(stored, { authority, handoffId: parsedId.data });
   };
 
@@ -126,7 +134,9 @@ export function createBuilderHandoffService(input: {
 
     async findLatestPending(value: { authority: Authority }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      if (!input.store.findLatestPending) return undefined;
+      if (!input.store.findLatestPending) {
+        return undefined;
+      }
       const stored = await input.store.findLatestPending({ authority });
       return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
@@ -171,8 +181,12 @@ export function createBuilderHandoffService(input: {
         authority,
         ...(reserved.disposition === "created" ? { handoffId: candidate.handoffId } : {}),
       });
-      if (record.requestDigest !== requestDigest || record.creationRequestId !== creationRequestId)
+      if (
+        record.requestDigest !== requestDigest ||
+        record.creationRequestId !== creationRequestId
+      ) {
         throw new BuilderHandoffConflictError();
+      }
       return {
         handoffId: record.handoffId,
         expiresAt: record.expiresAt,
@@ -182,13 +196,16 @@ export function createBuilderHandoffService(input: {
 
     async resolve(value: { authority: Authority; handoffId: string }) {
       const record = await read(value);
-      if (record.sessionId !== undefined)
+      if (record.sessionId !== undefined) {
         return {
           status: "redeemed" as const,
           sessionId: record.sessionId,
           record,
         };
-      if (now() >= record.expiresAt) throw new BuilderHandoffUnavailableError();
+      }
+      if (now() >= record.expiresAt) {
+        throw new BuilderHandoffUnavailableError();
+      }
       return {
         status: "unredeemed" as const,
         prompt: builderHandoffPrompt(record.intent),
@@ -201,16 +218,19 @@ export function createBuilderHandoffService(input: {
       z.string().uuid().parse(value.creationRequestId);
       const record = await read(value);
       const timestamp = now();
-      if (record.sessionId !== undefined || timestamp < record.expiresAt)
+      if (record.sessionId !== undefined || timestamp < record.expiresAt) {
         return {
           handoffId: record.handoffId,
           expiresAt: record.expiresAt,
           disposition: "existing" as const,
         };
+      }
 
       // Renew the same start identity: a durable start may have succeeded before
       // its bind reply was lost at expiry. A successor would launch a second app.
-      if (!input.store.renewExpired) throw new BuilderHandoffUnavailableError();
+      if (!input.store.renewExpired) {
+        throw new BuilderHandoffUnavailableError();
+      }
       const renewed = await input.store.renewExpired({
         authority: record.authority,
         handoffId: record.handoffId,
@@ -218,15 +238,19 @@ export function createBuilderHandoffService(input: {
         now: timestamp,
         expiresAt: new Date(timestamp.getTime() + lifetimeMs),
       });
-      if (!renewed) throw new BuilderHandoffUnavailableError();
+      if (!renewed) {
+        throw new BuilderHandoffUnavailableError();
+      }
       const parsed = requireOwnedRecord(renewed.record, value);
       if (
         parsed.requestDigest !== record.requestDigest ||
         parsed.creationRequestId !== record.creationRequestId
-      )
+      ) {
         throw new BuilderHandoffConflictError();
-      if (parsed.sessionId === undefined && now() >= parsed.expiresAt)
+      }
+      if (parsed.sessionId === undefined && now() >= parsed.expiresAt) {
         throw new BuilderHandoffUnavailableError();
+      }
       return {
         handoffId: parsed.handoffId,
         expiresAt: parsed.expiresAt,
@@ -250,10 +274,13 @@ export function createBuilderHandoffService(input: {
         sessionId: z.string().min(1).max(200).parse(value.sessionId),
         now: now(),
       });
-      if (!record) throw new BuilderHandoffUnavailableError();
+      if (!record) {
+        throw new BuilderHandoffUnavailableError();
+      }
       const parsed = requireOwnedRecord(record, value);
-      if (parsed.requestDigest !== value.requestDigest || parsed.sessionId !== value.sessionId)
+      if (parsed.requestDigest !== value.requestDigest || parsed.sessionId !== value.sessionId) {
         throw new BuilderHandoffConflictError();
+      }
       return parsed;
     },
   };

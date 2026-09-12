@@ -19,20 +19,23 @@ function argumentsFrom(values: readonly string[]) {
   for (let index = 0; index < values.length; index += 2) {
     const name = values[index];
     const value = values[index + 1];
-    if (!name?.startsWith("--") || value === undefined || args.has(name))
+    if (!name?.startsWith("--") || value === undefined || args.has(name)) {
       throw new Error("Arguments must be unique --name value pairs.");
+    }
     args.set(name, value);
   }
   const root = args.get("--arrusted-root");
   const output = args.get("--output");
   const releaseOrigin = args.get("--release-origin");
-  if (!root || !output || !releaseOrigin || args.size !== 3)
+  if (!root || !output || !releaseOrigin || args.size !== 3) {
     throw new Error(
       "usage: hosted:starter-source-build -- --arrusted-root <path> --output <directory> --release-origin <https-origin>",
     );
+  }
   const origin = new URL(releaseOrigin);
-  if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash)
+  if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash) {
     throw new Error("Release origin must be an exact HTTPS origin.");
+  }
   return { root: realpathSync(root), output: resolve(output), origin };
 }
 
@@ -57,17 +60,21 @@ function git(root: string, args: readonly string[], encoding: "utf-8" | "buffer"
 }
 
 const input = argumentsFrom(process.argv.slice(2));
-if (git(input.root, ["rev-parse", "HEAD"], "utf-8").trim() !== TARGET_SHA)
+if (git(input.root, ["rev-parse", "HEAD"], "utf-8").trim() !== TARGET_SHA) {
   throw new Error("Arrusted source SHA is not the pinned supported commit.");
-if (git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf-8").trim() !== TARGET_TREE)
+}
+if (git(input.root, ["rev-parse", `${TARGET_SHA}^{tree}`], "utf-8").trim() !== TARGET_TREE) {
   throw new Error("Arrusted source tree is not the pinned supported tree.");
+}
 
 const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "utf-8")
   .trimEnd()
   .split("\n")
   .map((line) => {
     const match = TREE_ENTRY.exec(line);
-    if (!match) throw new Error(`Unsupported starter tree entry: ${line}`);
+    if (!match) {
+      throw new Error(`Unsupported starter tree entry: ${line}`);
+    }
     const [, mode, path] = match;
     const bytes = git(input.root, ["show", `${TARGET_SHA}:${path}`], "buffer");
     return {
@@ -77,7 +84,9 @@ const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "u
       bytes: bytes.byteLength,
     };
   });
-if (!entries.length) throw new Error("Pinned starter contains no files.");
+if (!entries.length) {
+  throw new Error("Pinned starter contains no files.");
+}
 
 const archive = deterministicGzip(
   git(input.root, ["archive", "--format=tar", TARGET_SHA], "buffer"),

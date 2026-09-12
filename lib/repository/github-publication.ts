@@ -436,8 +436,9 @@ function canonicalWithoutDigest<T extends { digest: string }>(value: T) {
 }
 
 function exactDigest(value: { digest: string }, label: string): void {
-  if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest)
+  if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest) {
     throw new Error(`${label} digest is malformed.`);
+  }
 }
 
 export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissions {
@@ -487,13 +488,16 @@ function canonicalPaths(paths: readonly string[]): readonly string[] {
     paths.length === 0 ||
     new Set(paths).size !== paths.length ||
     paths.some((path) => !safeSourcePath(path))
-  )
+  ) {
     throw new Error("GitHub publication paths are unsafe or duplicated.");
+  }
   return [...paths].toSorted(compareOverlayPaths);
 }
 
 function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
-  if (paths.length === 0) return [];
+  if (paths.length === 0) {
+    return [];
+  }
   return canonicalPaths(paths);
 }
 
@@ -523,8 +527,9 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
     JSON.stringify(review.changes) !== JSON.stringify(sortedChanges) ||
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
-  )
+  ) {
     throw new Error("The reviewed change-set receipt is non-canonical.");
+  }
 }
 
 function reviewForProposal(
@@ -538,8 +543,9 @@ function reviewForProposal(
     (proposal.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
       (proposal.changedContentDigest !== review.changedContentDigest ||
         JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
-  )
+  ) {
     throw new Error("The publication content review does not match the sealed proposal.");
+  }
 }
 
 function contentManifest(
@@ -573,7 +579,9 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   const keys = includeBytes
     ? (["mode", "digest", "bytes"] as const)
     : (["mode", "digest"] as const);
-  if (!record(value) || !exactKeys(value, keys)) return false;
+  if (!record(value) || !exactKeys(value, keys)) {
+    return false;
+  }
   return (
     (value.mode === "644" || value.mode === "755") &&
     isDigest(value.digest) &&
@@ -582,18 +590,21 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
 }
 
 function exactContentChange(change: unknown): boolean {
-  if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path))
+  if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path)) {
     return false;
-  if (change.kind === "added")
+  }
+  if (change.kind === "added") {
     return (
       exactKeys(change, ["path", "kind", "after"]) && exactContentFileState(change.after, true)
     );
-  if (change.kind === "modified")
+  }
+  if (change.kind === "modified") {
     return (
       exactKeys(change, ["path", "kind", "before", "after"]) &&
       exactContentFileState(change.before, false) &&
       exactContentFileState(change.after, true)
     );
+  }
   return (
     change.kind === "deleted" &&
     exactKeys(change, ["path", "kind", "before"]) &&
@@ -626,15 +637,17 @@ function freshContentTree(
     const segments = file.path.split("/");
     for (const segment of segments.slice(0, -1)) {
       const existing = directory.children.get(segment);
-      if (existing?.kind === "file")
+      if (existing?.kind === "file") {
         throw new Error("The fresh repository source manifest overlaps paths.");
+      }
       const child = existing ?? ({ kind: "directory", children: new Map() } as const);
       directory.children.set(segment, child);
       directory = child;
     }
     const name = segments.at(-1)!;
-    if (directory.children.has(name))
+    if (directory.children.has(name)) {
       throw new Error("The fresh repository source manifest duplicates paths.");
+    }
     directory.children.set(name, { kind: "file", file });
   }
   const encodeTree = (directory: Extract<Node, { kind: "directory" }>): Buffer => {
@@ -672,8 +685,9 @@ export function assertExactGitHubFreshRepositoryContent(input: {
     content.sourceTree !== proposal.sourceTree ||
     !Array.isArray(content.files) ||
     content.files.length === 0
-  )
+  ) {
     throw new Error("The fresh repository content schema is invalid.");
+  }
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
   const paths = content.files.map((file) => file.path);
   if (
@@ -690,8 +704,9 @@ export function assertExactGitHubFreshRepositoryContent(input: {
         gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId,
     ) ||
     freshContentTree(content.files, algorithm) !== proposal.sourceTree
-  )
+  ) {
     throw new Error("The fresh repository content does not match the immutable source tree.");
+  }
 }
 
 export function assertExactGitHubDraftPullRequestContent(input: {
@@ -711,8 +726,9 @@ export function assertExactGitHubDraftPullRequestContent(input: {
     !Array.isArray(input.content.approvedPaths) ||
     !Array.isArray(input.content.changes) ||
     input.content.changes.some((change) => !exactContentChange(change))
-  )
+  ) {
     throw new Error("The publication content schema is not closed.");
+  }
   const manifest = contentManifest(input.content.changes);
   if (
     input.content.version !== 1 ||
@@ -726,8 +742,9 @@ export function assertExactGitHubDraftPullRequestContent(input: {
       (change) =>
         change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
     )
-  )
+  ) {
     throw new Error("The publication content does not match the approved reviewed overlay.");
+  }
 }
 
 export function assertExactGitHubPublicationContent(input: {
@@ -739,8 +756,9 @@ export function assertExactGitHubPublicationContent(input: {
   assertExactGitHubDraftPullRequestContent(input);
   if (
     JSON.stringify(contentManifest(input.content.changes)) !== JSON.stringify(input.review.changes)
-  )
+  ) {
     throw new Error("The publication content does not match the approved reviewed overlay.");
+  }
 }
 
 export async function readExactGitHubFreshRepositoryContent(input: {
@@ -776,8 +794,9 @@ export async function readExactGitHubPublicationContent(input: {
   const changes: GitHubPublicationContentChange[] = [];
   for (const change of input.review.changes) {
     if (change.kind === "deleted") {
-      if (change.before === undefined)
+      if (change.before === undefined) {
         throw new Error("The reviewed deletion preimage is missing.");
+      }
       changes.push({
         path: change.path,
         kind: change.kind,
@@ -785,23 +804,26 @@ export async function readExactGitHubPublicationContent(input: {
       });
       continue;
     }
-    if (change.after === undefined)
+    if (change.after === undefined) {
       throw new Error("The reviewed publication postimage is missing.");
+    }
     let observed: Awaited<ReturnType<typeof input.source.readFile>>;
     try {
       observed = await input.source.readFile(change.path);
     } catch {
       throw new Error("The approved publication content source failed.");
     }
-    if (observed === null)
+    if (observed === null) {
       throw new Error(`The approved publication postimage is missing for ${change.path}.`);
+    }
     const bytes = new Uint8Array(observed.bytes);
     if (
       observed.mode !== change.after.mode ||
       observed.digest !== change.after.digest ||
       bytesDigest(bytes) !== change.after.digest
-    )
+    ) {
       throw new Error(`The approved publication postimage changed for ${change.path}.`);
+    }
     if (change.kind === "added") {
       changes.push({
         path: change.path,
@@ -810,8 +832,9 @@ export async function readExactGitHubPublicationContent(input: {
       });
       continue;
     }
-    if (change.before === undefined)
+    if (change.before === undefined) {
       throw new Error("The reviewed modification preimage is missing.");
+    }
     changes.push({
       path: change.path,
       kind: change.kind,
@@ -849,8 +872,9 @@ function assertReviewedBinding(
     source.sourceTree !== review.sourceTree ||
     source.contractDigest !== review.repositoryContractDigest ||
     source.eligibilityDigest !== review.eligibilityDigest
-  )
+  ) {
     throw new Error("The reviewed change set is not bound to the exact source receipt.");
+  }
 }
 
 const installationKeys = [
@@ -889,8 +913,9 @@ export function createGitHubInstallationIdentity(
     !Array.isArray(input.selectedRepositoryIds) ||
     new Set(input.selectedRepositoryIds).size !== input.selectedRepositoryIds.length ||
     input.selectedRepositoryIds.some((id) => !isDecimal(id))
-  )
+  ) {
     throw new Error("The GitHub installation identity is invalid.");
+  }
   const unsigned = {
     version: GITHUB_PUBLICATION_VERSION,
     operation: input.operation,
@@ -906,8 +931,9 @@ export function createGitHubInstallationIdentity(
 }
 
 export function assertExactInstallationIdentity(identity: GitHubInstallationIdentity): void {
-  if (!exactKeys(identity, installationKeys) || !exactKeys(identity.permissions, permissionKeys))
+  if (!exactKeys(identity, installationKeys) || !exactKeys(identity.permissions, permissionKeys)) {
     throw new Error("The GitHub installation identity schema is not closed.");
+  }
   const rebuilt = createGitHubInstallationIdentity({
     operation: identity.operation,
     installationId: identity.installationId,
@@ -917,8 +943,9 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
     repositorySelection: identity.repositorySelection,
     selectedRepositoryIds: identity.selectedRepositoryIds,
   });
-  if (JSON.stringify(identity) !== JSON.stringify(rebuilt))
+  if (JSON.stringify(identity) !== JSON.stringify(rebuilt)) {
     throw new Error("The GitHub installation identity is non-canonical or over-privileged.");
+  }
 }
 
 const repositoryKeys = [
@@ -950,15 +977,17 @@ export function createRepositoryObservation(
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
     typeof input.releaseGate.configured !== "boolean"
-  )
+  ) {
     throw new Error("The repository observation is invalid.");
+  }
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
   return { ...unsigned, digest: digest(unsigned) };
 }
 
 export function assertExactRepositoryObservation(repository: GitHubRepositoryObservation): void {
-  if (!exactKeys(repository, repositoryKeys))
+  if (!exactKeys(repository, repositoryKeys)) {
     throw new Error("The repository observation schema is not closed.");
+  }
   const rebuilt = createRepositoryObservation({
     repositoryId: repository.repositoryId,
     owner: repository.owner,
@@ -970,8 +999,9 @@ export function assertExactRepositoryObservation(repository: GitHubRepositoryObs
     installationIdentityDigest: repository.installationIdentityDigest,
     releaseGate: repository.releaseGate,
   });
-  if (JSON.stringify(repository) !== JSON.stringify(rebuilt))
+  if (JSON.stringify(repository) !== JSON.stringify(rebuilt)) {
     throw new Error("The repository observation is non-canonical.");
+  }
 }
 
 export async function resolveImmutableExistingSource(input: {
@@ -989,16 +1019,18 @@ export async function resolveImmutableExistingSource(input: {
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)
-  )
+  ) {
     throw new Error("The immutable source request is invalid.");
+  }
   const installation = await input.adapter.inspectInstallation("resolve-existing-source");
   assertExactInstallationIdentity(installation);
   if (
     installation.operation !== "resolve-existing-source" ||
     installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
-  )
+  ) {
     throw new Error("The installation is not selected for source resolution.");
+  }
   const repository = await input.adapter.inspectRepository({
     operation: "resolve-existing-source",
     repositoryId: input.repositoryId,
@@ -1010,8 +1042,9 @@ export async function resolveImmutableExistingSource(input: {
     repository.repositoryId !== input.repositoryId ||
     repository.headSha !== input.expectedSha ||
     repository.headTree !== input.expectedTree
-  )
+  ) {
     throw new Error("The GitHub source changed or is outside the approved installation.");
+  }
   const unsigned = {
     version: GITHUB_PUBLICATION_VERSION,
     repository,
@@ -1038,8 +1071,9 @@ const immutableSourceReceiptKeys = [
 export function assertExactImmutableGitHubSourceReceipt(
   receipt: ImmutableGitHubSourceReceipt,
 ): void {
-  if (!exactKeys(receipt, immutableSourceReceiptKeys))
+  if (!exactKeys(receipt, immutableSourceReceiptKeys)) {
     throw new Error("The immutable GitHub source receipt schema is not closed.");
+  }
   assertExactRepositoryObservation(receipt.repository);
   exactDigest(receipt, "Immutable GitHub source receipt");
   if (
@@ -1052,8 +1086,9 @@ export function assertExactImmutableGitHubSourceReceipt(
     receipt.repository.headSha !== receipt.resolvedSha ||
     receipt.repository.headTree !== receipt.resolvedTree ||
     receipt.repository.installationIdentityDigest !== receipt.installationIdentityDigest
-  )
+  ) {
     throw new Error("The immutable GitHub source receipt is malformed.");
+  }
 }
 
 const freshProposalKeys = [
@@ -1091,8 +1126,9 @@ export function createFreshRepositoryProposal(input: {
     input.source.sourceKind !== "fresh-template" ||
     input.destinationOwner !== input.installation.accountLogin ||
     !safeName(input.destinationName)
-  )
+  ) {
     throw new Error("Fresh repository creation is outside the approved destination.");
+  }
   const idempotencyKey = digest({
     installationIdentityDigest: input.installation.digest,
     destinationOwner: input.destinationOwner,
@@ -1126,8 +1162,9 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
   if (
     !exactKeys(proposal, freshProposalKeys) ||
     !exactKeys(proposal.releaseGate, ["name", "configured"])
-  )
+  ) {
     throw new Error("The fresh repository proposal schema is not closed.");
+  }
   exactDigest(proposal, "Fresh repository proposal");
   const expectedKey = digest({
     installationIdentityDigest: proposal.installationIdentityDigest,
@@ -1154,8 +1191,9 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     proposal.initialCommitMessage !== "Initialize repository from supported template" ||
     proposal.intendedOutcome !== "create-private-fresh-history-repository" ||
     proposal.idempotencyKey !== expectedKey
-  )
+  ) {
     throw new Error("The fresh repository proposal is malformed.");
+  }
 }
 
 const draftProposalKeys = [
@@ -1210,8 +1248,9 @@ export function createDraftPullRequestProposal(input: {
     !input.installation.selectedRepositoryIds.includes(input.repository.repositoryId) ||
     input.repository.installationIdentityDigest !== input.installation.digest ||
     !safeTitle(input.title)
-  )
+  ) {
     throw new Error("The draft pull-request proposal is stale, overlapping, or unauthorized.");
+  }
   const idempotencyKey = digest({
     installationIdentityDigest: input.installation.digest,
     repositoryObservationDigest: input.repository.digest,
@@ -1246,8 +1285,9 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
   if (
     !exactKeys(proposal, draftProposalKeys) ||
     !exactKeys(proposal.releaseGate, ["name", "configured"])
-  )
+  ) {
     throw new Error("The draft pull-request proposal schema is not closed.");
+  }
   exactDigest(proposal, "Draft pull-request proposal");
   const idempotencyKey = digest({
     installationIdentityDigest: proposal.installationIdentityDigest,
@@ -1277,8 +1317,9 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     proposal.idempotencyKey !== idempotencyKey ||
     proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
     proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
-  )
+  ) {
     throw new Error("The draft pull-request proposal is malformed.");
+  }
 }
 
 function assertFreshReadBack(
@@ -1290,8 +1331,9 @@ function assertFreshReadBack(
     !exactKeys(readBack.initialCommit, ["sha", "tree", "parents"]) ||
     !Array.isArray(readBack.initialCommit.parents) ||
     readBack.initialCommit.parents.length !== 0
-  )
+  ) {
     throw new Error("Fresh repository provider read-back schema is not closed.");
+  }
   exactDigest(readBack, "Fresh repository provider read-back");
   assertExactRepositoryObservation(readBack.repository);
   if (
@@ -1306,8 +1348,9 @@ function assertFreshReadBack(
     readBack.repository.headTree !== readBack.initialCommit.tree ||
     readBack.initialCommit.tree !== proposal.sourceTree ||
     !releaseGateAbsent(readBack.repository)
-  )
+  ) {
     throw new Error("Fresh repository provider read-back does not match the proposal.");
+  }
 }
 
 function assertDraftReadBack(
@@ -1325,8 +1368,9 @@ function assertDraftReadBack(
       "digest",
     ]) ||
     !Array.isArray(readBack.changedPathsSinceBase)
-  )
+  ) {
     throw new Error("Draft publication provider read-back schema is not closed.");
+  }
   exactDigest(readBack, "Draft publication provider read-back");
   assertExactRepositoryObservation(readBack.repository);
   if (
@@ -1343,11 +1387,13 @@ function assertDraftReadBack(
     canonicalPathsOrEmpty(readBack.changedPathsSinceBase).some((path) =>
       proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),
     )
-  )
+  ) {
     throw new Error("Draft publication provider read-back is stale or overlapping.");
+  }
   if (readBack.branch.status === "absent") {
-    if (!exactKeys(readBack.branch, ["status"]))
+    if (!exactKeys(readBack.branch, ["status"])) {
       throw new Error("Absent branch read-back schema is not closed.");
+    }
   } else if (
     !exactKeys(readBack.branch, [
       "status",
@@ -1365,11 +1411,13 @@ function assertDraftReadBack(
       JSON.stringify(proposal.approvedPaths) ||
     readBack.branch.changedContentDigest !== proposal.changedContentDigest ||
     readBack.branch.idempotencyKey !== proposal.idempotencyKey
-  )
+  ) {
     throw new Error("Branch provider read-back does not match the approved change set.");
+  }
   if (readBack.pullRequest.status === "absent") {
-    if (!exactKeys(readBack.pullRequest, ["status"]))
+    if (!exactKeys(readBack.pullRequest, ["status"])) {
       throw new Error("Absent pull-request read-back schema is not closed.");
+    }
   } else if (
     !exactKeys(readBack.pullRequest, [
       "status",
@@ -1398,8 +1446,9 @@ function assertDraftReadBack(
     readBack.pullRequest.idempotencyKey !== proposal.idempotencyKey ||
     (readBack.branch.status === "present" &&
       readBack.pullRequest.headSha !== readBack.branch.branchSha)
-  )
+  ) {
     throw new Error("Pull-request provider read-back does not match the proposal.");
+  }
 }
 
 function receipt<T extends Omit<GitHubMutationReceipt, "digest">>(
@@ -1452,8 +1501,9 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
               "recoveredFromPending",
               "providerReadBackDigest",
             ];
-  if (!exactKeys(value, [...common, ...extra, "digest"]))
+  if (!exactKeys(value, [...common, ...extra, "digest"])) {
     throw new Error("GitHub mutation receipt schema is not closed.");
+  }
   exactDigest(value, "GitHub mutation receipt");
   if (
     value.version !== GITHUB_PUBLICATION_VERSION ||
@@ -1462,15 +1512,17 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     typeof value.approvedByCallId !== "string" ||
     value.approvedByCallId.length === 0 ||
     (value.kind !== "fresh-repository" && value.kind !== "draft-pull-request")
-  )
+  ) {
     throw new Error("GitHub mutation receipt bindings are invalid.");
+  }
   if (value.status === "failed") {
     if (
       (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
       value.recoveryRequired !== true
-    )
+    ) {
       throw new Error("GitHub failure receipt is invalid.");
+    }
   } else if (value.status === "succeeded") {
     if (
       !isDigest(value.providerReadBackDigest) ||
@@ -1478,8 +1530,9 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       (value.kind === "fresh-repository"
         ? value.releaseGateAbsent !== true
         : value.releaseGateUnchanged !== true)
-    )
+    ) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
+    }
     if (value.kind === "fresh-repository") {
       assertExactRepositoryObservation(value.repository);
       if (
@@ -1488,8 +1541,9 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
         value.freshHistory !== true ||
         value.initialCommitSha !== value.repository.headSha ||
         value.initialCommitTree !== value.repository.headTree
-      )
+      ) {
         throw new Error("Fresh repository success receipt is invalid.");
+      }
     } else if (
       !isDecimal(value.repositoryId) ||
       !safeBranch(value.branchName) ||
@@ -1505,8 +1559,9 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       !isDigest(value.changedContentDigest) ||
       JSON.stringify(canonicalPaths(value.normalizedChangedPaths)) !==
         JSON.stringify(value.normalizedChangedPaths)
-    )
+    ) {
       throw new Error("Draft pull-request success receipt is invalid.");
+    }
   } else if (value.status !== "pending") {
     throw new Error("GitHub mutation receipt status is invalid.");
   }
@@ -1518,14 +1573,17 @@ async function readJournal(
   kind: MutationKind,
 ): Promise<GitHubMutationReceipt | undefined> {
   const value = await store.read(proposal.digest);
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   assertCanonicalGitHubMutationReceipt(value);
   if (
     value.kind !== kind ||
     value.proposalDigest !== proposal.digest ||
     value.idempotencyKey !== proposal.idempotencyKey
-  )
+  ) {
     throw new Error("The GitHub journal belongs to a different proposal.");
+  }
   return value;
 }
 
@@ -1544,8 +1602,9 @@ async function claimPending(input: {
     idempotencyKey: input.idempotencyKey,
     approvedByCallId: input.approvedByCallId,
   });
-  if (!(await input.store.compareAndSet(input.proposalDigest, undefined, pending)))
+  if (!(await input.store.compareAndSet(input.proposalDigest, undefined, pending))) {
     throw new Error("The GitHub journal changed concurrently.");
+  }
   return pending;
 }
 
@@ -1555,8 +1614,9 @@ async function storeTerminal(
   terminal: GitHubMutationReceipt,
 ): Promise<void> {
   assertCanonicalGitHubMutationReceipt(terminal);
-  if (!(await store.compareAndSet(pending.proposalDigest, pending.digest, terminal)))
+  if (!(await store.compareAndSet(pending.proposalDigest, pending.digest, terminal))) {
     throw new GitHubOutcomeUnknownError();
+  }
 }
 
 function freshSuccess(input: {
@@ -1592,8 +1652,12 @@ function draftSuccess(input: {
   recovered: boolean;
 }): DraftPullRequestSuccessReceipt {
   assertDraftReadBack(input.readBack, input.proposal);
-  if (input.readBack.branch.status !== "present" || input.readBack.pullRequest.status !== "present")
+  if (
+    input.readBack.branch.status !== "present" ||
+    input.readBack.pullRequest.status !== "present"
+  ) {
     throw new Error("The approved branch and draft pull request are not both present.");
+  }
   return receipt({
     version: GITHUB_PUBLICATION_VERSION,
     kind: "draft-pull-request" as const,
@@ -1651,11 +1715,14 @@ export async function createApprovedFreshRepository(input: {
   reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(input.store, input.proposal, "fresh-repository");
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "fresh-repository") throw new Error("Unreachable receipt kind.");
+    if (prior.kind !== "fresh-repository") {
+      throw new Error("Unreachable receipt kind.");
+    }
     return prior;
   }
-  if (prior?.status === "failed")
+  if (prior?.status === "failed") {
     throw new Error("The failed GitHub mutation requires explicit recovery.");
+  }
   const pending =
     prior ??
     (await claimPending({
@@ -1665,7 +1732,9 @@ export async function createApprovedFreshRepository(input: {
       idempotencyKey: input.proposal.idempotencyKey,
       approvedByCallId: input.approvedByCallId,
     }));
-  if (pending.status !== "pending") throw new Error("Unreachable journal status.");
+  if (pending.status !== "pending") {
+    throw new Error("Unreachable journal status.");
+  }
   let existing: FreshRepositoryReadBack | undefined;
   try {
     existing = await input.adapter.inspectFreshRepositoryOutcome(input.proposal);
@@ -1692,8 +1761,9 @@ export async function createApprovedFreshRepository(input: {
     installation.operation !== "create-fresh-repository" ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     destination !== "absent"
-  )
+  ) {
     throw new Error("Fresh repository preconditions changed after approval.");
+  }
   const content = await readExactGitHubFreshRepositoryContent({
     proposal: input.proposal,
     source: input.contentSource,
@@ -1712,15 +1782,18 @@ export async function createApprovedFreshRepository(input: {
     await storeTerminal(input.store, pending, failure);
     throw new Error("GitHub rejected repository creation; sanitized receipt recorded.");
   }
-  if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId))
+  if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId)) {
     throw new GitHubOutcomeUnknownError();
+  }
   let readBack: FreshRepositoryReadBack | undefined;
   try {
     readBack = await input.adapter.inspectFreshRepositoryOutcome(input.proposal);
   } catch {
     throw new GitHubOutcomeUnknownError();
   }
-  if (readBack === undefined) throw new GitHubOutcomeUnknownError();
+  if (readBack === undefined) {
+    throw new GitHubOutcomeUnknownError();
+  }
   let success: FreshRepositorySuccessReceipt;
   try {
     success = freshSuccess({
@@ -1748,11 +1821,14 @@ export async function publishApprovedDraftPullRequest(input: {
   reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(input.store, input.proposal, "draft-pull-request");
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "draft-pull-request") throw new Error("Unreachable receipt kind.");
+    if (prior.kind !== "draft-pull-request") {
+      throw new Error("Unreachable receipt kind.");
+    }
     return prior;
   }
-  if (prior?.status === "failed")
+  if (prior?.status === "failed") {
     throw new Error("The failed GitHub mutation requires explicit recovery.");
+  }
   const pending =
     prior ??
     (await claimPending({
@@ -1762,7 +1838,9 @@ export async function publishApprovedDraftPullRequest(input: {
       idempotencyKey: input.proposal.idempotencyKey,
       approvedByCallId: input.approvedByCallId,
     }));
-  if (pending.status !== "pending") throw new Error("Unreachable journal status.");
+  if (pending.status !== "pending") {
+    throw new Error("Unreachable journal status.");
+  }
   let observed: DraftPublicationReadBack;
   try {
     observed = await input.adapter.inspectDraftPublication(input.proposal);
@@ -1780,16 +1858,18 @@ export async function publishApprovedDraftPullRequest(input: {
     await storeTerminal(input.store, pending, success);
     return success;
   }
-  if (observed.branch.status === "present")
+  if (observed.branch.status === "present") {
     throw new Error("A branch collision exists without the approved draft pull request.");
+  }
   const installation = await input.adapter.inspectInstallation("publish-draft-pull-request");
   assertExactInstallationIdentity(installation);
   if (
     installation.operation !== "publish-draft-pull-request" ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     !installation.selectedRepositoryIds.includes(input.proposal.repositoryId)
-  )
+  ) {
     throw new Error("Draft pull-request installation authority changed.");
+  }
   const content = await readExactGitHubPublicationContent({
     proposal: input.proposal,
     review: input.review,
@@ -1806,8 +1886,9 @@ export async function publishApprovedDraftPullRequest(input: {
     await storeTerminal(input.store, pending, failure);
     throw new Error("GitHub rejected draft pull-request publication; sanitized receipt recorded.");
   }
-  if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId))
+  if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId)) {
     throw new GitHubOutcomeUnknownError();
+  }
   try {
     observed = await input.adapter.inspectDraftPublication(input.proposal);
   } catch {

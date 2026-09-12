@@ -56,8 +56,9 @@ interface DevelopmentSupervisorState {
 
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
-  if (value === undefined || !value.startsWith("/"))
+  if (value === undefined || !value.startsWith("/")) {
     throw new Error(`mise must supply the absolute ${name} ${description}.`);
+  }
   return value;
 }
 
@@ -71,8 +72,9 @@ async function privateRoot(path: string) {
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o077) !== 0
-  )
+  ) {
     throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);
+  }
   return canonical;
 }
 
@@ -186,7 +188,9 @@ async function runEveCycle(input: {
     for (const path of changedPaths) {
       const previous = previousEntries.get(path);
       const current = currentEntries.get(path);
-      if (previous?.digest === current?.digest) continue;
+      if (previous?.digest === current?.digest) {
+        continue;
+      }
       snapshotDeltaFiles += 1;
       snapshotDeltaBytes += current?.bytes ?? previous?.bytes ?? 0;
     }
@@ -207,7 +211,9 @@ async function runEveCycle(input: {
       input.packageState.fingerprint = packageFingerprint;
     }
     const packageResult = input.packageState.result;
-    if (packageResult === undefined) throw new Error("Development package was unavailable.");
+    if (packageResult === undefined) {
+      throw new Error("Development package was unavailable.");
+    }
     const closed = developmentLaunchEnvironment({
       sourceRoot: input.sourceRoot,
       snapshotRoot: snapshot.root,
@@ -275,14 +281,17 @@ async function runEveCycle(input: {
         input.nextExited,
         stopping,
       ]);
-      if (startup.kind !== "ready") return startup;
-      if (!packageReused)
+      if (startup.kind !== "ready") {
+        return startup;
+      }
+      if (!packageReused) {
         await registerDevelopmentPackage({
           codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
           codexHome: requiredEnvironment("APP_BUILDER_DEV_CODEX_HOME", "profile root"),
           marketplaceRoot: packageResult.marketplaceRoot,
           version: packageResult.receipt.version,
         });
+      }
       console.info(
         JSON.stringify({
           event: "autograph.local.eve-cycle",
@@ -393,9 +402,13 @@ try {
     );
   }
 } catch (error) {
-  if (!shutdown.signal.aborted) throw error;
+  if (!shutdown.signal.aborted) {
+    throw error;
+  }
   process.exitCode = shutdown.exitCode();
 } finally {
-  if (next !== undefined) await stopDevelopmentChild(next);
+  if (next !== undefined) {
+    await stopDevelopmentChild(next);
+  }
   shutdown.dispose();
 }

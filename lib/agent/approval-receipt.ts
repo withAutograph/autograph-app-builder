@@ -23,12 +23,13 @@ export const approvalReceiptSchema = z
         : receipt.phase === "change_set"
           ? "accept-change-set"
           : "create-draft-pr";
-    if (receipt.outcome !== expectedOutcome)
+    if (receipt.outcome !== expectedOutcome) {
       context.addIssue({
         code: "custom",
         path: ["outcome"],
         message: "Approval outcome does not match its phase.",
       });
+    }
   });
 
 export type ApprovalReceipt = z.infer<typeof approvalReceiptSchema>;
@@ -82,13 +83,16 @@ export function assertApprovalReceipt(input: {
     actual.baseRef !== input.target.baseRef ||
     actual.baseSha !== input.target.baseSha ||
     actual.subjectDigest !== input.subjectDigest
-  )
+  ) {
     throw new Error("The approval receipt does not match the exact subject.");
+  }
   return actual;
 }
 
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined;
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
   const record = input as Record<string, unknown>;
   if (Object.hasOwn(record, "approvalReceipt")) {
     const parsed = approvalReceiptSchema.safeParse(record.approvalReceipt);
@@ -169,11 +173,12 @@ export function approvalRequestDecision(input: {
     if (
       Object.hasOwn(input.toolInput, "approvalReceipt") ||
       publicApprovalDescription(input.toolInput, input.toolName) === undefined
-    )
+    ) {
       return {
         type: "denied",
         reason: "The local approval subject is missing or invalid.",
       };
+    }
     return "user-approval";
   }
   try {

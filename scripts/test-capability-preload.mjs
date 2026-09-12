@@ -35,8 +35,9 @@ if (
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
   (repositoryRootStat.mode & 0o022n) !== 0n
-)
+) {
   throw new Error("Structural test package root was not owner-bound.");
+}
 const require = createRequire(import.meta.url);
 const registry = require(resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
 const workerThreads = require("node:worker_threads");
@@ -57,16 +58,20 @@ delete process.env.NODE_OPTIONS;
 
 function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
-  for (const name of allowedWorkerEnvironment)
-    if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined)
+  for (const name of allowedWorkerEnvironment) {
+    if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined) {
       environment[name] = source[name];
+    }
+  }
   const hasEveEnvelope = eveEnvelope !== undefined;
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope ? undefined : repositoryRoot;
   environment.EVE_DEV = hasEveEnvelope ? undefined : eveProfile ? "1" : undefined;
-  if (eveEnvelope?.bodyTimeout === "360000")
+  if (eveEnvelope?.bodyTimeout === "360000") {
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
-  if (eveEnvelope?.headersTimeout === "360000")
+  }
+  if (eveEnvelope?.headersTimeout === "360000") {
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = eveEnvelope.headersTimeout;
+  }
   return environment;
 }
 
@@ -94,24 +99,30 @@ function readFdFrame() {
   while (!source.includes("\n")) {
     const buffer = Buffer.alloc(512);
     const count = readSync(authorizationFd, buffer, 0, buffer.length, null);
-    if (count <= 0) throw new Error("Structural test authorization was absent.");
+    if (count <= 0) {
+      throw new Error("Structural test authorization was absent.");
+    }
     source += buffer.subarray(0, count).toString("utf-8");
     const newline = source.indexOf("\n");
     if (
       (newline === -1 && Buffer.byteLength(source) > maxBytes) ||
       (newline !== -1 && Buffer.byteLength(source.slice(0, newline + 1)) > maxBytes)
-    )
+    ) {
       throw new Error("Structural test authorization was oversized.");
+    }
   }
-  if (source.indexOf("\n") !== source.length - 1)
+  if (source.indexOf("\n") !== source.length - 1) {
     throw new Error("Structural test authorization was not one frame.");
+  }
   return JSON.parse(source);
 }
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const value = receiveMessageOnPort(port)?.message;
-    if (value !== undefined) return value;
+    if (value !== undefined) {
+      return value;
+    }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
   }
   throw new Error("Structural test authorization timed out.");
@@ -125,8 +136,9 @@ function requestAuthorization() {
     !isMainThread && workerData && typeof workerData === "object"
       ? workerData[workerPortKey]
       : undefined;
-  if (!isMainThread && port === undefined)
+  if (!isMainThread && port === undefined) {
     throw new Error("Structural test Worker authorization was absent.");
+  }
   const delegatedPublicKey =
     !isMainThread && workerData && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
@@ -134,8 +146,9 @@ function requestAuthorization() {
   const request = registry.begin(process, context, delegatedPublicKey);
   let response;
   if (port === undefined) {
-    if (!fstatSync(authorizationFd).isSocket())
+    if (!fstatSync(authorizationFd).isSocket()) {
       throw new Error("Structural test authorization was not private IPC.");
+    }
     writeSync(authorizationFd, `${JSON.stringify({ version: 2, ...request })}\n`);
     response = readFdFrame();
   } else {
@@ -158,8 +171,9 @@ function requestAuthorization() {
       "signature",
       "delegationPrivateKey",
     ])
-  )
+  ) {
     throw new Error("Structural test authorization response was malformed.");
+  }
   const privateKey = createPrivateKey({
     key: Buffer.from(response.delegationPrivateKey, "base64"),
     format: "der",
@@ -168,8 +182,9 @@ function requestAuthorization() {
   const derivedPublic = createPublicKey(privateKey)
     .export({ format: "der", type: "spki" })
     .toString("base64");
-  if (derivedPublic !== response.publicKey)
+  if (derivedPublic !== response.publicKey) {
     throw new Error("Structural test delegation key did not match.");
+  }
   const proof = { ...response };
   delete proof.delegationPrivateKey;
   const capability = registry.complete(process, proof);
@@ -269,7 +284,9 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       });
       let settled = false;
       const cleanup = () => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         clearTimeout(timeout);
         channel.port1.close();
@@ -334,19 +351,28 @@ try {
   if (
     !isMainThread &&
     JSON.stringify(workerGateAEvalProfile) !== JSON.stringify(authorization.gateAEvalProfile)
-  )
+  ) {
     throw new Error("The delegated Gate A eval profile did not match.");
+  }
   const gateAEvalProfileToInstall = isMainThread
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;
-  if (eveProfile) installGateAEvalProfile(process.env, gateAEvalProfileToInstall, repositoryRoot);
-  else for (const name of gateAEnvironmentFields) Reflect.deleteProperty(process.env, name);
-  if (!isMainThread) Reflect.deleteProperty(workerData, gateAEvalProfileKey);
+  if (eveProfile) {
+    installGateAEvalProfile(process.env, gateAEvalProfileToInstall, repositoryRoot);
+  } else {
+    for (const name of gateAEnvironmentFields) {
+      Reflect.deleteProperty(process.env, name);
+    }
+  }
+  if (!isMainThread) {
+    Reflect.deleteProperty(workerData, gateAEvalProfileKey);
+  }
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
     Reflect.deleteProperty(workerData, eveWorkerEnvelopeKey);
-  } else if (eveProfile) process.env.EVE_DEV = "1";
-  else {
+  } else if (eveProfile) {
+    process.env.EVE_DEV = "1";
+  } else {
     for (const name of [
       "EVE_DEV",
       "WORKFLOW_LOCAL_BASE_URL",
@@ -355,8 +381,9 @@ try {
       "EVE_DEVELOPMENT_SANDBOX_RUN_ID",
       "EVE_EVALUATION",
       "EVE_EVALUATION_RUN_ID",
-    ])
+    ]) {
       Reflect.deleteProperty(process.env, name);
+    }
   }
   installed = authorization.capability;
   process.env.APP_BUILDER_TEST_CAPABILITY_ID = installed.id;
@@ -369,7 +396,9 @@ try {
     authorization.gateAEvalProfile,
   );
 } catch {
-  if (installed !== undefined) registry.revoke(process, installed);
+  if (installed !== undefined) {
+    registry.revoke(process, installed);
+  }
   delete process.env.APP_BUILDER_TEST_CAPABILITY_ID;
   delete process.env.APP_BUILDER_TEST_MODEL;
 }

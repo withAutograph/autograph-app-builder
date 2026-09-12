@@ -9,12 +9,14 @@ export async function GET(
 ) {
   try {
     const emulation = readProviderEmulation(process.env);
-    if (!emulation || emulation.mode !== "preview")
+    if (!emulation || emulation.mode !== "preview") {
       throw new Error("Preview authentication emulation is unavailable.");
+    }
     const { provider, approval } = await context.params;
     const verified = verifyLocalOAuthApproval(approval, emulation.relaySecret);
-    if (verified.provider !== provider || verified.origin !== emulation.canonicalOrigin)
+    if (verified.provider !== provider || verified.origin !== emulation.canonicalOrigin) {
       throw new Error("Invalid approval binding.");
+    }
     return completeAuthorization({ params: Promise.resolve({ provider }) }, verified.authorization);
   } catch (error) {
     console.error(

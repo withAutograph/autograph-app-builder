@@ -35,10 +35,11 @@ function createVercelDefinition() {
           command: developmentPinnedToolchainCommand(),
           abortSignal: AbortSignal.timeout(300_000),
         });
-        if (setup.exitCode !== 0)
+        if (setup.exitCode !== 0) {
           throw new Error(
             `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2000)}`,
           );
+        }
       } else {
         await installHostedBunRuntime(sandbox);
       }

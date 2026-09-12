@@ -39,7 +39,9 @@ export function RenamePasskeyDialog({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextName = name.trim();
-    if (nextName) updatePasskey.mutate({ id: passkey.id, name: nextName });
+    if (nextName) {
+      updatePasskey.mutate({ id: passkey.id, name: nextName });
+    }
   };
 
   return (

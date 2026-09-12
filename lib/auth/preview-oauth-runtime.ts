@@ -93,11 +93,17 @@ interface GitHubOAuthTokens {
 }
 
 async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
-  if (!response.ok) return null;
+  if (!response.ok) {
+    return null;
+  }
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > limit) return null;
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {
+    return null;
+  }
   const body = await response.text();
-  if (body.length > limit) return null;
+  if (body.length > limit) {
+    return null;
+  }
   try {
     return JSON.parse(body);
   } catch {
@@ -114,7 +120,9 @@ export async function fetchVerifiedGitHubUserInfo(
   tokens: GitHubOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
-  if (!tokens.accessToken) return null;
+  if (!tokens.accessToken) {
+    return null;
+  }
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${tokens.accessToken}`,
@@ -148,13 +156,19 @@ export async function fetchVerifiedGitHubUserInfo(
   ]);
   const profile = githubProfileSchema.safeParse(profileBody);
   const emails = githubEmailsSchema.safeParse(emailsBody);
-  if (!profile.success || !emails.success) return null;
+  if (!profile.success || !emails.success) {
+    return null;
+  }
   const email =
     emails.data.find((candidate) => candidate.primary && candidate.verified) ??
     emails.data.find((candidate) => candidate.verified);
-  if (!email) return null;
+  if (!email) {
+    return null;
+  }
   const normalizedEmail = email.email.trim().toLowerCase();
-  if (!normalizedEmail) return null;
+  if (!normalizedEmail) {
+    return null;
+  }
 
   return {
     user: {
@@ -196,7 +210,9 @@ async function exchangeLocalEmulatedOAuthCode(input: {
     },
     input.emulation,
   );
-  if (!response.ok) throw new Error("Emulated OAuth token exchange failed.");
+  if (!response.ok) {
+    throw new Error("Emulated OAuth token exchange failed.");
+  }
   const body = (await response.json()) as {
     access_token?: unknown;
     token_type?: unknown;
@@ -225,7 +241,9 @@ export async function fetchVerifiedVercelUserInfo(
   tokens: VercelOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
-  if (!tokens.accessToken || !tokens.idToken) return null;
+  if (!tokens.accessToken || !tokens.idToken) {
+    return null;
+  }
 
   let tokenClaims: ReturnType<typeof decodeJwt>;
   try {
@@ -249,12 +267,18 @@ export async function fetchVerifiedVercelUserInfo(
   } catch {
     return null;
   }
-  if (!response.ok) return null;
+  if (!response.ok) {
+    return null;
+  }
 
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > 16_384) return null;
+  if (Number.isFinite(declaredLength) && declaredLength > 16_384) {
+    return null;
+  }
   const body = await response.text();
-  if (body.length > 16_384) return null;
+  if (body.length > 16_384) {
+    return null;
+  }
 
   let profile: z.infer<typeof vercelUserInfoSchema>;
   try {
@@ -584,7 +608,9 @@ export function createPreviewOAuthServer(input: {
               },
               localEmulation,
             );
-            if (!response.ok) return null;
+            if (!response.ok) {
+              return null;
+            }
             const profile = (await response.json()) as {
               id?: number;
               login?: string;
@@ -592,7 +618,9 @@ export function createPreviewOAuthServer(input: {
               name?: string;
               avatar_url?: string;
             };
-            if (!profile.id || !profile.email) return null;
+            if (!profile.id || !profile.email) {
+              return null;
+            }
             return {
               id: profile.id,
               email: profile.email,
@@ -640,9 +668,13 @@ export function createPreviewOAuthServer(input: {
               },
               localEmulation,
             );
-            if (!response.ok) return null;
+            if (!response.ok) {
+              return null;
+            }
             const profile = vercelUserInfoSchema.safeParse(await response.json());
-            if (!profile.success || !profile.data.email_verified) return null;
+            if (!profile.success || !profile.data.email_verified) {
+              return null;
+            }
             return {
               id: profile.data.sub,
               sub: profile.data.sub,
@@ -683,7 +715,9 @@ export function createPreviewOAuthServer(input: {
               overrideUserInfoOnSignIn: false,
               getUserInfo: async (tokens) => {
                 const result = await fetchVerifiedGitHubUserInfo(tokens);
-                if (result === null) return null;
+                if (result === null) {
+                  return null;
+                }
                 return {
                   ...result,
                   // GitHub's own response contains additional profile fields
@@ -697,7 +731,9 @@ export function createPreviewOAuthServer(input: {
     user: {
       validateUserInfo({ user, source }) {
         const providerId = source.oauth?.providerId;
-        if (providerId === undefined) return;
+        if (providerId === undefined) {
+          return;
+        }
         if (
           !new Set(["github", "vercel"]).has(providerId) ||
           user.emailVerified !== true ||

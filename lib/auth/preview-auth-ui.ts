@@ -6,7 +6,9 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
   const serialized = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (Array.isArray(value)) {
-      for (const item of value) serialized.append(key, item);
+      for (const item of value) {
+        serialized.append(key, item);
+      }
     } else if (value !== undefined) {
       serialized.append(key, value);
     }
@@ -17,13 +19,17 @@ export function serializeAuthPageSearchParams(searchParams: AuthPageSearchParams
 
 export function resolveAuthCallbackURL(defaultURL: string, search: string, sameOrigin?: string) {
   const callbackURL = new URLSearchParams(search).get("callbackURL");
-  if (!callbackURL) return defaultURL;
+  if (!callbackURL) {
+    return defaultURL;
+  }
 
   try {
     const parsed = new URL(callbackURL, "https://autograph.invalid");
     const isRootRelative = callbackURL.startsWith("/") && !callbackURL.startsWith("//");
     const isSameOriginAbsolute = sameOrigin !== undefined && parsed.origin === sameOrigin;
-    if (!isRootRelative && !isSameOriginAbsolute) return defaultURL;
+    if (!isRootRelative && !isSameOriginAbsolute) {
+      return defaultURL;
+    }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return defaultURL;
@@ -50,7 +56,9 @@ export function resolvePasskeyRedirectTo(redirectTo: string, search: string, ori
       origin,
     );
   }
-  if (!searchParams.has("callbackURL")) return redirectTo;
+  if (!searchParams.has("callbackURL")) {
+    return redirectTo;
+  }
 
   const callbackURL = resolveAuthCallbackURL("/", search, origin);
   const resolved = resolveProviderCallbackURL(redirectTo, callbackURL, origin);

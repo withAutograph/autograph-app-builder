@@ -127,7 +127,9 @@ describe("Browser prototype preview", () => {
     for (const candidate of cases) {
       const handler = createPrototypePreviewRequestHandler({
         resolvePrototype: async () => {
-          if (candidate.prototype instanceof Error) throw candidate.prototype;
+          if (candidate.prototype instanceof Error) {
+            throw candidate.prototype;
+          }
           return candidate.prototype;
         },
       });

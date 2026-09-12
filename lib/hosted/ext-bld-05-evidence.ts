@@ -108,7 +108,9 @@ export const extBld05EvidenceReceiptSchema = z
 export type ExtBld05EvidenceReceipt = z.infer<typeof extBld05EvidenceReceiptSchema>;
 
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => left.localeCompare(right))

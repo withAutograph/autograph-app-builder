@@ -14,9 +14,13 @@ import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return undefined;
+  if (index === -1) {
+    return undefined;
+  }
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Missing value for ${name}.`);
+  }
   return value;
 };
 
@@ -33,13 +37,15 @@ const git = (...args: string[]) =>
     },
   }).trim();
 const sourceStatus = git("status", "--porcelain=v1");
-if (sourceStatus !== "")
+if (sourceStatus !== "") {
   throw new Error(
     `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
   );
+}
 const sourceRepository = "https://github.com/withAutograph/autograph-app-builder";
-if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
+if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository)) {
   throw new Error("Portable releases require the canonical source remote.");
+}
 const source = {
   repository: sourceRepository,
   sha: git("rev-parse", "HEAD"),
@@ -51,7 +57,9 @@ try {
   await lstat(requestedOutput);
   throw new Error(`Release output already exists: ${requestedOutput}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    throw error;
+  }
 }
 const requestedParent = resolve(requestedOutput, "..");
 await mkdir(requestedParent, { recursive: true, mode: 0o700 });
@@ -61,8 +69,9 @@ const core = join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 for (const path of ["plugin.json", "mcp.json", "LICENSE", "skills"]) {
   const source = resolve(repositoryRoot, path);
-  if ((await lstat(source)).isSymbolicLink())
+  if ((await lstat(source)).isSymbolicLink()) {
     throw new Error(`Portable source cannot be a symbolic link: ${path}`);
+  }
   await cp(source, join(core, path), { recursive: true });
 }
 const mcp = JSON.parse(await readFile(join(core, "mcp.json"), "utf-8"));
@@ -119,8 +128,11 @@ async function collect(directory: string) {
   for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
     const info = await stat(path);
-    if (info.isDirectory()) await collect(path);
-    else files.set(relative(output, path), await readFile(path));
+    if (info.isDirectory()) {
+      await collect(path);
+    } else {
+      files.set(relative(output, path), await readFile(path));
+    }
   }
 }
 await collect(core);
@@ -137,8 +149,9 @@ await mkdir(join(marketplacePluginRoot, ".codex-plugin"), {
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
 const codexManifest = JSON.parse(await readFile(resolve(".codex-plugin/plugin.json"), "utf-8"));
-if (codexManifest.name !== portable.name || codexManifest.version !== portable.version)
+if (codexManifest.name !== portable.name || codexManifest.version !== portable.version) {
   throw new Error("The Codex adapter name and version must match the portable manifest.");
+}
 const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];
 const codexMarketplaceAssetPaths: string[] = [];
 for (const reference of new Set(codexAssetReferences)) {
@@ -150,8 +163,9 @@ for (const reference of new Set(codexAssetReferences)) {
       .slice(2)
       .split("/")
       .some((part: string) => part === "" || part === "." || part === "..")
-  )
+  ) {
     throw new Error("Codex manifest asset references must be safe relative paths.");
+  }
   const relativeAssetPath = reference.slice(2);
   const sourceAsset = readTrackedTreeBlob({
     repositoryRoot,
@@ -215,8 +229,11 @@ async function collectMarketplace(directory: string) {
   for (const entry of (await readdir(directory)).toSorted()) {
     const path = join(directory, entry);
     const info = await stat(path);
-    if (info.isDirectory()) await collectMarketplace(path);
-    else marketplaceFiles.set(relative(marketplaceRoot, path), await readFile(path));
+    if (info.isDirectory()) {
+      await collectMarketplace(path);
+    } else {
+      marketplaceFiles.set(relative(marketplaceRoot, path), await readFile(path));
+    }
   }
 }
 await collectMarketplace(marketplaceRoot);
@@ -246,7 +263,9 @@ const receipt = {
   codexMarketplaceAssets: Object.fromEntries(
     codexMarketplaceAssetPaths.toSorted().map((path) => {
       const content = marketplaceFiles.get(path);
-      if (!content) throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
+      if (!content) {
+        throw new Error(`Codex marketplace omitted referenced asset ${path}.`);
+      }
       return [path, sha256(content)];
     }),
   ),
@@ -263,5 +282,7 @@ await writeFile(
   join(output, "SHA256SUMS"),
   `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`,
 );
-if ((await realpath(core)) !== core) throw new Error("Portable core path was not canonical.");
+if ((await realpath(core)) !== core) {
+  throw new Error("Portable core path was not canonical.");
+}
 console.log(`Sealed ${archiveName}: ${receipt.archive.sha256}`);

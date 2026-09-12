@@ -99,8 +99,9 @@ describe("PostgreSQL handoff renewal", () => {
       "owner_user_id",
       "handoff_id",
       "request_digest",
-    ])
+    ]) {
       expect(query.sql).toContain(`"builder_handoff"."${column}" =`);
+    }
     expect(query.sql).not.toContain('"builder_handoff"."expires_at" =');
     expect(query.sql).toContain('"builder_handoff"."expires_at" <=');
     expect(query.sql).toContain('"builder_handoff"."redeemed_at" is null');

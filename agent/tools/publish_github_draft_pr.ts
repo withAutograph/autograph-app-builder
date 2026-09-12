@@ -25,10 +25,11 @@ export default defineTool({
       state.phase !== "reviewed" ||
       state.githubDraftProposal === undefined ||
       state.githubSource === undefined
-    )
+    ) {
       throw new Error(
         "Choose a repository and finish the implementation plan before opening a draft pull request.",
       );
+    }
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "publication",

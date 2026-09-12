@@ -9,8 +9,12 @@ export class GitHubPublicationTestStore implements GitHubPublicationReceiptStore
   }
 
   async compareAndSet(key: string, expected: string | undefined, value: GitHubMutationReceipt) {
-    if (this.values.get(key)?.digest !== expected) return false;
-    if (this.rejectTerminal && value.status !== "pending") return false;
+    if (this.values.get(key)?.digest !== expected) {
+      return false;
+    }
+    if (this.rejectTerminal && value.status !== "pending") {
+      return false;
+    }
     this.values.set(key, value);
     return true;
   }

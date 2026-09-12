@@ -144,8 +144,9 @@ export function createPostgresHostedGitHubInstallationStore(
             set: binding,
           })
           .returning(bindingSelection);
-        if (bindingRows.length !== 1)
+        if (bindingRows.length !== 1) {
           throw new Error("Hosted GitHub installation binding was not durable.");
+        }
 
         // Maintain the original single publication binding as an explicit
         // compatibility row. Publication continues to require its own later

@@ -19,9 +19,12 @@ describe("development MCP readiness", () => {
         method: string;
       };
       methods.push(request.method);
-      if (request.method === "initialize")
+      if (request.method === "initialize") {
         return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-1");
-      if (request.method === "notifications/initialized") return response(undefined, 202);
+      }
+      if (request.method === "notifications/initialized") {
+        return response(undefined, 202);
+      }
       return response({
         jsonrpc: "2.0",
         id: request.id,
@@ -46,11 +49,15 @@ describe("development MCP readiness", () => {
       };
       const firstAttempt = attempt === 0;
       attempt += 1;
-      if (request.method === "initialize" && firstAttempt)
+      if (request.method === "initialize" && firstAttempt) {
         return response({ error: "starting" }, 503);
-      if (request.method === "initialize")
+      }
+      if (request.method === "initialize") {
         return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-2");
-      if (request.method === "notifications/initialized") return response(undefined, 202);
+      }
+      if (request.method === "notifications/initialized") {
+        return response(undefined, 202);
+      }
       return response({
         jsonrpc: "2.0",
         id: request.id,
@@ -73,9 +80,12 @@ describe("development MCP readiness", () => {
         id?: number;
         method: string;
       };
-      if (request.method === "initialize")
+      if (request.method === "initialize") {
         return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-3");
-      if (request.method === "notifications/initialized") return response(undefined, 202);
+      }
+      if (request.method === "notifications/initialized") {
+        return response(undefined, 202);
+      }
       return response({
         jsonrpc: "2.0",
         id: request.id,

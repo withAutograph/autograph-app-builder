@@ -163,7 +163,9 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
-      if (!field.signUp || field.readOnly) continue;
+      if (!field.signUp || field.readOnly) {
+        continue;
+      }
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {

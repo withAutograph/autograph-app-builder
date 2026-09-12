@@ -9,13 +9,17 @@ export async function GET(request: Request) {
   } catch {
     return new Response("Not found", { status: 404 });
   }
-  if (!emulation) return new Response("Not found", { status: 404 });
+  if (!emulation) {
+    return new Response("Not found", { status: 404 });
+  }
   const origin = emulation.canonicalOrigin;
   const query = new URL(request.url).searchParams;
   try {
     const code = query.get("code");
     const state = query.get("state");
-    if (!code || !state) throw new Error("invalid");
+    if (!code || !state) {
+      throw new Error("invalid");
+    }
     const relay = verifyLocalVercelRelay(state, emulation.relaySecret, Date.now(), origin);
     const callback = new URL("/vercel/installations/callback", origin);
     callback.searchParams.set("code", code);

@@ -75,9 +75,13 @@ export async function executeBuilderProvisioning(input: {
     request,
     now: new Date(now()),
   });
-  if (!sameIntent(request, reserved.record.request)) throw new Error("provision-request-id-reused");
+  if (!sameIntent(request, reserved.record.request)) {
+    throw new Error("provision-request-id-reused");
+  }
   const existing = reserved.record.response[request.operation];
-  if (existing.status === "succeeded") return reserved.record.response;
+  if (existing.status === "succeeded") {
+    return reserved.record.response;
+  }
 
   const leaseId = (input.dependencies.leaseId ?? randomUUID)();
   const leased = await updateBuilderProvisionJournal({
@@ -91,15 +95,17 @@ export async function executeBuilderProvisioning(input: {
         operation.leaseId &&
         operation.leaseExpiresAt &&
         Date.parse(operation.leaseExpiresAt) > now()
-      )
+      ) {
         return current;
+      }
       operation.leaseId = leaseId;
       operation.leaseExpiresAt = new Date(now() + LEASE_MS).toISOString();
       return current;
     },
   });
-  if (leased.record.operations[request.operation].leaseId !== leaseId)
+  if (leased.record.operations[request.operation].leaseId !== leaseId) {
     return leased.record.response;
+  }
 
   const persist = async (kind: "candidate" | "absent", candidate: string) => {
     await updateBuilderProvisionJournal({
@@ -112,7 +118,9 @@ export async function executeBuilderProvisioning(input: {
           kind === "candidate"
             ? current.operations[request.operation].candidates
             : current.operations[request.operation].absentCandidates;
-        if (!values.includes(candidate)) values.push(candidate);
+        if (!values.includes(candidate)) {
+          values.push(candidate);
+        }
         return current;
       },
     });
@@ -132,7 +140,9 @@ export async function executeBuilderProvisioning(input: {
           authority: input.authority,
           requestId: request.requestId,
         });
-        if (!current) throw new Error("provision-journal-missing");
+        if (!current) {
+          throw new Error("provision-journal-missing");
+        }
         result = await provisionGitHubRepository({
           config: input.dependencies.githubConfig,
           authority: input.authority,
@@ -171,7 +181,9 @@ export async function executeBuilderProvisioning(input: {
       authority: input.authority,
       requestId: request.requestId,
     });
-    if (!current) throw new Error("provision-journal-missing");
+    if (!current) {
+      throw new Error("provision-journal-missing");
+    }
     const credential = await input.dependencies.readVercelCredential({
       authority: input.authority,
       installationId: request.providers.vercelInstallationId!,
@@ -210,9 +222,11 @@ export async function executeBuilderProvisioning(input: {
     requestId: request.requestId,
     now,
     update(current) {
-      if (request.operation === "github")
+      if (request.operation === "github") {
         current.response.github = githubProvisionResultSchema.parse(result);
-      else current.response.vercel = vercelProvisionResultSchema.parse(result);
+      } else {
+        current.response.vercel = vercelProvisionResultSchema.parse(result);
+      }
       if (
         request.operation === "github" &&
         result.status === "succeeded" &&

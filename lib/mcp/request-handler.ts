@@ -139,12 +139,14 @@ export function withHostedBuilderHandoffs(input: {
   return {
     ...input.service,
     async start(request) {
-      if (request.handoffId === undefined) return input.service.start(request);
+      if (request.handoffId === undefined) {
+        return input.service.start(request);
+      }
       const resolved = await input.handoffs.resolve({
         authority,
         handoffId: request.handoffId,
       });
-      if (resolved.status === "redeemed")
+      if (resolved.status === "redeemed") {
         return input.service.recoverStart === undefined
           ? Promise.reject(new Error("handoff-start-recovery-unavailable"))
           : input.service.recoverStart({
@@ -152,6 +154,7 @@ export function withHostedBuilderHandoffs(input: {
               cursor: 0,
               limit: 100,
             });
+      }
       const resolvedRepository = resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
         const access = await input.handoffs.recheckRepositoryAccess({
@@ -159,7 +162,9 @@ export function withHostedBuilderHandoffs(input: {
           principal: input.principal,
           repository: resolvedRepository,
         });
-        if (access.status === "provider-unavailable") throw new McpProviderUnavailableError();
+        if (access.status === "provider-unavailable") {
+          throw new McpProviderUnavailableError();
+        }
       }
       const result = await input.service.start({
         prompt: resolved.prompt,
@@ -373,11 +378,21 @@ function adapterMode(
 ): "local" | "hosted" | "unconfigured" | "invalid" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
-  if (![undefined, "0", "1"].includes(local)) return "invalid";
-  if (![undefined, "0", "1"].includes(hosted)) return "invalid";
-  if (local === "1" && hosted === "1") return "invalid";
-  if (hosted === "1") return "hosted";
-  if (local === "1") return "local";
+  if (![undefined, "0", "1"].includes(local)) {
+    return "invalid";
+  }
+  if (![undefined, "0", "1"].includes(hosted)) {
+    return "invalid";
+  }
+  if (local === "1" && hosted === "1") {
+    return "invalid";
+  }
+  if (hosted === "1") {
+    return "hosted";
+  }
+  if (local === "1") {
+    return "local";
+  }
   return "unconfigured";
 }
 
@@ -476,7 +491,9 @@ async function hostedServiceForRequest(
   runtime: HostedMcpRuntime,
 ): Promise<EveSessionService | Response> {
   const parsedAuth = hostedMcpAuthConfigSchema.safeParse(runtime.auth);
-  if (!parsedAuth.success) return unavailableResponse();
+  if (!parsedAuth.success) {
+    return unavailableResponse();
+  }
   const auth = parsedAuth.data;
   const requiredScopes = await requiredScopesForRequest(request);
   let token: string;
@@ -551,9 +568,13 @@ export function createMcpRequestHandler(
   const environment = input.environment ?? process.env;
   return async (request: Request): Promise<Response> => {
     const mode = adapterMode(environment);
-    if (mode === "invalid") return unavailableResponse();
+    if (mode === "invalid") {
+      return unavailableResponse();
+    }
     if (mode === "hosted") {
-      if (input.hostedRuntime === undefined) return unavailableResponse();
+      if (input.hostedRuntime === undefined) {
+        return unavailableResponse();
+      }
       if (await isPublicDiscoveryRequest(request)) {
         return createAutographMcpHandler(discoveryOnlyService, {
           requestUrl: request.url,

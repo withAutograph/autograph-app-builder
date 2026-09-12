@@ -33,9 +33,11 @@ afterEach(async () => {
   const makeWritable = async (path: string) => {
     await chmod(path, 0o700).catch(() => undefined);
     for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
-      if (entry.isDirectory()) await makeWritable(join(path, entry.name));
-      else if (!entry.isSymbolicLink())
+      if (entry.isDirectory()) {
+        await makeWritable(join(path, entry.name));
+      } else if (!entry.isSymbolicLink()) {
         await chmod(join(path, entry.name), 0o600).catch(() => undefined);
+      }
     }
   };
   await Promise.all(roots.map(makeWritable));

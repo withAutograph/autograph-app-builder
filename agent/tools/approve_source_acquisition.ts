@@ -15,8 +15,12 @@ export default defineTool({
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
     const existing = existingRepositoryAcquisitionReceipt(current, expectedSourceReceiptDigest);
-    if (existing !== undefined) return existing;
-    if (current.phase === "empty") throw new Error("No source was reviewed.");
+    if (existing !== undefined) {
+      return existing;
+    }
+    if (current.phase === "empty") {
+      throw new Error("No source was reviewed.");
+    }
     let currentReceipt = current.receipt;
     if (current.receipt.version === SOURCE_RECEIPT_VERSION) {
       await inspectCanonicalArrustedSandboxWorkspace({
@@ -29,8 +33,9 @@ export default defineTool({
         current.receipt.sourcePath,
       );
     }
-    if (currentReceipt.digest !== expectedSourceReceiptDigest)
+    if (currentReceipt.digest !== expectedSourceReceiptDigest) {
       throw new Error("The source changed after review.");
+    }
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "acquisition_approved",

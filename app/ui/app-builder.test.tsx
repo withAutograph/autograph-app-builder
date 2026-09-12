@@ -194,7 +194,9 @@ function AppBuilder(
 ) {
   const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
   void user;
-  if (!componentProps.authenticated) return <AnonymousBuilder />;
+  if (!componentProps.authenticated) {
+    return <AnonymousBuilder />;
+  }
   const { authenticated: _authenticated, ...authenticatedProps } = componentProps;
   return (
     <div className={styles.appShell}>
@@ -253,7 +255,9 @@ async function press(element: HTMLElement, key: string) {
 
 afterEach(async () => {
   vi.useRealTimers();
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   container?.remove();
   root = undefined;
   container = undefined;

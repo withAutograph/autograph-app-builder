@@ -37,8 +37,11 @@ export default defineTool({
         const content = await sandbox.readTextFile({
           path: `/workspace/repository/${relativePath}`,
         });
-        if (content === null) missingPaths.push(requestedPath);
-        else files.push({ path: requestedPath, content });
+        if (content === null) {
+          missingPaths.push(requestedPath);
+        } else {
+          files.push({ path: requestedPath, content });
+        }
       }
       return { files, missingPaths };
     }
@@ -50,8 +53,9 @@ export default defineTool({
     // other path special treatment.
     if (path === developmentWorkspacePath && canAutoSelectDevelopmentSource()) {
       const receipt = await developmentSourceReceipt("existing-repository");
-      if (receipt === undefined)
+      if (receipt === undefined) {
         throw new Error("The configured development source was unavailable.");
+      }
       const workflow = appBuilderWorkflowState.get();
       if (workflow.phase === "empty") {
         assertUpstreamMutationAllowed(workflow, "development workspace setup");
@@ -81,7 +85,9 @@ export default defineTool({
       }
       return inspectSupportedRepository(receipt.sourcePath);
     }
-    if (canAutoSelectDevelopmentSource()) return inspectSupportedRepository(path);
+    if (canAutoSelectDevelopmentSource()) {
+      return inspectSupportedRepository(path);
+    }
 
     const sandbox = await ctx.getSandbox();
     const availablePaths: string[] = [];
@@ -90,8 +96,11 @@ export default defineTool({
       const content = await sandbox.readTextFile({
         path: `repository/${overviewPath}`,
       });
-      if (content === null) missingPaths.push(overviewPath);
-      else availablePaths.push(overviewPath);
+      if (content === null) {
+        missingPaths.push(overviewPath);
+      } else {
+        availablePaths.push(overviewPath);
+      }
     }
     return {
       workspacePath: developmentWorkspacePath,

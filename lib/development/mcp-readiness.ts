@@ -40,7 +40,9 @@ async function mcpRequest(input: {
     body: JSON.stringify(input.body),
     signal,
   });
-  if (!response.ok) throw new Error(`Development MCP returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    throw new Error(`Development MCP returned HTTP ${response.status}.`);
+  }
   const text = await response.text();
   const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
   return { body: text ? jsonRpcBody(text) : undefined, sessionId };
@@ -70,8 +72,9 @@ export async function developmentMcpToolNames(input: {
       },
     },
   });
-  if (initialized.body?.error)
+  if (initialized.body?.error) {
     throw new Error(initialized.body.error.message ?? "Development MCP initialization failed.");
+  }
   await mcpRequest({
     endpoint: input.endpoint,
     fetcher,
@@ -86,8 +89,9 @@ export async function developmentMcpToolNames(input: {
     sessionId: initialized.sessionId,
     body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
   });
-  if (listed.body?.error)
+  if (listed.body?.error) {
     throw new Error(listed.body.error.message ?? "Development MCP tools/list failed.");
+  }
   return (listed.body?.result?.tools ?? []).map((tool) => tool.name ?? "");
 }
 
@@ -103,25 +107,32 @@ export async function waitForDevelopmentMcp(input: {
   const started = Date.now();
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
-    if (input.signal?.aborted) throw abortReason(input.signal);
+    if (input.signal?.aborted) {
+      throw abortReason(input.signal);
+    }
     try {
       const names = await developmentMcpToolNames(input);
       if (
         names.length !== TOOL_NAMES.length ||
         names.some((name, index) => name !== TOOL_NAMES[index])
-      )
+      ) {
         throw new UnexpectedDevelopmentToolsError(
           `Development MCP must expose exactly ${TOOL_NAMES.join(", ")} in order; received ${names.join(", ") || "no tools"}.`,
         );
+      }
       return names;
     } catch (error) {
-      if (error instanceof UnexpectedDevelopmentToolsError) throw error;
+      if (error instanceof UnexpectedDevelopmentToolsError) {
+        throw error;
+      }
       lastError = error;
     }
     try {
       await delay(intervalMs, undefined, { signal: input.signal });
     } catch {
-      if (input.signal?.aborted) throw abortReason(input.signal);
+      if (input.signal?.aborted) {
+        throw abortReason(input.signal);
+      }
       throw new Error("Development MCP readiness wait failed.");
     }
   }

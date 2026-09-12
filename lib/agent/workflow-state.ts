@@ -114,8 +114,9 @@ export function assertExactDependencyPreparationReceipt(
     receipt.dependencyLayout === undefined ||
     !/^[0-9a-f]{64}$/u.test(digest) ||
     digest !== sha256(JSON.stringify(unsigned))
-  )
+  ) {
     throw new Error("The dependency preparation receipt is malformed.");
+  }
 }
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
@@ -344,10 +345,11 @@ export function assertUpstreamMutationAllowed(
   state: AppBuilderWorkflowState,
   operation: string,
 ): void {
-  if (isPublicationWorkflowPhase(state))
+  if (isPublicationWorkflowPhase(state)) {
     throw new Error(
       `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`,
     );
+  }
 }
 
 export function assertExactWorkflowState(
@@ -355,8 +357,9 @@ export function assertExactWorkflowState(
   expected: AppBuilderWorkflowState,
   operation: string,
 ): void {
-  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
+  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected))) {
     throw new Error(`The workflow changed concurrently before ${operation}.`);
+  }
 }
 
 export function assertCurrentGitHubDraftProposal(input: {
@@ -381,10 +384,11 @@ export function assertCurrentGitHubDraftProposal(input: {
     proposal.owner !== input.githubSource.repository.owner ||
     proposal.name !== input.githubSource.repository.name ||
     proposal.baseBranch !== input.githubSource.repository.defaultBranch
-  )
+  ) {
     throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
     );
+  }
   return proposal;
 }
 
@@ -398,10 +402,11 @@ export function assertPublicationJournalStatus(
     publication_failed: [undefined, "failed"],
     published_local: ["succeeded"],
   };
-  if (!allowed[phase].includes(status))
+  if (!allowed[phase].includes(status)) {
     throw new Error(
       `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
     );
+  }
 }
 
 export function assertFreshBootstrapJournalStatus(
@@ -418,10 +423,11 @@ export function assertFreshBootstrapJournalStatus(
     fresh_bootstrap_failed: ["failed", "succeeded"],
     published_fresh_bootstrap: ["succeeded"],
   };
-  if (!allowed[phase].includes(status))
+  if (!allowed[phase].includes(status)) {
     throw new Error(
       `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`,
     );
+  }
 }
 
 export function workflowWorkspace(

@@ -135,7 +135,9 @@ function verifiedImplementationPlan(
   candidate: unknown,
 ): PublicImplementationPlan | undefined {
   const parsed = planResultSchema.safeParse(candidate);
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    return undefined;
+  }
   const result = parsed.data;
   const { target } = result;
   const requestedChanges = request.existingAppChanges;
@@ -176,8 +178,9 @@ function verifiedImplementationPlan(
     result.digest !== sha256(JSON.stringify(unsigned)) ||
     target.blockers.length !== 0 ||
     target.mutations.length !== 0
-  )
+  ) {
     return undefined;
+  }
   return publicImplementationPlanSchema.parse({
     appId: target.contract.appId,
     runtime: target.plan.source.runtime,
@@ -201,14 +204,19 @@ export function latestInstalledImplementationPlan(
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
-        if (action.kind !== "tool-call") continue;
+        if (action.kind !== "tool-call") {
+          continue;
+        }
         if (action.toolName !== "plan_app_creation") {
           requested.delete(action.callId);
           continue;
         }
         const parsed = planRequestSchema.safeParse(action.input);
-        if (parsed.success) requested.set(action.callId, parsed.data);
-        else requested.delete(action.callId);
+        if (parsed.success) {
+          requested.set(action.callId, parsed.data);
+        } else {
+          requested.delete(action.callId);
+        }
       }
       continue;
     }
@@ -218,8 +226,9 @@ export function latestInstalledImplementationPlan(
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
       event.data.result.isError === true
-    )
+    ) {
       continue;
+    }
 
     if (event.data.result.toolName === "record_prototype_artifact") {
       const { output } = event.data.result;
@@ -228,17 +237,24 @@ export function latestInstalledImplementationPlan(
         output !== null &&
         "invalidated" in output &&
         output.invalidated === true
-      )
+      ) {
         latest = undefined;
+      }
       continue;
     }
-    if (event.data.result.toolName !== "plan_app_creation") continue;
+    if (event.data.result.toolName !== "plan_app_creation") {
+      continue;
+    }
 
     const { callId } = event.data.result;
     const input = requested.get(callId);
-    if (input === undefined) continue;
+    if (input === undefined) {
+      continue;
+    }
     const plan = verifiedImplementationPlan(callId, input, event.data.result.output);
-    if (plan !== undefined) latest = plan;
+    if (plan !== undefined) {
+      latest = plan;
+    }
   }
 
   return latest;
@@ -258,14 +274,19 @@ export function latestInstalledPrototype(
   for (const event of events) {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
-        if (action.kind !== "tool-call") continue;
+        if (action.kind !== "tool-call") {
+          continue;
+        }
         if (action.toolName !== "record_prototype_artifact") {
           requested.delete(action.callId);
           continue;
         }
         const parsed = prototypeRequestSchema.safeParse(action.input);
-        if (parsed.success) requested.set(action.callId, parsed.data);
-        else requested.delete(action.callId);
+        if (parsed.success) {
+          requested.set(action.callId, parsed.data);
+        } else {
+          requested.delete(action.callId);
+        }
       }
       continue;
     }
@@ -275,12 +296,15 @@ export function latestInstalledPrototype(
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
       event.data.result.isError === true
-    )
+    ) {
       continue;
+    }
 
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) {
+        continue;
+      }
       latest = publicPrototypeSchema.parse({
         path: `prototype/${preview.data.appId}/index.html`,
         mediaType: "text/html",
@@ -290,12 +314,16 @@ export function latestInstalledPrototype(
       });
       continue;
     }
-    if (event.data.result.toolName !== "record_prototype_artifact") continue;
+    if (event.data.result.toolName !== "record_prototype_artifact") {
+      continue;
+    }
 
     const { callId } = event.data.result;
     const input = requested.get(callId);
     const output = prototypeResultSchema.safeParse(event.data.result.output);
-    if (input === undefined || !output.success) continue;
+    if (input === undefined || !output.success) {
+      continue;
+    }
 
     const appId = prototypePathPattern.exec(input.path)?.[1];
     const digest = sha256(input.content);
@@ -316,8 +344,9 @@ export function latestInstalledPrototype(
       output.data.revision !== revision ||
       output.data.size !== size ||
       output.data.recordedByCallId !== callId
-    )
+    ) {
       continue;
+    }
 
     latest = publicPrototypeSchema.parse({
       path: input.path,
@@ -343,10 +372,13 @@ export function latestInstalledUiPreview(
       event.data.result.kind !== "tool-result" ||
       event.data.result.isError === true ||
       event.data.result.toolName !== "record_ui_preview"
-    )
+    ) {
       continue;
+    }
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
+    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) {
+      continue;
+    }
     latest = publicUiPreviewSchema.parse({
       appId: preview.data.appId,
       revision: preview.data.revision,
@@ -379,8 +411,9 @@ function inputRequest(request: {
     request.kind === "tool-approval" &&
     toolName !== undefined &&
     silentInternalApprovalTools.has(toolName)
-  )
+  ) {
     return undefined;
+  }
   const title =
     request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
       ? approvalTitles[toolName as keyof typeof approvalTitles]
@@ -400,8 +433,9 @@ function inputRequest(request: {
     toolName in approvalTitles &&
     toolName !== "apply_app_creation" &&
     description === undefined
-  )
+  ) {
     return undefined;
+  }
   return {
     requestId: request.requestId,
     kind: request.kind === "tool-approval" ? "approval" : "question",
@@ -574,15 +608,24 @@ export function outstandingInstalledEveRequests(
   for (const event of events) {
     if (event.type === "input.requested") {
       const projected = event.data.requests.map(inputRequest);
-      if (projected.some((request) => request === undefined)) return [];
+      if (projected.some((request) => request === undefined)) {
+        return [];
+      }
       for (const request of event.data.requests) {
         const publicRequest = inputRequest(request);
-        if (publicRequest !== undefined) outstanding.set(request.requestId, publicRequest);
+        if (publicRequest !== undefined) {
+          outstanding.set(request.requestId, publicRequest);
+        }
       }
     }
-    if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
+    if (event.type === "input.resolved") {
+      for (const resolution of event.data.resolutions) {
+        outstanding.delete(resolution.requestId);
+      }
+    }
+    if (event.type === "approval.settled") {
+      outstanding.delete(event.data.requestId);
+    }
   }
   return [...outstanding.values()];
 }
@@ -592,10 +635,14 @@ export function outstandingInternalEveRequests(
 ): PublicInputRequest[] {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === "input.requested" && event.request !== undefined)
+    if (event.type === "input.requested" && event.request !== undefined) {
       outstanding.set(event.request.requestId, event.request);
-    if (event.type === "input.resolved")
-      for (const requestId of event.requestIds ?? []) outstanding.delete(requestId);
+    }
+    if (event.type === "input.resolved") {
+      for (const requestId of event.requestIds ?? []) {
+        outstanding.delete(requestId);
+      }
+    }
   }
   return [...outstanding.values()];
 }
@@ -606,21 +653,45 @@ export function deriveInstalledEveStatus(events: readonly MessageStreamEvent[]):
   for (const event of events) {
     if (event.type === "input.requested") {
       const projected = event.data.requests.map(inputRequest);
-      if (projected.some((request) => request === undefined)) return "failed";
-      for (const request of projected)
-        if (request !== undefined) outstanding.add(request.requestId);
+      if (projected.some((request) => request === undefined)) {
+        return "failed";
+      }
+      for (const request of projected) {
+        if (request !== undefined) {
+          outstanding.add(request.requestId);
+        }
+      }
     }
-    if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
-    if (event.type === "turn.cancelled") boundary = "cancelled";
-    if (event.type === "session.waiting") boundary = "waiting";
-    if (event.type === "session.completed") boundary = "completed";
-    if (event.type === "session.failed") boundary = "failed";
-    if (event.type === "step.started") boundary = "working";
+    if (event.type === "input.resolved") {
+      for (const resolution of event.data.resolutions) {
+        outstanding.delete(resolution.requestId);
+      }
+    }
+    if (event.type === "approval.settled") {
+      outstanding.delete(event.data.requestId);
+    }
+    if (event.type === "turn.cancelled") {
+      boundary = "cancelled";
+    }
+    if (event.type === "session.waiting") {
+      boundary = "waiting";
+    }
+    if (event.type === "session.completed") {
+      boundary = "completed";
+    }
+    if (event.type === "session.failed") {
+      boundary = "failed";
+    }
+    if (event.type === "step.started") {
+      boundary = "working";
+    }
   }
-  if (boundary === "completed" || boundary === "failed") return boundary;
-  if (outstanding.size > 0) return "input_required";
+  if (boundary === "completed" || boundary === "failed") {
+    return boundary;
+  }
+  if (outstanding.size > 0) {
+    return "input_required";
+  }
   return boundary;
 }
 

@@ -27,11 +27,12 @@ export const publicAuthorizationUrlSchema = z
       url.username ||
       url.password ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Authorization requires credential-free HTTPS or loopback URL.",
       });
+    }
   });
 
 export const inputPresentationSchema = z
@@ -65,12 +66,13 @@ export const publicInputRequestSchema = z
   })
   .strict()
   .superRefine((request, context) => {
-    if (request.kind !== "authorization" && request.authorization)
+    if (request.kind !== "authorization" && request.authorization) {
       context.addIssue({
         code: "custom",
         path: ["authorization"],
         message: "Only authorization requests may include a challenge.",
       });
+    }
   });
 
 export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
@@ -250,11 +252,12 @@ export const eveStartInputSchema = z
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
-    if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1)
+    if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1) {
       context.addIssue({
         code: "custom",
         message: "Provide exactly one of prompt, handoffId, or resumeSessionId.",
       });
+    }
   });
 export const eveGetInputSchema = z
   .object({
@@ -296,12 +299,13 @@ export const eveRespondInputSchema = z
   .superRefine(({ responses }, context) => {
     const seen = new Set<string>();
     for (const [index, { requestId }] of responses.entries()) {
-      if (seen.has(requestId))
+      if (seen.has(requestId)) {
         context.addIssue({
           code: "custom",
           path: ["responses", index, "requestId"],
           message: "Each requestId must appear exactly once.",
         });
+      }
       seen.add(requestId);
     }
   });

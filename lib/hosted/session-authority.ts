@@ -84,8 +84,9 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
     ...initiatorInput,
     scopes: initiator.attributes["mcp:scopes"],
   });
-  if (!authorityResult.success || !currentPrincipal.success || !initiatorPrincipal.success)
+  if (!authorityResult.success || !currentPrincipal.success || !initiatorPrincipal.success) {
     throw new HostedSessionAuthorityError("invalid");
+  }
   const authority = authorityResult.data;
   return { authority, principal: currentPrincipal.data };
 }
@@ -97,13 +98,16 @@ export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
     // Local sessions have no prepared hosted context. A malformed hosted
     // envelope must not silently become an unbound session.
     const current = (sessionAuth as { current?: { authenticator?: string } } | null)?.current;
-    if (current?.authenticator === "mcp-oauth-jwks")
+    if (current?.authenticator === "mcp-oauth-jwks") {
       throw new HostedSessionAuthorityError("invalid");
+    }
     return undefined;
   }
   exactForwardedSessionAuthority(sessionAuth);
   const current = parsed.data.current.attributes["autograph:source-handoff-id"];
   const initiator = parsed.data.initiator.attributes["autograph:source-handoff-id"];
-  if (current !== initiator) throw new HostedSessionAuthorityError("mismatch");
+  if (current !== initiator) {
+    throw new HostedSessionAuthorityError("mismatch");
+  }
   return initiator;
 }

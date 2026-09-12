@@ -35,11 +35,12 @@ const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Values must be sorted and contain no duplicates.",
       });
+    }
   });
 
 export const buildReadyHandoffSchema = z
@@ -79,7 +80,9 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function normalizedStrings(value: unknown, pattern: RegExp): string[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   return [
     ...new Set(
       value.filter((item): item is string => typeof item === "string" && pattern.test(item)),
@@ -95,10 +98,14 @@ function normalizedStrings(value: unknown, pattern: RegExp): string[] {
 export function normalizeBuildReadyAppSpec(content: string): string {
   const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
   const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
-  if (heading === null) return normalizedContent;
+  if (heading === null) {
+    return normalizedContent;
+  }
   const section = normalizedContent.slice(heading.index + heading[0].length);
   const block = /```json[ \t]*\n([\s\S]*?)\n[ \t]*```/iu.exec(section);
-  if (block?.[1] === undefined) return normalizedContent;
+  if (block?.[1] === undefined) {
+    return normalizedContent;
+  }
 
   let parsed: unknown;
   try {
@@ -134,18 +141,19 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
   const issues: AppSpecValidationIssue[] = [];
   for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
     const count = normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ?? 0;
-    if (count === 0)
+    if (count === 0) {
       issues.push({
         code: "missing_heading",
         path: heading,
         message: `Add exactly one "## ${heading}" section.`,
       });
-    else if (count > 1)
+    } else if (count > 1) {
       issues.push({
         code: "duplicate_heading",
         path: heading,
         message: `Keep exactly one "## ${heading}" section.`,
       });
+    }
   }
 
   const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(normalizedContent);
@@ -179,13 +187,15 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
     return { valid: false, issues };
   }
   const handoff = buildReadyHandoffSchema.safeParse(parsed);
-  if (!handoff.success)
-    for (const issue of handoff.error.issues)
+  if (!handoff.success) {
+    for (const issue of handoff.error.issues) {
       issues.push({
         code: "build_handoff_shape",
         path: ["Build handoff", ...issue.path].join("."),
         message: issue.message,
       });
+    }
+  }
 
   return issues.length === 0 ? { valid: true } : { valid: false, issues };
 }

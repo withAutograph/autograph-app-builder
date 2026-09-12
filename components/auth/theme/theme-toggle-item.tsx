@@ -34,14 +34,20 @@ export function ThemeToggleItem() {
   // Keep keyboard handling local to the toggle component.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
 
     const target = event.target as HTMLElement;
-    if (target.getAttribute("role") !== "tab") return;
+    if (target.getAttribute("role") !== "tab") {
+      return;
+    }
 
     const wrapper = target.closest<HTMLElement>('[role="menuitem"]');
     const content = wrapper?.closest<HTMLElement>('[data-slot="dropdown-menu-content"]');
-    if (!wrapper || !content) return;
+    if (!wrapper || !content) {
+      return;
+    }
 
     const items = [
       ...content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
@@ -49,7 +55,9 @@ export function ThemeToggleItem() {
     const currentIndex = items.indexOf(wrapper);
     const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
     const next = items[nextIndex];
-    if (!next) return;
+    if (!next) {
+      return;
+    }
 
     event.preventDefault();
     next.focus();
@@ -61,7 +69,9 @@ export function ThemeToggleItem() {
       onFocus={(e) => {
         // onFocus bubbles in React, so guard against re-entry from focus
         // events fired by the inner TabsTrigger.
-        if (e.target === e.currentTarget) focusActiveTab();
+        if (e.target === e.currentTarget) {
+          focusActiveTab();
+        }
       }}
     >
       <PaletteIcon className="text-muted-foreground" />

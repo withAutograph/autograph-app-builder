@@ -26,7 +26,9 @@ export default defineTool({
     const bundled = HOSTED_MANAGED_SKILL_CONTENTS.find(
       (file) => file.path === `${skill}/${reference}`,
     );
-    if (!bundled) throw new Error("The selected skill reference is not bundled.");
+    if (!bundled) {
+      throw new Error("The selected skill reference is not bundled.");
+    }
     return {
       skill,
       reference,

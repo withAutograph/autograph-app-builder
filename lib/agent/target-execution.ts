@@ -41,22 +41,26 @@ export function plannedProposalForExecution(
     state.phase !== "validation_failed" &&
     state.phase !== "validated" &&
     state.phase !== "reviewed"
-  )
+  ) {
     throw new Error(
       "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
     );
-  if (state.proposal.digest !== expectedProposalDigest)
+  }
+  if (state.proposal.digest !== expectedProposalDigest) {
     throw new Error("The canonical proposal changed before execution readiness.");
+  }
   return state.proposal;
 }
 
 export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
-  if (!target.success)
+  if (!target.success) {
     throw new Error("The planned proposal no longer matches its durable execution bindings.");
-  if (target.data.blockers.length !== 0)
+  }
+  if (target.data.blockers.length !== 0) {
     throw new Error("The planned proposal still contains blockers and cannot be applied.");
+  }
   const expected = {
     sourceSha: state.workspace.sourceSha,
     sourceTree: state.workspace.sourceTree,
@@ -87,8 +91,9 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
     target.data.contract.appId !== state.appSpec.appId ||
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
-  )
+  ) {
     throw new Error("The planned proposal no longer matches its durable execution bindings.");
+  }
 }
 
 export function targetExecutionBlockers(input: {
@@ -97,9 +102,12 @@ export function targetExecutionBlockers(input: {
   capabilityBlockers?: readonly string[];
 }): string[] {
   const blockers: string[] = [...(input.capabilityBlockers ?? [])];
-  if (!input.imageConfigured) blockers.push("No immutable sandbox image is configured.");
-  if (!input.toolchainReady)
+  if (!input.imageConfigured) {
+    blockers.push("No immutable sandbox image is configured.");
+  }
+  if (!input.toolchainReady) {
     blockers.push("The sandbox execution environment or a required command is unavailable.");
+  }
   return blockers;
 }
 
@@ -160,7 +168,9 @@ export async function inspectTargetExecutionReadiness(input: {
           const location = await input.sandbox.run({
             command: `command -v ${command}`,
           });
-          if (location.exitCode !== 0) return { command, available: false as const, version: "" };
+          if (location.exitCode !== 0) {
+            return { command, available: false as const, version: "" };
+          }
           const version = await input.sandbox.run({
             command: `${command} --version`,
           });

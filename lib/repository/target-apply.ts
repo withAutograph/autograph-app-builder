@@ -187,28 +187,53 @@ export function assertCurrentTargetApplyReceipt(input: {
     !safeSourcePath(input.appSpecPath) ||
     !digest.safeParse(input.appSpecDigest).success ||
     !digest.safeParse(input.preparedTreeDigest).success
-  )
+  ) {
     throw new Error("A canonical V2 target apply receipt is required.");
+  }
 }
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandFailureKind"] {
-  if (/timeout|timed out|aborted/iu.test(stderr)) return "timeout";
-  if (/permission denied|eacces|eperm/iu.test(stderr)) return "permission-denied";
-  if (/not found|enoent|command not found/iu.test(stderr)) return "missing-command-or-file";
-  if (/dependency|lockfile|module|package|install/iu.test(stderr)) return "dependency";
-  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr)) return "validation";
-  if (/proposal is stale or noncanonical/iu.test(stderr)) return "stale-proposal";
-  if (/proposal must have no blockers/iu.test(stderr)) return "proposal-blocked";
-  if (/already exists/iu.test(stderr)) return "app-already-exists";
-  if (/create-app lock|already running/iu.test(stderr)) return "app-lock";
-  if (/partial state|recovery/iu.test(stderr)) return "partial-state";
-  if (/projected config|projected repository|unsupported entry/iu.test(stderr))
+  if (/timeout|timed out|aborted/iu.test(stderr)) {
+    return "timeout";
+  }
+  if (/permission denied|eacces|eperm/iu.test(stderr)) {
+    return "permission-denied";
+  }
+  if (/not found|enoent|command not found/iu.test(stderr)) {
+    return "missing-command-or-file";
+  }
+  if (/dependency|lockfile|module|package|install/iu.test(stderr)) {
+    return "dependency";
+  }
+  if (/validation|typecheck|lint|test failed|build failed/iu.test(stderr)) {
+    return "validation";
+  }
+  if (/proposal is stale or noncanonical/iu.test(stderr)) {
+    return "stale-proposal";
+  }
+  if (/proposal must have no blockers/iu.test(stderr)) {
+    return "proposal-blocked";
+  }
+  if (/already exists/iu.test(stderr)) {
+    return "app-already-exists";
+  }
+  if (/create-app lock|already running/iu.test(stderr)) {
+    return "app-lock";
+  }
+  if (/partial state|recovery/iu.test(stderr)) {
+    return "partial-state";
+  }
+  if (/projected config|projected repository|unsupported entry/iu.test(stderr)) {
     return "projected-repository";
-  if (/mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr))
+  }
+  if (/mise|task|proposal|create:app|already exists|failed|error/iu.test(stderr)) {
     return "repository-task";
-  if (stderr.trim() === "") return "empty-output";
+  }
+  if (stderr.trim() === "") {
+    return "empty-output";
+  }
   return "unknown";
 }
 
@@ -221,8 +246,9 @@ function missingDependency(output: string): string | undefined {
 }
 
 export function applyOverlayRoot(proposalDigest: string): string {
-  if (!digest.safeParse(proposalDigest).success)
+  if (!digest.safeParse(proposalDigest).success) {
     throw new Error("The target proposal digest is invalid.");
+  }
   return `.app-builder/apply/${proposalDigest}/repository`;
 }
 
@@ -256,8 +282,9 @@ export async function materializeFreshApplyOverlay(input: {
     if (
       acceptedAppSpec === null ||
       sha256(acceptedAppSpec) !== input.proposal.contract.appSpec.sha256
-    )
+    ) {
       throw new Error("The planning overlay does not contain the exact accepted AppSpec.");
+    }
     return {
       applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
@@ -344,8 +371,9 @@ for (const file of files)
 `;
 
 export function overlaySnapshotCommand(): string {
-  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'"))
+  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'")) {
     throw new Error("The overlay snapshot script is not shell-safe.");
+  }
   return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
 }
 
@@ -357,7 +385,9 @@ export async function inspectApplyOverlay(
     command: overlaySnapshotCommand(),
     workingDirectory: applyRoot,
   });
-  if (result.exitCode !== 0) throw new Error("The proposal apply overlay could not be inspected.");
+  if (result.exitCode !== 0) {
+    throw new Error("The proposal apply overlay could not be inspected.");
+  }
   const files = result.stdout
     .split("\n")
     .filter(Boolean)
@@ -368,8 +398,9 @@ export async function inspectApplyOverlay(
         match[2] === undefined ||
         match[3] === undefined ||
         !safeSourcePath(match[3])
-      )
+      ) {
         throw new Error("The proposal apply overlay returned an invalid path receipt.");
+      }
       return {
         path: match[3],
         mode: match[1],
@@ -377,8 +408,9 @@ export async function inspectApplyOverlay(
       };
     });
   const normalized = canonicalOverlayFiles(files);
-  if (new Set(normalized.map(({ path }) => path)).size !== normalized.length)
+  if (new Set(normalized.map(({ path }) => path)).size !== normalized.length) {
     throw new Error("The proposal apply overlay returned duplicate paths.");
+  }
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
 }
 
@@ -390,9 +422,13 @@ export async function inspectFixtureApplyOverlay(
   const sourceManifest = await sandbox.readTextFile({
     path: ".app-builder/source-files.json",
   });
-  if (sourceManifest === null) throw new Error("The prepared workspace manifest is missing.");
+  if (sourceManifest === null) {
+    throw new Error("The prepared workspace manifest is missing.");
+  }
   const parsed = JSON.parse(sourceManifest) as unknown;
-  if (!Array.isArray(parsed)) throw new Error("The prepared workspace manifest is invalid.");
+  if (!Array.isArray(parsed)) {
+    throw new TypeError("The prepared workspace manifest is invalid.");
+  }
   const sourceFiles = parsed.map((candidate) => {
     if (
       typeof candidate !== "object" ||
@@ -400,8 +436,9 @@ export async function inspectFixtureApplyOverlay(
       !("path" in candidate) ||
       typeof candidate.path !== "string" ||
       !safeSourcePath(candidate.path)
-    )
+    ) {
       throw new Error("The prepared workspace manifest is invalid.");
+    }
     return {
       path: candidate.path,
       mode: "mode" in candidate && candidate.mode === "100755" ? "755" : "644",
@@ -440,7 +477,7 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
     .flatMap((path): OverlayChange[] => {
       const previous = beforeFiles.get(path);
       const current = afterFiles.get(path);
-      if (previous === undefined && current !== undefined)
+      if (previous === undefined && current !== undefined) {
         return [
           {
             path,
@@ -448,7 +485,8 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
             after: { mode: current.mode, digest: current.digest },
           },
         ];
-      if (previous !== undefined && current === undefined)
+      }
+      if (previous !== undefined && current === undefined) {
         return [
           {
             path,
@@ -456,11 +494,12 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
             before: { mode: previous.mode, digest: previous.digest },
           },
         ];
+      }
       if (
         previous !== undefined &&
         current !== undefined &&
         (previous.mode !== current.mode || previous.digest !== current.digest)
-      )
+      ) {
         return [
           {
             path,
@@ -469,6 +508,7 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
             after: { mode: current.mode, digest: current.digest },
           },
         ];
+      }
       return [];
     });
 }
@@ -477,7 +517,9 @@ function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
 ): TargetApplyCommandReceipt | undefined {
-  if (result.exitCode !== 0) return undefined;
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
   let candidate: unknown;
   try {
     candidate = JSON.parse(result.stdout) as unknown;
@@ -485,7 +527,9 @@ function parseTargetReceipt(
     return undefined;
   }
   const parsed = targetApplyCommandReceiptSchema.safeParse(candidate);
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    return undefined;
+  }
   const receipt = parsed.data;
   if (
     receipt.appId !== proposal.contract.appId ||
@@ -498,8 +542,9 @@ function parseTargetReceipt(
     (proposal.plan.topology.proposedDigest !== undefined &&
       receipt.topology.newDigest !== proposal.plan.topology.proposedDigest) ||
     receipt.mutations[0] !== proposal.plan.source.workspacePath
-  )
+  ) {
     return undefined;
+  }
   return receipt;
 }
 
@@ -534,18 +579,20 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             ? current !== null
             : current === null || sha256(current) !== change.before.digest) ||
           change.after.digest !== sha256(change.after.content)
-        )
+        ) {
           return {
             exitCode: 2,
             stdout: "",
             stderr: "stale iteration preimage",
           };
+        }
       }
-      for (const change of proposal.iteration.changes)
+      for (const change of proposal.iteration.changes) {
         await sandbox.writeTextFile({
           path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
         });
+      }
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         version: 1,
@@ -625,11 +672,12 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
-      for (const change of proposal.iteration.changes)
+      for (const change of proposal.iteration.changes) {
         await sandbox.writeTextFile({
           path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
         });
+      }
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         version: 1,
@@ -669,8 +717,9 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       path: `${relativeRoot}/microfrontends.json`,
       content: `${JSON.stringify({ applications: [appId] }, null, 2)}\n`,
     });
-    if (appId === "apply-failure")
+    if (appId === "apply-failure") {
       return { exitCode: 1, stdout: "", stderr: "fixture apply failure" };
+    }
     const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
@@ -706,8 +755,9 @@ export async function executeProposalBoundApply(input: {
     input.binding.appSpecDigest !== input.proposal.contract.appSpec.sha256 ||
     input.binding.appSpecPath !== input.proposal.contract.appSpec.path ||
     !safeSourcePath(input.binding.appSpecPath)
-  )
+  ) {
     throw new Error("The accepted AppSpec binding or path differs from the target proposal.");
+  }
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const overlay = await materializeFreshApplyOverlay({
     sandbox: input.sandbox,
@@ -717,7 +767,7 @@ export async function executeProposalBoundApply(input: {
     proposal: input.proposal,
     environment: input.environment,
   });
-  if (input.dependencyLayout !== undefined)
+  if (input.dependencyLayout !== undefined) {
     try {
       for (const root of input.dependencyLayout.roots) {
         const target = `repository/${root.path}`;
@@ -730,12 +780,15 @@ export async function executeProposalBoundApply(input: {
           command: `ln -s ${root.cachePath} ${root.path}`,
           workingDirectory: "/workspace/repository",
         });
-        if (linked.exitCode !== 0) throw new Error("dependency cache miss");
+        if (linked.exitCode !== 0) {
+          throw new Error("dependency cache miss");
+        }
       }
     } catch {
       // The repository install below remains authoritative. A missing or stale
       // cache is an optimization miss, not a reason to block the build.
     }
+  }
   let planning: OverlaySnapshot;
   let prepared: OverlaySnapshot;
   let before: OverlaySnapshot;

@@ -33,8 +33,9 @@ export default defineTool({
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
-    )
+    ) {
       throw new Error("Derive an exact canonical proposal before requesting target apply.");
+    }
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {

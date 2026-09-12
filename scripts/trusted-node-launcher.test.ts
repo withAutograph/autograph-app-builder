@@ -293,7 +293,9 @@ describe("trusted Node launcher", () => {
     expect(localStart).toContain('"$launcher" "$node_bin" node_modules/next/dist/bin/next dev');
     expect(readFileSync(launcher, "utf-8")).not.toContain("VERCEL_OIDC_TOKEN");
     for (const path of taskFiles(resolve(repositoryRoot, ".config/mise/tasks"))) {
-      if (path.endsWith("/local/start")) continue;
+      if (path.endsWith("/local/start")) {
+        continue;
+      }
       expect(readFileSync(path, "utf-8"), path).not.toContain("local-eve-launcher");
     }
   });
@@ -368,7 +370,9 @@ describe("trusted Node launcher", () => {
         );
         continue;
       }
-      if (!/(mise which (?:node|pnpm)|node_modules\/)/u.test(source)) continue;
+      if (!/(mise which (?:node|pnpm)|node_modules\/)/u.test(source)) {
+        continue;
+      }
       expect(source, path).toContain("trusted-node-launcher");
     }
   });

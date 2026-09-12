@@ -29,9 +29,12 @@ async function packageInputDigest(path: string): Promise<string> {
       .toSorted((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
         const entryPath = join(path, entry.name);
-        if (entry.isDirectory()) return [entry.name, await packageInputDigest(entryPath)] as const;
-        if (!entry.isFile())
+        if (entry.isDirectory()) {
+          return [entry.name, await packageInputDigest(entryPath)] as const;
+        }
+        if (!entry.isFile()) {
           throw new Error(`Development package input was not a regular file: ${entryPath}`);
+        }
         return [entry.name, sha256(await readFile(entryPath))] as const;
       }),
   );
@@ -266,10 +269,11 @@ export async function registerDevelopmentPackage(input: {
     installed.source.path !== join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
-  )
+  ) {
     throw new Error(
       `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
     );
+  }
   return { selector: DEVELOPMENT_PLUGIN_SELECTOR, marketplaceRoot };
 }
 

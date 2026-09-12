@@ -17,7 +17,9 @@ export function createHostedBunRuntimeInstaller() {
 
   return (sandbox: Pick<SandboxSession, "id" | "run">) => {
     const existing = installs.get(sandbox.id);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      return existing;
+    }
 
     // Promise composition preserves the shared install handle and cleanup identity.
     // oxlint-disable promise/prefer-await-to-callbacks
@@ -25,14 +27,17 @@ export function createHostedBunRuntimeInstaller() {
     // oxlint-disable-next-line promise/prefer-await-to-then
     const install: Promise<void> = Promise.resolve(sandbox.run(hostedBunRuntimeInstallRequest))
       .then((result) => {
-        if (result.exitCode !== 0)
+        if (result.exitCode !== 0) {
           throw new Error("The hosted Bun runtime could not be installed.");
+        }
       })
       // Preserve the shared lazy promise while clearing it after a failed install.
       // oxlint-disable-next-line promise/prefer-await-to-callbacks
       // oxlint-disable-next-line promise/prefer-await-to-then
       .catch((error: unknown) => {
-        if (installs.get(sandbox.id) === install) installs.delete(sandbox.id);
+        if (installs.get(sandbox.id) === install) {
+          installs.delete(sandbox.id);
+        }
         throw error;
       });
     // oxlint-enable promise/prefer-await-to-callbacks

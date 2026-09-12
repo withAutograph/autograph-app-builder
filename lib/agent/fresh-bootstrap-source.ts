@@ -16,7 +16,9 @@ export async function freshBootstrapSourceWorkspace(input: {
   receipt: SourceReceipt;
   workspace: PreparedSandboxWorkspace;
 }): Promise<FreshBootstrapSourceWorkspace | undefined> {
-  if (input.receipt.version !== SOURCE_RECEIPT_VERSION) return undefined;
+  if (input.receipt.version !== SOURCE_RECEIPT_VERSION) {
+    return undefined;
+  }
   const reverify = async () => {
     await inspectSourceBoundSandboxWorkspace({
       sandbox: input.sandbox,

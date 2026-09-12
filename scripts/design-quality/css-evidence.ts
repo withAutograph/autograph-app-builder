@@ -27,11 +27,15 @@ function canonicalSelector(value: string) {
     const char = value[index]!;
     if (quote) {
       output += char;
-      if (char === quote && value[index - 1] !== "\\") quote = undefined;
+      if (char === quote && value[index - 1] !== "\\") {
+        quote = undefined;
+      }
       continue;
     }
     if (char === '"' || char === "'") {
-      if (pendingSpace && output) output += " ";
+      if (pendingSpace && output) {
+        output += " ";
+      }
       pendingSpace = false;
       quote = char;
       output += char;
@@ -43,7 +47,9 @@ function canonicalSelector(value: string) {
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) output += " ";
+      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
+        output += " ";
+      }
     }
     pendingSpace = false;
     output += char;
@@ -66,8 +72,9 @@ function ruleSignature(
             (other.startsWith(`${property}-`) || property.startsWith(`${other}-`)),
         ),
     )
-  )
+  ) {
     return undefined;
+  }
   return `${canonicalSelector(selector)}\u0000${declarations
     .map(
       (declaration) =>
@@ -84,14 +91,20 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
     css.walkRules((rule) => {
       // Conditional rule context is not represented reliably by every CDP
       // backend, so it deliberately stays unassessed.
-      if (rule.parent?.type !== "root") return;
+      if (rule.parent?.type !== "root") {
+        return;
+      }
       const declarations =
         rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
-      if (!signature) return;
+      if (!signature) {
+        return;
+      }
       for (const declaration of declarations) {
         const start = declaration.source?.start;
-        if (!start) continue;
+        if (!start) {
+          continue;
+        }
         evidence.push({
           selector: canonicalSelector(rule.selector),
           property: declaration.prop,
@@ -113,7 +126,9 @@ export function generatedCssRule(
   value: string | undefined,
   declarations: { name: string; value: string; important?: boolean }[],
 ) {
-  if (!selector || value === undefined) return undefined;
+  if (!selector || value === undefined) {
+    return undefined;
+  }
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,

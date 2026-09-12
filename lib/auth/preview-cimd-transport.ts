@@ -41,7 +41,9 @@ function addressesForOptions(
   options: LookupOptions,
 ): readonly LookupAddress[] {
   const requestedFamily = options.family;
-  if (requestedFamily !== 4 && requestedFamily !== 6) return addresses;
+  if (requestedFamily !== 4 && requestedFamily !== 6) {
+    return addresses;
+  }
   return addresses.filter(({ family }) => family === requestedFamily);
 }
 
@@ -78,7 +80,9 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
   const result = new Headers();
   for (const [name, value] of Object.entries(headers)) {
     if (Array.isArray(value)) {
-      for (const item of value) result.append(name, item);
+      for (const item of value) {
+        result.append(name, item);
+      }
     } else if (value !== undefined) {
       result.append(name, value);
     }
@@ -87,7 +91,9 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
 }
 
 function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
-  if (signal.aborted) return Promise.reject<T>(signal.reason);
+  if (signal.aborted) {
+    return Promise.reject<T>(signal.reason);
+  }
 
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {

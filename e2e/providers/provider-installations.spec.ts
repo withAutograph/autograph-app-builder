@@ -80,7 +80,9 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
   page.on("console", (message) => messages.push(message.text()));
   return async () => {
     await expect(page.getByRole("checkbox", { name: /GitHub/u })).toBeVisible();
-    for (const rawValue of rawValues) expect(messages.join("\n")).not.toContain(rawValue);
+    for (const rawValue of rawValues) {
+      expect(messages.join("\n")).not.toContain(rawValue);
+    }
   };
 }
 
@@ -99,8 +101,9 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
       request.method() !== "POST" ||
       !request.headers()["next-action"] ||
       !request.postData()?.includes("clientMutationId")
-    )
+    ) {
       return route.continue();
+    }
     held = true;
     const response = await route.fetch();
     checkpointStarted = true;
@@ -336,7 +339,9 @@ for (const provider of emulatedProviders) {
     await expect(page.locator("#app-brief")).toHaveValue(brief);
     let callbackUrl = "";
     page.on("request", (request) => {
-      if (new URL(request.url()).pathname === descriptor.callbackPath) callbackUrl = request.url();
+      if (new URL(request.url()).pathname === descriptor.callbackPath) {
+        callbackUrl = request.url();
+      }
     });
     await installProvider(page, provider);
     expect(callbackUrl).toContain("state=");
@@ -372,8 +377,9 @@ for (const provider of emulatedProviders) {
       await sql.end();
     }
     await page.getByRole("button", { name: localApprovalButtonName(provider) }).click();
-    if (new URL(page.url()).origin === descriptor.emulatorOrigin)
+    if (new URL(page.url()).origin === descriptor.emulatorOrigin) {
       await page.getByRole("button", { name: /autograph-dev/u }).click();
+    }
 
     await expect(page).toHaveURL(new RegExp(`${descriptor.slug}=failed`, "u"));
     await waitForBuilderReady(page);

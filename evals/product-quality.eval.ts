@@ -32,7 +32,9 @@ export default defineEval({
       input: {
         path: "prototype/vendor-onboarding/index.html",
         content: (value) => {
-          if (typeof value !== "string") return false;
+          if (typeof value !== "string") {
+            return false;
+          }
           const report = evaluatePrototypeQuality({
             scenario: vendor,
             html: value,

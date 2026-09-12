@@ -27,8 +27,9 @@ function canonicalTrackedPath(path: string) {
 
 /** Reads one exact regular file from an immutable Git tree, never the checkout. */
 export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: string; path: string }) {
-  if (!objectId.test(input.tree) || !canonicalTrackedPath(input.path))
+  if (!objectId.test(input.tree) || !canonicalTrackedPath(input.path)) {
     throw new Error("Tracked tree asset reference was not canonical.");
+  }
 
   const record = git(input.repositoryRoot, [
     "ls-tree",
@@ -44,8 +45,9 @@ export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: strin
     record.byteLength < separator + 2 ||
     record[record.byteLength - 1] !== 0 ||
     record.subarray(separator + 1, -1).toString("utf-8") !== input.path
-  )
+  ) {
     throw new Error(`Manifest asset was not one exact tracked file: ${input.path}`);
+  }
 
   const metadata = record.subarray(0, separator).toString("ascii").split(" ");
   const [mode, type, oid] = metadata;
@@ -54,8 +56,9 @@ export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: strin
     !["100644", "100755"].includes(mode) ||
     type !== "blob" ||
     !objectId.test(oid)
-  )
+  ) {
     throw new Error(`Manifest asset was not a tracked regular blob: ${input.path}`);
+  }
 
   return {
     bytes: git(input.repositoryRoot, ["cat-file", "blob", oid]),

@@ -78,7 +78,7 @@ describe("prepared provider continuity", () => {
     for (const response of [
       new Response(null, { status: 403, headers: { "retry-after": "30" } }),
       Response.json({ id: "prj_1", name: "stock", accountId: "team_other" }),
-    ])
+    ]) {
       expect(
         await readPreparedVercelAccess({
           authority,
@@ -91,6 +91,7 @@ describe("prepared provider continuity", () => {
         action: "retry",
         retryable: true,
       });
+    }
     expect(
       await readPreparedVercelAccess({
         authority,

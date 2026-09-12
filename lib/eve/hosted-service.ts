@@ -130,12 +130,24 @@ function titleFromPrompt(prompt: string): string {
 }
 
 function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionStageSchema> {
-  if (result.status === "completed") return "complete";
-  if (["failed", "cancelled"].includes(result.status)) return "needs_attention";
-  if (result.implementationPlan !== undefined) return "ready";
-  if (result.prototype !== undefined) return "prototype";
-  if (result.status === "input_required") return "needs_attention";
-  if (result.status === "working") return "designing";
+  if (result.status === "completed") {
+    return "complete";
+  }
+  if (["failed", "cancelled"].includes(result.status)) {
+    return "needs_attention";
+  }
+  if (result.implementationPlan !== undefined) {
+    return "ready";
+  }
+  if (result.prototype !== undefined) {
+    return "prototype";
+  }
+  if (result.status === "input_required") {
+    return "needs_attention";
+  }
+  if (result.status === "working") {
+    return "designing";
+  }
   return "planning";
 }
 
@@ -176,15 +188,22 @@ const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
 ];
 
 function truncateUtf8(value: string, maximumBytes: number): string {
-  if (maximumBytes === 0) return "";
+  if (maximumBytes === 0) {
+    return "";
+  }
   const encoder = new TextEncoder();
-  if (encoder.encode(value).byteLength <= maximumBytes) return value;
+  if (encoder.encode(value).byteLength <= maximumBytes) {
+    return value;
+  }
   let lower = 0;
   let upper = value.length;
   while (lower < upper) {
     const midpoint = Math.ceil((lower + upper) / 2);
-    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes) lower = midpoint;
-    else upper = midpoint - 1;
+    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes) {
+      lower = midpoint;
+    } else {
+      upper = midpoint - 1;
+    }
   }
   const end = lower > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(lower - 1)) ? lower - 1 : lower;
   return value.slice(0, end);
@@ -250,11 +269,12 @@ function checkpointEvent(
   event: z.infer<typeof publicEveEventSchema>,
   profile: CheckpointInputProfile,
 ): z.infer<typeof publicEveEventSchema> {
-  if (event.type === "input_required")
+  if (event.type === "input_required") {
     return {
       ...event,
       request: checkpointInputRequest(event.request, profile),
     };
+  }
   return event;
 }
 
@@ -266,14 +286,20 @@ function checkpointForSnapshot(
   const ring = Array.from<z.infer<typeof publicEveEventSchema>>({ length: 512 });
   let publicEventCount = 0;
   for (const candidate of snapshot.events) {
-    if (candidate === null || typeof candidate !== "object") continue;
+    if (candidate === null || typeof candidate !== "object") {
+      continue;
+    }
     const projected = toPublicEvent(candidate as InternalEveEvent);
-    if (projected === null) continue;
+    if (projected === null) {
+      continue;
+    }
     const parsed = publicEveEventSchema.safeParse({
       ...projected,
       index: publicEventCount,
     });
-    if (!parsed.success) continue;
+    if (!parsed.success) {
+      continue;
+    }
     const event = parsed.data;
     ring[publicEventCount % ring.length] =
       event.type === "assistant_message"
@@ -351,7 +377,9 @@ function checkpointForSnapshot(
       includePrototype: true,
       includeImplementationPlan: true,
     });
-    if (checkpoint !== undefined) return checkpoint;
+    if (checkpoint !== undefined) {
+      return checkpoint;
+    }
   }
 
   const minimalProfile = checkpointInputProfiles.at(-1)!;
@@ -364,7 +392,9 @@ function checkpointForSnapshot(
       profile: minimalProfile,
       ...artifactSelection,
     });
-    if (checkpoint !== undefined) return checkpoint;
+    if (checkpoint !== undefined) {
+      return checkpoint;
+    }
   }
 
   // A structurally valid fallback prevents an oversized transport snapshot
@@ -380,7 +410,9 @@ function checkpointForSnapshot(
 
 function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>): string {
   const prompt = recoveryPromptForSession(record);
-  if (prompt === undefined) throw new HostedSessionRecoveryUnavailableError();
+  if (prompt === undefined) {
+    throw new HostedSessionRecoveryUnavailableError();
+  }
   return prompt;
 }
 
@@ -435,7 +467,9 @@ export function createHostedEveSessionService(input: {
 
   async function requireSession(sessionId: string) {
     const session = await input.store.getSession(principal, sessionId);
-    if (session === null) throw new HostedSessionNotFoundError();
+    if (session === null) {
+      throw new HostedSessionNotFoundError();
+    }
     const parsed = hostedSessionRecordSchema.parse(session);
     if (
       parsed.sessionId !== sessionId ||
@@ -607,8 +641,12 @@ export function createHostedEveSessionService(input: {
         // `reserved` remains non-replayable; a committed terminal record is
         // interpreted from the store on a later exact retry.
       }
-      if (!settlementVerified) throw new HostedSubmissionUnknownError();
-      if (rejected) throw new HostedRejectedOperationError(error.code);
+      if (!settlementVerified) {
+        throw new HostedSubmissionUnknownError();
+      }
+      if (rejected) {
+        throw new HostedRejectedOperationError(error.code);
+      }
       throw new HostedSubmissionUnknownError();
     }
 
@@ -740,8 +778,12 @@ export function createHostedEveSessionService(input: {
       await observeSnapshot(sessionId, snapshot);
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
-      if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
-      if (session.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
+      if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+        throw error;
+      }
+      if (session.checkpoint === undefined) {
+        throw new HostedSessionRecoveryUnavailableError();
+      }
       await input.store.observeSession?.({
         principal,
         sessionId,
@@ -770,13 +812,17 @@ export function createHostedEveSessionService(input: {
             await observeSnapshot(stored.sessionId, snapshot);
             existing = toDurableHostedSessionRecord(await requireSession(stored.sessionId));
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+              throw error;
+            }
           }
         }
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted) {
-          if (existing.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
+          if (existing.checkpoint === undefined) {
+            throw new HostedSessionRecoveryUnavailableError();
+          }
           return mutate({
             kind: "start",
             request,
@@ -838,15 +884,18 @@ export function createHostedEveSessionService(input: {
             });
             return await observeSnapshot(existing.sessionId, snapshot);
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+              throw error;
+            }
           }
         }
         if (
           existing.checkpoint === undefined ||
           existing.checkpointDigest === undefined ||
           input.store.replaceSessionAdapter === undefined
-        )
+        ) {
           throw new HostedSessionRecoveryUnavailableError();
+        }
         return mutate({
           kind: "resume",
           request,
@@ -888,14 +937,16 @@ export function createHostedEveSessionService(input: {
               durable.adapterSessionId !== response.adapterSessionId ||
               durable.adapterGeneration !== existing.adapterGeneration + 1 ||
               durable.checkpointDigest !== hostedSessionCheckpointDigest(checkpoint)
-            )
+            ) {
               throw new HostedSubmissionUnknownError();
+            }
             return { result };
           },
         });
       }
-      if (request.prompt === undefined)
+      if (request.prompt === undefined) {
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
+      }
       const { prompt } = request;
       return mutate({
         kind: "start",
@@ -1008,8 +1059,9 @@ export function createHostedEveSessionService(input: {
           if (
             expected.length !== request.responses.length ||
             expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
-          )
+          ) {
             throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+          }
           const snapshot = await input.transport.respond({
             principal,
             operationId,
@@ -1036,8 +1088,9 @@ export function createHostedEveSessionService(input: {
           ...(turnId === undefined ? {} : { turnId }),
         });
       } catch (error) {
-        if (error instanceof SubmissionRejectedBeforeDispatchError)
+        if (error instanceof SubmissionRejectedBeforeDispatchError) {
           throw new HostedRejectedOperationError(error.code);
+        }
         throw error;
       }
       const result = projectSnapshot(sessionId, snapshot);

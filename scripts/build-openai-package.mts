@@ -18,32 +18,41 @@ const endpoint =
 
 if (connectionIndex === -1 || connectionId) {
   // The option is absent or has a value.
-} else throw new Error("Missing value for --connection-id.");
+} else {
+  throw new Error("Missing value for --connection-id.");
+}
 if (endpointIndex === -1 || suppliedEndpoint) {
   // The option is absent or has a value.
-} else throw new Error("Missing value for --endpoint.");
+} else {
+  throw new Error("Missing value for --endpoint.");
+}
 
 if (connectionId && suppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");
 }
 
-if (portable.version !== AUTOGRAPH_PACKAGE_VERSION)
+if (portable.version !== AUTOGRAPH_PACKAGE_VERSION) {
   throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
+}
 
-if (suppliedEndpoint) assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
+if (suppliedEndpoint) {
+  assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
+}
 
 const portableMcpPath = resolve("mcp.json");
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
-if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME)
+if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME) {
   throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
+}
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
 if (
   !portableServer ||
   typeof portableServer !== "object" ||
   portableServer.type !== "streamable-http"
-)
+) {
   throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
+}
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifest = {

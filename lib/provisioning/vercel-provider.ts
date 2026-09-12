@@ -74,7 +74,9 @@ export async function provisionVercelProject(input: {
       throw new Error("provider-unavailable");
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 2 * 1024 * 1024) throw new Error("invalid-response");
+    if (bytes.byteLength > 2 * 1024 * 1024) {
+      throw new Error("invalid-response");
+    }
     let body: unknown;
     try {
       body = bytes.byteLength
@@ -83,9 +85,12 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("invalid-response");
     }
-    if (response.status === 401) throw new Error("credential-rejected");
-    if (!args.expected.includes(response.status))
+    if (response.status === 401) {
+      throw new Error("credential-rejected");
+    }
+    if (!args.expected.includes(response.status)) {
       throw new Error(`vercel-status-${response.status}`);
+    }
     return { status: response.status, body };
   }
 
@@ -109,15 +114,21 @@ export async function provisionVercelProject(input: {
               suffix: (input.generateSuffix ?? suffix)(),
               maximumLength: 100,
             });
-      if (candidates.includes(candidate)) continue;
+      if (candidates.includes(candidate)) {
+        continue;
+      }
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
     for (const candidate of candidates.slice(0, 5)) {
       const before = await inspect(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
-      if (before.status === 200 && !wasAbsent) continue;
-      if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
+      if (before.status === 200 && !wasAbsent) {
+        continue;
+      }
+      if (before.status === 404 && !wasAbsent) {
+        await input.persistAbsent(candidate);
+      }
       if (before.status === 404) {
         const created = await vercel({
           method: "POST",
@@ -146,16 +157,19 @@ export async function provisionVercelProject(input: {
         }
         if (created.status === 409) {
           const recovered = await inspect(candidate);
-          if (recovered.status !== 200) continue;
+          if (recovered.status !== 200) {
+            continue;
+          }
         }
       }
       const observed = await inspect(candidate);
-      if (observed.status !== 200)
+      if (observed.status !== 200) {
         return {
           status: "failed",
           code: "postcondition_failed",
           retryable: false,
         };
+      }
       const project = projectSchema.parse(observed.body);
       if (
         project.name !== candidate ||
@@ -163,12 +177,13 @@ export async function provisionVercelProject(input: {
         (linkedRepository !== undefined &&
           `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
         (linkedRepository === undefined && project.link !== undefined)
-      )
+      ) {
         return {
           status: "failed",
           code: "postcondition_failed",
           retryable: false,
         };
+      }
       return {
         status: "succeeded",
         installationId: input.installation.installationId,

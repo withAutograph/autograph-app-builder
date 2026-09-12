@@ -48,13 +48,17 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function property(value: unknown, key: string) {
-  if (!record(value) || !(key in value)) throw new Error("invalid-response");
+  if (!record(value) || !(key in value)) {
+    throw new Error("invalid-response");
+  }
   return value[key];
 }
 
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
-  if (typeof result !== "string") throw new Error("invalid-response");
+  if (typeof result !== "string") {
+    throw new TypeError("invalid-response");
+  }
   return result;
 }
 
@@ -87,8 +91,9 @@ export function starterSourceBinding(source: StarterSource) {
           source.provenance.eligibilityDigest,
           source.provenance.contractDigest,
         ].some((value) => value === undefined)
-      )
+      ) {
         throw new Error("starter-source-provenance-missing");
+      }
       return {
         sourceSha: objectId.parse(source.provenance.sourceSha),
         sourceTree: objectId.parse(source.provenance.sourceTree),
@@ -118,8 +123,9 @@ export function starterSourceBinding(source: StarterSource) {
       },
     };
   }
-  if (source.manifest === undefined || source.manifestSha256 === undefined)
+  if (source.manifest === undefined || source.manifestSha256 === undefined) {
     throw new Error("starter-source-provenance-missing");
+  }
   return {
     sourceSha: source.manifest.source.sha,
     sourceTree: source.manifest.source.tree,
@@ -177,18 +183,22 @@ export async function provisionGitHubRepository(input: {
       }).request(`${args.method ?? "GET"} ${args.path}`, {
         ...(record(args.body) ? args.body : {}),
       });
-      if (!args.expected.includes(response.status))
+      if (!args.expected.includes(response.status)) {
         throw new Error(`github-status-${response.status}`);
+      }
       return { status: response.status, body: response.data };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (status === 401) throw new Error("credential-rejected", { cause: error });
-      if (typeof status === "number" && args.expected.includes(status))
+      if (status === 401) {
+        throw new Error("credential-rejected", { cause: error });
+      }
+      if (typeof status === "number" && args.expected.includes(status)) {
         return {
           status,
           body: record(response) ? response.data : undefined,
         };
+      }
       throw new Error("provider-unavailable", { cause: error });
     }
   }
@@ -206,15 +216,18 @@ export async function provisionGitHubRepository(input: {
     });
     const token = stringProperty(authentication, "token");
     const permissions = property(authentication, "permissions");
-    if (token.length < 20 || token.length > 512) throw new Error("invalid-response");
+    if (token.length < 20 || token.length > 512) {
+      throw new Error("invalid-response");
+    }
     if (
       !record(permissions) ||
       Object.keys(permissions).toSorted().join(",") !== "administration,contents,metadata" ||
       permissions.administration !== "write" ||
       permissions.contents !== "write" ||
       permissions.metadata !== "read"
-    )
+    ) {
       throw new Error("invalid-response");
+    }
     return token;
   }
 
@@ -230,8 +243,9 @@ export async function provisionGitHubRepository(input: {
       stringProperty(account, "type") !== input.installation.accountType ||
       !["all", "selected"].includes(stringProperty(data, "repository_selection")) ||
       property(data, "suspended_at") !== null
-    )
+    ) {
       throw new Error("installation-inactive");
+    }
   }
 
   async function refreshUserToken() {
@@ -240,17 +254,22 @@ export async function provisionGitHubRepository(input: {
         authority: input.authority,
         providerUserId: input.installation.accountId,
       });
-      if (!credential?.active) throw new Error("credential-unavailable");
+      if (!credential?.active) {
+        throw new Error("credential-unavailable");
+      }
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
         : undefined;
-      if (expires === undefined || expires > now() + 60_000) return credential.tokens.accessToken;
+      if (expires === undefined || expires > now() + 60_000) {
+        return credential.tokens.accessToken;
+      }
       if (
         !credential.tokens.refreshToken ||
         !credential.tokens.refreshTokenExpiresAt ||
         Date.parse(credential.tokens.refreshTokenExpiresAt) <= now()
-      )
+      ) {
         throw new Error("credential-unavailable");
+      }
       let authentication: unknown;
       try {
         ({ authentication } = await createGitHubOAuthApp({
@@ -274,8 +293,9 @@ export async function provisionGitHubRepository(input: {
       const refreshToken = stringProperty(authentication, "refreshToken");
       const accessTokenExpiresAt = stringProperty(authentication, "expiresAt");
       const refreshTokenExpiresAt = stringProperty(authentication, "refreshTokenExpiresAt");
-      if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now())
+      if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now()) {
         throw new Error("invalid-response");
+      }
       const refreshedAt = now();
       const rotated = await input.credentialStore.rotate({
         authority: input.authority,
@@ -289,7 +309,9 @@ export async function provisionGitHubRepository(input: {
         },
         now: new Date(refreshedAt),
       });
-      if (rotated) return rotated.tokens.accessToken;
+      if (rotated) {
+        return rotated.tokens.accessToken;
+      }
     }
     throw new Error("credential-contention");
   }
@@ -310,20 +332,22 @@ export async function provisionGitHubRepository(input: {
       if (
         decimalProperty(user.body, "id") !== input.installation.accountId ||
         stringProperty(user.body, "login") !== input.installation.accountLogin
-      )
+      ) {
         throw new Error("credential-unavailable");
+      }
     }
   } catch (error) {
     if (
       error instanceof Error &&
       error.message === "credential-rejected" &&
       input.installation.accountType === "User"
-    )
+    ) {
       await input.credentialStore.deactivate({
         authority: input.authority,
         providerUserId: input.installation.accountId,
         now: new Date(now()),
       });
+    }
     return {
       status: "failed",
       code:
@@ -362,7 +386,9 @@ export async function provisionGitHubRepository(input: {
     for (let offset = 0; offset < input.source.files.length; offset += 12) {
       const page = input.source.files.slice(offset, offset + 12);
       const values = await Promise.all(page.map(writeBlob));
-      for (const [path, sha] of values) blobs.set(path, sha);
+      for (const [path, sha] of values) {
+        blobs.set(path, sha);
+      }
     }
     const tree = await github({
       method: "POST",
@@ -379,7 +405,9 @@ export async function provisionGitHubRepository(input: {
       expected: [201],
     });
     const treeSha = objectId.parse(stringProperty(tree.body, "sha"));
-    if (treeSha !== source.sourceTree) throw new Error("source-tree-mismatch");
+    if (treeSha !== source.sourceTree) {
+      throw new Error("source-tree-mismatch");
+    }
     const commit = await github({
       method: "POST",
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/commits`,
@@ -403,9 +431,12 @@ export async function provisionGitHubRepository(input: {
 
   async function readBack(name: string): Promise<GitHubProvisionResult> {
     const repo = await repository(name);
-    if (repo.status !== 200) throw new Error("repository-missing");
-    if (stringProperty(repo.body, "description") !== marker(input.requestId))
+    if (repo.status !== 200) {
+      throw new Error("repository-missing");
+    }
+    if (stringProperty(repo.body, "description") !== marker(input.requestId)) {
       throw new Error("repository-marker-mismatch");
+    }
     const commit = await github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/commits/main`,
       token,
@@ -414,18 +445,26 @@ export async function provisionGitHubRepository(input: {
     const commitData = property(commit.body, "commit");
     const treeData = property(commitData, "tree");
     const parents = property(commit.body, "parents");
-    if (!Array.isArray(parents) || parents.length !== 0) throw new Error("commit-not-parentless");
+    if (!Array.isArray(parents) || parents.length !== 0) {
+      throw new Error("commit-not-parentless");
+    }
     const headSha = objectId.parse(stringProperty(commit.body, "sha"));
     const headTree = objectId.parse(stringProperty(treeData, "sha"));
-    if (headTree !== source.sourceTree) throw new Error("source-tree-mismatch");
+    if (headTree !== source.sourceTree) {
+      throw new Error("source-tree-mismatch");
+    }
     const tree = await github({
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${headTree}?recursive=1`,
       token,
       expected: [200],
     });
-    if (property(tree.body, "truncated") !== false) throw new Error("tree-truncated");
+    if (property(tree.body, "truncated") !== false) {
+      throw new Error("tree-truncated");
+    }
     const entries = property(tree.body, "tree");
-    if (!Array.isArray(entries)) throw new Error("invalid-response");
+    if (!Array.isArray(entries)) {
+      throw new TypeError("invalid-response");
+    }
     const observed = entries
       .filter((entry) => record(entry) && entry.type === "blob")
       .map((entry) => ({
@@ -441,8 +480,9 @@ export async function provisionGitHubRepository(input: {
         sha: gitBlobSha(file.bytes),
       }))
       .toSorted((left, right) => left.path.localeCompare(right.path));
-    if (JSON.stringify(observed) !== JSON.stringify(expected))
+    if (JSON.stringify(observed) !== JSON.stringify(expected)) {
       throw new Error("source-files-mismatch");
+    }
     const repositoryId = decimalProperty(repo.body, "id");
     const owner = stringProperty(property(repo.body, "owner"), "login");
     const resolvedName = stringProperty(repo.body, "name");
@@ -452,8 +492,9 @@ export async function provisionGitHubRepository(input: {
       typeof isPrivate !== "boolean" ||
       isPrivate !== input.private ||
       stringProperty(repo.body, "default_branch") !== "main"
-    )
+    ) {
       throw new Error("repository-postcondition");
+    }
     return {
       status: "succeeded",
       installationId: input.installation.installationId,
@@ -488,15 +529,21 @@ export async function provisionGitHubRepository(input: {
               suffix: (input.generateSuffix ?? suffix)(),
               maximumLength: 100,
             });
-      if (candidates.includes(candidate)) continue;
+      if (candidates.includes(candidate)) {
+        continue;
+      }
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
     for (const candidate of candidates.slice(0, 5)) {
       const before = await repository(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
-      if (before.status === 200 && !wasAbsent) continue;
-      if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
+      if (before.status === 200 && !wasAbsent) {
+        continue;
+      }
+      if (before.status === 404 && !wasAbsent) {
+        await input.persistAbsent(candidate);
+      }
       if (before.status === 404) {
         const createPath =
           input.installation.accountType === "Organization"
@@ -516,9 +563,13 @@ export async function provisionGitHubRepository(input: {
         });
         if (created.status === 422) {
           const recovered = await repository(candidate);
-          if (recovered.status !== 200) continue;
+          if (recovered.status !== 200) {
+            continue;
+          }
         } else {
-          if (input.installation.accountType === "Organization") token = await installationToken();
+          if (input.installation.accountType === "Organization") {
+            token = await installationToken();
+          }
           await writeStarter(candidate);
         }
       }
@@ -526,14 +577,17 @@ export async function provisionGitHubRepository(input: {
       if (
         owned.status !== 200 ||
         stringProperty(owned.body, "description") !== marker(input.requestId)
-      )
+      ) {
         continue;
+      }
       const main = await github({
         path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(candidate)}/commits/main`,
         token,
         expected: [200, 404, 409],
       });
-      if (main.status !== 200) await writeStarter(candidate);
+      if (main.status !== 200) {
+        await writeStarter(candidate);
+      }
       try {
         return await readBack(candidate);
       } catch {

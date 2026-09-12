@@ -17,7 +17,9 @@ function validEmulatorRedirect(input: {
   state: string;
 }) {
   const location = input.response.headers.get("location");
-  if (!location || input.response.status < 300 || input.response.status >= 400) return undefined;
+  if (!location || input.response.status < 300 || input.response.status >= 400) {
+    return undefined;
+  }
   const destination = new URL(location);
   if (
     destination.origin !== input.origin ||
@@ -25,8 +27,9 @@ function validEmulatorRedirect(input: {
     destination.searchParams.getAll("code").length !== 1 ||
     destination.searchParams.getAll("state").length !== 1 ||
     destination.searchParams.get("state") !== input.state
-  )
+  ) {
     return undefined;
+  }
   return destination;
 }
 
@@ -39,8 +42,9 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     return new Response("Not found", { status: 404 });
   }
   const origin = emulation?.canonicalOrigin;
-  if (!emulation || !allowed.has(provider) || request.headers.get("origin") !== origin)
+  if (!emulation || !allowed.has(provider) || request.headers.get("origin") !== origin) {
     return new Response("Not found", { status: 404 });
+  }
   const form = await request.formData();
   const state = form.get("state");
   const phase = form.get("phase");
@@ -49,12 +53,15 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     state.length < 20 ||
     state.length > 2048 ||
     (phase !== null && phase !== "authorize")
-  )
+  ) {
     return new Response("Invalid request", { status: 400 });
+  }
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
-    if (phase !== null) return new Response("Invalid request", { status: 400 });
+    if (phase !== null) {
+      return new Response("Invalid request", { status: 400 });
+    }
     const relay = signLocalVercelRelay(
       {
         state,
@@ -89,7 +96,9 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       path: "/local-connections/vercel/oauth-callback",
       state: relay,
     });
-    if (!destination) return new Response("Invalid emulated Vercel approval", { status: 400 });
+    if (!destination) {
+      return new Response("Invalid emulated Vercel approval", { status: 400 });
+    }
     return NextResponse.redirect(destination, { status: 303 });
   }
 
@@ -104,8 +113,9 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       typeof codeChallenge !== "string" ||
       !/^[A-Za-z0-9_-]{43}$/u.test(codeChallenge) ||
       codeChallengeMethod !== "S256"
-    )
+    ) {
       return new Response("Invalid request", { status: 400 });
+    }
     const response = await providerEmulationFetch(
       new URL(`${emulation.githubOrigin}/login/oauth/callback`),
       {
@@ -130,7 +140,9 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       path: "/github/installations/callback",
       state,
     });
-    if (!destination) return new Response("Invalid emulated GitHub approval", { status: 400 });
+    if (!destination) {
+      return new Response("Invalid emulated GitHub approval", { status: 400 });
+    }
     return NextResponse.redirect(destination, { status: 303 });
   }
 

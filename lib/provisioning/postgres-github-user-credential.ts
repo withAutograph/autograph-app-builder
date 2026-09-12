@@ -39,8 +39,9 @@ export function createPostgresGitHubUserCredentialStore(input: {
       workspaceId: row.workspaceId,
       ownerUserId: row.ownerUserId,
     });
-    if (row.keyVersion !== input.config.keyVersion)
+    if (row.keyVersion !== input.config.keyVersion) {
       throw new Error("github-credential-key-version");
+    }
     return {
       providerUserId: row.providerUserId,
       providerLogin: row.providerLogin,
@@ -101,7 +102,9 @@ export function createPostgresGitHubUserCredentialStore(input: {
           },
         })
         .returning();
-      if (!rows[0]) throw new Error("github-credential-not-durable");
+      if (!rows[0]) {
+        throw new Error("github-credential-not-durable");
+      }
       return parse(rows[0]);
     },
     async read(value) {

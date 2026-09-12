@@ -11,7 +11,9 @@ import {
 async function resolveFlagForStorybook(flag: {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
-  if (!process.env.FLAGS) return false;
+  if (!process.env.FLAGS) {
+    return false;
+  }
   try {
     return (
       (await flag.run({

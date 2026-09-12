@@ -33,7 +33,9 @@ function caseDirectory(id: string, root?: string) {
 export async function listDesignCases(root?: string): Promise<ListedDesignCase[]> {
   const base = designCasesRoot(root);
   const entries = await readdir(base, { withFileTypes: true }).catch((error) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
     throw error;
   });
   const cases = await Promise.all(
@@ -43,8 +45,9 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
         const metadata = designCaseSchema.parse(
           JSON.parse(await readFile(join(base, entry.name, "case.json"), "utf-8")),
         );
-        if (metadata.id !== entry.name)
+        if (metadata.id !== entry.name) {
           throw new Error(`Case directory and metadata id differ: ${entry.name}`);
+        }
         return {
           id: metadata.id,
           title: metadata.title,
@@ -60,7 +63,9 @@ export async function readDesignCase(id: string, root?: string) {
   const metadata = designCaseSchema.parse(
     JSON.parse(await readFile(join(directory, "case.json"), "utf-8")),
   );
-  if (metadata.id !== id) throw new Error(`Case directory and metadata id differ: ${id}`);
+  if (metadata.id !== id) {
+    throw new Error(`Case directory and metadata id differ: ${id}`);
+  }
   return {
     ...metadata,
     directory,
@@ -70,6 +75,8 @@ export async function readDesignCase(id: string, root?: string) {
 }
 
 export function appendReviewQuestions(brief: string, questions: string[]) {
-  if (questions.length === 0) return brief;
+  if (questions.length === 0) {
+    return brief;
+  }
   return `${brief.trimEnd()}\n\n---\n\nReview questions for this case:\n${questions.map((question) => `- ${question}`).join("\n")}`;
 }

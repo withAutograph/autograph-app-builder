@@ -23,8 +23,9 @@ export default defineEval({
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("reviewed receipt was preserved"));
-    if (git(repository, ["branch", "--list", "app-builder/*"]).trim() !== "")
+    if (git(repository, ["branch", "--list", "app-builder/*"]).trim() !== "") {
       throw new Error("Pre-journal interruption created a branch.");
+    }
 
     await t.send("Report artifact workflow status.");
     t.check(t.reply, includes('"phase":"reviewed"'));

@@ -13,8 +13,9 @@ import {
 describe("app-creation skill export", () => {
   it("declares its locked repository-owned execution closure", () => {
     const repositoryRoot = resolve(import.meta.dirname, "../..");
-    for (const path of APP_CREATION_SKILL_EXPORT_DEPENDENCY_PATHS)
+    for (const path of APP_CREATION_SKILL_EXPORT_DEPENDENCY_PATHS) {
       expect(readFileSync(join(repositoryRoot, path))).toBeInstanceOf(Buffer);
+    }
   });
 
   it("exports the Next app-like-experience adapter with its reviewed workflows", () => {
@@ -56,10 +57,11 @@ describe("app-creation skill export", () => {
     expect(first).toEqual(second);
     expect(first.roots).toEqual(APP_CREATION_SKILL_ROOTS);
     expect(first.fileCount).toBeGreaterThan(0);
-    for (const file of first.files)
+    for (const file of first.files) {
       expect(readFileSync(join(firstRoot, file.path))).toEqual(
         readFileSync(join(secondRoot, file.path)),
       );
+    }
   });
 
   it("refuses to overwrite an existing destination", async () => {

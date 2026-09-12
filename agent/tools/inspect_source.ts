@@ -24,22 +24,24 @@ export default defineTool({
         value.sourceKind === "existing-repository" &&
         value.path === undefined &&
         !canAutoSelectDevelopmentSource()
-      )
+      ) {
         context.addIssue({
           code: "custom",
           path: ["path"],
           message: "Existing repositories require an allowlisted local path.",
         });
+      }
       if (
         value.sourceKind === "fresh-template" &&
         value.path !== undefined &&
         !hasTestCapability("simulated-target")
-      )
+      ) {
         context.addIssue({
           code: "custom",
           path: ["path"],
           message: "Fresh templates are acquired from the canonical Arrusted remote.",
         });
+      }
     }),
   async execute({ sourceKind, path }, ctx) {
     let receipt = await developmentSourceReceipt(sourceKind, path);
@@ -47,20 +49,25 @@ export default defineTool({
       receipt === undefined &&
       sourceKind === "fresh-template" &&
       !(hasTestCapability("simulated-target") && path !== undefined)
-    )
+    ) {
       receipt = await acquireCanonicalArrustedTemplate({
         sandbox: () => ctx.getSandbox(),
         sessionId: ctx.session.id,
         callId: ctx.callId,
       });
+    }
     if (receipt === undefined && isHostedVercelRuntime(process.env)) {
       const selected = sourceWorkflowState.get();
-      if (selected.phase !== "empty") ({ receipt } = selected);
+      if (selected.phase !== "empty") {
+        ({ receipt } = selected);
+      }
     }
-    if (receipt === undefined && path !== undefined && !isHostedVercelRuntime(process.env))
+    if (receipt === undefined && path !== undefined && !isHostedVercelRuntime(process.env)) {
       receipt = await inspectSourceReceipt(sourceKind, path);
-    if (receipt === undefined)
+    }
+    if (receipt === undefined) {
       throw new Error("The selected source is not available in this app build session.");
+    }
     sourceWorkflowState.update(() => ({
       version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",

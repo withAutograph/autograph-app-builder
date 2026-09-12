@@ -30,7 +30,9 @@ vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
 let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   root = undefined;
   container?.remove();
   vi.clearAllMocks();

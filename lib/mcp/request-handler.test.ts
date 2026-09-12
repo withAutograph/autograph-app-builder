@@ -74,7 +74,9 @@ function runtime(
     auth,
     verifier: {
       async verify() {
-        if (input.verifierError !== undefined) throw input.verifierError;
+        if (input.verifierError !== undefined) {
+          throw input.verifierError;
+        }
         return input.verifiedClaims ?? claims();
       },
     },
@@ -133,7 +135,9 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
   const payload = JSON.parse(data ?? body) as { result?: T };
-  if (payload.result === undefined) throw new Error(`MCP result was missing: ${body}`);
+  if (payload.result === undefined) {
+    throw new Error(`MCP result was missing: ${body}`);
+  }
   return payload.result;
 }
 

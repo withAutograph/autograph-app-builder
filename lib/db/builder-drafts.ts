@@ -79,13 +79,17 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
       // stale clients still save, but their response identifies the contention.
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const target = await read({ authority, draftId: input.draftId });
-        if (target?.status === "archived") throw new Error("builder-draft-archived");
+        if (target?.status === "archived") {
+          throw new Error("builder-draft-archived");
+        }
         const current = await readActive({ authority });
-        if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
+        if (input.expectedRevision > 0 && current?.draftId !== input.draftId) {
           throw new Error("builder-draft-stale");
+        }
         if (current) {
-          if (current.lastClientMutationId === input.clientMutationId)
+          if (current.lastClientMutationId === input.clientMutationId) {
             return { row: current, idempotent: true, concurrent: false };
+          }
           const rows = await database
             .update(schema.builderDrafts)
             .set({
@@ -138,7 +142,9 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
           // A completed handoff's draft is read-only. Never reactivate it from
           // delayed page-hide transport or an old provider-return tab.
         } catch (error) {
-          if (!isUniqueViolation(error)) throw error;
+          if (!isUniqueViolation(error)) {
+            throw error;
+          }
         }
       }
       throw new Error("builder-draft-contention");

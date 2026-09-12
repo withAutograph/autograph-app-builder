@@ -20,7 +20,9 @@ export function configureVercelSessionGitSource(input: {
 
 export function readVercelSessionGitSource(sessionId: string) {
   const exact = pendingSources.get(sessionId);
-  if (exact !== undefined) return exact;
+  if (exact !== undefined) {
+    return exact;
+  }
 
   // Eve may decorate the public run id when deriving its provider session
   // key. Resolve only an unambiguous delimiter-bounded suffix; never fall

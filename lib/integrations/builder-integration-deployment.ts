@@ -30,7 +30,9 @@ const databases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>
 
 function databaseFor(databaseUrl: string) {
   const existing = databases.get(databaseUrl);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
   const database = openHostedPostgresDatabase(databaseUrl);
   databases.set(databaseUrl, database);
   return database;

@@ -17,14 +17,17 @@ import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbo
 function argument(name: string) {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
+  if (value === undefined || value.length === 0) {
+    throw new Error(`Missing ${name}.`);
+  }
   return value;
 }
 
 const host = argument("--host");
 const port = Number(argument("--port"));
-if (!Number.isInteger(port) || port < 1 || port > 65_535)
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error("Invalid PostgreSQL port.");
+}
 
 const client = postgres({
   database: "postgres",
@@ -251,8 +254,9 @@ try {
   const batch = await reconcileExpiredSandboxLeases({
     store,
     async stopSandbox(providerSandboxId) {
-      if (providerSandboxId === batchFailed.lease.providerSandboxId)
+      if (providerSandboxId === batchFailed.lease.providerSandboxId) {
         throw new Error("provider unavailable");
+      }
     },
     nowEpochMs: 0,
   });

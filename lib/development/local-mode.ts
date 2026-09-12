@@ -59,14 +59,17 @@ export type DevelopmentSnapshot = Readonly<{
 
 function argumentValue(args: readonly string[], index: number, name: string) {
   const value = args[index + 1];
-  if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing value for ${name}.`);
+  }
   return value;
 }
 
 function port(value: string, name: string) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1024 || parsed > 65_535)
+  if (!Number.isSafeInteger(parsed) || parsed < 1024 || parsed > 65_535) {
     throw new Error(`${name} must be an unprivileged TCP port.`);
+  }
   return parsed;
 }
 
@@ -80,8 +83,9 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
   } = { nextPort: 3000, evePort: 2000 };
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
-    if (name === undefined || !name.startsWith("--"))
+    if (name === undefined || !name.startsWith("--")) {
       throw new Error("Development arguments must use named options.");
+    }
     const value = argumentValue(args, index, name);
     switch (name) {
       case "--arrusted-root": {
@@ -109,13 +113,18 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
       }
     }
   }
-  if (parsed.arrustedRoot === undefined)
+  if (parsed.arrustedRoot === undefined) {
     throw new Error("Usage: mise run dev -- --arrusted-root /absolute/path/to/arrusted");
-  if (!isAbsolute(parsed.arrustedRoot)) throw new Error("--arrusted-root must be absolute.");
-  if (parsed.stateRoot !== undefined && !isAbsolute(parsed.stateRoot))
+  }
+  if (!isAbsolute(parsed.arrustedRoot)) {
+    throw new Error("--arrusted-root must be absolute.");
+  }
+  if (parsed.stateRoot !== undefined && !isAbsolute(parsed.stateRoot)) {
     throw new Error("--state-root must be absolute.");
-  if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot))
+  }
+  if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot)) {
     throw new Error("--destination-root must be absolute.");
+  }
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };
 }
 
@@ -138,18 +147,20 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 
 async function canonicalOwnedDirectory(path: string, label: string) {
   const requested = resolve(path);
-  if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path)
+  if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path) {
     throw new Error(`${label} must be an absolute canonical directory.`);
+  }
   const info = await lstat(path);
   if (
     info.isSymbolicLink() ||
     !info.isDirectory() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o022) !== 0
-  )
+  ) {
     throw new Error(
       `${label} must be owned by the current account and not writable by another account.`,
     );
+  }
   return path;
 }
 
@@ -187,7 +198,9 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
   for (const entry of stdout.toString("utf-8").split("\0").filter(Boolean)) {
     const staged = /^(\d{6}) [0-9a-f]+ [0-3]\t([\s\S]*)$/u.exec(entry);
     const path = staged?.[2] ?? entry;
-    if (!safeRelativePath(path)) continue;
+    if (!safeRelativePath(path)) {
+      continue;
+    }
     if (staged?.[1] === "160000") {
       const absolute = join(sourceRoot, path);
       try {
@@ -201,7 +214,9 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
           continue;
         }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          continue;
+        }
         throw error;
       }
     }
@@ -216,11 +231,16 @@ async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
   let ancestor = dirname(absolute);
   for (;;) {
     const info = await lstat(ancestor);
-    if (!info.isDirectory() || info.isSymbolicLink())
+    if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error(`Development source ancestor was unsafe: ${relative(sourceRoot, absolute)}`);
-    if (ancestor === sourceRoot) break;
+    }
+    if (ancestor === sourceRoot) {
+      break;
+    }
     const parent = dirname(ancestor);
-    if (parent === ancestor) throw new Error("Development source path escaped its checkout.");
+    if (parent === ancestor) {
+      throw new Error("Development source path escaped its checkout.");
+    }
     ancestor = parent;
   }
 }
@@ -234,13 +254,15 @@ async function sourceEntry(sourceRoot: string, path: string) {
       const descriptor = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const opened = await descriptor.stat();
-        if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino)
+        if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino) {
           throw new Error(`Development source file changed during read: ${path}`);
+        }
         const content = await descriptor.readFile();
         await assertSafeSourceAncestors(sourceRoot, absolute);
         const final = await descriptor.stat();
-        if (final.dev !== opened.dev || final.ino !== opened.ino)
+        if (final.dev !== opened.dev || final.ino !== opened.ino) {
           throw new Error(`Development source file changed during read: ${path}`);
+        }
         return {
           path,
           kind: "file" as const,
@@ -253,11 +275,14 @@ async function sourceEntry(sourceRoot: string, path: string) {
     }
     if (info.isSymbolicLink()) {
       const target = await readlink(absolute);
-      if (isAbsolute(target)) throw new Error(`Development source link must be relative: ${path}`);
+      if (isAbsolute(target)) {
+        throw new Error(`Development source link must be relative: ${path}`);
+      }
       const resolved = resolve(dirname(absolute), target);
       const escaped = relative(sourceRoot, resolved);
-      if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped))
+      if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped)) {
         throw new Error(`Development source link escapes the checkout: ${path}`);
+      }
       return {
         path,
         kind: "link" as const,
@@ -269,7 +294,9 @@ async function sourceEntry(sourceRoot: string, path: string) {
       `Development source supports only regular files and safe symbolic links: ${path}`,
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
     throw error;
   }
 }
@@ -277,19 +304,22 @@ async function sourceEntry(sourceRoot: string, path: string) {
 async function developmentEntries(sourceRoot: string) {
   const paths = await sourcePaths(sourceRoot);
   const entries: Awaited<ReturnType<typeof sourceEntry>>[] = [];
-  for (let offset = 0; offset < paths.length; offset += 32)
+  for (let offset = 0; offset < paths.length; offset += 32) {
     entries.push(
       ...(await Promise.all(
         paths.slice(offset, offset + 32).map((path) => sourceEntry(sourceRoot, path)),
       )),
     );
+  }
   return entries.filter((entry) => entry !== undefined);
 }
 
 function fingerprintEntries(entries: readonly Awaited<ReturnType<typeof sourceEntry>>[]) {
   const hash = createHash("sha256");
   for (const entry of entries) {
-    if (entry === undefined) continue;
+    if (entry === undefined) {
+      continue;
+    }
     const path = Buffer.from(entry.path);
     hash.update(
       Buffer.from(
@@ -322,10 +352,16 @@ export function waitForDevelopmentSourceChange(input: {
     const timers: { audit?: NodeJS.Timeout } = {};
     let watcher: FSWatcher | undefined;
     const finish = (changed: boolean) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
-      if (debounce !== undefined) clearTimeout(debounce);
-      if (timers.audit !== undefined) clearInterval(timers.audit);
+      if (debounce !== undefined) {
+        clearTimeout(debounce);
+      }
+      if (timers.audit !== undefined) {
+        clearInterval(timers.audit);
+      }
       watcher?.close();
       input.signal?.removeEventListener("abort", aborted);
       resolve(changed);
@@ -354,8 +390,12 @@ export function waitForDevelopmentSourceChange(input: {
       }
     };
     function schedule(delay = 0) {
-      if (settled) return;
-      if (debounce !== undefined) clearTimeout(debounce);
+      if (settled) {
+        return;
+      }
+      if (debounce !== undefined) {
+        clearTimeout(debounce);
+      }
       debounce = setTimeout(() => {
         check();
       }, delay);
@@ -395,15 +435,16 @@ export async function createDevelopmentSnapshot(input: {
         recursive: true,
         mode: 0o700,
       });
-      if (entry.kind === "link")
+      if (entry.kind === "link") {
         await symlink(entry.content.toString("utf-8"), join(root, entry.path));
-      else {
+      } else {
         await writeFile(join(root, entry.path), entry.content, { mode: 0o600 });
         await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
       }
     }
-    if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint)
+    if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint) {
       throw new Error("Arrusted source changed while its development snapshot was created.");
+    }
     execFileSync("/usr/bin/git", ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
@@ -474,16 +515,24 @@ export async function removeDevelopmentSnapshot(root: string) {
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   async function makeWritable(path: string) {
     const info = await lstat(path);
-    if (info.isSymbolicLink()) return;
+    if (info.isSymbolicLink()) {
+      return;
+    }
     if (info.isDirectory()) {
       await chmod(path, 0o700);
-      for (const entry of await readdir(path)) await makeWritable(join(path, entry));
-    } else await chmod(path, 0o600);
+      for (const entry of await readdir(path)) {
+        await makeWritable(join(path, entry));
+      }
+    } else {
+      await chmod(path, 0o600);
+    }
   }
   try {
     await makeWritable(root);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
   await rm(root, { recursive: true, force: true });
 }
@@ -491,11 +540,14 @@ export async function removeDevelopmentSnapshot(root: string) {
 async function digestFileOrAbsent(path: string) {
   try {
     const info = await lstat(path);
-    if (!info.isFile() || info.isSymbolicLink())
+    if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`Dependency input must be a regular file: ${path}`);
+    }
     return sha256(await readFile(path));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "absent";
+    }
     throw error;
   }
 }
@@ -506,8 +558,9 @@ export async function developmentDependencyKey(input: {
   tools: DevelopmentTools;
 }) {
   const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
-  if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform))
+  if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform)) {
     throw new Error("Development dependency platform is unsupported.");
+  }
   const lockfiles = Object.fromEntries(
     await Promise.all(
       dependencyInputs.map(async (path) => [

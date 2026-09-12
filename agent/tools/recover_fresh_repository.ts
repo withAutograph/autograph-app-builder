@@ -27,19 +27,22 @@ export default defineTool({
       (workflow.phase !== "fresh_bootstrap_pending" &&
         workflow.phase !== "fresh_bootstrap_failed") ||
       workflow.sourceReceipt.sourceKind !== "fresh-template"
-    )
+    ) {
       throw new Error("Fresh-bootstrap recovery requires an exact pending or failed workflow.");
+    }
     const proposal =
       workflow.phase === "fresh_bootstrap_pending"
         ? workflow.freshBootstrapProposal
         : proposalFromFreshBootstrapJournal(workflow.freshBootstrapReceipt);
-    if (proposal.digest !== input.expectedProposalDigest)
+    if (proposal.digest !== input.expectedProposalDigest) {
       throw new Error("The fresh-bootstrap proposal changed before recovery approval.");
+    }
     if (
       workflow.phase === "fresh_bootstrap_failed" &&
       workflow.freshBootstrapReceipt.digest !== input.expectedJournalDigest
-    )
+    ) {
       throw new Error("The failed fresh-bootstrap journal changed before recovery approval.");
+    }
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const sandbox = await ctx.getSandbox();
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
@@ -65,14 +68,16 @@ export default defineTool({
         if (
           current.phase !== "fresh_bootstrap_pending" &&
           current.phase !== "fresh_bootstrap_failed"
-        )
+        ) {
           throw new Error("The fresh-bootstrap workflow phase changed during recovery.");
+        }
         const currentProposal =
           current.phase === "fresh_bootstrap_pending"
             ? current.freshBootstrapProposal
             : proposalFromFreshBootstrapJournal(current.freshBootstrapReceipt);
-        if (!exactFreshBootstrapProposalMatch(currentProposal, proposal))
+        if (!exactFreshBootstrapProposalMatch(currentProposal, proposal)) {
           throw new Error("The fresh-bootstrap workflow changed during recovery.");
+        }
         return result.ok
           ? {
               ...current,

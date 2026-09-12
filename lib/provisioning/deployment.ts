@@ -38,14 +38,16 @@ export function createBuilderProvisioningRouteHandler(input: {
   const { origin } = new URL(input.origin);
   return async (request: Request) => {
     try {
-      if (new URL(request.url).origin !== origin)
+      if (new URL(request.url).origin !== origin) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
+      }
       const authority = await input.authorityForRequest(request);
-      if (!authority)
+      if (!authority) {
         return Response.json(
           { error: "authentication_required" },
           { status: 401, headers: noStore },
         );
+      }
       if (request.method === "GET") {
         const requestId = z
           .string()
@@ -79,13 +81,16 @@ export function createBuilderProvisioningRouteHandler(input: {
         request.method !== "POST" ||
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
-      )
+      ) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
-      if (!(await input.enabled()))
+      }
+      if (!(await input.enabled())) {
         return Response.json({ error: "feature_disabled" }, { status: 503, headers: noStore });
+      }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384))
+      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
         return Response.json({ error: "request_invalid" }, { status: 400, headers: noStore });
+      }
       const body = builderProvisionRequestSchema.parse(await request.json());
       if (new URL(request.url).searchParams.get("mode") === "reserve") {
         const reserved = await input.dependencies.journal.reserve({
@@ -118,7 +123,9 @@ let handler: ((request: Request) => Promise<Response>) | undefined;
 export function getBuilderProvisioningDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (handler) return handler;
+  if (handler) {
+    return handler;
+  }
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const vercelConfig = readVercelIntegrationEnvironment(environment);

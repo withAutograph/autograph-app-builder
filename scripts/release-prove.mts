@@ -46,14 +46,16 @@ function parseArguments(args: readonly string[]) {
       !name.startsWith("--") ||
       value.startsWith("--") ||
       values.has(name)
-    )
+    ) {
       throw new Error("Release proof arguments must be unique --name value pairs.");
+    }
     values.set(name, value);
   }
   const required = (name: string) => {
     const value = values.get(name);
-    if (value === undefined || value === "")
+    if (value === undefined || value === "") {
       throw new Error(`Missing required release proof option ${name}.`);
+    }
     values.delete(name);
     return value;
   };
@@ -62,17 +64,20 @@ function parseArguments(args: readonly string[]) {
     endpoint: required("--endpoint"),
     output: required("--output"),
   };
-  if (values.size !== 0)
+  if (values.size !== 0) {
     throw new Error(`Unsupported release proof options: ${[...values.keys()].join(", ")}.`);
-  if (!isAbsolute(parsed.arrustedRoot) || !isAbsolute(parsed.output))
+  }
+  if (!isAbsolute(parsed.arrustedRoot) || !isAbsolute(parsed.output)) {
     throw new Error("Release proof roots must be absolute.");
+  }
   return parsed;
 }
 
 function requiredExecutable(name: string) {
   const value = process.env[name];
-  if (value === undefined || !isAbsolute(value))
+  if (value === undefined || !isAbsolute(value)) {
     throw new Error(`mise must supply the absolute ${name} executable.`);
+  }
   return value;
 }
 
@@ -91,8 +96,12 @@ async function run(
     encoding: "utf-8",
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (!options.capture && result.stdout.trim() !== "") process.stdout.write(result.stdout);
-  if (!options.capture && result.stderr.trim() !== "") process.stderr.write(result.stderr);
+  if (!options.capture && result.stdout.trim() !== "") {
+    process.stdout.write(result.stdout);
+  }
+  if (!options.capture && result.stderr.trim() !== "") {
+    process.stderr.write(result.stderr);
+  }
   return result.stdout;
 }
 
@@ -103,8 +112,9 @@ async function ownerBoundFile(path: string, label: string) {
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     (info.mode & 0o022) !== 0
-  )
+  ) {
     throw new Error(`${label} must be a current-user-owned regular file.`);
+  }
   return readFile(path);
 }
 
@@ -112,22 +122,25 @@ const args = parseArguments(process.argv.slice(2));
 const endpointOrigin = releaseEndpoint(args.endpoint);
 const builder = await exactCleanGitSource(repositoryRoot, "Builder");
 const arrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
-if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE)
+if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE) {
   throw new Error("Arrusted release source does not match the source-bound image target.");
+}
 const projectBinding = await ownerBoundFile(
   join(repositoryRoot, ".vercel/project.json"),
   "Vercel release project binding",
 );
 const outputParent = await realpath(dirname(args.output));
-if (join(outputParent, basename(args.output)) !== args.output)
+if (join(outputParent, basename(args.output)) !== args.output) {
   throw new Error("Release output must be an absolute canonical child path.");
+}
 try {
   await mkdir(args.output, { mode: 0o700 });
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code === "EEXIST")
+  if ((error as NodeJS.ErrnoException).code === "EEXIST") {
     throw new Error(`Release candidate already exists: ${args.output}`, {
       cause: error,
     });
+  }
   throw error;
 }
 const output = await realpath(args.output);
@@ -278,8 +291,9 @@ try {
     finalBuilder.tree !== builder.tree ||
     finalArrusted.commit !== arrusted.commit ||
     finalArrusted.tree !== arrusted.tree
-  )
+  ) {
     throw new Error("Release sources changed while the candidate was proved.");
+  }
   const closureSha256 = sha256(
     JSON.stringify({
       builder: { commit: builder.commit, tree: builder.tree },

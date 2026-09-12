@@ -202,7 +202,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     if (current === undefined || current.epoch !== input.epoch) {
       throw new Error("The sandbox execution lease epoch is stale.");
     }
-    if (current.state !== "active") return structuredClone(current);
+    if (current.state !== "active") {
+      return structuredClone(current);
+    }
     const lease = sandboxExecutionLeaseSchema.parse({
       ...current,
       state: "released",
@@ -217,7 +219,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
   ): Promise<SandboxExecutionLease | null> {
     const current = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
-    if (current === undefined) return null;
+    if (current === undefined) {
+      return null;
+    }
     if (
       current.providerSandboxId !== input.providerSandboxId ||
       current.policyDigest !== input.policyDigest
@@ -242,8 +246,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
         claimed.length >= input.limit ||
         current.state === "released" ||
         current.expiresAtEpochMs > input.nowEpochMs
-      )
+      ) {
         continue;
+      }
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,
         state: "orphaned",
@@ -264,8 +269,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       current === undefined ||
       current.state !== "orphaned" ||
       current.epoch !== input.lease.epoch
-    )
+    ) {
       return null;
+    }
     const lease = sandboxExecutionLeaseSchema.parse(
       input.providerOutcome === "stopped"
         ? {
@@ -310,8 +316,11 @@ export async function reconcileExpiredSandboxLeases(input: {
         providerOutcome,
         nowEpochMs: input.nowEpochMs,
       });
-      if (settled === null) settlementRaced.push(digest);
-      else if (providerOutcome === "stopped") stopped.push(digest);
+      if (settled === null) {
+        settlementRaced.push(digest);
+      } else if (providerOutcome === "stopped") {
+        stopped.push(digest);
+      }
     } catch {
       settlementFailed.push(digest);
     }

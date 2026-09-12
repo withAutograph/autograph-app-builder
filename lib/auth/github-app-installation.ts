@@ -67,7 +67,9 @@ export interface GitHubStateValidationDiagnostic {
 }
 
 export function githubInstallationAuthorizationDiagnostic(error: unknown) {
-  if (!(error instanceof GitHubInstallationAuthorizationError)) return undefined;
+  if (!(error instanceof GitHubInstallationAuthorizationError)) {
+    return undefined;
+  }
   return {
     stage: error.stage,
     ...(error.category === undefined ? {} : { category: error.category }),
@@ -154,7 +156,9 @@ export function readGitHubAppInstallationEnvironment(
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
   });
-  if (!parsed.success) throw new Error("GitHub App installation configuration is invalid.");
+  if (!parsed.success) {
+    throw new Error("GitHub App installation configuration is invalid.");
+  }
   return parsed.data;
 }
 
@@ -203,8 +207,9 @@ const canonicalAuthority = (authority: HostedTenantAuthority) =>
 const authorityDigest = (authority: HostedTenantAuthority) => sha256(canonicalAuthority(authority));
 
 function property(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value))
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value)) {
     throw new Error("invalid-response");
+  }
   return (value as Record<string, unknown>)[key];
 }
 
@@ -213,19 +218,25 @@ function decimalProperty(value: unknown, key: string): string {
   if (typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0) {
     return String(candidate);
   }
-  if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) return candidate;
+  if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) {
+    return candidate;
+  }
   throw new Error("invalid-response");
 }
 
 function stringProperty(value: unknown, key: string): string {
   const candidate = property(value, key);
-  if (typeof candidate !== "string") throw new Error("invalid-response");
+  if (typeof candidate !== "string") {
+    throw new TypeError("invalid-response");
+  }
   return candidate;
 }
 
 function nullableStringProperty(value: unknown, key: string): string | null {
   const candidate = property(value, key);
-  if (candidate !== null && typeof candidate !== "string") throw new Error("invalid-response");
+  if (candidate !== null && typeof candidate !== "string") {
+    throw new Error("invalid-response");
+  }
   return candidate;
 }
 
@@ -290,17 +301,19 @@ function verifyState(input: {
   now: number;
 }) {
   const diagnostic = { stateDigest: sha256(input.state) };
-  if (input.state.length > 2048)
+  if (input.state.length > 2048) {
     throw new GitHubStateValidationError({
       substage: "state-format",
       ...diagnostic,
     });
+  }
   const segments = input.state.split(".");
-  if (segments.length !== 2)
+  if (segments.length !== 2) {
     throw new GitHubStateValidationError({
       substage: "state-format",
       ...diagnostic,
     });
+  }
   const [payload, providedSignature] = segments as [string, string];
   const expectedSignature = createHmac("sha256", input.stateSecret)
     .update("github-installation-state\n")
@@ -343,20 +356,22 @@ function verifyState(input: {
     });
   }
   const nowSeconds = Math.floor(input.now / 1000);
-  if (parsed.authorityDigest !== authorityDigest(input.authority))
+  if (parsed.authorityDigest !== authorityDigest(input.authority)) {
     throw new GitHubStateValidationError({
       substage: "state-authority-digest",
       ...diagnostic,
     });
+  }
   if (
     parsed.expiresAt <= nowSeconds ||
     parsed.issuedAt > nowSeconds + 30 ||
     parsed.expiresAt - parsed.issuedAt !== STATE_LIFETIME_MS / 1000
-  )
+  ) {
     throw new GitHubStateValidationError({
       substage: "state-time",
       ...diagnostic,
     });
+  }
   return {
     stateDigest: sha256(input.state),
     authorityDigest: parsed.authorityDigest,
@@ -374,10 +389,13 @@ function verifyState(input: {
 function callbackInput(url: string) {
   const query = new URL(url).searchParams;
   const singular = ["code", "error", "installation_id", "setup_action", "state"];
-  if (singular.some((key) => query.getAll(key).length > 1))
+  if (singular.some((key) => query.getAll(key).length > 1)) {
     throw new GitHubCallbackParseError("duplicate-key");
+  }
   const stateResult = z.string().min(1).max(2048).safeParse(query.get("state"));
-  if (!stateResult.success) throw new GitHubCallbackParseError("state-format");
+  if (!stateResult.success) {
+    throw new GitHubCallbackParseError("state-format");
+  }
   const state = stateResult.data;
   const code = query.get("code");
   const oauthError = query.get("error");
@@ -387,8 +405,9 @@ function callbackInput(url: string) {
       code !== null ||
       query.has("installation_id") ||
       query.has("setup_action")
-    )
+    ) {
       throw new GitHubCallbackParseError("callback-shape");
+    }
     return {
       kind: "oauth-error" as const,
       error: ["access_denied", "temporarily_unavailable", "server_error"].includes(oauthError)
@@ -407,7 +426,9 @@ function callbackInput(url: string) {
     ) {
       throw new GitHubCallbackParseError("callback-shape");
     }
-    if (code.length === 0) throw new GitHubCallbackParseError("code-format");
+    if (code.length === 0) {
+      throw new GitHubCallbackParseError("code-format");
+    }
     return {
       kind: "authorize" as const,
       code,
@@ -482,8 +503,9 @@ function oauthErrorCategoryFromException(error: unknown) {
 function normalizedUserTokens(authentication: unknown, now: number) {
   try {
     const accessToken = stringProperty(authentication, "token");
-    if (accessToken.length < 20 || accessToken.length > 512 || /[\0\r\n]/u.test(accessToken))
+    if (accessToken.length < 20 || accessToken.length > 512 || /[\0\r\n]/u.test(accessToken)) {
       throw new Error("invalid-token");
+    }
     const expiresAt =
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "expiresAt"))
@@ -510,8 +532,9 @@ function normalizedUserTokens(authentication: unknown, now: number) {
         !Number.isFinite(Date.parse(refreshTokenExpiresAt)) ||
         Date.parse(expiresAt) <= now ||
         Date.parse(refreshTokenExpiresAt) <= now)
-    )
+    ) {
       throw new Error("invalid-token");
+    }
     return {
       accessToken,
       ...(expiring
@@ -528,7 +551,9 @@ function normalizedUserTokens(authentication: unknown, now: number) {
 }
 
 function propertyOrUndefined(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
   return key in value ? (value as Record<string, unknown>)[key] : undefined;
 }
 
@@ -595,10 +620,16 @@ async function accessibleInstallation(input: {
         candidates.push(installation);
       }
     }
-    if (page * 100 >= totalCount) break;
-    if (page === 10) throw new Error("too-many-installations");
+    if (page * 100 >= totalCount) {
+      break;
+    }
+    if (page === 10) {
+      throw new Error("too-many-installations");
+    }
   }
-  if (candidates.length !== 1) throw new Error("ambiguous-installation");
+  if (candidates.length !== 1) {
+    throw new Error("ambiguous-installation");
+  }
   return candidates[0]!;
 }
 
@@ -669,8 +700,9 @@ export function createGitHubAppInstallationAuthorization(input: {
     ) {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-        if (!(await input.membership.isActiveMember(authority)))
+        if (!(await input.membership.isActiveMember(authority))) {
           throw new Error("membership-inactive");
+        }
         const issuedAt = now();
         const state = signedState({
           authority,
@@ -692,8 +724,9 @@ export function createGitHubAppInstallationAuthorization(input: {
           ? new URL("/local-connections/github", config.issuer)
           : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
         redirect.searchParams.set("state", state.state);
-        if (input.emulation && returnState.resumeKey)
+        if (input.emulation && returnState.resumeKey) {
           redirect.searchParams.set("resume", returnState.resumeKey);
+        }
         return {
           version: 1 as const,
           action: "github-app.installation.begin" as const,
@@ -766,8 +799,9 @@ export function createGitHubAppInstallationAuthorization(input: {
         } catch {
           throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
-        if (!activeMember)
+        if (!activeMember) {
           throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+        }
         let consumed: boolean;
         try {
           consumed = await input.stateStore.consume({
@@ -779,19 +813,21 @@ export function createGitHubAppInstallationAuthorization(input: {
         } catch {
           throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
-        if (!consumed)
+        if (!consumed) {
           throw new GitHubInstallationAuthorizationError(
             "membership-state-consumption",
             undefined,
             state.returnState,
           );
+        }
 
-        if (callback.kind === "oauth-error")
+        if (callback.kind === "oauth-error") {
           throw new GitHubInstallationAuthorizationError(
             "oauth-callback-error",
             callback.error,
             state.returnState,
           );
+        }
 
         if (callback.kind === "install") {
           if (
@@ -847,11 +883,13 @@ export function createGitHubAppInstallationAuthorization(input: {
             ? new URL("/local-connections/github", input.emulation.canonicalOrigin)
             : authorizeUrl;
           if (input.emulation) {
-            for (const [key, value] of authorizeUrl.searchParams)
+            for (const [key, value] of authorizeUrl.searchParams) {
               approvalUrl.searchParams.append(key, value);
+            }
             approvalUrl.searchParams.set("phase", "authorize");
-            if (state.returnState.resumeKey)
+            if (state.returnState.resumeKey) {
               approvalUrl.searchParams.set("resume", state.returnState.resumeKey);
+            }
           }
           return {
             version: 1 as const,
@@ -874,8 +912,9 @@ export function createGitHubAppInstallationAuthorization(input: {
           callback.installationId !== undefined &&
           (callback.installationId !== state.installationId ||
             callback.setupAction !== state.setupAction)
-        )
+        ) {
           throw new Error("installation-mismatch");
+        }
 
         let authentication: unknown;
         try {
@@ -921,14 +960,17 @@ export function createGitHubAppInstallationAuthorization(input: {
           installation = input.emulation
             ? await (async () => {
                 const [owner, repo] = input.emulation!.githubRepository.split("/");
-                if (!owner || !repo) throw new Error("invalid-emulation");
+                if (!owner || !repo) {
+                  throw new Error("invalid-emulation");
+                }
                 const { data } = await userOctokit.request(
                   "GET /repos/{owner}/{repo}/installation",
                   { owner, repo },
                 );
                 const value = installationIdentity(data);
-                if (value.installationId !== state.installationId || value.appId !== config.appId)
+                if (value.installationId !== state.installationId || value.appId !== config.appId) {
                   throw new Error("installation-mismatch");
+                }
                 return value;
               })()
             : await accessibleInstallation({
@@ -937,16 +979,19 @@ export function createGitHubAppInstallationAuthorization(input: {
                 appSlug: config.appSlug,
                 requestedInstallationId: state.installationId,
               });
-          if (installation.suspendedAt !== null)
+          if (installation.suspendedAt !== null) {
             throw new Error("GitHub installation is suspended.");
-          if (installation.accountType === "User" && installation.accountId !== providerUserId)
+          }
+          if (installation.accountType === "User" && installation.accountId !== providerUserId) {
             throw new Error("GitHub installation belongs to another provider user.");
+          }
         } catch {
           throw new GitHubInstallationAuthorizationError("installation-identity-validation");
         }
         try {
-          if (!(await input.membership.isActiveMember(authority)))
+          if (!(await input.membership.isActiveMember(authority))) {
             throw new Error("membership-inactive");
+          }
         } catch {
           throw new GitHubInstallationAuthorizationError("membership-state-consumption");
         }
@@ -984,7 +1029,9 @@ export function createGitHubAppInstallationAuthorization(input: {
           appliedAt: appliedAt.toISOString(),
         };
       } catch (error) {
-        if (error instanceof GitHubInstallationAuthorizationError) throw error;
+        if (error instanceof GitHubInstallationAuthorizationError) {
+          throw error;
+        }
         throw new Error(FAILURE_MESSAGE, { cause: error });
       }
     },

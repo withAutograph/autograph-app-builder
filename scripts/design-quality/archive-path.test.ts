@@ -8,8 +8,9 @@ it("archives desktop variants and retains historical names", () => {
     "desktop-window-1",
     "desktop-custom-1280x840-0",
     "mobile-0",
-  ])
+  ]) {
     expect(captureFilename(name)).toBe(`${name}.png`);
+  }
 });
 it("does not interpret names as paths or HTML", () => {
   for (const name of [
@@ -18,6 +19,7 @@ it("does not interpret names as paths or HTML", () => {
     "x<img>-0",
     "desktop?secret-0",
     "desktop-custom-1280x840px-0",
-  ])
+  ]) {
     expect(() => captureFilename(name)).toThrow();
+  }
 });

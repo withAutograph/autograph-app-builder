@@ -46,31 +46,44 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
   for (const entry of await readdir(join(root, relative), {
     withFileTypes: true,
   })) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+    if (entry.name.startsWith(".") || entry.name === "node_modules") {
+      continue;
+    }
     const path = join(relative, entry.name);
-    if (entry.isDirectory()) files.push(...(await sources(root, path)));
-    else if (entry.isFile() && /\.(tsx?|css)$/u.test(path))
+    if (entry.isDirectory()) {
+      files.push(...(await sources(root, path)));
+    } else if (entry.isFile() && /\.(tsx?|css)$/u.test(path)) {
       files.push({ path, content: await readFile(join(root, path), "utf-8") });
+    }
   }
   return files;
 }
 async function main() {
   if (values["list-cases"]) {
-    for (const designCase of await listDesignCases())
+    for (const designCase of await listDesignCases()) {
       console.log(`${designCase.id}\t${designCase.status}\t${designCase.title}`);
+    }
     return;
   }
-  if (values.case && values["brief-file"])
+  if (values.case && values["brief-file"]) {
     throw new Error("Use either --case or --brief-file, not both");
-  if (!values["preview-url"] || !values["arrusted-root"] || (!values["brief-file"] && !values.case))
+  }
+  if (
+    !values["preview-url"] ||
+    !values["arrusted-root"] ||
+    (!values["brief-file"] && !values.case)
+  ) {
     throw new Error("Required: --preview-url, --arrusted-root, and --brief-file or --case");
+  }
   const url = new URL(values["preview-url"]);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
     throw new Error("Use a normal HTTP(S) preview URL without credentials");
-  if (values.scenario && !values["fixture-interactions"])
+  }
+  if (values.scenario && !values["fixture-interactions"]) {
     throw new Error(
       "Interaction steps require --fixture-interactions: use only previews with simulated effects",
     );
+  }
   const output = resolve(
     values["output-dir"] ??
       join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/gu, "-")),
@@ -126,7 +139,9 @@ async function main() {
     ? scenariosSchema.parse(
         JSON.parse(
           await readFile(scenarioPath, "utf-8").catch((error) => {
-            if (!values.scenario && (error as NodeJS.ErrnoException).code === "ENOENT") return "[]";
+            if (!values.scenario && (error as NodeJS.ErrnoException).code === "ENOENT") {
+              return "[]";
+            }
             throw error;
           }),
         ),
@@ -153,7 +168,9 @@ async function main() {
     additionalDesktopSize,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));
-  for (const capture of captures) limitations.push(...(capture.styles?.limitations ?? []));
+  for (const capture of captures) {
+    limitations.push(...(capture.styles?.limitations ?? []));
+  }
   const adherence = scoreAdherence(
     [
       ...("observations" in source ? source.observations : []),

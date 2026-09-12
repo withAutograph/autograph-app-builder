@@ -334,8 +334,9 @@ export function assertExactDependencyTargetBinding(input: {
   if (
     input.cache.manifest.scope === "development-execution" ||
     input.cache.manifest.scope === "live-template-execution"
-  )
+  ) {
     return;
+  }
   const target = dependencyTargetForWorkspace(input.cache, input.workspace);
   if (
     input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||
@@ -349,8 +350,9 @@ export function assertExactDependencyTargetBinding(input: {
         input.dependencyReceipt.sourceReceiptDigest !== input.sourceReceipt.digest ||
         input.dependencyReceipt.targetSha !== target.sha ||
         input.dependencyReceipt.targetTree !== target.tree))
-  )
+  ) {
     throw new Error("The prepared source does not match the immutable dependency target.");
+  }
 }
 
 export function dependencyTargetForWorkspace(
@@ -421,8 +423,9 @@ function liveTemplateManifestPath(
 }
 
 export function dependencyCacheNodeModulesRoot(contentDigest: string): string {
-  if (!sha256Digest.safeParse(contentDigest).success)
+  if (!sha256Digest.safeParse(contentDigest).success) {
     throw new Error("The dependency cache content digest is invalid.");
+  }
   return `${DEPENDENCY_CACHE_EXTRACTED_ROOT}/${contentDigest}/node_modules`;
 }
 
@@ -447,11 +450,13 @@ export function materializedDependencyNodeModulesRoot(
   contentDigest: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  if (isDevelopmentExecution(environment))
+  if (isDevelopmentExecution(environment)) {
     return `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${contentDigest}/node_modules`;
+  }
   const immutableImageRoot = dependencyCacheNodeModulesRoot(contentDigest);
-  if (hostedWorkspaceDependencyExtractionEnabled(environment))
+  if (hostedWorkspaceDependencyExtractionEnabled(environment)) {
     return `/workspace/.app-builder/hosted-dependencies/${contentDigest}/node_modules`;
+  }
   return immutableImageRoot;
 }
 
@@ -459,8 +464,9 @@ export function dependencyExecutionLayout(
   observed: ObservedDependencyCache,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ExecutionDependencyLayout {
-  if (fixtureDependencyCacheEnabled(environment))
+  if (fixtureDependencyCacheEnabled(environment)) {
     return { version: 1, kind: "fixture", roots: [], workspaceLinks: [] };
+  }
   if (observed.manifest.scope === "live-template-execution") {
     return executionDependencyLayoutSchema.parse({
       version: 1,
@@ -594,11 +600,15 @@ export async function materializeExecutionDependencyView(input: {
   viewKey: string;
 }) {
   const layout = executionDependencyLayoutSchema.parse(input.layout);
-  if (layout.kind === "fixture" || layout.kind === "checkout") return;
-  if (!sha256Digest.safeParse(input.viewKey).success)
+  if (layout.kind === "fixture" || layout.kind === "checkout") {
+    return;
+  }
+  if (!sha256Digest.safeParse(input.viewKey).success) {
     throw new Error("The dependency view key is invalid.");
-  if (!safeSourcePath(input.overlayRoot))
+  }
+  if (!safeSourcePath(input.overlayRoot)) {
     throw new Error("The dependency overlay path is invalid.");
+  }
   const layoutDigest = executionDependencyLayoutDigest(layout);
   const layoutPath = `.app-builder/dependency-layouts/${layoutDigest}.json`;
   const viewRoot = `.app-builder/dependency-views/${layoutDigest}/${input.viewKey}`;
@@ -616,8 +626,9 @@ export async function materializeExecutionDependencyView(input: {
     abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
   });
   boundedOutput(result.stdout, result.stderr, "Dependency view materialization");
-  if (result.exitCode !== 0)
+  if (result.exitCode !== 0) {
     throw new Error("The dependency execution view could not be materialized.");
+  }
 }
 
 function isDevelopmentExecution(environment: Readonly<Record<string, string | undefined>>) {
@@ -641,8 +652,9 @@ function boundedOutput(stdout: string, stderr: string, label: string) {
   if (
     Buffer.byteLength(stdout) > DEPENDENCY_CACHE_OUTPUT_BYTES ||
     Buffer.byteLength(stderr) > DEPENDENCY_CACHE_OUTPUT_BYTES
-  )
+  ) {
     throw new Error(`${label} output exceeded the fixed size limit.`);
+  }
 }
 
 function commandPayload(output: string) {
@@ -885,9 +897,13 @@ async function liveTemplatePlatform(
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
   boundedOutput(result.stdout, result.stderr, "Template dependency platform");
-  if (result.exitCode !== 0) throw new Error("The template dependency platform is unsupported.");
+  if (result.exitCode !== 0) {
+    throw new Error("The template dependency platform is unsupported.");
+  }
   const platform = liveTemplatePlatformSchema.safeParse(result.stdout.trim());
-  if (!platform.success) throw new Error("The template dependency platform is invalid.");
+  if (!platform.success) {
+    throw new Error("The template dependency platform is invalid.");
+  }
   return platform.data;
 }
 
@@ -905,7 +921,9 @@ async function inspectLiveTemplateDependencyIdentity(
   const manifestSource = await sandbox.readTextFile({
     path: ".app-builder/source-files.json",
   });
-  if (manifestSource === null) throw new Error("The prepared source manifest is missing.");
+  if (manifestSource === null) {
+    throw new Error("The prepared source manifest is missing.");
+  }
   let entries: z.infer<typeof preparedDependencyInputSchema>[];
   try {
     entries = z
@@ -916,7 +934,9 @@ async function inspectLiveTemplateDependencyIdentity(
     throw new Error("The prepared source manifest is invalid.");
   }
   const files = new Map(entries.map((entry) => [entry.path, entry]));
-  if (files.size !== entries.length) throw new Error("The prepared source manifest is invalid.");
+  if (files.size !== entries.length) {
+    throw new Error("The prepared source manifest is invalid.");
+  }
   const dependencyInputPaths = entries
     .map(({ path }) => path)
     .filter(isLiveTemplateDependencyInputPath)
@@ -929,8 +949,9 @@ async function inspectLiveTemplateDependencyIdentity(
           const content = await sandbox.readBinaryFile({
             path: `repository/${path}`,
           });
-          if (entry === undefined || content === null || sha256(content) !== entry.sha256)
+          if (entry === undefined || content === null || sha256(content) !== entry.sha256) {
             throw new Error("A dependency input changed after source review.");
+          }
           return [path, entry.sha256] as const;
         }),
       ),
@@ -982,8 +1003,9 @@ function assertExactLiveTemplateManifest(
       (entry) => entry.nodeModulesPath !== `${sourceRoot}/${entry.path}`,
     ) ||
     manifest.closure.workspaceLinks.some((entry) => entry.path === entry.sourcePath)
-  )
+  ) {
     throw new Error("The live template dependency cache binding drifted.");
+  }
 }
 
 function assertExactLiveTemplateClosure(
@@ -999,8 +1021,9 @@ function assertExactLiveTemplateClosure(
       JSON.stringify(manifest.closure.workspaceLinks) ||
     observation.cargoHomeDigest !== manifest.closure.cargoHomeDigest ||
     observation.microfrontendsVersion !== manifest.closure.microfrontendsVersion
-  )
+  ) {
     throw new Error("The live template dependency cache closure drifted.");
+  }
 }
 
 async function inspectLiveTemplateClosure(input: {
@@ -1013,8 +1036,9 @@ async function inspectLiveTemplateClosure(input: {
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
   boundedOutput(result.stdout, result.stderr, "Template dependency closure inspection");
-  if (result.exitCode !== 0)
+  if (result.exitCode !== 0) {
     throw new Error("The live template dependency cache closure is missing.");
+  }
   try {
     return liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout) as unknown);
   } catch {
@@ -1075,16 +1099,18 @@ export async function bootstrapLiveTemplateDependencies(input: {
     abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
   });
   boundedOutput(result.stdout, result.stderr, "Template dependency bootstrap");
-  if (result.exitCode !== 0)
+  if (result.exitCode !== 0) {
     throw new Error("The canonical template dependencies could not be bootstrapped.");
+  }
   let observation: z.infer<typeof liveTemplateClosureObservationSchema>;
   try {
     observation = liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout) as unknown);
   } catch {
     throw new Error("The canonical template dependency bootstrap receipt is invalid.");
   }
-  if (observation.platform !== platform)
+  if (observation.platform !== platform) {
     throw new Error("The canonical template dependency platform drifted.");
+  }
   const manifest = {
     version: 4 as const,
     scope: "live-template-execution" as const,
@@ -1137,8 +1163,9 @@ export async function inspectDependencyCache(
     const liveManifest = await sandbox.readTextFile({
       path: liveTemplateManifestPath(identity.dependencyKey, platform),
     });
-    if (liveManifest === null)
+    if (liveManifest === null) {
       throw new DependencyCacheMissingError("The live template dependency cache is missing.");
+    }
     let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
     try {
       manifest = liveTemplateDependencyCacheManifestSchema.parse(
@@ -1172,10 +1199,11 @@ export async function inspectDependencyCache(
     manifestResult.stderr,
     "Dependency cache manifest inspection",
   );
-  if (manifestResult.exitCode !== 0)
+  if (manifestResult.exitCode !== 0) {
     throw new DependencyCacheMissingError(
       "The fixed offline dependency cache manifest is missing.",
     );
+  }
   const manifestPayload = commandPayload(manifestResult.stdout);
   let parsed: unknown;
   try {
@@ -1192,11 +1220,14 @@ export async function inspectDependencyCache(
         ? developmentDependencyCacheManifestSchema
         : dependencyCacheManifestSchema
   ).safeParse(parsed);
-  if (!validated.success) throw new Error("The fixed offline dependency cache manifest drifted.");
+  if (!validated.success) {
+    throw new Error("The fixed offline dependency cache manifest drifted.");
+  }
   if (developmentExecution) {
     const developmentManifest = developmentDependencyCacheManifestSchema.parse(validated.data);
-    if (developmentManifest.dependencyKey !== environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY)
+    if (developmentManifest.dependencyKey !== environment.APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY) {
       throw new Error("The development dependency cache key drifted.");
+    }
   }
 
   const archiveResult = await sandbox.run({
@@ -1209,8 +1240,9 @@ export async function inspectDependencyCache(
     abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
   });
   boundedOutput(archiveResult.stdout, archiveResult.stderr, "Dependency cache content inspection");
-  if (archiveResult.exitCode !== 0)
+  if (archiveResult.exitCode !== 0) {
     throw new Error("The fixed offline dependency cache archive is missing.");
+  }
   const archivePayload = commandPayload(archiveResult.stdout);
   const [checksumLine, sizeLine, cargoChecksumLine, cargoSizeLine] = archivePayload
     .trim()
@@ -1244,8 +1276,9 @@ export async function inspectDependencyCache(
         !sha256Digest.safeParse(observedCargoDigest).success ||
         observedCargoDigest !== fullClosure.cargoArchiveSha256 ||
         observedCargoBytes !== fullClosure.cargoArchiveBytes))
-  )
+  ) {
     throw new Error("The fixed offline dependency cache archive drifted.");
+  }
 
   return {
     manifest: validated.data,
@@ -1255,8 +1288,9 @@ export async function inspectDependencyCache(
 }
 
 export function planningOverlayRoot(artifactRevision: string) {
-  if (!sha256Digest.safeParse(artifactRevision).success)
+  if (!sha256Digest.safeParse(artifactRevision).success) {
     throw new Error("The AppSpec artifact revision is invalid.");
+  }
   return `.app-builder/target-inputs/${artifactRevision}/repository`;
 }
 
@@ -1304,8 +1338,9 @@ export async function materializeOfflineDependencies(input: {
       abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
     });
     boundedOutput(extraction.stdout, extraction.stderr, "Offline dependency materialization");
-    if (extraction.exitCode !== 0)
+    if (extraction.exitCode !== 0) {
       throw new Error("The fixed offline dependency cache could not be materialized.");
+    }
     await materializeExecutionDependencyView({
       sandbox: input.sandbox,
       layout: dependencyLayout,
@@ -1318,8 +1353,9 @@ export async function materializeOfflineDependencies(input: {
     : await input.sandbox.readTextFile({
         path: `${root}/node_modules/@vercel/microfrontends/package.json`,
       });
-  if (packageContent === null)
+  if (packageContent === null) {
     throw new Error("The required offline dependency closure is incomplete.");
+  }
   let packageVersion: unknown;
   try {
     packageVersion = (JSON.parse(packageContent) as { version?: unknown }).version;
@@ -1330,8 +1366,9 @@ export async function materializeOfflineDependencies(input: {
     observed.manifest.scope === "live-template-execution"
       ? observed.manifest.closure.microfrontendsVersion
       : ARRUSTED_MICROFRONTENDS_VERSION;
-  if (packageVersion !== expectedMicrofrontendsVersion)
+  if (packageVersion !== expectedMicrofrontendsVersion) {
     throw new Error("The required offline dependency closure drifted.");
+  }
   if (
     !fixtureDependencyCacheEnabled(environment) &&
     !hostedArtifactDependencyCacheEnabled(environment) &&
@@ -1343,8 +1380,9 @@ export async function materializeOfflineDependencies(input: {
       abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     });
     boundedOutput(resolution.stdout, resolution.stderr, "Offline dependency resolution");
-    if (resolution.exitCode !== 0)
+    if (resolution.exitCode !== 0) {
       throw new Error("The required offline dependency closure is incomplete.");
+    }
     // Identity and planning invoke only the fixed Node/Bun commands above.
     // Rust belongs to unrelated target capabilities and must not turn a
     // planning walkthrough into a toolchain gate. A future Rust-backed

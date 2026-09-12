@@ -7,7 +7,9 @@ const bytes = (value: string) => new TextEncoder().encode(value);
 const stream = (...chunks: string[]) =>
   new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const chunk of chunks) controller.enqueue(bytes(chunk));
+      for (const chunk of chunks) {
+        controller.enqueue(bytes(chunk));
+      }
       controller.close();
     },
   });
@@ -135,7 +137,9 @@ describe("bounded sandbox command", () => {
     });
     await runBoundedSandboxCommand({ spawn }, { command: "true", env: { SAFE_INPUT: "exact" } });
     const firstCall = spawn.mock.calls.at(0);
-    if (firstCall === undefined) throw new Error("The bounded command was not spawned.");
+    if (firstCall === undefined) {
+      throw new Error("The bounded command was not spawned.");
+    }
     expect((firstCall[0] as { env?: unknown }).env).toEqual({
       SAFE_INPUT: "exact",
     });

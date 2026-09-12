@@ -70,10 +70,13 @@ export default defineTool({
     { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
   ) {
-    if (!validAppId(appId)) throw new Error("App id must be one lowercase kebab-case segment.");
+    if (!validAppId(appId)) {
+      throw new Error("App id must be one lowercase kebab-case segment.");
+    }
     const current = appBuilderWorkflowState.get();
-    if (current.phase === "empty")
+    if (current.phase === "empty") {
       throw new Error("Start a workspace before creating an implementation plan.");
+    }
     const path = `prototype/${appId}/app-spec.md`;
     const artifact = current.artifacts.find(
       (candidate) =>
@@ -82,13 +85,17 @@ export default defineTool({
         (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
         (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision),
     );
-    if (artifact === undefined)
+    if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
-    if (artifact.mediaType !== "text/markdown")
+    }
+    if (artifact.mediaType !== "text/markdown") {
       throw new Error("The accepted AppSpec artifact media type is invalid.");
+    }
     const content = normalizeBuildReadyAppSpec(artifact.content);
     const validation = validateBuildReadyAppSpec(content);
-    if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
+    if (!validation.valid) {
+      throw new Error(appSpecRepairDiagnostic(validation));
+    }
     const accepted = {
       appId,
       artifactPath: artifact.path,

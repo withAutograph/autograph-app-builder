@@ -21,8 +21,9 @@ export function withFreshBootstrapTestCapability<T>(
   operation: () => Promise<T>,
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<T> {
-  if (capability.authority !== "structural-test-injection")
+  if (capability.authority !== "structural-test-injection") {
     throw new Error("Only an explicit structural test capability can be injected.");
+  }
   return structurallyInjectedCapability.run({ capability, hooks }, operation);
 }
 
@@ -34,8 +35,9 @@ export function configuredFreshBootstrapEvalHooks(): FreshBootstrapFaultHooks | 
   if (
     !hasTestCapability("simulated-publication") ||
     process.env.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT !== "after-stage"
-  )
+  ) {
     return undefined;
+  }
   return {
     afterStageCreation: () => {
       throw new Error("Structurally configured fresh-bootstrap eval fault.");

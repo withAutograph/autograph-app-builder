@@ -40,7 +40,9 @@ describe("local Eve acceptance", () => {
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {
+          yield event;
+        }
       },
     };
     const session = {
@@ -270,7 +272,9 @@ describe("local Eve acceptance", () => {
     const response = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of settledEvents) yield event;
+        for (const event of settledEvents) {
+          yield event;
+        }
       },
     };
     const session = {
@@ -413,7 +417,9 @@ describe("local Eve acceptance", () => {
     const resumedResponse = {
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of resumedEvents) yield event;
+        for (const event of resumedEvents) {
+          yield event;
+        }
       },
     };
     const session = {
@@ -536,7 +542,9 @@ describe("local Eve acceptance", () => {
     const response = (entries: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of entries) yield event;
+        for (const event of entries) {
+          yield event;
+        }
       },
     });
     const session = {
@@ -970,7 +978,9 @@ describe("local Eve acceptance", () => {
     const stream = (events: MessageStreamEvent[]) => ({
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {
+          yield event;
+        }
       },
     });
     const initial = stream([{ type: "session.waiting", data: {} } as MessageStreamEvent]);

@@ -38,7 +38,9 @@ export default defineTool({
     assertUpstreamMutationAllowed(initialWorkflow, "GitHub source preparation");
     const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
     const access = await resolveRepositoryAccessForTool(input, ctx, runtime);
-    if (access.kind === "selection") return access.access;
+    if (access.kind === "selection") {
+      return access.access;
+    }
 
     const prepared = await runtime.prepareExistingSource({
       ...input,
@@ -56,21 +58,24 @@ export default defineTool({
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
     repositoryAccessReceiptState.update((current) => {
-      if (current?.digest !== access.receipt.digest)
+      if (current?.digest !== access.receipt.digest) {
         throw new Error("Repository access changed concurrently during source preparation.");
+      }
       return prepared.accessReceipt;
     });
     sourceWorkflowState.update((current) => {
-      if (JSON.stringify(current) !== JSON.stringify(initialSource))
+      if (JSON.stringify(current) !== JSON.stringify(initialSource)) {
         throw new Error(
           "The reviewed source changed concurrently during GitHub source preparation.",
         );
+      }
       if (current.phase !== "empty") {
         if (
           current.receipt.digest !== prepared.sourceReceipt.digest ||
           current.githubSource?.digest !== prepared.githubSource.digest
-        )
+        ) {
           throw new Error("This app build already owns a different GitHub source binding.");
+        }
         return current;
       }
       return {
@@ -87,8 +92,9 @@ export default defineTool({
           workflowWorkspace(current)?.workspaceDigest !== prepared.workspace.workspaceDigest ||
           current.sourceReceipt.digest !== prepared.sourceReceipt.digest ||
           current.githubSource?.digest !== prepared.githubSource.digest
-        )
+        ) {
           throw new Error("This app build already owns a different GitHub source binding.");
+        }
         return current;
       }
       return {

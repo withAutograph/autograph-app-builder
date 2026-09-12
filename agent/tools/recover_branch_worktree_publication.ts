@@ -22,20 +22,23 @@ export default defineTool({
   }),
   approval: always(),
   async execute({ publication, expectedJournalDigest }, ctx) {
-    if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
+    if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
       throw new Error("Branch-worktree publication recovery is disabled on this host.");
+    }
     const workflow = appBuilderWorkflowState.get();
     if (
       workflow.phase !== "branch_publication_pending" &&
       workflow.phase !== "branch_publication_failed"
-    )
+    ) {
       throw new Error("Branch-worktree recovery requires a pending or failed durable intent.");
+    }
     const expectedProposal =
       workflow.phase === "branch_publication_pending"
         ? workflow.branchPublicationProposal
         : proposalFromBranchJournal(workflow.branchPublicationReceipt);
-    if (!exactBranchWorktreeProposalMatch(publication, expectedProposal))
+    if (!exactBranchWorktreeProposalMatch(publication, expectedProposal)) {
       throw new Error("The recovery proposal changed after its durable intent.");
+    }
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await recoverBranchWorktreePublication({
       proposal: expectedProposal,
@@ -55,8 +58,9 @@ export default defineTool({
         if (
           current.phase !== "branch_publication_pending" &&
           current.phase !== "branch_publication_failed"
-        )
+        ) {
           throw new Error("The branch publication workflow changed before recovery recording.");
+        }
         return result.status === "succeeded"
           ? {
               ...current,

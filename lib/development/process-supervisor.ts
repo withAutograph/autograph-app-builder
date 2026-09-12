@@ -36,7 +36,9 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
 }
 
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
-  if (signal.aborted) return Promise.resolve({ kind: "stop" as const, code: exitCode() });
+  if (signal.aborted) {
+    return Promise.resolve({ kind: "stop" as const, code: exitCode() });
+  }
   return new Promise<{ kind: "stop"; code: number }>((resolve) => {
     signal.addEventListener("abort", () => resolve({ kind: "stop", code: exitCode() }), {
       once: true,
@@ -45,8 +47,12 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
 }
 
 export function developmentChildExit(child: ChildProcess) {
-  if (child.exitCode !== null) return Promise.resolve(child.exitCode);
-  if (child.signalCode !== null) return Promise.resolve(1);
+  if (child.exitCode !== null) {
+    return Promise.resolve(child.exitCode);
+  }
+  if (child.signalCode !== null) {
+    return Promise.resolve(1);
+  }
   return new Promise<number>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
@@ -64,7 +70,9 @@ export async function stopDevelopmentChild(
   // The wrapper can exit before Eve's local server finishes its shutdown
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
-  if (childExited && !options.processGroup) return;
+  if (childExited && !options.processGroup) {
+    return;
+  }
   const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1100 : 5000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
@@ -75,7 +83,9 @@ export async function stopDevelopmentChild(
     try {
       process.kill(-child.pid, value);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+        throw error;
+      }
     }
   };
   if (options.processGroup && child.pid !== undefined && process.platform !== "win32") {
@@ -83,8 +93,11 @@ export async function stopDevelopmentChild(
     // to Eve. Signalling the whole group here would also hit Eve directly,
     // making the wrapper's forward a second signal that bypasses Eve's orderly
     // shutdown and can orphan its separately detached local server.
-    if (childExited) signalProcessGroup("SIGTERM");
-    else child.kill("SIGTERM");
+    if (childExited) {
+      signalProcessGroup("SIGTERM");
+    } else {
+      child.kill("SIGTERM");
+    }
     // `eve dev` uses a separately detached local-server child. Its CLI sends
     // that child an IPC shutdown request and has a 900ms shutdown backstop.
     // Do not cut that handshake short: a premature group kill leaves the
@@ -95,11 +108,15 @@ export async function stopDevelopmentChild(
       setTimeout(() => resolve(), gracefulTimeoutMs);
     });
     signalProcessGroup("SIGKILL");
-    if (!childExited) await exited;
+    if (!childExited) {
+      await exited;
+    }
     return;
   }
   child.kill("SIGTERM");
-  if (childExited) return;
+  if (childExited) {
+    return;
+  }
   const graceful = await Promise.race([
     exited.then(() => true),
     new Promise<false>((resolve) => {
@@ -129,7 +146,9 @@ export async function waitForDevelopmentPortRelease(
       socket.once("connect", () => finish(true));
       socket.once("error", () => finish(false));
     });
-    if (!occupied) return;
+    if (!occupied) {
+      return;
+    }
     await new Promise((resolve) => {
       setTimeout(resolve, pollMs);
     });

@@ -316,7 +316,9 @@ class Adapter implements GitHubPublicationAdapter {
   }
 
   async inspectFreshRepositoryOutcome() {
-    if (this.throwFreshReadBack) throw new Error("read-back-failed");
+    if (this.throwFreshReadBack) {
+      throw new Error("read-back-failed");
+    }
     return this.freshOutcome;
   }
 
@@ -326,14 +328,19 @@ class Adapter implements GitHubPublicationAdapter {
   ) {
     this.freshCalls += 1;
     this.freshContent = content;
-    if (this.throwFreshMutation) throw new Error("transport-failed");
-    if (this.freshAcknowledgement.status === "accepted")
+    if (this.throwFreshMutation) {
+      throw new Error("transport-failed");
+    }
+    if (this.freshAcknowledgement.status === "accepted") {
       this.freshOutcome = freshReadBack(proposal, this.identities.create);
+    }
     return this.freshAcknowledgement;
   }
 
   async inspectDraftPublication(proposal: DraftPullRequestProposal) {
-    if (this.throwDraftReadBack) throw new Error("read-back-failed");
+    if (this.throwDraftReadBack) {
+      throw new Error("read-back-failed");
+    }
     return this.draftOutcome ?? draftReadBack(proposal, this.publishRepo);
   }
 
@@ -343,9 +350,12 @@ class Adapter implements GitHubPublicationAdapter {
   ) {
     this.draftCalls += 1;
     this.draftContent = content;
-    if (this.throwDraftMutation) throw new Error("transport-failed");
-    if (this.draftAcknowledgement.status === "accepted")
+    if (this.throwDraftMutation) {
+      throw new Error("transport-failed");
+    }
+    if (this.draftAcknowledgement.status === "accepted") {
       this.draftOutcome = draftReadBack(proposal, this.publishRepo, "complete");
+    }
     return this.draftAcknowledgement;
   }
 }
@@ -487,7 +497,7 @@ describe("closed GitHub publication contract", () => {
         resolvedByCallId: "resolve-call",
       }),
     ).rejects.toThrow(/installation is not selected/u);
-    for (const ref of ["main", "refs/tags/v1", "refs/heads/../main", "refs/heads/x.lock"])
+    for (const ref of ["main", "refs/tags/v1", "refs/heads/../main", "refs/heads/x.lock"]) {
       await expect(
         resolveImmutableExistingSource({
           adapter,
@@ -499,6 +509,7 @@ describe("closed GitHub publication contract", () => {
           resolvedByCallId: "resolve-call",
         }),
       ).rejects.toThrow(/invalid/u);
+    }
   });
 
   it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
@@ -633,7 +644,9 @@ describe("closed GitHub publication contract", () => {
     sourceBytes.fill(0);
     const [change] = content.changes;
     expect(change?.kind).toBe("added");
-    if (change?.kind === "added") expect(change.after.bytes).toEqual(reviewedBytes);
+    if (change?.kind === "added") {
+      expect(change.after.bytes).toEqual(reviewedBytes);
+    }
     expect(() =>
       assertExactGitHubPublicationContent({
         proposal,
@@ -756,8 +769,11 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const store = new Store();
       const proposal = freshProposal(adapter);
-      if (failure === "read-back") adapter.throwFreshReadBack = true;
-      else store.rejectTerminal = true;
+      if (failure === "read-back") {
+        adapter.throwFreshReadBack = true;
+      } else {
+        store.rejectTerminal = true;
+      }
       await expect(
         createApprovedFreshRepository({
           adapter,

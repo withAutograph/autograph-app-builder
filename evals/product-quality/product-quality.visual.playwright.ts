@@ -45,8 +45,11 @@ test.afterAll(
   async () =>
     await new Promise<void>((resolve, reject) => {
       prototypeServer?.close((error) => {
-        if (error === undefined) resolve();
-        else reject(error);
+        if (error === undefined) {
+          resolve();
+        } else {
+          reject(error);
+        }
       });
     }),
 );

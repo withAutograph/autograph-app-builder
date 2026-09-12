@@ -34,13 +34,17 @@ export interface PasswordStrengthMeterProps {
 export function PasswordStrengthMeter({ password, className }: PasswordStrengthMeterProps) {
   const { emailAndPassword, localization } = useAuth();
 
-  if (!emailAndPassword?.strengthMeter) return null;
+  if (!emailAndPassword?.strengthMeter) {
+    return null;
+  }
 
   const { score, level } = evaluatePasswordStrength(password, {
     minLength: emailAndPassword.minPasswordLength,
   });
 
-  if (level === "empty") return null;
+  if (level === "empty") {
+    return null;
+  }
 
   const levelLabels: Record<FilledLevel, string> = {
     weak: localization.auth.passwordWeak,

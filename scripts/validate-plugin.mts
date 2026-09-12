@@ -5,10 +5,11 @@ const rootIndex = process.argv.indexOf("--root");
 const pluginRoot = resolve(rootIndex === -1 ? "." : process.argv[rootIndex + 1]);
 if (rootIndex === -1 || process.argv[rootIndex + 1]) {
   // The option is absent or has a value.
-} else
+} else {
   throw new Error(
     "Usage: pnpm validate:plugin [--root <plugin-directory>] [--artifact] [--release]",
   );
+}
 const result = await validateAgentPluginPackage({
   pluginRoot,
   repositoryRoot: resolve("."),

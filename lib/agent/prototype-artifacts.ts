@@ -31,8 +31,9 @@ export function parsePrototypeArtifactPath(path: string): {
     appId === undefined ||
     !validAppId(appId) ||
     !["app-spec.md", "decisions.md", "index.html"].includes(fileName ?? "")
-  )
+  ) {
     throw new Error("Prototype artifact path is not allowed.");
+  }
   return {
     appId,
     fileName: fileName as "app-spec.md" | "decisions.md" | "index.html",
@@ -57,26 +58,33 @@ export function recordPrototypeArtifactRevision(input: {
   reused: boolean;
 } {
   const { appId } = parsePrototypeArtifactPath(input.path);
-  if (expectedPrototypeArtifactMediaType(input.path) !== input.mediaType)
+  if (expectedPrototypeArtifactMediaType(input.path) !== input.mediaType) {
     throw new Error("Prototype artifact media type is not allowed for its path.");
-  if (input.content.length === 0 || Buffer.byteLength(input.content) > maximumArtifactBytes)
+  }
+  if (input.content.length === 0 || Buffer.byteLength(input.content) > maximumArtifactBytes) {
     throw new Error("Prototype artifact content size is not allowed.");
-  if (input.expectedAppId !== undefined && appId !== input.expectedAppId)
+  }
+  if (input.expectedAppId !== undefined && appId !== input.expectedAppId) {
     throw new Error("Prototype artifact app id does not match this workflow.");
-  if (input.artifacts.some(({ sessionId }) => sessionId !== input.sessionId))
+  }
+  if (input.artifacts.some(({ sessionId }) => sessionId !== input.sessionId)) {
     throw new Error("Prototype artifact state belongs to a different session.");
+  }
   const recordedAppIds = new Set(input.artifacts.map((artifact) => artifact.appId));
-  if (recordedAppIds.size > 1)
+  if (recordedAppIds.size > 1) {
     throw new Error("Prototype artifact state contains multiple app ids.");
+  }
   const recordedAppId = input.artifacts[0]?.appId;
-  if (recordedAppId !== undefined && recordedAppId !== appId)
+  if (recordedAppId !== undefined && recordedAppId !== appId) {
     throw new Error("This app build already owns a different prototype app.");
+  }
 
   const digest = sha256(input.content);
   const revision = sha256(JSON.stringify({ path: input.path, mediaType: input.mediaType, digest }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
-  if (prior?.revision === revision)
+  if (prior?.revision === revision) {
     return { artifact: prior, artifacts: input.artifacts, reused: true };
+  }
 
   const artifact: PrototypeArtifact = {
     appId,
@@ -114,10 +122,11 @@ export function exactPrototypeArtifact(
       (input.revision === undefined || candidate.revision === input.revision) &&
       candidate.sessionId === input.sessionId,
   );
-  if (artifact === undefined)
+  if (artifact === undefined) {
     throw new Error(
       "The prototype artifact digest or revision is stale or unavailable in this session.",
     );
+  }
   return artifact;
 }
 
@@ -149,8 +158,9 @@ export function completeBuildReadyPrototypeAppSpec(input: {
     !byPath.has(`${prefix}decisions.md`) ||
     appSpec.mediaType !== "text/markdown" ||
     !validateBuildReadyAppSpec(appSpec.content).valid
-  )
+  ) {
     return undefined;
+  }
   return appSpec;
 }
 
@@ -204,7 +214,9 @@ export function recordPrototypeArtifactBundle(input: {
   });
   if (appSpec === undefined) {
     const validation = validateBuildReadyAppSpec(appSpecMarkdown);
-    if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
+    if (!validation.valid) {
+      throw new Error(appSpecRepairDiagnostic(validation));
+    }
     throw new Error("The prototype bundle must contain a complete build-ready AppSpec.");
   }
   return { artifacts, appSpec, reused };

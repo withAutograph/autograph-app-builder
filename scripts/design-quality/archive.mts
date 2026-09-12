@@ -21,8 +21,9 @@ if (values.help) {
   console.log("mise run eval:design-archive -- --report-dir PATH --name stock-exceptions");
   process.exit(0);
 }
-if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name))
+if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name)) {
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
+}
 const input = resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(join(input, "report.json"), "utf-8"));
 const timestamp = new Date(report.createdAt).toISOString();
@@ -94,12 +95,15 @@ for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
 }
 lines.push("", "## Strengths", "");
-for (const strength of report.judge.strengths ?? []) lines.push(`- ${md(strength)}`);
+for (const strength of report.judge.strengths ?? []) {
+  lines.push(`- ${md(strength)}`);
+}
 lines.push("", "## Improvements", "");
-for (const finding of report.judge.findings ?? [])
+for (const finding of report.judge.findings ?? []) {
   lines.push(
     `- **${md(finding.severity)} — ${md(finding.image)}:** ${md(finding.explanation)} ${md(finding.improvement)}`,
   );
+}
 lines.push(
   "",
   "## Token evidence",
@@ -109,7 +113,7 @@ lines.push(
   "| Viewport | Category | Token references / assessed | Coverage |",
   "| --- | --- | --- | --- |",
 );
-for (const capture of report.captures)
+for (const capture of report.captures) {
   for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
     const s = summary as {
       counts: Record<string, number>;
@@ -121,8 +125,9 @@ for (const capture of report.captures)
       `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }
+}
 lines.push("", "## Latest-run screenshots", "");
-for (const capture of report.captures)
+for (const capture of report.captures) {
   lines.push(
     `### ${md(capture.name)} — ${md(capture.state)}`,
     "",
@@ -131,9 +136,14 @@ for (const capture of report.captures)
     `![${md(capture.name)} ${md(capture.state)}](${capture.path})`,
     "",
   );
+}
 lines.push("## Limitations", "");
-for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
-for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
+for (const limitation of report.judge.limitations ?? []) {
+  lines.push(`- ${md(limitation)}`);
+}
+for (const limitation of report.evaluationNotes ?? []) {
+  lines.push(`- ${md(limitation)}`);
+}
 await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
 const rows: {
   path: string;
@@ -142,13 +152,19 @@ const rows: {
   score: unknown;
 }[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
-  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) continue;
+  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) {
+    continue;
+  }
   for (const run of await readdir(join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {
-    if (!run.isDirectory()) continue;
+    if (!run.isDirectory()) {
+      continue;
+    }
     const saved = await readArchivedReport(join(archiveRoot, day.name, run.name));
-    if (saved === null) continue;
+    if (saved === null) {
+      continue;
+    }
     rows.push({
       path: `${day.name}/${run.name}`,
       name: saved.archive.name,

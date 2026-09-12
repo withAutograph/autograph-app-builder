@@ -174,7 +174,9 @@ describe("Vercel project provisioning", () => {
         created = true;
         return Response.json({ id: "prj_2" }, { status: 201 });
       }
-      if (path.endsWith("/apps-vendor-portal")) return Response.json({ id: "unrelated" });
+      if (path.endsWith("/apps-vendor-portal")) {
+        return Response.json({ id: "unrelated" });
+      }
       return created
         ? Response.json({
             id: "prj_2",

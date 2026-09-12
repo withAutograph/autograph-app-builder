@@ -22,7 +22,9 @@ async function collectBounded(
   const chunks: Uint8Array[] = [];
   for (;;) {
     const next = await reader.read();
-    if (next.done) break;
+    if (next.done) {
+      break;
+    }
     state.bytes += next.value.byteLength;
     observed();
     if (state.bytes > state.maximumBytes) {
@@ -149,11 +151,13 @@ export async function runBoundedSandboxCommand(
       wallTimeout.promise,
       noOutputTimeout.promise,
       new Promise<never>((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else
+        if (signal.aborted) {
+          reject(signal.reason);
+        } else {
           signal.addEventListener("abort", () => reject(signal.reason), {
             once: true,
           });
+        }
       }),
     ]);
     return {
@@ -168,9 +172,12 @@ export async function runBoundedSandboxCommand(
       ...(process === undefined ? [] : [Promise.resolve(process.kill())]),
     ];
     await settleWithin(Promise.allSettled(cleanup), killCleanupTimeoutMs);
-    if (error instanceof SandboxCommandLimitError) throw error;
-    if (controller.signal.reason instanceof SandboxCommandLimitError)
+    if (error instanceof SandboxCommandLimitError) {
+      throw error;
+    }
+    if (controller.signal.reason instanceof SandboxCommandLimitError) {
       throw controller.signal.reason;
+    }
     throw error;
   } finally {
     wallTimeout.clear();

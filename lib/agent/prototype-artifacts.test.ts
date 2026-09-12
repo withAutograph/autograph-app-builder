@@ -41,8 +41,9 @@ describe("prototype artifact receipts", () => {
       "prototype/expense-review/pages/index.html",
       "prototype/expense-review/../app-spec.md",
       "/prototype/expense-review/app-spec.md",
-    ])
+    ]) {
       expect(() => parsePrototypeArtifactPath(path)).toThrow("not allowed");
+    }
   });
 
   it("reads back only the exact session, path, and digest", () => {

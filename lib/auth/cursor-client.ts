@@ -49,7 +49,9 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .from(schema.oauthClient)
     .where(eq(schema.oauthClient.clientId, cursorClientId))
     .limit(1);
-  if (!client) return false;
+  if (!client) {
+    return false;
+  }
   const expected = cursorClientRegistration();
   for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
     const actual = client[key];
@@ -59,15 +61,20 @@ export async function isCursorClientReady(database: Reader, resource: string): P
         !Array.isArray(actual) ||
         actual.length !== value.length ||
         !value.every((entry) => actual.includes(entry))
-      )
+      ) {
         return false;
-    } else if (actual !== value) return false;
+      }
+    } else if (actual !== value) {
+      return false;
+    }
   }
   const bindings = await database
     .select()
     .from(schema.oauthClientResource)
     .where(eq(schema.oauthClientResource.clientId, cursorClientId));
-  if (bindings.length !== 1 || bindings[0].resourceId !== resource) return false;
+  if (bindings.length !== 1 || bindings[0].resourceId !== resource) {
+    return false;
+  }
   const [target] = await database
     .select()
     .from(schema.oauthResource)

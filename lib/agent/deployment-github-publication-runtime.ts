@@ -48,12 +48,16 @@ export function readDeploymentGitHubPublicationConfig(
 ): DeploymentGitHubPublicationConfig {
   rejectAmbientGitHubAuthority(environment);
   const rawEnabled = environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED;
-  if (rawEnabled === undefined) return { enabled: false };
+  if (rawEnabled === undefined) {
+    return { enabled: false };
+  }
   const enabled = enabledSchema.safeParse(rawEnabled);
   if (!enabled.success) {
     throw new Error("APP_BUILDER_GITHUB_PUBLICATION_ENABLED must be exactly 0 or 1.");
   }
-  if (enabled.data === "0") return { enabled: false };
+  if (enabled.data === "0") {
+    return { enabled: false };
+  }
   readHostedDeploymentEnvironment(environment);
   const forwarderSubject = readHostedForwarderSubject(environment);
   if (forwarderSubject === undefined) {

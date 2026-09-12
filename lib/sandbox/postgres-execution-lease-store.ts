@@ -156,7 +156,9 @@ export function createPostgresSandboxExecutionLeaseStore(
                 .set(values)
                 .where(tenantPredicate(principal, input.adapterSessionId))
                 .returning();
-        if (rows.length !== 1) throw new Error("Sandbox execution lease was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Sandbox execution lease was not durable.");
+        }
         return {
           disposition: "acquired",
           lease: parseSandboxExecutionLeaseRow(rows[0]),
@@ -209,7 +211,9 @@ export function createPostgresSandboxExecutionLeaseStore(
           .set(leaseValues(lease))
           .where(tenantPredicate(input.principal, input.adapterSessionId))
           .returning();
-        if (rows.length !== 1) throw new Error("Lease heartbeat was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Lease heartbeat was not durable.");
+        }
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -223,9 +227,12 @@ export function createPostgresSandboxExecutionLeaseStore(
           input.adapterSessionId,
           true,
         );
-        if (current === null || current.epoch !== input.epoch)
+        if (current === null || current.epoch !== input.epoch) {
           throw new Error("The sandbox execution lease epoch is stale.");
-        if (current.state !== "active") return current;
+        }
+        if (current.state !== "active") {
+          return current;
+        }
         const lease = sandboxExecutionLeaseSchema.parse({
           ...current,
           state: "released",
@@ -243,7 +250,9 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1) throw new Error("Lease release was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Lease release was not durable.");
+        }
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -257,14 +266,18 @@ export function createPostgresSandboxExecutionLeaseStore(
           input.adapterSessionId,
           true,
         );
-        if (current === null) return null;
+        if (current === null) {
+          return null;
+        }
         if (
           current.providerSandboxId !== input.providerSandboxId ||
           current.policyDigest !== input.policyDigest
         ) {
           throw new Error("The sandbox execution lease authority is stale.");
         }
-        if (current.state !== "active") return current;
+        if (current.state !== "active") {
+          return current;
+        }
         const lease = sandboxExecutionLeaseSchema.parse({
           ...current,
           state: "released",
@@ -282,7 +295,9 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1) throw new Error("Lease release was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Lease release was not durable.");
+        }
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },
@@ -321,7 +336,9 @@ export function createPostgresSandboxExecutionLeaseStore(
               ),
             )
             .returning();
-          if (updated.length === 1) claimed.push(parseSandboxExecutionLeaseRow(updated[0]));
+          if (updated.length === 1) {
+            claimed.push(parseSandboxExecutionLeaseRow(updated[0]));
+          }
         }
         return claimed;
       });
@@ -336,9 +353,16 @@ export function createPostgresSandboxExecutionLeaseStore(
           input.lease.adapterSessionId,
           true,
         );
-        if (current === null || current.state !== "orphaned" || current.epoch !== input.lease.epoch)
+        if (
+          current === null ||
+          current.state !== "orphaned" ||
+          current.epoch !== input.lease.epoch
+        ) {
           return null;
-        if (input.providerOutcome === "stop-failed") return current;
+        }
+        if (input.providerOutcome === "stop-failed") {
+          return current;
+        }
         const lease = sandboxExecutionLeaseSchema.parse({
           ...current,
           state: "released",
@@ -356,7 +380,9 @@ export function createPostgresSandboxExecutionLeaseStore(
             ),
           )
           .returning();
-        if (rows.length !== 1) throw new Error("Orphan recovery settlement was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Orphan recovery settlement was not durable.");
+        }
         return parseSandboxExecutionLeaseRow(rows[0]);
       });
     },

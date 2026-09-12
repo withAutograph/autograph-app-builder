@@ -96,7 +96,9 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
         })
         .onConflictDoNothing()
         .returning();
-      if (inserted[0]) return { disposition: "created", record: rowRecord(inserted[0]) };
+      if (inserted[0]) {
+        return { disposition: "created", record: rowRecord(inserted[0]) };
+      }
       const existing = await database
         .select()
         .from(builderHandoffs)
@@ -107,7 +109,9 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .limit(1);
-      if (!existing[0]) throw new Error("builder-handoff-not-durable");
+      if (!existing[0]) {
+        throw new Error("builder-handoff-not-durable");
+      }
       return { disposition: "existing", record: rowRecord(existing[0]) };
     },
     read,
@@ -130,7 +134,9 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .returning();
-      if (updated[0]) return { disposition: "renewed", record: rowRecord(updated[0]) };
+      if (updated[0]) {
+        return { disposition: "renewed", record: rowRecord(updated[0]) };
+      }
       // A concurrent renewal or bind won the CAS. Return its current reference.
       const existing = await read(input);
       return existing?.requestDigest === input.requestDigest &&
@@ -154,7 +160,9 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .returning();
-      if (updated[0]) return rowRecord(updated[0]);
+      if (updated[0]) {
+        return rowRecord(updated[0]);
+      }
       const existing = await read({
         authority,
         handoffId: input.handoffId,

@@ -11,7 +11,9 @@ function makeQueryClient() {
 let browserQueryClient: QueryClient | undefined;
 
 export function getQueryClient() {
-  if (environmentManager.isServer()) return makeQueryClient();
+  if (environmentManager.isServer()) {
+    return makeQueryClient();
+  }
   browserQueryClient ??= makeQueryClient();
   return browserQueryClient;
 }

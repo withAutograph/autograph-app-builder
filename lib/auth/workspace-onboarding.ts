@@ -18,13 +18,16 @@ export async function resolveWorkspaceOnboardingState<T>(
     return value === undefined ? { status: "anonymous" } : { status: "ready", value };
   } catch (error) {
     if (error instanceof OrganizationProvisioningError) {
-      if (error.reason === "workspace-ambiguous") return { status: "workspace-ambiguous" };
+      if (error.reason === "workspace-ambiguous") {
+        return { status: "workspace-ambiguous" };
+      }
       if (
         error.reason === "access-revoked" ||
         error.reason === "verified-identity-required" ||
         error.reason === "signup-disabled"
-      )
+      ) {
         return { status: "access-denied" };
+      }
     }
     return { status: "workspace-setup-retry" };
   }

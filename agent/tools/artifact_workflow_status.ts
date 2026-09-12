@@ -40,14 +40,16 @@ export default defineTool({
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase === "empty")
+    if (state.phase === "empty") {
       return {
         version: state.version,
         phase: state.phase,
         sessionId: ctx.session.id,
       };
-    if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
+    }
+    if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id)) {
       throw new Error("Prototype artifact state belongs to a different session.");
+    }
     return {
       version: state.version,
       sessionId: ctx.session.id,

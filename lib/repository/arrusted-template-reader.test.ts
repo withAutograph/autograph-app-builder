@@ -31,7 +31,7 @@ function readerFetch(input?: {
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     calls.push({ url, init });
-    if (url.endsWith("/app/installations/456/access_tokens"))
+    if (url.endsWith("/app/installations/456/access_tokens")) {
       return json(
         {
           token: "ghs_reader_token_that_is_only_for_this_acquisition",
@@ -48,7 +48,8 @@ function readerFetch(input?: {
         },
         input?.status ?? 201,
       );
-    if (url.includes("/installation/repositories?"))
+    }
+    if (url.includes("/installation/repositories?")) {
       return json({
         total_count: input?.totalCount ?? 1,
         repositories: [
@@ -59,6 +60,7 @@ function readerFetch(input?: {
           },
         ],
       });
+    }
     throw new Error(`Unexpected GitHub request: ${url}`);
   };
   return { calls, implementation };

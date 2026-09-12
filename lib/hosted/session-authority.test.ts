@@ -42,8 +42,9 @@ describe("exact forwarded session authority", () => {
         initiator: prepared,
       },
       { current: prepared, initiator: null },
-    ])
+    ]) {
       expect(() => sourceHandoffIdForSessionAuth(candidate)).toThrow(HostedSessionAuthorityError);
+    }
   });
   it("returns one exact current and initiating tenant authority", () => {
     expect(exactForwardedSessionAuthority({ current: auth(), initiator: auth() })).toEqual({

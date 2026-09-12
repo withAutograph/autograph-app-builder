@@ -39,7 +39,9 @@ describe("sandbox execution lease", () => {
     expect([first.disposition, raced.disposition]).toEqual(["acquired", "acquired"]);
     const replay = await acquire(store, "user_1", "session_1");
     expect(replay.disposition).toBe("existing");
-    if (replay.disposition === "rejected") throw new Error("unexpected");
+    if (replay.disposition === "rejected") {
+      throw new Error("unexpected");
+    }
     expect(replay.lease.epoch).toBe(1);
     expect(replay.lease.policyDigest).toBe(sandboxExecutionPolicyDigest());
   });
@@ -47,7 +49,9 @@ describe("sandbox execution lease", () => {
   it("releases idempotently and increments the epoch on reacquisition", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     const acquired = await acquire(store, "user_1", "session_1");
-    if (acquired.disposition === "rejected") throw new Error("unexpected");
+    if (acquired.disposition === "rejected") {
+      throw new Error("unexpected");
+    }
     const released = await store.release({
       principal: acquired.lease.principal,
       adapterSessionId: acquired.lease.adapterSessionId,
@@ -66,7 +70,9 @@ describe("sandbox execution lease", () => {
       }),
     ).toEqual(released);
     const next = await acquire(store, "user_1", "session_1", 3000);
-    if (next.disposition === "rejected") throw new Error("unexpected");
+    if (next.disposition === "rejected") {
+      throw new Error("unexpected");
+    }
     expect(next.lease.epoch).toBe(2);
   });
 
@@ -122,7 +128,9 @@ describe("sandbox execution lease", () => {
     await acquire(store, "user_1", "session_1", 1);
     await acquire(store, "user_2", "session_2", 1);
     const stopSandbox = vi.fn(async (providerSandboxId: string) => {
-      if (providerSandboxId === "sandbox_session_1") throw new Error("provider unavailable");
+      if (providerSandboxId === "sandbox_session_1") {
+        throw new Error("provider unavailable");
+      }
     });
     const result = await reconcileExpiredSandboxLeases({
       store,
@@ -146,7 +154,9 @@ describe("sandbox execution lease", () => {
   it("makes recovery and reacquisition races retry-safe", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     const first = await acquire(store, "user_1", "session_1", 1);
-    if (first.disposition === "rejected") throw new Error("unexpected");
+    if (first.disposition === "rejected") {
+      throw new Error("unexpected");
+    }
     const [claim] = await store.claimExpired({
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
       limit: 1,
@@ -169,7 +179,9 @@ describe("sandbox execution lease", () => {
       "session_1",
       4 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     );
-    if (reacquired.disposition === "rejected") throw new Error("unexpected");
+    if (reacquired.disposition === "rejected") {
+      throw new Error("unexpected");
+    }
     expect(reacquired.lease.epoch).toBe(2);
     await expect(
       store.settleRecovery({

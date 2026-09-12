@@ -127,7 +127,9 @@ export async function updateBuilderProvisionJournal(input: {
       authority: input.authority,
       requestId: input.requestId,
     });
-    if (!current) throw new Error("provision-journal-missing");
+    if (!current) {
+      throw new Error("provision-journal-missing");
+    }
     const next = builderProvisionJournalRecordSchema.parse(
       input.update(structuredClone(current.record)),
     );
@@ -142,7 +144,9 @@ export async function updateBuilderProvisionJournal(input: {
       record: next,
       now: updatedAt,
     });
-    if (saved) return saved;
+    if (saved) {
+      return saved;
+    }
   }
   throw new Error("provision-journal-contention");
 }

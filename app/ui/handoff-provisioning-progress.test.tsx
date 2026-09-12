@@ -63,12 +63,16 @@ class TestEventSource {
 
   emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
-    for (const listener of this.listeners.get(name) ?? []) listener(event);
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener(event);
+    }
   }
 
   malformed(name: "snapshot" | "end") {
     const event = new MessageEvent("message", { data: "not-json" });
-    for (const listener of this.listeners.get(name) ?? []) listener(event);
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener(event);
+    }
   }
 }
 
@@ -88,7 +92,9 @@ async function render(initial = projection(1)) {
 }
 
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   container?.remove();
   root = undefined;
   container = undefined;

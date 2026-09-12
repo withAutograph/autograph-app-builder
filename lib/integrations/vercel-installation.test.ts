@@ -66,7 +66,9 @@ describe("Vercel integration security", () => {
         states: {
           async create() {},
           async consume() {
-            if (consumed) return undefined;
+            if (consumed) {
+              return undefined;
+            }
             consumed = true;
             return recoveredReturnState;
           },
@@ -94,8 +96,9 @@ describe("Vercel integration security", () => {
         nonce: () => "n".repeat(43),
         now: () => 1_800_000_000_000,
         fetch: (async (url) => {
-          if (String(url).endsWith("/v2/oauth/access_token"))
+          if (String(url).endsWith("/v2/oauth/access_token")) {
             return Response.json({ access_token: "provider-token-sentinel" });
+          }
           return Response.json({
             id: "team_1",
             name: "Autograph",

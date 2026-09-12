@@ -9,7 +9,7 @@ export function WorkspaceSetupStatus({
   callbackUrl?: string;
   loadingTitle?: string;
 }) {
-  if (status === "error")
+  if (status === "error") {
     return (
       <main className={styles.page}>
         <section className={styles.statusCard}>
@@ -24,6 +24,7 @@ export function WorkspaceSetupStatus({
         </section>
       </main>
     );
+  }
 
   return (
     <main className={styles.page}>

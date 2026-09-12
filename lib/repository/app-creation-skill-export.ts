@@ -49,7 +49,9 @@ async function absent(path: string): Promise<boolean> {
     await lstat(path);
     return false;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
     throw error;
   }
 }
@@ -61,25 +63,31 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
       (left, right) => left.name.localeCompare(right.name),
     )) {
       const path = join(directory, entry.name);
-      if (entry.isSymbolicLink())
+      if (entry.isSymbolicLink()) {
         throw new Error("App-creation skill exports do not accept symbolic links.");
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) {
+      }
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.isFile()) {
         const mode = (await lstat(path)).mode & 0o777;
-        if (mode !== 0o644 && mode !== 0o755)
+        if (mode !== 0o644 && mode !== 0o755) {
           throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
+        }
         files.push({
           path: relative(sourceRoot, path).split("\\").join("/"),
           mode: mode === 0o755 ? "100755" : "100644",
           sha256: sha256(await readFile(path)),
         });
-      } else throw new Error("App-creation skill exports accept only files and directories.");
+      } else {
+        throw new Error("App-creation skill exports accept only files and directories.");
+      }
     }
   }
   for (const root of APP_CREATION_SKILL_ROOTS) {
     const directory = join(sourceRoot, root);
-    if (!(await lstat(directory)).isDirectory())
+    if (!(await lstat(directory)).isDirectory()) {
       throw new Error(`App-creation skill root is not a directory: ${root}`);
+    }
     await visit(directory);
   }
   return files.toSorted((left, right) => left.path.localeCompare(right.path));
@@ -91,8 +99,9 @@ export async function exportAppCreationSkills(options: {
 }): Promise<AppCreationSkillExportManifest> {
   const repositoryRoot = await realpath(resolve(options.repositoryRoot));
   const outputRoot = resolve(options.outputRoot);
-  if (!(await absent(outputRoot)))
+  if (!(await absent(outputRoot))) {
     throw new Error("App-creation skill export destination must be absent.");
+  }
   const parent = await realpath(resolve(outputRoot, ".."));
   const canonicalOutput = join(parent, basename(outputRoot));
   const sourceRoot = join(repositoryRoot, "agent", "skills");

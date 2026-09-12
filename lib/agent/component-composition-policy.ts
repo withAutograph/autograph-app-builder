@@ -15,11 +15,12 @@ function sortedUnique<T extends z.ZodType<string>>(item: T) {
     if (
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
-    )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Values must be sorted and contain no duplicates.",
       });
+    }
   });
 }
 
@@ -94,23 +95,26 @@ export function bindArrustedComponentCompositionPolicy(input: {
   sourceSha: string;
   sourceTree: string;
 }): CompositionPolicyResolution {
-  if (!gitObject.safeParse(input.sourceSha).success)
+  if (!gitObject.safeParse(input.sourceSha).success) {
     return {
       status: "unavailable",
       reasons: ["The selected source SHA is invalid."],
     };
-  if (!gitObject.safeParse(input.sourceTree).success)
+  }
+  if (!gitObject.safeParse(input.sourceTree).success) {
     return {
       status: "unavailable",
       reasons: ["The selected source tree is invalid."],
     };
-  if (input.content === null)
+  }
+  if (input.content === null) {
     return {
       status: "unavailable",
       reasons: [
         `Missing ${ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH} in the selected Arrusted source.`,
       ],
     };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(input.content) as unknown;
@@ -121,11 +125,12 @@ export function bindArrustedComponentCompositionPolicy(input: {
     };
   }
   const policy = arrustedComponentCompositionPolicySchema.safeParse(parsed);
-  if (!policy.success)
+  if (!policy.success) {
     return {
       status: "unavailable",
       reasons: ["The Arrusted component-composition manifest is invalid."],
     };
+  }
   return {
     status: "available",
     binding: {
@@ -142,7 +147,9 @@ function importsFrom(content: string): string[] {
   const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
   for (const match of content.matchAll(pattern)) {
     const [, specifier] = match;
-    if (specifier !== undefined) imports.add(specifier);
+    if (specifier !== undefined) {
+      imports.add(specifier);
+    }
   }
   return [...imports].toSorted();
 }
@@ -169,16 +176,19 @@ export function auditAppliedAppComposition(input: {
 
   for (const file of input.files) {
     const relative = appRelativePath(input.appId, file.path);
-    if (relative === undefined) continue;
+    if (relative === undefined) {
+      continue;
+    }
     const isStyle = /\.(?:css|scss|sass|less)$/u.test(relative);
     const isComponentSource = /\.(?:[cm]?[jt]sx?)$/u.test(relative);
 
-    if (/(?:^|\/)components(?:\/|$)/u.test(relative))
+    if (/(?:^|\/)components(?:\/|$)/u.test(relative)) {
       violations.push({
         code: "local-component-file",
         path: file.path,
         message: "Generated apps may not add local visual component files.",
       });
+    }
 
     if (
       isComponentSource &&
@@ -186,41 +196,46 @@ export function auditAppliedAppComposition(input: {
       /(?:export\s+(?:default\s+)?function|function\s+[A-Z]|const\s+[A-Z][A-Za-z0-9]*\s*=\s*\()/u.test(
         file.content,
       )
-    )
+    ) {
       violations.push({
         code: "local-component-definition",
         path: file.path,
         message: "Generated apps may only define visual route glue named by the Arrusted policy.",
       });
+    }
 
-    if (isStyle && !allowedStyles.has(relative))
+    if (isStyle && !allowedStyles.has(relative)) {
       violations.push({
         code: "unapproved-style-file",
         path: file.path,
         message: "Generated apps may not add component-local style files.",
       });
+    }
 
-    if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
+    if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content)) {
       violations.push({
         code: "replacement-design-token",
         path: file.path,
         message: "Generated apps may not define replacement design tokens.",
       });
+    }
 
-    if (/style\s*=\s*\{\s*\{/u.test(file.content))
+    if (/style\s*=\s*\{\s*\{/u.test(file.content)) {
       violations.push({
         code: "inline-visual-style",
         path: file.path,
         message: "Generated apps may not add inline visual styling.",
       });
+    }
 
     for (const specifier of importsFrom(file.content)) {
-      if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier))
+      if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier)) {
         violations.push({
           code: "unapproved-public-import",
           path: file.path,
           message: `The import ${specifier} is not declared by the selected Arrusted policy.`,
         });
+      }
     }
   }
 

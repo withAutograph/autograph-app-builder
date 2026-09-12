@@ -14,7 +14,9 @@ export default defineTool({
   }),
   async execute({ path, digest }, ctx) {
     const current = appBuilderWorkflowState.get();
-    if (current.phase === "empty") throw new Error("No prototype artifact is available.");
+    if (current.phase === "empty") {
+      throw new Error("No prototype artifact is available.");
+    }
     const artifact = exactPrototypeArtifact(current.artifacts, {
       path,
       digest,

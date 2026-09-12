@@ -74,7 +74,9 @@ describe("build-ready AppSpec validation", () => {
   it("returns exact repair instructions for missing sections and handoff", () => {
     const result = validateBuildReadyAppSpec("## Status and prototype\n\nA first prototype.");
     expect(result.valid).toBe(false);
-    if (result.valid) throw new Error("expected invalid AppSpec");
+    if (result.valid) {
+      throw new Error("expected invalid AppSpec");
+    }
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -119,7 +121,9 @@ describe("build-ready AppSpec validation", () => {
     });
     const result = validateBuildReadyAppSpec(extra);
     expect(result.valid).toBe(false);
-    if (result.valid) throw new Error("expected invalid AppSpec");
+    if (result.valid) {
+      throw new Error("expected invalid AppSpec");
+    }
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

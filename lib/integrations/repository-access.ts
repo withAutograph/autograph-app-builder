@@ -46,7 +46,9 @@ export type RepositoryReference = z.output<typeof repositoryReferenceSchema>;
 
 export function parseRepositoryReference(value: string): RepositoryReference {
   const segments = value.trim().split("/");
-  if (segments.length !== 2) throw new Error("repository-reference-invalid");
+  if (segments.length !== 2) {
+    throw new Error("repository-reference-invalid");
+  }
   return repositoryReferenceSchema.parse({
     owner: segments[0],
     name: segments[1],
@@ -240,7 +242,9 @@ export async function classifyGitHubRepositoryAccess(input: {
         continue;
       }
       const candidate = await provider.inspectRepositoryByName(repository);
-      if (candidate === undefined) continue;
+      if (candidate === undefined) {
+        continue;
+      }
       const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
       if (
         snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||

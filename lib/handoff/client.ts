@@ -11,8 +11,9 @@ export function buildAppHandoffPrompt(
 ) {
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(handoffId)
-  )
+  ) {
     throw new Error("handoff-id-invalid");
+  }
   const setup =
     destination === "codex"
       ? `Use the official Autograph App Builder plugin to continue this app.
@@ -44,7 +45,9 @@ export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: s
 }
 
 export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
-  if (!ready) return undefined;
+  if (!ready) {
+    return undefined;
+  }
   const url = new URL(mcpUrl);
   if (
     (url.protocol !== "https:" &&
@@ -54,8 +57,9 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
     url.password ||
     url.search ||
     url.hash
-  )
+  ) {
     throw new Error("mcp-url-invalid");
+  }
   const config = JSON.stringify({
     url: url.href,
     auth: { CLIENT_ID: "autograph-cursor-desktop" },

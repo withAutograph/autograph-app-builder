@@ -24,8 +24,9 @@ function databaseFixture(rows: unknown[]) {
     returning: vi.fn(async () => rows),
     limit: vi.fn(async () => rows),
   };
-  for (const key of ["select", "update", "from", "set", "where"] as const)
+  for (const key of ["select", "update", "from", "set", "where"] as const) {
     query[key].mockReturnValue(query);
+  }
   return {
     query,
     database: query as unknown as Parameters<typeof createPostgresVercelAuthorizationStateStore>[0],

@@ -51,12 +51,16 @@ async function render(props: Parameters<typeof Harness>[0], strict = false) {
       ),
     ),
   );
-  if (!autosave) throw new Error("autosave-harness-not-ready");
+  if (!autosave) {
+    throw new Error("autosave-harness-not-ready");
+  }
   return autosave;
 }
 
 afterEach(async () => {
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => root?.unmount());
+  }
   container?.remove();
   root = undefined;
   container = undefined;
@@ -80,8 +84,9 @@ describe("useBuilderDraftAutosave", () => {
       outbox,
       save,
       onAcknowledged: ({ revision }) => {
-        if (revision === 1)
+        if (revision === 1) {
           queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
+        }
       },
     });
     await act(async () => {
@@ -134,7 +139,9 @@ describe("useBuilderDraftAutosave", () => {
       clearIfMutationId: vi.fn(async () => true),
     };
     const save = vi.fn(async ({ mutationId, snapshot }) => {
-      if (snapshot.brief === "older") await firstSave;
+      if (snapshot.brief === "older") {
+        await firstSave;
+      }
       return {
         mutationId,
         revision: snapshot.brief === "older" ? 1 : 2,
@@ -174,12 +181,16 @@ describe("useBuilderDraftAutosave", () => {
       }),
       clear: vi.fn(),
       clearIfMutationId: vi.fn(async (mutationId) => {
-        if (entry?.mutationId !== mutationId) return false;
+        if (entry?.mutationId !== mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),
       clearIfAcknowledged: vi.fn(async (acknowledgement) => {
-        if (entry?.mutationId !== acknowledgement.mutationId) return false;
+        if (entry?.mutationId !== acknowledgement.mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),
@@ -189,7 +200,9 @@ describe("useBuilderDraftAutosave", () => {
       releaseFirst = resolve;
     });
     const save = vi.fn(async ({ mutationId, snapshot }) => {
-      if (snapshot.brief === "first") await first;
+      if (snapshot.brief === "first") {
+        await first;
+      }
       return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
     });
     const value = await render({ outbox, save });
@@ -215,7 +228,9 @@ describe("useBuilderDraftAutosave", () => {
       }),
       clear: vi.fn(),
       clearIfMutationId: vi.fn(async (mutationId) => {
-        if (entry?.mutationId !== mutationId) return false;
+        if (entry?.mutationId !== mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),

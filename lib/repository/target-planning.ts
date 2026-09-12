@@ -105,12 +105,13 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       }),
     })
     .superRefine((proposal, context) => {
-      if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest)
+      if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["iteration", "digest"],
           message: "The iteration digest does not bind its changes.",
         });
+      }
     });
 
 export const targetIterationProposalSchema =
@@ -122,7 +123,9 @@ export const targetProposalSchema = z.union([
 ]);
 
 function targetProposalSchemaForTopology(topologyOwner: string) {
-  if (topologyOwner === "microfrontends.json") return targetProposalSchema;
+  if (topologyOwner === "microfrontends.json") {
+    return targetProposalSchema;
+  }
   return z.union([
     targetCreationProposalSchemaForTopology(topologyOwner),
     targetIterationProposalSchemaForTopology(topologyOwner),
@@ -164,8 +167,9 @@ export type TargetCommandExecutor = (input: {
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function planningMarker(marker: string, phase: "start" | "finish") {
-  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
     console.info(`[app-builder planning] ${marker} ${phase}`);
+  }
 }
 
 function parseOutput<T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T {
@@ -186,7 +190,9 @@ function parseOutput<T>(result: TargetCommandResult, schema: z.ZodType<T>, label
     throw new Error(`${label} returned invalid JSON.`);
   }
   const validated = schema.safeParse(parsed);
-  if (!validated.success) throw new Error(`${label} returned an invalid shape.`);
+  if (!validated.success) {
+    throw new Error(`${label} returned an invalid shape.`);
+  }
   return validated.data;
 }
 
@@ -194,37 +200,41 @@ export function targetExecutionBinding(
   cache: ObservedDependencyCache | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  if (hasTestCapability("simulated-target", environment))
+  if (hasTestCapability("simulated-target", environment)) {
     return {
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
       dependencyCacheDigest: cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
     } as const;
+  }
   const imageDigest = configuredToolchainImage(environment);
-  if (cache === undefined)
+  if (cache === undefined) {
     return {
       imageDigest: imageDigest ?? "vercel-sandbox",
       dependencyCacheDigest: "checkout",
       fixture: false,
     } as const;
+  }
   if (imageDigest === undefined) {
     const backend = sandboxBackendPlan({
       environment,
       fixture: false,
       localImageConfigured: false,
     });
-    if (backend.kind === "vercel-development" && backend.blockers.length === 0)
+    if (backend.kind === "vercel-development" && backend.blockers.length === 0) {
       return {
         imageDigest: developmentExecutionArtifactDigest(environment),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
       } as const;
-    if (isHostedVercelSandboxBackend(backend.kind) && backend.blockers.length === 0)
+    }
+    if (isHostedVercelSandboxBackend(backend.kind) && backend.blockers.length === 0) {
       return {
         imageDigest: hostedExecutionArtifactDigest(),
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
       } as const;
+    }
     throw new Error(
       "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
@@ -317,8 +327,9 @@ export function sandboxTargetCommandExecutor(sandbox: SandboxSession): TargetCom
       !/(?:cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing)/iu.test(
         `${result.stdout}\n${result.stderr}`,
       )
-    )
+    ) {
       return result;
+    }
 
     await sandbox.setNetworkPolicy("allow-all");
     const setup = await sandbox.run({
@@ -326,7 +337,9 @@ export function sandboxTargetCommandExecutor(sandbox: SandboxSession): TargetCom
       workingDirectory: planningRoot,
       abortSignal: AbortSignal.timeout(300_000),
     });
-    if (setup.exitCode !== 0) return setup;
+    if (setup.exitCode !== 0) {
+      return setup;
+    }
     return sandbox.run({ ...request, abortSignal });
   };
 }
@@ -343,8 +356,9 @@ export function fixtureTargetCommandExecutor(): TargetCommandExecutor {
       contractPath: `apps/${requestedAppId}/app.contract.json`,
       kernelSchemaPath: `apps/${requestedAppId}/schema/${requestedAppId}-schema.json`,
     };
-    if (command === "identity")
+    if (command === "identity") {
       return { exitCode: 0, stdout: JSON.stringify(identity), stderr: "" };
+    }
     const proposal = {
       contract: {
         version: 1,
@@ -412,8 +426,9 @@ export async function executeTargetIdentityAndPlanning(input: {
     contractPath: `apps/${input.appId}/app.contract.json`,
     kernelSchemaPath: `apps/${input.appId}/schema/${input.appId}-schema.json`,
   };
-  if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
+  if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity)) {
     throw new Error("Target identity did not match the accepted AppSpec.");
+  }
   // Discover the actual prepared checkout. Authored changes may describe a
   // new app, and existing apps do not need a package manifest to be iterable.
   const existingApplication =
@@ -422,8 +437,9 @@ export async function executeTargetIdentityAndPlanning(input: {
         command: `test -d /workspace/repository/${identity.workspacePath}`,
       })
     ).exitCode === 0;
-  if (existingApplication && input.existingAppChanges === undefined)
+  if (existingApplication && input.existingAppChanges === undefined) {
     throw new ExistingApplicationChangesRequiredError();
+  }
   if (existingApplication && input.existingAppChanges !== undefined) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
@@ -433,8 +449,9 @@ export async function executeTargetIdentityAndPlanning(input: {
         !requested.path.startsWith(`${identity.workspacePath}/`) ||
         requested.path === identity.contractPath ||
         seen.has(requested.path)
-      )
+      ) {
         throw new Error("An existing-app change path is not allowed.");
+      }
       seen.add(requested.path);
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
@@ -459,7 +476,9 @@ export async function executeTargetIdentityAndPlanning(input: {
         },
       });
     }
-    if (changes.length === 0) throw new Error("At least one existing-app change is required.");
+    if (changes.length === 0) {
+      throw new Error("At least one existing-app change is required.");
+    }
     const contract = {
       version: 1 as const,
       appId: input.appId,
@@ -521,8 +540,9 @@ export async function executeTargetIdentityAndPlanning(input: {
     proposal.plan.source.packageName !== identity.packageName ||
     proposal.plan.topology.projectName !== identity.projectName ||
     proposal.plan.topology.packageName !== identity.packageName
-  )
+  ) {
     throw new Error("Target proposal did not match the resolved identity.");
+  }
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

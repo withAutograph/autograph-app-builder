@@ -15,7 +15,9 @@ const verifiedReleaseInstall = {
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
   const match = section.match(/```sh\n([\s\S]*?)\n```/u);
-  if (!match) throw new Error(`${heading} has no shell block.`);
+  if (!match) {
+    throw new Error(`${heading} has no shell block.`);
+  }
   return match[1];
 }
 
@@ -29,7 +31,9 @@ async function readAuditLog(path: string) {
   try {
     return await readFile(path, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "";
+    }
     throw error;
   }
 }

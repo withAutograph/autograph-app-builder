@@ -151,7 +151,9 @@ describe("prepared handoff session continuity", () => {
         };
       }),
       get: vi.fn(async () => {
-        if (missing) throw new HostedAdapterSessionUnavailableError();
+        if (missing) {
+          throw new HostedAdapterSessionUnavailableError();
+        }
         return snapshot;
       }),
     });
@@ -752,7 +754,9 @@ describe("hosted Eve service core", () => {
       adapterGeneration: 1,
       resumability: "live",
     });
-    if (upgraded?.version !== 2) throw new Error("Expected lazy durable-session upgrade.");
+    if (upgraded?.version !== 2) {
+      throw new Error("Expected lazy durable-session upgrade.");
+    }
     expect(upgraded.checkpoint).toBeDefined();
   });
 
@@ -923,7 +927,9 @@ describe("hosted Eve service core", () => {
     });
     const record = await store.getSession(principal, first.result.sessionId);
     expect(record?.version).toBe(2);
-    if (record?.version !== 2) throw new Error("Expected durable session.");
+    if (record?.version !== 2) {
+      throw new Error("Expected durable session.");
+    }
     expect(record.checkpoint?.events.length).toBeLessThanOrEqual(512);
     expect(
       new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
@@ -984,7 +990,9 @@ describe("hosted Eve service core", () => {
 
     const record = await store.getSession(principal, first.result.sessionId);
     expect(record?.version).toBe(2);
-    if (record?.version !== 2) throw new Error("Expected durable session.");
+    if (record?.version !== 2) {
+      throw new Error("Expected durable session.");
+    }
     expect(
       new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
     ).toBeLessThanOrEqual(512 * 1024);
@@ -1158,7 +1166,9 @@ describe("hosted Eve service core", () => {
         settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
         async getSession(requestPrincipal, sessionId) {
           const session = await base.getSession(requestPrincipal, sessionId);
-          if (condition === "missing") return null;
+          if (condition === "missing") {
+            return null;
+          }
           return session === null ? null : { ...session, adapterSessionId: "eve_mismatched" };
         },
         listSessions: (request) => base.listSessions(request),

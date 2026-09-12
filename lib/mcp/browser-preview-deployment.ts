@@ -20,11 +20,21 @@ type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 function adapterMode(environment: Environment): "local" | "hosted" | "unavailable" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
-  if (![undefined, "0", "1"].includes(local)) return "unavailable";
-  if (![undefined, "0", "1"].includes(hosted)) return "unavailable";
-  if (local === "1" && hosted === "1") return "unavailable";
-  if (hosted === "1") return "hosted";
-  if (local === "1") return "local";
+  if (![undefined, "0", "1"].includes(local)) {
+    return "unavailable";
+  }
+  if (![undefined, "0", "1"].includes(hosted)) {
+    return "unavailable";
+  }
+  if (local === "1" && hosted === "1") {
+    return "unavailable";
+  }
+  if (hosted === "1") {
+    return "hosted";
+  }
+  if (local === "1") {
+    return "local";
+  }
   return "unavailable";
 }
 
@@ -50,8 +60,12 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     request: Request,
   ): Promise<EveSessionService | undefined> => {
     const mode = adapterMode(input.environment);
-    if (mode === "unavailable") return undefined;
-    if (mode === "local") return createEveSessionService(input.environment);
+    if (mode === "unavailable") {
+      return undefined;
+    }
+    if (mode === "local") {
+      return createEveSessionService(input.environment);
+    }
 
     if (hosted === undefined) {
       const config = readPreviewOAuthRuntimeConfig(input.environment);
@@ -73,17 +87,23 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         }),
       };
     }
-    if (new URL(request.url).origin !== hosted.origin) return undefined;
+    if (new URL(request.url).origin !== hosted.origin) {
+      return undefined;
+    }
     const session = await hosted.auth.api.getSession({
       headers: request.headers,
     });
-    if (session?.user.id === undefined) return undefined;
+    if (session?.user.id === undefined) {
+      return undefined;
+    }
     const workspaceId = await hosted.membership.activeWorkspaceForUser({
       issuer: hosted.issuer,
       audience: hosted.audience,
       ownerUserId: session.user.id,
     });
-    if (workspaceId === undefined) return undefined;
+    if (workspaceId === undefined) {
+      return undefined;
+    }
     const principal = hostedPrincipalSchema.parse({
       issuer: hosted.issuer,
       audience: hosted.audience,

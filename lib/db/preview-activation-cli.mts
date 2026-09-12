@@ -23,7 +23,9 @@ import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 async function readPrivateRequest(path: string): Promise<unknown> {
-  if (!isAbsolute(path)) throw new Error("Activation request path must be absolute.");
+  if (!isAbsolute(path)) {
+    throw new Error("Activation request path must be absolute.");
+  }
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path) {
     throw new Error("Activation request path must be canonical and unsymlinked.");
@@ -163,7 +165,9 @@ function createStore(sql: Sql): PreviewActivationStore {
       }
       const database = await sql<{ name: string }[]>`select current_database() as name`;
       const databaseName = database[0]?.name;
-      if (databaseName === undefined) throw new Error("Database identity was unavailable.");
+      if (databaseName === undefined) {
+        throw new Error("Database identity was unavailable.");
+      }
       await sql`revoke all privileges on database ${sql(databaseName)} from ${sql(input.roleName)}`;
       await sql`revoke all privileges on schema public from ${sql(input.roleName)}`;
       await sql`revoke all privileges on all tables in schema public from ${sql(input.roleName)}`;
@@ -174,7 +178,9 @@ function createStore(sql: Sql): PreviewActivationStore {
       await sql`grant usage, select on all sequences in schema public to ${sql(input.roleName)}`;
       const owner = await sql<{ owner: string }[]>`select current_user as owner`;
       const ownerName = owner[0]?.owner;
-      if (ownerName === undefined) throw new Error("Migration owner was unavailable.");
+      if (ownerName === undefined) {
+        throw new Error("Migration owner was unavailable.");
+      }
       await sql`alter default privileges for role ${sql(ownerName)} in schema public revoke all privileges on tables from ${sql(input.roleName)}`;
       await sql`alter default privileges for role ${sql(ownerName)} in schema public revoke all privileges on sequences from ${sql(input.roleName)}`;
       await sql`alter default privileges for role ${sql(ownerName)} in schema public grant select, insert, update, delete on tables to ${sql(input.roleName)}`;

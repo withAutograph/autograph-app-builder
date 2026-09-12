@@ -25,7 +25,9 @@ export default defineTool({
   async execute(input, ctx) {
     const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
     const result = await resolveRepositoryAccessForTool(input, ctx, runtime);
-    if (result.kind === "selection") return result.access;
+    if (result.kind === "selection") {
+      return result.access;
+    }
     return {
       ...result.access,
       repositoryAccessReceiptDigest: result.receipt.digest,

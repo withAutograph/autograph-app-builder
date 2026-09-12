@@ -36,7 +36,9 @@ function memoryStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) {
+        return undefined;
+      }
       record.authorizedAt = input.now;
       return record;
     },
@@ -53,7 +55,9 @@ function memoryStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) {
+        return undefined;
+      }
       record.consumedAt = input.now;
       return record;
     },

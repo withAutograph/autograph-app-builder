@@ -117,8 +117,9 @@ export function withImageLifecycleTestProvenance<T>(
   provenance: ImageProvenance,
   operation: () => T,
 ): T {
-  if (!hasTestCapability("simulated-target"))
+  if (!hasTestCapability("simulated-target")) {
     throw new Error("Image lifecycle provenance injection requires structural test authority.");
+  }
   return injectedImageProvenance.run(provenance, operation);
 }
 
@@ -185,20 +186,27 @@ function ensureNoLinkPath(path: string, label: string): void {
   const canonical = resolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
   const root = resolve(canonical, "/") === canonical ? canonical : undefined;
-  if (root !== undefined) throw new Error(`${label} cannot be the filesystem root.`);
+  if (root !== undefined) {
+    throw new Error(`${label} cannot be the filesystem root.`);
+  }
   let cursor = canonical;
   for (;;) {
     const stat = lstatSync(cursor);
-    if (stat.isSymbolicLink()) throw new Error(`${label} contains a symbolic link.`);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`${label} contains a symbolic link.`);
+    }
     const parent = dirname(cursor);
-    if (parent === cursor) break;
+    if (parent === cursor) {
+      break;
+    }
     cursor = parent;
   }
 }
 
 function assertAbsoluteInput(path: string, label: string): void {
-  if (!isAbsolute(path) || resolve(path) !== path)
+  if (!isAbsolute(path) || resolve(path) !== path) {
     throw new Error(`${label} must be an absolute normalized path.`);
+  }
 }
 
 function containsPath(root: string, candidate: string): boolean {
@@ -236,8 +244,11 @@ export async function withLifecycleLock<T>(
     const acquired = await new Promise<boolean>((resolve, reject) => {
       const onError = (error: NodeJS.ErrnoException) => {
         server.removeListener("listening", onListening);
-        if (error.code === "EADDRINUSE") resolve(false);
-        else reject(error);
+        if (error.code === "EADDRINUSE") {
+          resolve(false);
+        } else {
+          reject(error);
+        }
       };
       const onListening = () => {
         server.removeListener("error", onError);
@@ -247,11 +258,14 @@ export async function withLifecycleLock<T>(
       server.once("listening", onListening);
       server.listen({ host: "127.0.0.1", port, exclusive: true });
     });
-    if (acquired) break;
-    if (await portIsOurLock(port, identity))
+    if (acquired) {
+      break;
+    }
+    if (await portIsOurLock(port, identity)) {
       throw new Error(
         "Another image lifecycle operation holds the exclusive external-operation lock.",
       );
+    }
   }
   server.unref();
   try {
@@ -259,8 +273,11 @@ export async function withLifecycleLock<T>(
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => {
-        if (error === undefined) resolve();
-        else reject(error);
+        if (error === undefined) {
+          resolve();
+        } else {
+          reject(error);
+        }
       });
     });
   }
@@ -276,14 +293,17 @@ export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
       const mode = (stat.mode & 0o777).toString(8).padStart(3, "0");
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(absolute);
-        if (isAbsolute(target))
+        if (isAbsolute(target)) {
           throw new Error(`Proof runtime symlink ${relativePath} has an absolute target.`);
+        }
         const resolvedTarget = resolve(dirname(absolute), target);
-        if (!containsPath(nodeModulesRoot, resolvedTarget))
+        if (!containsPath(nodeModulesRoot, resolvedTarget)) {
           throw new Error(`Proof runtime symlink ${relativePath} escapes node_modules.`);
+        }
         const canonicalTarget = realpathSync(absolute);
-        if (!containsPath(nodeModulesRoot, canonicalTarget))
+        if (!containsPath(nodeModulesRoot, canonicalTarget)) {
           throw new Error(`Proof runtime symlink ${relativePath} resolves outside node_modules.`);
+        }
         records.push(`l\0${relativePath}\0${mode}\0${target}`);
       } else if (stat.isDirectory()) {
         records.push(`d\0${relativePath}\0${mode}`);
@@ -302,8 +322,9 @@ export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
 }
 
 function assertDisjointRoots(stateRoot: string, repositoryRoot: string, label: string): void {
-  if (containsPath(repositoryRoot, stateRoot) || containsPath(stateRoot, repositoryRoot))
+  if (containsPath(repositoryRoot, stateRoot) || containsPath(stateRoot, repositoryRoot)) {
     throw new Error(`${label} must be outside the image lifecycle state root.`);
+  }
 }
 
 function assertLifecycleStateScope(approval: LifecycleApproval): void {
@@ -325,16 +346,20 @@ function assertLifecycleStateScope(approval: LifecycleApproval): void {
 
 function assertOwnedPrivateDirectory(path: string, label: string): void {
   const stat = lstatSync(path);
-  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
+  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700) {
     throw new Error(`${label} must be a mode 0700 directory.`);
+  }
   const uid = process.getuid?.();
-  if (uid === undefined || stat.uid !== uid)
+  if (uid === undefined || stat.uid !== uid) {
     throw new Error(`${label} must be owned by the current user.`);
+  }
 }
 
 function exactDockerArgument(dockerfile: string, name: string): string {
   const match = new RegExp(`^ARG ${name}=([^\\n]+)$`, "mu").exec(dockerfile);
-  if (match?.[1] === undefined) throw new Error(`Dockerfile is missing exact ${name}.`);
+  if (match?.[1] === undefined) {
+    throw new Error(`Dockerfile is missing exact ${name}.`);
+  }
   return match[1];
 }
 
@@ -354,10 +379,15 @@ function assertOwnedNoLinkTree(path: string, uid: number): void {
     stat.uid !== uid ||
     (!stat.isDirectory() && !stat.isFile()) ||
     (stat.isFile() && stat.nlink !== 1)
-  )
+  ) {
     throw new Error("Unsafe interrupted Buildx state requires review.");
-  if (!stat.isDirectory()) return;
-  for (const entry of readdirSync(path)) assertOwnedNoLinkTree(join(path, entry), uid);
+  }
+  if (!stat.isDirectory()) {
+    return;
+  }
+  for (const entry of readdirSync(path)) {
+    assertOwnedNoLinkTree(join(path, entry), uid);
+  }
 }
 
 function removeBuildxRuntime(path: string, uid: number): void {
@@ -367,18 +397,23 @@ function removeBuildxRuntime(path: string, uid: number): void {
     stat.isSymbolicLink() ||
     stat.uid !== uid ||
     (stat.mode & 0o777) !== 0o700
-  )
+  ) {
     throw new Error("Unsafe interrupted Buildx state requires review.");
+  }
   assertOwnedNoLinkTree(path, uid);
   rmSync(path, { recursive: true, force: false });
 }
 
 export function reconcileLifecycleTemps(stateRoot: string): void {
-  if (!existsSync(stateRoot)) return;
+  if (!existsSync(stateRoot)) {
+    return;
+  }
   ensureNoLinkPath(stateRoot, "Image lifecycle state root");
   assertOwnedPrivateDirectory(stateRoot, "Image lifecycle state root");
   const uid = process.getuid?.();
-  if (uid === undefined) throw new Error("Image lifecycle recovery requires a current user ID.");
+  if (uid === undefined) {
+    throw new Error("Image lifecycle recovery requires a current user ID.");
+  }
   for (const entry of readdirSync(stateRoot, { withFileTypes: true })) {
     const absolute = join(stateRoot, entry.name);
     const stat = lstatSync(absolute);
@@ -388,8 +423,9 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
         entry.isSymbolicLink() ||
         stat.uid !== uid ||
         (stat.mode & 0o777) !== 0o600
-      )
+      ) {
         throw new Error("Unsafe interrupted receipt artifact requires review.");
+      }
       unlinkSync(absolute);
     } else if (temporaryContextPattern.test(entry.name)) {
       if (
@@ -397,8 +433,9 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
         entry.isSymbolicLink() ||
         stat.uid !== uid ||
         (stat.mode & 0o777) !== 0o700
-      )
+      ) {
         throw new Error("Unsafe interrupted build context requires review.");
+      }
       rmSync(absolute, { recursive: true, force: false });
     } else if (temporaryBuildxPattern.test(entry.name)) {
       removeBuildxRuntime(absolute, uid);
@@ -411,7 +448,9 @@ export function withBuildxRuntime<T>(
   operation: (environment: Readonly<{ BUILDX_CONFIG: string }>) => T,
 ): T {
   const uid = process.getuid?.();
-  if (uid === undefined) throw new Error("Buildx runtime isolation requires a current user ID.");
+  if (uid === undefined) {
+    throw new Error("Buildx runtime isolation requires a current user ID.");
+  }
   const runtime = join(stateRoot, `buildx-runtime.tmp-${process.pid}-${randomUUID()}`);
   mkdirSync(runtime, { recursive: false, mode: 0o700 });
   try {
@@ -429,8 +468,9 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   );
   try {
     let offset = 0;
-    while (offset < bytes.length)
+    while (offset < bytes.length) {
       offset += writeSync(descriptor, bytes, offset, bytes.length - offset);
+    }
     fsyncSync(descriptor);
   } finally {
     closeSync(descriptor);
@@ -439,11 +479,13 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
 }
 
 function removeSanitizedGitTree(context: SanitizedGitTree): void {
-  if (!temporaryContextPattern.test(context.root.split(sep).at(-1) ?? ""))
+  if (!temporaryContextPattern.test(context.root.split(sep).at(-1) ?? "")) {
     throw new Error("Refusing to remove a non-lifecycle build context.");
+  }
   const stat = lstatSync(context.root);
-  if (!stat.isDirectory() || stat.isSymbolicLink())
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error("Refusing to remove an unsafe lifecycle build context.");
+  }
   rmSync(context.root, { recursive: true, force: false });
 }
 
@@ -465,8 +507,9 @@ function writeReceipt(
   const path = join(root, filename);
   if (existsSync(path)) {
     const existing = readReceipt(stateRoot, filename, kind, provenance);
-    if (existing.digest !== receipt.digest)
+    if (existing.digest !== receipt.digest) {
       throw new Error(`${kind} already has a different exact receipt.`);
+    }
     return existing;
   }
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
@@ -490,8 +533,12 @@ function writeReceipt(
       closeSync(directory);
     }
   } catch (error) {
-    if (descriptor !== undefined) closeSync(descriptor);
-    if (existsSync(temporary)) unlinkSync(temporary);
+    if (descriptor !== undefined) {
+      closeSync(descriptor);
+    }
+    if (existsSync(temporary)) {
+      unlinkSync(temporary);
+    }
     throw error;
   }
   return receipt;
@@ -513,18 +560,21 @@ function readReceipt(
     (stat.mode & 0o777) !== 0o600 ||
     uid === undefined ||
     stat.uid !== uid
-  )
+  ) {
     throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
+  }
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
   if (
     parsed.version !== 1 ||
     parsed.kind !== kind ||
     parsed.provenance.digest !== provenance.digest
-  )
+  ) {
     throw new Error(`${kind} receipt does not match exact provenance.`);
+  }
   const { digest, ...unsigned } = parsed;
-  if (digest !== hashArtifact(JSON.stringify(unsigned)))
+  if (digest !== hashArtifact(JSON.stringify(unsigned))) {
     throw new Error(`${kind} receipt digest is invalid.`);
+  }
   assertNoSecretMaterial(parsed);
   return parsed;
 }
@@ -557,8 +607,9 @@ function verifyStateRootContents(provenance: ImageProvenance): void {
       continue;
     }
     const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
-    if (kind === undefined || !entry.isFile() || entry.isSymbolicLink())
+    if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
       throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
+    }
     readReceipt(provenance.builder.stateRoot, entry.name, kind, provenance);
   }
 }
@@ -576,8 +627,9 @@ export function observeImageProvenance(
       approval.builderCommit !== injected.builder.commit ||
       approval.builderTree !== injected.builder.tree ||
       approval.dockerfileSha256 !== injected.dockerfile.sha256
-    )
+    ) {
       throw new Error("Injected image provenance does not match the lifecycle approval.");
+    }
     return injected;
   }
   assertAbsoluteInput(builderRootInput, "Builder root");
@@ -606,17 +658,20 @@ export function observeImageProvenance(
   const dockerfileAbsolute = join(builderRoot, dockerfilePath);
   ensureNoLinkPath(dockerfileAbsolute, "Sandbox Dockerfile");
   const dockerfile = readFileSync(dockerfileAbsolute, "utf-8");
-  if (exactDockerArgument(dockerfile, "TARGET_SHA") !== ARRUSTED_IMAGE_TARGET_SHA)
+  if (exactDockerArgument(dockerfile, "TARGET_SHA") !== ARRUSTED_IMAGE_TARGET_SHA) {
     throw new Error("Dockerfile target commit does not match lifecycle policy.");
-  if (exactDockerArgument(dockerfile, "TARGET_TREE") !== ARRUSTED_IMAGE_TARGET_TREE)
+  }
+  if (exactDockerArgument(dockerfile, "TARGET_TREE") !== ARRUSTED_IMAGE_TARGET_TREE) {
     throw new Error("Dockerfile target tree does not match lifecycle policy.");
+  }
   const targetFiles = Object.fromEntries(
     Object.entries(targetArguments).map(([argument, relativePath]) => {
       const absolute = join(arrustedRoot, relativePath);
       ensureNoLinkPath(absolute, `Arrusted target file ${relativePath}`);
       const digest = hashArtifact(readFileSync(absolute));
-      if (exactDockerArgument(dockerfile, argument) !== digest)
+      if (exactDockerArgument(dockerfile, argument) !== digest) {
         throw new Error(`Arrusted target file ${relativePath} drifted.`);
+      }
       return [relativePath, digest];
     }),
   );
@@ -638,10 +693,11 @@ export function observeImageProvenance(
     ensureNoLinkPath(nodeModules, "Builder proof-runtime node_modules");
     const stat = lstatSync(nodeModules);
     const uid = process.getuid?.();
-    if (!stat.isDirectory() || uid === undefined || stat.uid !== uid)
+    if (!stat.isDirectory() || uid === undefined || stat.uid !== uid) {
       throw new Error(
         "Builder proof-runtime node_modules must be a real current-user-owned directory.",
       );
+    }
   }
   const provenance = createExactImageProvenance({
     builderRoot,
@@ -675,14 +731,17 @@ const toolEnvironmentKeys = {
 
 function exactGithubCli(): string {
   const configured = process.env.APP_BUILDER_IMAGE_GH_BIN;
-  if (configured === undefined || !isAbsolute(configured))
+  if (configured === undefined || !isAbsolute(configured)) {
     throw new Error("GitHub CLI must be resolved by the owning mise task.");
+  }
   const binary = realpathSync(configured);
-  if (binary !== configured || binary.split(sep).at(-1) !== "gh")
+  if (binary !== configured || binary.split(sep).at(-1) !== "gh") {
     throw new Error("GitHub CLI must use its canonical exact path.");
+  }
   const stat = lstatSync(binary);
-  if (!stat.isFile() || stat.isSymbolicLink())
+  if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error("GitHub CLI does not resolve to a regular file.");
+  }
   const version = spawnSync(binary, ["version"], {
     encoding: "utf-8",
     maxBuffer: maximumCommandOutputBytes,
@@ -693,8 +752,9 @@ function exactGithubCli(): string {
     version.error !== undefined ||
     version.status !== 0 ||
     !version.stdout.startsWith(`gh version ${githubCliVersion} `)
-  )
+  ) {
     throw new Error("GitHub CLI version is unsupported.");
+  }
   return binary;
 }
 
@@ -712,11 +772,14 @@ function exactGithubConfigRoot(): string {
 function exactToolBinary(program: ImageTool): string {
   const key = toolEnvironmentKeys[program];
   const configured = process.env[key];
-  if (configured === undefined || !isAbsolute(configured))
+  if (configured === undefined || !isAbsolute(configured)) {
     throw new Error(`${program} must be resolved by the owning mise task.`);
+  }
   const binary = realpathSync(configured);
   const stat = lstatSync(binary);
-  if (!stat.isFile()) throw new Error(`${program} does not resolve to a regular file.`);
+  if (!stat.isFile()) {
+    throw new Error(`${program} does not resolve to a regular file.`);
+  }
   return binary;
 }
 
@@ -725,7 +788,9 @@ export function imageToolInvocation(
   args: readonly string[],
 ): Readonly<{ program: string; args: readonly string[] }> {
   const binary = exactToolBinary(tool);
-  if (tool !== "msb") return { program: binary, args };
+  if (tool !== "msb") {
+    return { program: binary, args };
+  }
   return {
     program: exactToolBinary("node"),
     args: [binary, ...args],
@@ -766,15 +831,19 @@ function assertExactGhcrDockerConfig(stateRoot: string): void {
     uid === undefined ||
     stat.uid !== uid ||
     (stat.mode & 0o777) !== 0o600
-  )
+  ) {
     throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
-  if (!readFileSync(path).equals(ghcrDockerConfigBytes))
+  }
+  if (!readFileSync(path).equals(ghcrDockerConfigBytes)) {
     throw new Error("GHCR Docker configuration does not match the closed schema.");
+  }
 }
 
 function ensureGhcrDockerConfig(stateRoot: string): void {
   const path = ghcrDockerConfigPath(stateRoot);
-  if (!existsSync(path)) writeExactFile(path, ghcrDockerConfigBytes, 0o600);
+  if (!existsSync(path)) {
+    writeExactFile(path, ghcrDockerConfigBytes, 0o600);
+  }
   assertExactGhcrDockerConfig(stateRoot);
 }
 
@@ -789,23 +858,28 @@ function assertExactGhcrBoundHelper(stateRoot: string): void {
     uid === undefined ||
     stat.uid !== uid ||
     (stat.mode & 0o777) !== 0o700
-  )
+  ) {
     throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
-  if (!readFileSync(path).equals(ghcrBoundHelperBytes))
+  }
+  if (!readFileSync(path).equals(ghcrBoundHelperBytes)) {
     throw new Error("GHCR bound helper does not match the closed implementation.");
+  }
 }
 
 function ensureGhcrBoundHelper(stateRoot: string): void {
   const path = ghcrBoundHelperPath(stateRoot);
-  if (!existsSync(path)) writeExactFile(path, ghcrBoundHelperBytes, 0o700);
+  if (!existsSync(path)) {
+    writeExactFile(path, ghcrBoundHelperBytes, 0o700);
+  }
   assertExactGhcrBoundHelper(stateRoot);
 }
 
 function exactGhcrBoundHelperModule(): string {
   const path = realpathSync(join(process.cwd(), "lib/image/ghcr-bound-helper.ts"));
   const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink())
+  if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error("GHCR bound helper module is invalid.");
+  }
   return path;
 }
 
@@ -895,8 +969,9 @@ export function ghcrCredentialEnvironment(
     environment.APP_BUILDER_GHCR_USERNAME = identity.username;
     environment.APP_BUILDER_GHCR_IDENTITY_DIGEST = identity.digest;
     environment.APP_BUILDER_GHCR_PROVENANCE_DIGEST = identity.provenanceDigest;
-    if (identity.stateDigest !== undefined)
+    if (identity.stateDigest !== undefined) {
       environment.APP_BUILDER_GH_STATE_DIGEST = identity.stateDigest;
+    }
   }
   return environment;
 }
@@ -960,8 +1035,9 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
       JSON.stringify(binding) ||
     typeof (result as { username?: unknown }).username !== "string" ||
     !/^[a-f0-9]{64}$/u.test(String((result as { identityDigest?: unknown }).identityDigest))
-  )
+  ) {
     throw new Error("GHCR login receipt does not match the current credential boundary.");
+  }
   const { username } = result as { username: string };
   assertGhcrUsername(username);
   return {
@@ -980,8 +1056,12 @@ function readGhcrTokenFromStdin(): Buffer {
   const input = readBoundedInput(0, 4096);
   try {
     let end = input.length;
-    if (end > 0 && input[end - 1] === 0x0a) end -= 1;
-    if (end > 0 && input[end - 1] === 0x0d) end -= 1;
+    if (end > 0 && input[end - 1] === 0x0a) {
+      end -= 1;
+    }
+    if (end > 0 && input[end - 1] === 0x0d) {
+      end -= 1;
+    }
     const token = Buffer.from(input.subarray(0, end));
     if (token.length < 20) {
       token.fill(0);
@@ -1021,10 +1101,15 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
   let failed = false;
   let timedOut = false;
   const terminate = () => {
-    if (child.pid === undefined) return;
+    if (child.pid === undefined) {
+      return;
+    }
     try {
-      if (detached) process.kill(-child.pid, "SIGKILL");
-      else child.kill("SIGKILL");
+      if (detached) {
+        process.kill(-child.pid, "SIGKILL");
+      } else {
+        child.kill("SIGKILL");
+      }
     } catch {
       child.kill("SIGKILL");
     }
@@ -1036,7 +1121,9 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
       failed = true;
       copy.fill(0);
       terminate();
-    } else target.push(copy);
+    } else {
+      target.push(copy);
+    }
   };
   child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
   child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
@@ -1054,13 +1141,18 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
       child.once("error", () => resolve(-1));
       child.once("close", (code) => resolve(code ?? -1));
     });
-    if (failed || timedOut || status !== 0)
+    if (failed || timedOut || status !== 0) {
       throw new Error("GitHub keyring verification failed without recording credential output.");
+    }
     return Buffer.concat(stdout).toString("utf-8");
   } finally {
     clearTimeout(timeout);
-    for (const chunk of stdout) chunk.fill(0);
-    for (const chunk of stderr) chunk.fill(0);
+    for (const chunk of stdout) {
+      chunk.fill(0);
+    }
+    for (const chunk of stderr) {
+      chunk.fill(0);
+    }
   }
 }
 
@@ -1080,19 +1172,23 @@ function execute(
       env: sanitizedEnvironment(),
       timeout: 10_000,
     });
-    if (version.error !== undefined || version.status !== 0)
+    if (version.error !== undefined || version.status !== 0) {
       throw new Error(`${versionTool} version inspection failed.`);
+    }
     assertExactImageToolVersion(versionTool, version.stdout);
   };
-  if (tool === "msb") inspectVersion("node");
+  if (tool === "msb") {
+    inspectVersion("node");
+  }
   inspectVersion(tool);
   const toolInvocation = imageToolInvocation(tool, command.args);
   const invocation =
     command.launcher === undefined
       ? toolInvocation
       : (() => {
-          if (command.launcher !== "trusted-node" || tool !== "node")
+          if (command.launcher !== "trusted-node" || tool !== "node") {
             throw new Error("The image lifecycle launcher is unsupported.");
+          }
           const launcher = join(cwd, ".config/mise/scripts/trusted-node-launcher");
           const stat = lstatSync(launcher);
           if (
@@ -1102,8 +1198,9 @@ function execute(
             stat.uid !== (process.getuid?.() ?? -1) ||
             stat.nlink !== 1 ||
             (stat.mode & 0o022) !== 0
-          )
+          ) {
             throw new Error("The image lifecycle trusted Node launcher is invalid.");
+          }
           return {
             program: "/bin/sh",
             args: [launcher, toolInvocation.program, ...toolInvocation.args],
@@ -1118,16 +1215,20 @@ function execute(
       ...extraEnvironment,
     }),
   });
-  if (result.error !== undefined) throw result.error;
+  if (result.error !== undefined) {
+    throw result.error;
+  }
   if (
     Buffer.byteLength(result.stdout) > maximumCommandOutputBytes ||
     Buffer.byteLength(result.stderr) > maximumCommandOutputBytes
-  )
+  ) {
     throw new Error(`${command.program} lifecycle command output was too large.`);
-  if (result.status !== 0)
+  }
+  if (result.status !== 0) {
     throw new Error(
       `${command.program} lifecycle command failed with exit code ${result.status ?? "unknown"}.`,
     );
+  }
   return result.stdout;
 }
 
@@ -1139,7 +1240,9 @@ function verifyImageSourcesUnlocked(approval: LifecycleApproval) {
     "image-source",
     provenance,
   );
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) {
+    return existing;
+  }
   return writeReceipt(
     provenance.builder.stateRoot,
     "source-receipt.json",
@@ -1157,7 +1260,9 @@ function buildImageUnlocked(approval: LifecycleApproval) {
     "image-build",
     provenance,
   );
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) {
+    return existing;
+  }
   readReceipt(provenance.builder.stateRoot, "source-receipt.json", "image-source", provenance);
   const context = materializeSanitizedGitTree(
     provenance.arrusted.root,
@@ -1195,7 +1300,9 @@ function inspectLocalImageUnlocked(approval: LifecycleApproval) {
     "local-image",
     provenance,
   );
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) {
+    return existing;
+  }
   readReceipt(provenance.builder.stateRoot, "build-receipt.json", "image-build", provenance);
   const result = parseLocalImageInspection(
     execute(localImageInspectionCommand(provenance), provenance.builder.root),
@@ -1218,7 +1325,9 @@ function pushImageUnlocked(approval: LifecycleApproval) {
     "image-push",
     provenance,
   );
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) {
+    return existing;
+  }
   const login = requireCurrentGhcrLogin(provenance);
   const local = readReceipt(
     provenance.builder.stateRoot,
@@ -1252,8 +1361,9 @@ async function loginGhcrUnlocked(approval: LifecycleApproval, username: string) 
   );
   if (existing !== undefined) {
     const current = requireCurrentGhcrLogin(provenance);
-    if (current.identity.username !== username)
+    if (current.identity.username !== username) {
       throw new Error("Existing GHCR login receipt names another identity.");
+    }
     return current.receipt;
   }
   const token = readGhcrTokenFromStdin();
@@ -1300,7 +1410,9 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
     "remote-image",
     provenance,
   );
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) {
+    return existing;
+  }
   const local = readReceipt(
     provenance.builder.stateRoot,
     "local-image-receipt.json",
@@ -1321,10 +1433,12 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
       local.digest ||
     (push.result as { ghcrLoginReceiptDigest?: unknown }).ghcrLoginReceiptDigest !==
       login.receipt.digest
-  )
+  ) {
     throw new Error("Image push receipt is not bound to the local image identity.");
-  if (typeof local.result !== "object" || local.result === null)
+  }
+  if (typeof local.result !== "object" || local.result === null) {
     throw new Error("Local image receipt has no exact image identity.");
+  }
   const result = withBuildxRuntime(provenance.builder.stateRoot, (buildxEnvironment) => {
     const environment = {
       ...ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
@@ -1384,8 +1498,9 @@ function preloadImageUnlocked(approval: LifecycleApproval, digestReferenceInput:
       typeof existing.result !== "object" ||
       existing.result === null ||
       (existing.result as { reference?: unknown }).reference !== reference
-    )
+    ) {
       throw new Error("Existing preload receipt names another digest.");
+    }
     return existing;
   }
   const remote = readReceipt(
@@ -1398,8 +1513,9 @@ function preloadImageUnlocked(approval: LifecycleApproval, digestReferenceInput:
     typeof remote.result !== "object" ||
     remote.result === null ||
     (remote.result as { reference?: unknown }).reference !== reference
-  )
+  ) {
     throw new Error("Digest-only preload does not match remote readback.");
+  }
   const login = requireCurrentGhcrLogin(provenance);
   const push = readReceipt(
     provenance.builder.stateRoot,
@@ -1412,8 +1528,9 @@ function preloadImageUnlocked(approval: LifecycleApproval, digestReferenceInput:
     push.result === null ||
     (push.result as { ghcrLoginReceiptDigest?: unknown }).ghcrLoginReceiptDigest !==
       login.receipt.digest
-  )
+  ) {
     throw new Error("Image push receipt does not match the current GHCR login identity.");
+  }
   execute(
     imagePreloadCommand(reference),
     provenance.builder.root,
@@ -1475,8 +1592,9 @@ function prepareProofRuntimeUnlocked(approval: LifecycleApproval) {
       current.provenance,
     );
     if (existing !== undefined) {
-      if (JSON.stringify(existing.result) !== JSON.stringify(current.result))
+      if (JSON.stringify(existing.result) !== JSON.stringify(current.result)) {
         throw new Error("Existing proof runtime receipt does not match actual dependency bytes.");
+      }
       return existing;
     }
   } else {
@@ -1505,8 +1623,9 @@ function requireCurrentProofRuntime(
     "proof-runtime",
     provenance,
   );
-  if (JSON.stringify(receipt.result) !== JSON.stringify(result))
+  if (JSON.stringify(receipt.result) !== JSON.stringify(result)) {
     throw new Error("Proof runtime dependency state drifted after its frozen-install receipt.");
+  }
   return { provenance, receipt };
 }
 
@@ -1526,10 +1645,11 @@ function proveSandboxImageUnlocked(approval: LifecycleApproval, digestReferenceI
       (existing.result as { reference?: unknown }).reference !== reference ||
       (existing.result as { proofRuntimeReceiptDigest?: unknown }).proofRuntimeReceiptDigest !==
         proofRuntime.digest
-    )
+    ) {
       throw new Error(
         "Existing sandbox proof does not match the current digest-bound proof runtime.",
       );
+    }
     return existing;
   }
   const preload = readReceipt(
@@ -1542,8 +1662,9 @@ function proveSandboxImageUnlocked(approval: LifecycleApproval, digestReferenceI
     typeof preload.result !== "object" ||
     preload.result === null ||
     (preload.result as { reference?: unknown }).reference !== reference
-  )
+  ) {
     throw new Error("Sandbox proof does not match the preloaded digest.");
+  }
   execute(sandboxProofCommand(reference, provenance.arrusted.root), provenance.builder.root);
   return writeReceipt(
     provenance.builder.stateRoot,

@@ -54,8 +54,9 @@ export default defineTool({
   async execute(_input, ctx) {
     void _input;
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "validated" && state.phase !== "reviewed")
+    if (state.phase !== "validated" && state.phase !== "reviewed") {
       throw new Error("Run the repository validation before reviewing its changes.");
+    }
     const changeSet = await exactNormalizedChangeSet({
       state,
       sandbox: await ctx.getSandbox(),

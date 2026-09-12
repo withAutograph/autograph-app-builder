@@ -50,7 +50,9 @@ async function getWithTransientRetry(page: Page, path: string) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const retryable = /(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT)/u.test(message);
-      if (!retryable || attempt >= 2) throw error;
+      if (!retryable || attempt >= 2) {
+        throw error;
+      }
       await new Promise((resolve) => {
         setTimeout(resolve, 250 * 2 ** attempt);
       });
@@ -68,8 +70,9 @@ async function prepareNamedHandoff(
   await waitForBuilderReady(page);
   await page.locator("#app-brief").fill(brief);
   await page.getByLabel("App Name").fill(appName);
-  if (destination === "Cursor")
+  if (destination === "Cursor") {
     await page.getByRole("radio", { name: "Cursor", exact: true }).check();
+  }
   await expect(page.locator("#app-brief")).toHaveValue(brief);
   await completeHandoff(page);
   const url = page.url();
@@ -265,8 +268,12 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   let mcpRequests = 0;
   page.on("request", (request) => {
     const { pathname } = new URL(request.url());
-    if (request.method() === "GET" && pathname === handoff.statusPath) polled += 1;
-    if (pathname === "/mcp") mcpRequests += 1;
+    if (request.method() === "GET" && pathname === handoff.statusPath) {
+      polled += 1;
+    }
+    if (pathname === "/mcp") {
+      mcpRequests += 1;
+    }
   });
   const fixtureSessionId = `ui-observation-fixture:${randomUUID()}`;
   const sql = postgres(databaseUrl, { max: 1 });
@@ -353,9 +360,12 @@ test("Cursor install link remains hidden until its dedicated local client is reg
     } finally {
       await database.transaction(async (tx) => {
         await tx.delete(schema.oauthClient).where(eq(schema.oauthClient.clientId, cursorClientId));
-        if (clientsBefore.length) await tx.insert(schema.oauthClient).values(clientsBefore);
-        if (bindingsBefore.length)
+        if (clientsBefore.length) {
+          await tx.insert(schema.oauthClient).values(clientsBefore);
+        }
+        if (bindingsBefore.length) {
           await tx.insert(schema.oauthClientResource).values(bindingsBefore);
+        }
       });
     }
   } finally {
@@ -521,8 +531,12 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const provisioningRequests: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/builder/provision")
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/builder/provision"
+    ) {
       provisioningRequests.push(request.url());
+    }
   });
   const sql = postgres(databaseUrl, { max: 1 });
   try {

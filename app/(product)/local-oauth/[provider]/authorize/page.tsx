@@ -33,7 +33,9 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
     const configured = readProviderEmulation(process.env);
-    if (!configured) notFound();
+    if (!configured) {
+      notFound();
+    }
     emulation = configured;
     const appOrigin = emulation.canonicalOrigin;
     parsed = parseLocalOAuthAuthorization({

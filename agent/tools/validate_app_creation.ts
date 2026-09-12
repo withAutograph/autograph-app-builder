@@ -24,8 +24,9 @@ export default defineTool({
       current.phase !== "validation_pending" &&
       current.phase !== "validation_failed" &&
       current.phase !== "validated"
-    )
+    ) {
       throw new Error("Apply the requested changes before running the repository checks.");
+    }
     if (current.phase === "validated") {
       return {
         status: "validated" as const,
@@ -35,11 +36,12 @@ export default defineTool({
     }
     const sandbox = await ctx.getSandbox();
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
-    for (const file of input.implementationFiles)
+    for (const file of input.implementationFiles) {
       await sandbox.writeTextFile({
         path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,
       });
+    }
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const base = {

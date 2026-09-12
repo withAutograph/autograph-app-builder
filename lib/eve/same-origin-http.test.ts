@@ -204,7 +204,9 @@ describe("same-origin canonical Eve transport", () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
     const bodies: Record<string, unknown>[] = [];
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {
+        return stream();
+      }
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });
@@ -344,7 +346,9 @@ describe("same-origin canonical Eve transport", () => {
       expect(init?.redirect).toBe("manual");
       expect(headers.get("authorization")).toBe("Bearer project-oidc-token");
       expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("project-oidc-token");
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {
+        return stream();
+      }
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         message: "Build",
@@ -389,7 +393,9 @@ describe("same-origin canonical Eve transport", () => {
   it("uses canonical continuation and inputResponses bodies", async () => {
     const bodies: unknown[] = [];
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {
+        return stream();
+      }
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });

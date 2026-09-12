@@ -16,7 +16,9 @@ describe("canonical Arrusted source preparation", () => {
       },
       readinessDigest: "c".repeat(64),
     });
-    if (receipt.version !== 4) throw new Error("Expected cloned source fixture");
+    if (receipt.version !== 4) {
+      throw new Error("Expected cloned source fixture");
+    }
     const workspace = {
       workspaceId: "sandbox",
       workspacePath: "/workspace/repository",

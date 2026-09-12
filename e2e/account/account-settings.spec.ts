@@ -66,7 +66,9 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
     await expect(page.getByText("Add another passkey before deleting this one.")).toBeVisible();
     await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
   } finally {
-    if (!page.isClosed()) await authenticator?.dispose();
+    if (!page.isClosed()) {
+      await authenticator?.dispose();
+    }
   }
 });
 

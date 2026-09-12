@@ -34,8 +34,9 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
     typeof value.mcpUrl !== "string" ||
     typeof value.expiresAt !== "string" ||
     Number.isNaN(Date.parse(value.expiresAt))
-  )
+  ) {
     throw new Error("handoff-response-invalid");
+  }
   return {
     version: 1,
     handoffId,
@@ -98,7 +99,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       : undefined;
 
   useEffect(() => {
-    if (access !== "ready" || renewalPending || data.status === "continued") return;
+    if (access !== "ready" || renewalPending || data.status === "continued") {
+      return;
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     let disposed = false;
@@ -107,7 +110,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       controller?.abort();
     };
     const refresh = async () => {
-      if (disposed || document.visibilityState !== "visible") return;
+      if (disposed || document.visibilityState !== "visible") {
+        return;
+      }
       const request = new AbortController();
       controller = request;
       let complete = false;
@@ -119,38 +124,48 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             signal: request.signal,
           },
         );
-        if (request.signal.aborted || disposed) return;
+        if (request.signal.aborted || disposed) {
+          return;
+        }
         if (response.status === 401 || response.status === 403 || response.status === 404) {
           complete = true;
           setAccess(response.status === 401 ? "sign-in" : "unavailable");
           return;
         }
-        if (!response.ok) throw new Error("handoff-status-unavailable");
+        if (!response.ok) {
+          throw new Error("handoff-status-unavailable");
+        }
         const next = readStatus(await response.json(), data.handoffId);
-        if (request.signal.aborted || disposed) return;
+        if (request.signal.aborted || disposed) {
+          return;
+        }
         complete = next.status === "continued";
         setData(next);
         setNotice("");
       } catch {
-        if (!request.signal.aborted && !disposed)
+        if (!request.signal.aborted && !disposed) {
           setNotice(
             "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open.",
           );
+        }
       } finally {
         if (
           !disposed &&
           !request.signal.aborted &&
           !complete &&
           document.visibilityState === "visible"
-        )
+        ) {
           timer = setTimeout(() => {
             refresh();
           }, 5000);
+        }
       }
     };
     const visibilityChanged = () => {
       stop();
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
     };
     document.addEventListener("visibilitychange", visibilityChanged);
     void refresh();
@@ -163,7 +178,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   }, [access, data.handoffId, data.status, renewalPending]);
 
   useEffect(() => {
-    if (!renewal || renewalPending || reconciledRenewal.current === renewal) return;
+    if (!renewal || renewalPending || reconciledRenewal.current === renewal) {
+      return;
+    }
     reconciledRenewal.current = renewal;
     if (renewal.status === "sign-in") {
       setAccess("sign-in");
@@ -181,12 +198,17 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     }
     setRenewalNotice("");
     buildAppHandoffPrompt(renewal.handoff.handoffId, destination);
-    if (renewal.handoff.handoffId === data.handoffId) setData(renewal.handoff);
-    else router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
+    if (renewal.handoff.handoffId === data.handoffId) {
+      setData(renewal.handoff);
+    } else {
+      router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
+    }
   }, [data.handoffId, destination, renewal, renewalPending, router]);
 
   const renew = () => {
-    if (!isClientReady || renewalPending || access !== "ready") return;
+    if (!isClientReady || renewalPending || access !== "ready") {
+      return;
+    }
     const storageKey = `autograph-handoff-renew:${data.handoffId}`;
     if (renewalRequest.current?.handoffId !== data.handoffId) {
       let saved: string | null = null;

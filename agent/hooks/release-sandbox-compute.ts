@@ -17,7 +17,9 @@ async function release(
     | "session-failed",
 ) {
   const environment = process.env;
-  if (!isHostedSandboxExecutionEnabled(environment)) return;
+  if (!isHostedSandboxExecutionEnabled(environment)) {
+    return;
+  }
   try {
     await releaseHostedSandboxExecutionLease({
       sessionId: ctx.session.id,
@@ -36,7 +38,9 @@ export default defineHook({
   events: {
     async "turn.started"(_event, ctx) {
       const environment = process.env;
-      if (!isHostedSandboxExecutionEnabled(environment)) return;
+      if (!isHostedSandboxExecutionEnabled(environment)) {
+        return;
+      }
       await acquireHostedSandboxExecutionLease({
         sessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,

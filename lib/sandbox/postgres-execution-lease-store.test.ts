@@ -90,8 +90,9 @@ describe("PostgreSQL sandbox execution lease authority", () => {
       '"sandbox_execution_lease_workspace_active_idx"',
       '"sandbox_execution_lease_orphan_idx"',
       '"policy_digest" ~',
-    ])
+    ]) {
       expect(migration).toContain(required);
+    }
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE)\b/iu);
   });
 });

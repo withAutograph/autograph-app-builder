@@ -21,7 +21,9 @@ interface OrganizationRow {
 }
 
 function resultRows<T>(input: unknown): readonly T[] {
-  if (Array.isArray(input)) return input as T[];
+  if (Array.isArray(input)) {
+    return input as T[];
+  }
   if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
     return input.rows as T[];
   }
@@ -50,7 +52,9 @@ async function activeOrganizations(
 function oneAuthorizedOrganization(
   rows: readonly OrganizationRow[],
 ): EnsuredOrganization | undefined {
-  if (rows.length !== 1 || rows[0] === undefined) return undefined;
+  if (rows.length !== 1 || rows[0] === undefined) {
+    return undefined;
+  }
   if (!new Set(["owner", "admin", "member"]).has(rows[0].role)) {
     throw new OrganizationProvisioningError("access-revoked");
   }
@@ -152,7 +156,9 @@ export function createPostgresPreviewOrganizationAuthority(
           throw new OrganizationProvisioningError("workspace-ambiguous");
         }
         const existing = oneAuthorizedOrganization(memberships);
-        if (existing !== undefined) return existing;
+        if (existing !== undefined) {
+          return existing;
+        }
 
         const invitationResult = await transaction.execute(sql`
           select "invitation"."id", "invitation"."organization_id",

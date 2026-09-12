@@ -13,11 +13,12 @@ const implementationFilePathSchema = z
       });
       return;
     }
-    if (value.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
+    if (value.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
       context.addIssue({
         code: "custom",
         message: "Implementation file paths must stay inside the repository checkout.",
       });
+    }
   });
 
 export const implementationFilesSchema = z
@@ -30,12 +31,13 @@ export const implementationFilesSchema = z
   .superRefine((files, context) => {
     const paths = new Set<string>();
     for (const [index, file] of files.entries()) {
-      if (paths.has(file.path))
+      if (paths.has(file.path)) {
         context.addIssue({
           code: "custom",
           path: [index, "path"],
           message: "Implementation file paths must be unique.",
         });
+      }
       paths.add(file.path);
     }
   });
@@ -48,14 +50,17 @@ export function withImplementationFiles(
 ): ApplyCommandExecutor {
   return async (input) => {
     const result = await executor(input);
-    if (result.exitCode !== 0) return result;
+    if (result.exitCode !== 0) {
+      return result;
+    }
 
     const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
-    for (const file of files)
+    for (const file of files) {
       await input.sandbox.writeTextFile({
         path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,
       });
+    }
     return result;
   };
 }

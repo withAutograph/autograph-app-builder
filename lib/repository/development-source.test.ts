@@ -18,7 +18,9 @@ const roots: string[] = [];
 
 afterEach(() => {
   inspectSourceReceipt.mockReset();
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true });
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true });
+  }
 });
 
 function exactEnvironment(root: string) {

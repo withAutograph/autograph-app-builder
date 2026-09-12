@@ -4,7 +4,9 @@ import type { ProviderConnectionNotice } from "@/lib/integrations/provider-conne
 import styles from "./app-builder.module.css";
 
 export function ProviderNotices({ notices }: { notices: ProviderConnectionNotice[] }) {
-  if (!notices.length) return null;
+  if (!notices.length) {
+    return null;
+  }
   return (
     <div className={styles.providerNotices} aria-live="polite">
       {notices.map((notice) => {

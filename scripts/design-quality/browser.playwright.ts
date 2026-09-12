@@ -14,7 +14,9 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
   });
   try {
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("No listener");
+    if (!address || typeof address === "string") {
+      throw new Error("No listener");
+    }
     await expect(
       capturePreview({
         url: `http://127.0.0.1:${address.port}/missing`,
@@ -54,8 +56,9 @@ test("measurements distinguish concrete defects from intentional layout", async 
     `<!doctype html><html lang="en"><title>Poor reference</title><main style="width:900px"><h1>Inventory</h1><button style="width:50px;height:30px"></button><div role="table"><div role="row"><span role="columnheader">Item</span></div><div role="row"><span role="cell" style="display:inline-block;margin-left:80px">Bottle</span></div></div><div style="width:20px;overflow:hidden"><button style="width:200px">Clipped action</button></div></main></html>`,
   );
   const poor = await measurePage(page);
-  for (const kind of ["document-overflow", "possible-clipping", "possible-column-misalignment"])
+  for (const kind of ["document-overflow", "possible-clipping", "possible-column-misalignment"]) {
     expect(poor.findings.some((f) => f.kind === kind)).toBe(true);
+  }
   expect(poor.accessibility.violations.some((v) => v.id === "button-name")).toBe(true);
   await test.info().attach("authored-poor-reference", {
     body: await page.screenshot(),

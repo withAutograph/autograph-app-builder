@@ -119,7 +119,9 @@ async function HomeContent({ searchParams }: PageProps) {
 
   const authenticated = user.status === "ready";
   const resumeKey = parseProviderResumeKey(query.resume);
-  if (!authenticated || mode === "anonymous") return <AnonymousBuilder />;
+  if (!authenticated || mode === "anonymous") {
+    return <AnonymousBuilder />;
+  }
 
   const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
     builderConnectionsFlag(),
@@ -132,7 +134,9 @@ async function HomeContent({ searchParams }: PageProps) {
       environment: process.env,
       headers: await headers(),
     });
-    if (pendingHandoff) redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
+    if (pendingHandoff) {
+      redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
+    }
   }
   const durableDraft = resumeKey
     ? await readAuthenticatedBuilderDraft({

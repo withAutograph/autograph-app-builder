@@ -21,7 +21,9 @@ const hostedForwarderConfigSchema = z
 export function readHostedForwarderSubject(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string | undefined {
-  if (environment.EVE_HOSTED_ADAPTER !== "1") return undefined;
+  if (environment.EVE_HOSTED_ADAPTER !== "1") {
+    return undefined;
+  }
   const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   const config = hostedForwarderConfigSchema.parse({
     teamSlug: environment.EVE_HOSTED_VERCEL_TEAM_SLUG,

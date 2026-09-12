@@ -29,7 +29,9 @@ export function sandboxBackendPlan(input: {
   localImageConfigured: boolean;
 }): SandboxBackendPlan {
   const environment = input.environment ?? process.env;
-  if (input.fixture) return { kind: "fixture-just-bash", blockers: [] };
+  if (input.fixture) {
+    return { kind: "fixture-just-bash", blockers: [] };
+  }
   if (isHostedVercelRuntime(environment)) {
     let deploymentEnvironment: HostedDeploymentEnvironment;
     try {
@@ -56,14 +58,18 @@ export function sandboxBackendPlan(input: {
     developmentBinding[0] === "development" &&
     developmentBinding[1] === "vercel" &&
     developmentBinding[2] === "local-development"
-  )
+  ) {
     return { kind: "vercel-development", blockers: [] };
-  if (developmentBinding.some((value) => value !== undefined && value !== ""))
+  }
+  if (developmentBinding.some((value) => value !== undefined && value !== "")) {
     return {
       kind: "unsupported-development",
       blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
     };
-  if (input.localImageConfigured) return { kind: "local-microsandbox", blockers: [] };
+  }
+  if (input.localImageConfigured) {
+    return { kind: "local-microsandbox", blockers: [] };
+  }
   return {
     kind: "local-just-bash",
     blockers: ["No immutable local sandbox image is configured."],
@@ -79,10 +85,15 @@ export function selectSandboxDefinition<Hosted, Local, NonExecuting>(
     vercelHosted: () => Hosted;
   },
 ): Hosted | Local | NonExecuting {
-  if (kind === "unsupported-development" || kind === "unsupported-vercel")
+  if (kind === "unsupported-development" || kind === "unsupported-vercel") {
     throw new Error("The App Builder sandbox environment binding is unsupported.");
-  if (isVercelSandboxBackend(kind)) return factories.vercelHosted();
-  if (kind === "local-microsandbox") return factories.localMicrosandbox();
+  }
+  if (isVercelSandboxBackend(kind)) {
+    return factories.vercelHosted();
+  }
+  if (kind === "local-microsandbox") {
+    return factories.localMicrosandbox();
+  }
   return factories.nonExecuting();
 }
 

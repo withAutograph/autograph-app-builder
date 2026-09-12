@@ -28,10 +28,13 @@ export default defineTool({
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
-    if (development && sourceWorkflowState.get().phase === "empty")
+    if (development && sourceWorkflowState.get().phase === "empty") {
       await sourceStatus.execute({}, ctx);
+    }
     const source = sourceWorkflowState.get();
-    if (source.phase === "empty") throw new Error("No source was reviewed.");
+    if (source.phase === "empty") {
+      throw new Error("No source was reviewed.");
+    }
     if (!development && source.githubSource !== undefined) {
       assertExactImmutableGitHubSourceReceipt(source.githubSource);
     }
@@ -41,8 +44,9 @@ export default defineTool({
       : source.receipt.version === SOURCE_RECEIPT_VERSION
         ? await (async () => {
             const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
-            if (observed === undefined)
+            if (observed === undefined) {
               throw new Error("The canonical Arrusted workspace is missing.");
+            }
             return observed;
           })()
         : undefined;
@@ -66,14 +70,16 @@ export default defineTool({
       !development &&
       current.phase !== "empty" &&
       current.githubSource?.digest !== source.githubSource?.digest
-    )
+    ) {
       throw new Error("This app build already owns a different GitHub source binding.");
+    }
     if (
       !development &&
       currentWorkspace !== undefined &&
       currentWorkspace.workspaceId !== sandbox.id
-    )
+    ) {
       throw new Error("This app build already owns a different workspace.");
+    }
     let workspace;
     if (development) {
       workspace = await prepareDevelopmentSandboxWorkspace(
@@ -85,8 +91,9 @@ export default defineTool({
     } else if (githubWorkspace !== undefined) {
       workspace = githubWorkspace;
     } else if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
-      if (canonicalWorkspace === undefined)
+      if (canonicalWorkspace === undefined) {
         throw new Error("The canonical Arrusted workspace is missing.");
+      }
       workspace = canonicalWorkspace;
     } else {
       workspace = await prepareSupportedSandboxWorkspace(

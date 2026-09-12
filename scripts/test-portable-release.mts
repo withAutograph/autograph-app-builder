@@ -49,37 +49,44 @@ try {
     "https://mcp.autograph.dev/",
     "https://MCP.autograph.dev",
     "https://mcp.autograph.dev:443",
-  ])
+  ]) {
     await run(
       "build-portable-release.mts",
       ["--endpoint", endpoint, "--output", join(temp, `rejected-${Date.now()}`)],
       1,
     );
+  }
   const first = join(temp, "release-a");
   const second = join(temp, "release-b");
   const endpoint = "https://mcp.autograph.dev";
-  for (const output of [first, second])
+  for (const output of [first, second]) {
     await run("build-portable-release.mts", ["--endpoint", endpoint, "--output", output]);
+  }
   const portableManifest = JSON.parse(await readFile("plugin.json", "utf-8"));
   const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
   const marketplaceArchiveName = `app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
   const firstArchive = await readFile(join(first, archiveName));
   const secondArchive = await readFile(join(second, archiveName));
-  if (!firstArchive.equals(secondArchive)) throw new Error("Portable archive is not reproducible.");
+  if (!firstArchive.equals(secondArchive)) {
+    throw new Error("Portable archive is not reproducible.");
+  }
   const firstMarketplaceArchive = await readFile(join(first, marketplaceArchiveName));
   const secondMarketplaceArchive = await readFile(join(second, marketplaceArchiveName));
-  if (!firstMarketplaceArchive.equals(secondMarketplaceArchive))
+  if (!firstMarketplaceArchive.equals(secondMarketplaceArchive)) {
     throw new Error("Codex marketplace archive is not reproducible.");
+  }
   const firstReceipt = JSON.parse(await readFile(join(first, "release-receipt.json"), "utf-8"));
   const secondReceipt = JSON.parse(await readFile(join(second, "release-receipt.json"), "utf-8"));
-  if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt))
+  if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt)) {
     throw new Error("Portable release receipt is not reproducible.");
+  }
   if (
     firstReceipt.source.repository !== "https://github.com/withAutograph/autograph-app-builder" ||
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.sha) ||
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.tree)
-  )
+  ) {
     throw new Error("Portable release was not bound to an immutable source.");
+  }
   const extracted = join(temp, "extracted");
   await mkdir(extracted);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, archiveName), "-C", extracted], {
@@ -105,27 +112,33 @@ try {
     marketplaceManifest.name !== "autograph" ||
     marketplaceManifest.plugins?.[0]?.source?.path !== "./plugins/app-builder" ||
     marketplaceManifest.plugins?.[0]?.policy?.authentication !== "ON_USE"
-  )
+  ) {
     throw new Error("Codex marketplace manifest must authenticate App Builder on first use.");
+  }
   const codexPluginRoot = join(marketplace, marketplaceManifest.plugins[0].source.path);
-  if (!(await stat(codexPluginRoot)).isDirectory())
+  if (!(await stat(codexPluginRoot)).isDirectory()) {
     throw new Error("Codex marketplace source path did not resolve to the packaged plugin.");
+  }
   const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8"));
-  if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`)
+  if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the release endpoint.");
-  if (codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !== `${endpoint}/mcp`)
+  }
+  if (codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the OAuth resource.");
+  }
   const codexManifest = JSON.parse(
     await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
   );
   for (const reference of [codexManifest.interface?.composerIcon, codexManifest.interface?.logo]) {
-    if (typeof reference !== "string" || !reference.startsWith("./"))
+    if (typeof reference !== "string" || !reference.startsWith("./")) {
       throw new Error("Codex marketplace asset reference was invalid.");
-    if (!(await stat(join(codexPluginRoot, reference))).isFile())
+    }
+    if (!(await stat(join(codexPluginRoot, reference))).isFile()) {
       throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
+    }
   }
   const installs = join(temp, "installs");
-  for (const client of ["vscode", "cursor", "codex"])
+  for (const client of ["vscode", "cursor", "codex"]) {
     await run("install-portable-plugin.mts", [
       "--client",
       client,
@@ -134,6 +147,7 @@ try {
       "--destination",
       installs,
     ]);
+  }
   await run("smoke-portable-plugin.mts", ["--release", first, "--install-root", installs]);
   await verifyPortableProofArtifact({
     releaseRoot: first,
@@ -202,8 +216,9 @@ try {
   const missingAssetArchivePath = join(missingMarketplaceAsset, marketplaceArchiveName);
   const missingAssetFiles = archiveFiles(await readFile(missingAssetArchivePath));
   const missingAssetPath = "plugins/app-builder/assets/autograph-icon.png";
-  if (!missingAssetFiles.delete(missingAssetPath))
+  if (!missingAssetFiles.delete(missingAssetPath)) {
     throw new Error("Expected generated marketplace asset was absent.");
+  }
   const missingAssetArchive = deterministicGzip(deterministicTar(missingAssetFiles));
   await writeFile(missingAssetArchivePath, missingAssetArchive);
   const missingAssetReceiptPath = join(missingMarketplaceAsset, "release-receipt.json");

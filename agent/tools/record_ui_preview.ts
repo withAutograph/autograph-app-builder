@@ -29,19 +29,22 @@ export default defineTool({
     }
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
-    if (current.phase === "empty")
+    if (current.phase === "empty") {
       throw new Error("Prepare the Arrusted source before creating a UI preview.");
-    if (current.phase === "validation_pending")
+    }
+    if (current.phase === "validation_pending") {
       throw new Error("Finish the running build check before revising the preview.");
+    }
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
       prior !== undefined &&
       input.baseRevision !== undefined &&
       input.baseRevision !== prior?.revision
-    )
+    ) {
       throw new Error(
         `The UI preview revision is stale. Retry with the current UI preview revision: ${prior.revision}`,
       );
+    }
     const sourceDigest = uiPreviewSourceDigest(input);
     const revision = sourceDigest;
     const previewHtml = await renderUiPreview(input, await ctx.getSandbox());

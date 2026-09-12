@@ -206,10 +206,11 @@ esac
 `,
     { mode: 0o700 },
   );
-  for (const name of ["docker", "docker-buildx"] as const)
+  for (const name of ["docker", "docker-buildx"] as const) {
     writeFileSync(join(bin, name), `#!/bin/sh\nprintf '${name} fixture\\n'\n`, {
       mode: 0o700,
     });
+  }
   writeFileSync(
     join(bin, "msb"),
     `#!/usr/bin/env node
@@ -281,8 +282,11 @@ function withFakeGhEnvironment(
     return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 }
@@ -305,8 +309,11 @@ async function withFakeGhEnvironmentAsync(
     return await callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 }
@@ -351,8 +358,11 @@ function stateArtifactText(root: string): string {
   const visit = (path: string) => {
     for (const entry of readdirSync(path, { withFileTypes: true })) {
       const absolute = join(path, entry.name);
-      if (entry.isDirectory()) visit(absolute);
-      else if (entry.isFile()) contents.push(readFileSync(absolute, "utf-8"));
+      if (entry.isDirectory()) {
+        visit(absolute);
+      } else if (entry.isFile()) {
+        contents.push(readFileSync(absolute, "utf-8"));
+      }
     }
   };
   visit(root);
@@ -447,12 +457,13 @@ function installPreloadFixture(
               exact,
               loginResult,
             );
-      if (variant === "stale" && login !== undefined)
+      if (variant === "stale" && login !== undefined) {
         writeFileSync(
           join(stateRoot, "ghcr-login-receipt.json"),
           `${JSON.stringify({ ...login, result: { ...loginResult, status: "stale" } }, null, 2)}\n`,
           { mode: 0o600 },
         );
+      }
       writeFixtureReceipt(stateRoot, "push-receipt.json", "image-push", exact, {
         status: "pushed",
         tag: exact.image.tag,
@@ -463,10 +474,11 @@ function installPreloadFixture(
       writeFixtureReceipt(stateRoot, "remote-image-receipt.json", "remote-image", exact, {
         reference,
       });
-      if (variant === "state-drift")
+      if (variant === "state-drift") {
         writeFileSync(join(fixture.state, "gh", "device-id"), "drifted-device-id\n", {
           mode: 0o600,
         });
+      }
     },
   };
 }
@@ -548,8 +560,11 @@ describe("image lifecycle", () => {
           writeFileSync(join(root, "config.json"), '{"credsStore":"ambient"}\n', { mode: 0o600 });
           expect(() => ghcrCredentialEnvironment(root)).toThrow("closed schema");
         } finally {
-          if (oldHome === undefined) delete process.env.HOME;
-          else process.env.HOME = oldHome;
+          if (oldHome === undefined) {
+            delete process.env.HOME;
+          } else {
+            process.env.HOME = oldHome;
+          }
         }
       });
     } finally {
@@ -886,10 +901,11 @@ wait
     );
     child.stdin.end("ghcr.io\n");
     try {
-      for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1)
+      for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1) {
         await new Promise((resolve) => {
           setTimeout(resolve, 10);
         });
+      }
       expect(existsSync(descendant)).toBe(true);
       process.kill(-child.pid!, "SIGKILL");
       await new Promise<void>((resolve) => {
@@ -1043,8 +1059,9 @@ wait
   it("sends no Builder workspace files through the default build context", () => {
     expect(readFileSync(".dockerignore", "utf-8")).toBe("**\n");
     const dockerfile = readFileSync("containers/eve-sandbox/Dockerfile", "utf-8");
-    for (const line of dockerfile.split("\n").filter((line) => line.startsWith("COPY ")))
+    for (const line of dockerfile.split("\n").filter((line) => line.startsWith("COPY "))) {
       expect(line).toContain("--from=");
+    }
   });
 
   it("constructs exact standalone build, inspection, preload, and proof commands", () => {
@@ -1118,14 +1135,16 @@ wait
       '"aqua:docker/buildx" = "0.33.0"',
       'docker-cli = "29.4.0"',
       '"npm:microsandbox" = "0.5.10"',
-    ])
+    ]) {
       expect(miseConfig).toContain(expected);
+    }
     for (const expected of [
       '[[tools."aqua:docker/buildx"]]',
       "[[tools.docker-cli]]",
       '[[tools."npm:microsandbox"]]',
-    ])
+    ]) {
       expect(miseLock).toContain(expected);
+    }
     const dockerfileDigest = hashArtifact(readFileSync("containers/eve-sandbox/Dockerfile"));
     expect(dockerfileDigest).toBe(
       "05e47db175d19c836d95be2e628e36cf7c7a2859dc8fbd92ac5c07573db0ad5b",
@@ -1456,8 +1475,11 @@ wait
         symlinkSync(outside, runtime);
       } else {
         mkdirSync(runtime, { mode: 0o700 });
-        if (fixture === "nested-symlink") symlinkSync(outside, join(runtime, "current"));
-        else linkSync(outside, join(runtime, "current"));
+        if (fixture === "nested-symlink") {
+          symlinkSync(outside, join(runtime, "current"));
+        } else {
+          linkSync(outside, join(runtime, "current"));
+        }
       }
       expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted Buildx state");
       expect(readFileSync(outside, "utf-8")).toBe("keep");

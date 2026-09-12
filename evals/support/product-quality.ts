@@ -102,23 +102,29 @@ export function evaluateConversationQuality(input: {
 }): ConversationQualityReport {
   const messages = input.assistantMessages ?? [input.reply];
   const hardFailures: string[] = [];
-  if (!messages.every(isProductFacing))
+  if (!messages.every(isProductFacing)) {
     hardFailures.push("Conversation exposed internal orchestration vocabulary.");
-  if (messages.some((message) => forbiddenPublicVocabulary.test(message)))
+  }
+  if (messages.some((message) => forbiddenPublicVocabulary.test(message))) {
     hardFailures.push("Conversation used forbidden public vocabulary.");
-  for (const expected of input.scenario.expected.replyIncludes)
-    if (!input.reply.includes(expected))
+  }
+  for (const expected of input.scenario.expected.replyIncludes) {
+    if (!input.reply.includes(expected)) {
       hardFailures.push(`Reply omitted required product outcome: ${expected}.`);
+    }
+  }
   const questionCount = (input.reply.match(/\?/gu) ?? []).length;
-  if (input.scenario.expected.question === "forbidden" && questionCount !== 0)
+  if (input.scenario.expected.question === "forbidden" && questionCount !== 0) {
     hardFailures.push("Conversation asked an unnecessary product question.");
+  }
   if (
     input.scenario.expected.question === "one-recommended" &&
     (questionCount !== 1 || !/\brecommended\b/iu.test(input.reply))
-  )
+  ) {
     hardFailures.push(
       "Material ambiguity must ask one product question with a recommended default.",
     );
+  }
   return {
     hardFailures,
     score: {
@@ -147,11 +153,14 @@ export function evaluatePrototypeQuality(input: {
   appSpec: string;
 }): PrototypeQualityReport {
   const { prototype } = input.scenario.expected;
-  if (prototype === undefined)
+  if (prototype === undefined) {
     throw new Error("This product-quality scenario has no prototype contract.");
+  }
   const hardFailures: string[] = [];
   const require = (condition: boolean, message: string) => {
-    if (!condition) hardFailures.push(message);
+    if (!condition) {
+      hardFailures.push(message);
+    }
   };
   require(/<html\s+lang=["']en["']/iu.test(input.html), "Prototype lacks a language.");
   require(/<meta\s+name=["']viewport["']/iu.test(
@@ -164,8 +173,9 @@ export function evaluatePrototypeQuality(input: {
   require(!/lorem ipsum|todo:|placeholder text/iu.test(
     input.html,
   ), "Prototype contains unfinished placeholder content.");
-  for (const text of prototype.requiredText)
+  for (const text of prototype.requiredText) {
     require(input.html.includes(text), `Prototype omitted ${text}.`);
+  }
   const appSpecResult = validateBuildReadyAppSpec(input.appSpec);
   require(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
   require(input.appSpec.includes(
@@ -183,6 +193,8 @@ export function evaluatePrototypeQuality(input: {
 
 export function productQualityScenario(id: ProductQualityScenario["id"]): ProductQualityScenario {
   const scenario = PRODUCT_QUALITY_SCENARIOS.find((candidate) => candidate.id === id);
-  if (scenario === undefined) throw new Error(`Unknown product eval ${id}.`);
+  if (scenario === undefined) {
+    throw new Error(`Unknown product eval ${id}.`);
+  }
   return scenario;
 }

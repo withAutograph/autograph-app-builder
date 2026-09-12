@@ -92,7 +92,9 @@ function installedOidcNeedsRefresh(input: {
       confidential: true,
     });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
     const credentialPath = resolve(input.repositoryRoot, ".env.local");
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();

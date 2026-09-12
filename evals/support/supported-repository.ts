@@ -66,11 +66,12 @@ function fixtureGit(root: string, args: string[]): void {
 }
 
 export function createSupportedRepositoryFixture(): string {
-  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1")
+  if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1") {
     mkdirSync(join(tmpdir(), "autograph-app-builder-branch-publication"), {
       recursive: true,
       mode: 0o700,
     });
+  }
   const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")));
   const files: Record<string, string> = {
     ".config/mise/config.toml": [

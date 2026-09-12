@@ -132,8 +132,9 @@ export function renderReport(report: {
           ) ||
           !c.width ||
           !c.height
-        )
+        ) {
           return "";
+        }
         return `<a class="region" href="#finding-${index}" title="${escapeHtml(o.summary)}" aria-label="${escapeHtml(o.summary)}" style="left:${(100 * r.x) / c.width}%;top:${(100 * r.y) / c.height}%;width:${(100 * r.width) / c.width}%;height:${(100 * r.height) / c.height}%"></a>`;
       })
       .join("");
@@ -142,7 +143,9 @@ export function renderReport(report: {
       .filter(({ f }) => f.image === c.name)
       .map(({ f, index }) => {
         const r = f.region;
-        if (!c.width || !c.height || !Object.values(r).every(Number.isFinite)) return "";
+        if (!c.width || !c.height || !Object.values(r).every(Number.isFinite)) {
+          return "";
+        }
         return `<a class="region" href="#design-${index}" title="${escapeHtml(f.explanation)}" aria-label="${escapeHtml(f.explanation)}" style="left:${(100 * r.x) / c.width}%;top:${(100 * r.y) / c.height}%;width:${(100 * r.width) / c.width}%;height:${(100 * r.height) / c.height}%"></a>`;
       })
       .join("");

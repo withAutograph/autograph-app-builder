@@ -32,7 +32,9 @@ function route(input: { authenticated?: boolean } = {}) {
         const existing = [...rows.values()].find(
           (candidate) => candidate.creationRequestId === record.creationRequestId,
         );
-        if (existing) return { disposition: "existing", record: existing };
+        if (existing) {
+          return { disposition: "existing", record: existing };
+        }
         rows.set(record.handoffId, record);
         return { disposition: "created", record };
       },
@@ -49,10 +51,12 @@ function route(input: { authenticated?: boolean } = {}) {
           !record ||
           JSON.stringify(record.authority) !== JSON.stringify(input.authority) ||
           record.requestDigest !== input.requestDigest
-        )
+        ) {
           return undefined;
-        if (record.sessionId !== undefined || record.expiresAt > input.now)
+        }
+        if (record.sessionId !== undefined || record.expiresAt > input.now) {
           return { disposition: "existing", record };
+        }
         const updated = { ...record, expiresAt: input.expiresAt };
         rows.set(record.handoffId, updated);
         return { disposition: "renewed", record: updated };

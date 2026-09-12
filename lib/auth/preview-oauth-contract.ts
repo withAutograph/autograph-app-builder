@@ -186,7 +186,9 @@ export function buildPreviewCimdOptions(input: {
   return {
     fetchClientMetadataResource: async (resource, init) => {
       const response = await input.fetchClientMetadataResource(resource, init);
-      if (!response.ok) return response;
+      if (!response.ok) {
+        return response;
+      }
 
       let document: unknown;
       try {

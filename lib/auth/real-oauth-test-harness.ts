@@ -134,9 +134,13 @@ export async function createRealOAuthHarness(
           password: credentials.password,
         }),
       });
-      if (!response.ok) throw new Error("Test sign-in failed.");
+      if (!response.ok) {
+        throw new Error("Test sign-in failed.");
+      }
       const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
-      if (cookie === undefined) throw new Error("Test session was unavailable.");
+      if (cookie === undefined) {
+        throw new Error("Test session was unavailable.");
+      }
       return new Headers({ cookie });
     },
   }));
@@ -160,7 +164,7 @@ export async function registerTestCursorClient(harness: RealOAuthHarness) {
     model: "oauthResource",
     where: [{ field: "identifier", value: resource }],
   });
-  if (!target)
+  if (!target) {
     await harness.db.create({
       model: "oauthResource",
       data: {
@@ -173,6 +177,7 @@ export async function registerTestCursorClient(harness: RealOAuthHarness) {
         disabled: false,
       },
     });
+  }
   await harness.db.create({
     model: "oauthClient",
     data: cursorClientRegistration(),
@@ -203,11 +208,15 @@ export async function grantRealOAuth(
     redirect: "manual",
   });
   const location = authorization.headers.get("location");
-  if (authorization.status !== 302 || !location) throw new Error("OAuth authorization failed.");
+  if (authorization.status !== 302 || !location) {
+    throw new Error("OAuth authorization failed.");
+  }
   let callback = new URL(location, origin);
   const consentRequired = callback.pathname === "/auth/consent";
   if (consentRequired) {
-    if (!callback.searchParams.has("sig")) throw new Error("Consent continuation was not signed.");
+    if (!callback.searchParams.has("sig")) {
+      throw new Error("Consent continuation was not signed.");
+    }
     const headers = new Headers(browserHeaders);
     headers.set("origin", origin);
     headers.set("content-type", "application/json");
@@ -219,7 +228,9 @@ export async function grantRealOAuth(
         oauth_query: callback.search.slice(1),
       }),
     });
-    if (!consent.ok) throw new Error("OAuth consent failed.");
+    if (!consent.ok) {
+      throw new Error("OAuth consent failed.");
+    }
     const body = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
@@ -245,7 +256,9 @@ export async function grantRealOAuth(
       resource,
     }),
   });
-  if (!response.ok) throw new Error("OAuth token exchange failed.");
+  if (!response.ok) {
+    throw new Error("OAuth token exchange failed.");
+  }
   const tokens = (await response.json()) as OAuthTokens;
   const claims = await verifyRealOAuthToken(harness, tokens.access_token);
   return { tokens, claims, consentRequired };
@@ -278,7 +291,9 @@ export async function refreshRealOAuth(
       resource,
     }),
   });
-  if (!response.ok) throw new Error("OAuth refresh failed.");
+  if (!response.ok) {
+    throw new Error("OAuth refresh failed.");
+  }
   const tokens = (await response.json()) as OAuthTokens;
   return {
     tokens,
