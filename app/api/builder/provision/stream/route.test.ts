@@ -117,4 +117,35 @@ describe("GET /api/builder/provision/stream", () => {
 
     await reader?.cancel();
   });
+
+  it("resumes a newly created EventSource by query cursor but lets the native header advance it", async () => {
+    mockProjection(projection(4));
+    for (const [query, headers] of [
+      ["4", undefined],
+      ["1", { "Last-Event-ID": "4" }],
+    ] as const) {
+      const response = await GET(
+        new Request(
+          `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}&afterRevision=${query}`,
+          { headers },
+        ),
+      );
+      expect(await readAll(response)).toBe(
+        `id: 4\nevent: end\ndata: ${JSON.stringify(projection(4))}\n\n`,
+      );
+    }
+  });
+
+  it.each(["-1", "NaN", "Infinity", "1.5", "9007199254740992", "1e2"])(
+    "ignores malformed query cursor %s",
+    async (cursor) => {
+      mockProjection(projection(4));
+      const response = await GET(
+        new Request(
+          `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}&afterRevision=${cursor}`,
+        ),
+      );
+      expect(await readAll(response)).toContain("event: snapshot");
+    },
+  );
 });

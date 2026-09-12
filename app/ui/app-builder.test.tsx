@@ -24,7 +24,6 @@ const builderActions = vi.hoisted(() => ({
     updatedAt: "2030-01-01T00:00:00.000Z",
   })),
   loadActiveBuilderDraft: vi.fn(async () => undefined),
-  clearBuilderDraft: vi.fn(),
 }));
 
 async function defaultContinuation(
@@ -32,11 +31,6 @@ async function defaultContinuation(
   input: {
     requestId: string;
     provisioningEnabled: boolean;
-    form: {
-      appName: string;
-      githubInstallationId?: string;
-      vercelInstallationId?: string;
-    };
   },
 ) {
   return {
@@ -45,9 +39,9 @@ async function defaultContinuation(
       version: 1 as const,
       requestId: input.requestId,
       requestDigest: "0".repeat(64),
-      appId: input.form.appName.toLowerCase().replaceAll(/\s+/gu, "-"),
+      appId: "test-app",
       status: "settled" as const,
-      github: input.form.githubInstallationId
+      github: input.provisioningEnabled
         ? {
             status: "skipped" as const,
             code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
@@ -60,7 +54,7 @@ async function defaultContinuation(
             code: "not_selected" as const,
             retryable: false,
           },
-      vercel: input.form.vercelInstallationId
+      vercel: input.provisioningEnabled
         ? {
             status: "skipped" as const,
             code: (input.provisioningEnabled ? "not_selected" : "feature_disabled") as
@@ -106,7 +100,6 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/app/actions/builder", () => builderActions);
 vi.mock("@/app/actions/builder-drafts", () => ({
-  clearBuilderDraft: builderActions.clearBuilderDraft,
   loadActiveBuilderDraft: builderActions.loadActiveBuilderDraft,
   saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
 }));
@@ -211,7 +204,6 @@ function AppBuilder(
         integrations={integrationState}
         saveActiveBuilderDraftAction={builderActions.saveActiveBuilderDraft}
         loadActiveBuilderDraftAction={builderActions.loadActiveBuilderDraft}
-        clearBuilderDraftAction={builderActions.clearBuilderDraft}
       />
     </div>
   );
@@ -272,7 +264,6 @@ afterEach(async () => {
   builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
   builderActions.loadActiveBuilderDraft.mockReset();
   builderActions.saveActiveBuilderDraft.mockReset();
-  builderActions.clearBuilderDraft.mockReset();
   draftFetch.mockClear();
 });
 
@@ -624,6 +615,35 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
 
     expect(builderActions.saveActiveBuilderDraft).not.toHaveBeenCalled();
+  });
+
+  it("claims an anonymous brief without another edit and clears it only after acknowledgement", async () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem("autograph-app-brief", "Claim this anonymous brief.");
+    const saved = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(() => saved.promise);
+    await render(<AppBuilder authenticated />);
+    await act(async () => vi.advanceTimersToNextFrame());
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Claim this anonymous brief." }),
+          }),
+        }),
+      }),
+    );
+    expect(sessionStorage.getItem("autograph-app-brief")).toBe("Claim this anonymous brief.");
+    const [[request]] = builderActions.saveActiveBuilderDraft.mock.calls;
+    await act(async () =>
+      saved.resolve({
+        draftId: request.draftId,
+        revision: 1,
+        updatedAt: "2030-01-01T00:00:00.000Z",
+      }),
+    );
+    expect(sessionStorage.getItem("autograph-app-brief")).toBeNull();
   });
 
   it("replaces locally edited RHF values with a newer server revision", async () => {
@@ -991,17 +1011,72 @@ describe("Vercel-faithful App Builder flow", () => {
         provisioningEnabled: false,
         creationRequestId: expect.any(String),
         requestId: expect.any(String),
-        form: expect.objectContaining({
-          appName: "support-app",
-          buildDestination: "codex",
-          repository: "support-app",
-          privateRepository: true,
-        }),
+        draftCheckpoint: { draftId: expect.any(String), revision: expect.any(Number) },
       }),
     );
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
     expect(view.textContent).not.toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Open in ChatGPT / Codex");
+  });
+
+  it("keeps the edited form mounted through a failed continuation and retries the same intent", async () => {
+    const continuation = Promise.withResolvers<{ status: "error" }>();
+    builderActions.continueBuilderHandoff.mockImplementationOnce(() => continuation.promise);
+    const view = await render(<AppBuilder authenticated />);
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "Do not lose this saved intent.");
+    const form = view.querySelector("form")!;
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
+    expect(view.querySelector("#app-brief")).toBe(brief);
+    expect(view.querySelector("main")!.hasAttribute("inert")).toBe(true);
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
+    await act(async () => continuation.resolve({ status: "error" }));
+    expect(view.querySelector("#app-brief")).toBe(brief);
+    expect(brief.value).toBe("Do not lose this saved intent.");
+    expect(view.querySelector("main")!.hasAttribute("inert")).toBe(false);
+    expect(navigation.replace).not.toHaveBeenCalled();
+    const [[, first]] = builderActions.continueBuilderHandoff.mock.calls;
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledTimes(2);
+    expect(builderActions.continueBuilderHandoff.mock.calls[1][1]).toMatchObject({
+      requestId: first.requestId,
+      creationRequestId: first.creationRequestId,
+      draftCheckpoint: { draftId: first.draftCheckpoint.draftId },
+    });
+    expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
+  });
+
+  it("recovers a lost handoff response without resaving its archived draft", async () => {
+    builderActions.continueBuilderHandoff.mockRejectedValueOnce(new Error("response interrupted"));
+    const view = await render(<AppBuilder authenticated />);
+    const brief = view.querySelector<HTMLTextAreaElement>("#app-brief")!;
+    await fill(brief, "Already saved before the response was lost.");
+    await click(
+      [...view.querySelectorAll("button")].find((button) => button.textContent === "Create App")!,
+    );
+    expect(view.querySelector("#app-brief")).toBe(brief);
+    expect(view.textContent).toContain("Retry saved handoff");
+    const saves = builderActions.saveActiveBuilderDraft.mock.calls.length;
+    const [[, checkpoint]] = builderActions.continueBuilderHandoff.mock.calls;
+    builderActions.saveActiveBuilderDraft.mockRejectedValueOnce(
+      new Error("builder-draft-archived"),
+    );
+    await click(
+      [...view.querySelectorAll("button")].find(
+        (button) => button.textContent === "Retry saved handoff",
+      )!,
+    );
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledTimes(saves);
+    expect(builderActions.continueBuilderHandoff.mock.calls[1][1]).toEqual(checkpoint);
+    expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
   });
 
   it("renders the Better Auth account trigger without the legacy menu", async () => {

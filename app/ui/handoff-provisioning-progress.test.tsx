@@ -44,7 +44,6 @@ class TestEventSource {
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
   readonly url: string;
   closed = false;
-  onerror: (() => void) | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -61,7 +60,7 @@ class TestEventSource {
     this.closed = true;
   }
 
-  emit(name: "snapshot" | "end", value: unknown) {
+  emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     for (const listener of this.listeners.get(name) ?? []) listener(event);
   }
@@ -94,10 +93,28 @@ afterEach(async () => {
   container = undefined;
   TestEventSource.instances = [];
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
 describe("HandoffProvisioningProgress", () => {
+  it("keeps transport rejection inline and retries the same handoff successfully", async () => {
+    vi.stubGlobal("EventSource", TestEventSource);
+    actions.continue.mockRejectedValueOnce(new Error("connection interrupted"));
+    await render();
+    expect(container?.textContent).toContain("Provider setup paused. Your handoff is saved.");
+    const retry = [...(container?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Retry provider setup",
+    );
+    expect(retry).toBeDefined();
+    await act(async () => retry?.click());
+    expect(actions.continue).toHaveBeenCalledTimes(2);
+    expect(actions.continue).toHaveBeenLastCalledWith({ status: "error" }, { handoffId });
+    expect(container?.textContent).not.toContain("Provider setup paused");
+    expect(container?.textContent).not.toContain("Retry provider setup");
+    expect(TestEventSource.instances).toHaveLength(1);
+  });
+
   it("ignores malformed and regressive SSE snapshots, then refreshes once when a newer terminal revision arrives", async () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();
@@ -105,10 +122,23 @@ describe("HandoffProvisioningProgress", () => {
     expect(actions.continue).toHaveBeenCalledWith(undefined, { handoffId });
     const stream = TestEventSource.instances[0]!;
     expect(stream.url).toBe(
-      `/api/builder/provision/stream?requestId=${encodeURIComponent(requestId)}`,
+      `/api/builder/provision/stream?requestId=${encodeURIComponent(requestId)}&afterRevision=1`,
     );
 
     await act(async () => stream.malformed("snapshot"));
+    for (const invalid of [
+      { ...projection(99), provisioning: { ...projection(99).provisioning, status: "unexpected" } },
+      { ...projection(99), provisioning: { ...projection(99).provisioning, requestId: handoffId } },
+      { ...projection(99), provisioning: { ...projection(99).provisioning, github: {} } },
+      {
+        ...projection(99),
+        provisioning: { ...projection(99).provisioning, updatedAt: "yesterday" },
+      },
+      { ...projection(99), extra: "unexpected" },
+      { ...projection(99), revision: Number.MAX_SAFE_INTEGER + 1 },
+    ]) {
+      await act(async () => stream.emit("snapshot", invalid));
+    }
     await act(async () => stream.emit("snapshot", projection(1)));
     expect(container?.textContent).toContain("Preparing your selected providers");
 
@@ -128,11 +158,37 @@ describe("HandoffProvisioningProgress", () => {
     await render();
     const stream = TestEventSource.instances[0]!;
 
-    await act(async () => stream.onerror?.());
+    await act(async () => stream.emit("error"));
     expect(TestEventSource.instances).toHaveLength(1);
+    expect(container?.textContent).toContain("Reconnecting… Your handoff is saved.");
+    await act(async () => stream.emit("open"));
+    expect(container?.textContent).not.toContain("Reconnecting");
 
     await act(async () => root?.unmount());
     expect(stream.closed).toBe(true);
     root = undefined;
+  });
+
+  it("explicitly reconnects from the last accepted revision without retrying provider work", async () => {
+    vi.stubGlobal("EventSource", TestEventSource);
+    await render();
+    const oldStream = TestEventSource.instances[0]!;
+    await act(async () => oldStream.emit("snapshot", projection(7)));
+    await act(async () => oldStream.emit("error"));
+    await act(async () => container?.querySelector<HTMLButtonElement>("button")?.click());
+    expect(oldStream.closed).toBe(true);
+    expect(TestEventSource.instances).toHaveLength(2);
+    const newStream = TestEventSource.instances[1]!;
+    expect(newStream.url).toContain("afterRevision=7");
+    expect(actions.continue).toHaveBeenCalledOnce();
+
+    // Queued events from the closed connection must not settle the new stream.
+    await act(async () => oldStream.emit("end", projection(20, "settled")));
+    expect(navigation.refresh).not.toHaveBeenCalled();
+    await act(async () => newStream.emit("snapshot", projection(6, "settled")));
+    expect(navigation.refresh).not.toHaveBeenCalled();
+    await act(async () => newStream.emit("end", projection(8, "settled")));
+    expect(navigation.refresh).toHaveBeenCalledOnce();
+    expect(newStream.closed).toBe(true);
   });
 });

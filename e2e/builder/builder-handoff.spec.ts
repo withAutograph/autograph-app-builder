@@ -77,6 +77,42 @@ async function prepareNamedHandoff(
   return { url, pathname, id, statusPath: `/api/builder/handoffs/${id}` };
 }
 
+test("a lost handoff action response retries its saved checkpoint without resaving the archived draft", async ({
+  context,
+  page,
+}) => {
+  await installBrowserBoundaries(context);
+  await finishOAuth(page, "GitHub");
+  await page.goto("/");
+  await waitForBuilderReady(page);
+  await page.locator("#app-brief").fill("Recover a committed handoff after its response is lost.");
+  await page.getByLabel("App Name").fill("Recovered Handoff");
+  let interrupted = false;
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (
+      !interrupted &&
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/" &&
+      request.postData()?.includes("draftCheckpoint")
+    ) {
+      interrupted = true;
+      // Complete the real server mutation before dropping only its response.
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Create App" }).click();
+  await expect(page.getByRole("button", { name: "Retry saved handoff" })).toBeVisible();
+  expect(interrupted).toBe(true);
+  await page.getByRole("button", { name: "Retry saved handoff" }).click();
+  await expect(page).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u, { timeout: 30_000 });
+  await waitForHandoffContent(page, "Recovered Handoff");
+});
+
 test("multiple handoffs reload independently without replacing saved app context", async ({
   context,
   page,
@@ -517,15 +553,9 @@ test("expired handoff renews in place without changing intent or provisioning re
       exact: true,
     });
     await expect(launch).toBeDisabled();
-    const renewalResponse = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        new URL(response.url()).pathname === `${statusPath}/renew`,
-    );
     await page.getByRole("button", { name: "Renew handoff", exact: true }).click();
-    const renewedResponse = await renewalResponse;
-    expect(renewedResponse.ok()).toBe(true);
-    expect((await renewedResponse.json()).handoffId).toBe(handoffId);
+    // Renewal is a Server Action. Its reconciled UI is the completion barrier;
+    // the authenticated projection and SQL below prove the persisted outcome.
     await expect(launch).toBeEnabled();
     await expect(page).toHaveURL(handoffUrl);
     await expect(page.getByText("This handoff has expired.", { exact: false })).toHaveCount(0);

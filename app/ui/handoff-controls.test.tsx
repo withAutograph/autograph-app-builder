@@ -12,7 +12,11 @@ import {
 import { HandoffControls, type HandoffControlData } from "./handoff-controls";
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+const renewal = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("@/app/actions/handoff-renewal", () => ({
+  renewBuilderHandoff: renewal.action,
+}));
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const renewedId = "123e4567-e89b-42d3-a456-426614174002";
@@ -57,6 +61,7 @@ afterEach(async () => {
   sessionStorage.clear();
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  renewal.action.mockReset();
   vi.useRealTimers();
   visibility("visible");
 });
@@ -177,18 +182,14 @@ describe("durable handoff controls", () => {
       "Add Autograph to Cursor",
     );
   });
-  it("renews with a stable request ID after a lost response and never provisions or launches", async () => {
+  it("retries a rejected renewal transport with the same request ID and never provisions or launches", async () => {
     const data = { ...initial, status: "expired" as const };
-    let attempts = 0;
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-      if (options?.method !== "POST") return Response.json(data);
-      attempts += 1;
-      if (attempts === 1) throw new Error("response lost");
-      return Response.json({
-        version: 1,
-        handoffId: renewedId,
-        expiresAt: initial.expiresAt,
-      });
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json(data));
+    renewal.action.mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce({
+      status: "renewed",
+      handoff: { ...data, handoffId: renewedId },
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     await render(data);
@@ -203,31 +204,30 @@ describe("durable handoff controls", () => {
     container.remove();
     await render(data);
     await click("Renew handoff");
-    const renewals = request.mock.calls.filter(([, options]) => options?.method === "POST");
-    expect(renewals).toHaveLength(2);
-    expect(renewals[0]?.[0]).toBe(`/api/builder/handoffs/${id}/renew`);
-    expect(renewals[0]?.[1]?.body).toBe(renewals[1]?.[1]?.body);
+    expect(renewal.action).toHaveBeenCalledTimes(2);
+    const first = renewal.action.mock.calls[0]?.[1] as { creationRequestId?: string };
+    const retry = renewal.action.mock.calls[1]?.[1] as { creationRequestId?: string };
+    expect(first).toMatchObject({ handoffId: id });
+    expect(first.creationRequestId).toBe(retry.creationRequestId);
     expect(request.mock.calls.every(([url]) => !String(url).includes("provision"))).toBe(true);
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${renewedId}`);
     expect(open).not.toHaveBeenCalled();
   });
   it.each(["prepared", "continued"] as const)(
-    "refreshes a same-ID renewal immediately to %s without requiring a remount",
+    "reconciles a same-ID renewal immediately to %s without requiring a browser read",
     async (status) => {
       const expired = { ...initial, status: "expired" as const };
-      let renewed = false;
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-        if (options?.method === "POST") {
-          renewed = true;
-          return Response.json({
-            version: 1,
-            handoffId: id,
-            expiresAt: "2031-01-01T00:00:00.000Z",
-          });
-        }
-        return Response.json(
-          renewed ? { ...initial, status, expiresAt: "2031-01-01T00:00:00.000Z" } : expired,
-        );
+      const renewed = { ...initial, status, expiresAt: "2031-01-01T00:00:00.000Z" };
+      let persisted = false;
+      const request = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () => Response.json(persisted ? renewed : expired));
+      renewal.action.mockImplementation(async () => {
+        persisted = true;
+        return {
+          status: "renewed",
+          handoff: renewed,
+        };
       });
       await render(expired);
       await click("Renew handoff");
@@ -238,10 +238,25 @@ describe("durable handoff controls", () => {
         )?.disabled,
       ).toBe(false);
       expect(navigation.replace).not.toHaveBeenCalled();
-      expect(navigation.refresh).toHaveBeenCalledOnce();
+      expect(renewal.action).toHaveBeenCalledOnce();
+      expect(request.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
       expect(container.textContent?.includes("Continued in your app")).toBe(status === "continued");
     },
   );
+  it("shows the same-account recovery UI when the renewal action loses authorization", async () => {
+    const expired = { ...initial, status: "expired" as const };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(expired));
+    renewal.action.mockResolvedValue({ status: "sign-in" });
+
+    await render(expired);
+    await click("Renew handoff");
+
+    expect(container.textContent).toContain("Sign in to continue your saved app");
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(new URL(container.querySelector("a")!.href).searchParams.get("callbackURL")).toBe(
+      `/handoff/${id}`,
+    );
+  });
   it.each([401, 403, 404])(
     "preserves the continuation path and hides actions on access failure %s",
     async (status) => {

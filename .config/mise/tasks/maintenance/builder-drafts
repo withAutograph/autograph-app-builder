@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Remove active builder drafts inactive for 30 days using managed deployment authority"
+set -eu
+
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/maintenance-builder-drafts.mts

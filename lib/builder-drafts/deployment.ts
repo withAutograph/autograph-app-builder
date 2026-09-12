@@ -133,6 +133,15 @@ export function createBuilderDraftRouteHandler(input: {
         { headers: noStore },
       );
     } catch (error) {
+      if (
+        error instanceof Error &&
+        ["builder-draft-archived", "builder-draft-stale"].includes(error.message)
+      ) {
+        return Response.json(
+          { error: "draft_no_longer_active" },
+          { status: 409, headers: noStore },
+        );
+      }
       const invalid =
         error instanceof z.ZodError ||
         error instanceof SyntaxError ||

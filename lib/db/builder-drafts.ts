@@ -50,7 +50,7 @@ function isUniqueViolation(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
-export function createBuilderDraftStore(database: Database): BuilderDraftStore {
+function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore {
   const read: BuilderDraftStore["read"] = async ({ authority, draftId }) => {
     const rows = await database
       .select()
@@ -78,7 +78,11 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
       // A compare-and-set loop makes the database completion order authoritative:
       // stale clients still save, but their response identifies the contention.
       for (let attempt = 0; attempt < 8; attempt += 1) {
+        const target = await read({ authority, draftId: input.draftId });
+        if (target?.status === "archived") throw new Error("builder-draft-archived");
         const current = await readActive({ authority });
+        if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
+          throw new Error("builder-draft-stale");
         if (current) {
           if (current.lastClientMutationId === input.clientMutationId)
             return { row: current, idempotent: true, concurrent: false };
@@ -131,42 +135,27 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
             };
           }
 
-          // The draft may be an archived provider-return draft. Reactivate it
-          // only while this tenant has no other active draft.
-          const restored = await database
-            .update(schema.builderDrafts)
-            .set({
-              status: "active",
-              revision: sql`${schema.builderDrafts.revision} + 1`,
-              record,
-              lastClientMutationId: input.clientMutationId,
-              updatedAt: input.now,
-            })
-            .where(
-              and(
-                rowPredicate(authority, input.draftId),
-                eq(schema.builderDrafts.status, "archived"),
-              ),
-            )
-            .returning();
-          if (restored[0]) {
-            return {
-              row: parseRow(restored[0]),
-              idempotent: false,
-              concurrent: input.expectedRevision !== 0,
-            };
-          }
+          // A completed handoff's draft is read-only. Never reactivate it from
+          // delayed page-hide transport or an old provider-return tab.
         } catch (error) {
           if (!isUniqueViolation(error)) throw error;
         }
       }
       throw new Error("builder-draft-contention");
     },
-    async archive({ authority, draftId, now }) {
+    async archive({ authority, draftId, now, expectedRevision }) {
       const rows = await database
         .update(schema.builderDrafts)
         .set({ status: "archived", updatedAt: now })
-        .where(and(rowPredicate(authority, draftId), eq(schema.builderDrafts.status, "active")))
+        .where(
+          and(
+            rowPredicate(authority, draftId),
+            eq(schema.builderDrafts.status, "active"),
+            expectedRevision === undefined
+              ? undefined
+              : eq(schema.builderDrafts.revision, expectedRevision),
+          ),
+        )
         .returning({ draftId: schema.builderDrafts.draftId });
       return rows.length > 0;
     },
@@ -183,6 +172,28 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
         .returning({ draftId: schema.builderDrafts.draftId });
       return rows.length;
     },
+  };
+}
+
+/** Save and archive share one short database transaction per tenant draft. */
+export function createBuilderDraftStore(database: Database): BuilderDraftStore {
+  const unlocked = createUnlockedBuilderDraftStore(database);
+  const serialize = async <T>(
+    authorityInput: BuilderDraftAuthority,
+    run: (store: BuilderDraftStore) => Promise<T>,
+  ) => {
+    const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+    return database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`builder-draft:${JSON.stringify(authority)}`}, 0))`,
+      );
+      return run(createUnlockedBuilderDraftStore(transaction));
+    });
+  };
+  return {
+    ...unlocked,
+    saveActive: (input) => serialize(input.authority, (store) => store.saveActive(input)),
+    archive: (input) => serialize(input.authority, (store) => store.archive(input)),
   };
 }
 

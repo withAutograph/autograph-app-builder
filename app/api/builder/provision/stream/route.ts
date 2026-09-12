@@ -41,7 +41,12 @@ export async function GET(request: Request) {
   const first = await read();
   if (!first.ok) return first;
   const initial = builderProvisionProjectionSchema.parse(await first.json());
-  const lastEventId = Number(request.headers.get("last-event-id") ?? "0");
+  // Native reconnects advance the header; a new EventSource can only provide
+  // its acknowledged cursor in the URL. Never let the initial URL override it.
+  const cursor =
+    request.headers.get("last-event-id") ?? source.searchParams.get("afterRevision") ?? "0";
+  const parsedCursor = /^[0-9]+$/u.test(cursor) ? Number(cursor) : 0;
+  const lastEventId = Number.isSafeInteger(parsedCursor) ? parsedCursor : 0;
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastWrite = Date.now();

@@ -10,6 +10,6 @@ export async function saveActiveBuilderDraft(): Promise<never> {
   return unavailable();
 }
 
-export async function clearBuilderDraft(): Promise<never> {
+export async function loadActiveBuilderDraft(): Promise<never> {
   return unavailable();
 }

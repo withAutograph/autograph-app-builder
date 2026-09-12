@@ -22,11 +22,7 @@ import { parseProviderResumeKey } from "@/lib/integrations/provider-connection-r
 import { parseProviderConnectionFailureReason } from "@/lib/integrations/provider-connection-status";
 import type { ProviderConnectionNotice } from "@/lib/integrations/provider-connection-status";
 
-import {
-  clearBuilderDraft,
-  loadActiveBuilderDraft,
-  saveActiveBuilderDraft,
-} from "../actions/builder-drafts";
+import { loadActiveBuilderDraft, saveActiveBuilderDraft } from "../actions/builder-drafts";
 import { AnonymousBuilder } from "../ui/anonymous-builder";
 import { AuthenticatedBuilder } from "../ui/authenticated-builder";
 import { BuilderLoadingShell } from "../ui/builder-loading-shell";
@@ -171,7 +167,6 @@ async function HomeContent({ searchParams }: PageProps) {
         durableDraftUpdatedAt={durableDraft?.updatedAt}
         saveActiveBuilderDraftAction={saveActiveBuilderDraft}
         loadActiveBuilderDraftAction={loadActiveBuilderDraft}
-        clearBuilderDraftAction={clearBuilderDraft}
       />
     </div>
   );

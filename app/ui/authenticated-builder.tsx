@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 
-import { continueBuilderHandoff } from "@/app/actions/builder";
+import {
+  continueBuilderHandoff,
+  type BuilderHandoffContinuationInput,
+  type BuilderHandoffContinuationState,
+} from "@/app/actions/builder";
 import type {
   BuilderDraftPageData,
   SaveActiveBuilderDraftInput,
@@ -31,7 +35,6 @@ export type AuthenticatedBuilderProps = {
     input: SaveActiveBuilderDraftInput,
   ) => Promise<{ draftId: string; revision: number; updatedAt: string }>;
   loadActiveBuilderDraftAction?: () => Promise<BuilderDraftPageData | undefined>;
-  clearBuilderDraftAction?: (draftId: string) => Promise<unknown>;
 };
 
 /** Client-only form, draft, and continuation coordination below the server shell. */
@@ -49,14 +52,33 @@ export function AuthenticatedBuilder({
   durableDraftUpdatedAt,
   saveActiveBuilderDraftAction,
   loadActiveBuilderDraftAction,
-  clearBuilderDraftAction,
 }: AuthenticatedBuilderProps) {
   const router = useRouter();
   const [savedBrief, setSavedBrief] = useState("");
-  const activeDraftId = useRef<string | undefined>(undefined);
+  const continuationRequest = useRef<
+    | {
+        draftId: string;
+        intentKey: string;
+        requestId: string;
+        creationRequestId: string;
+      }
+    | undefined
+  >(undefined);
   const completedHandoff = useRef<string | undefined>(undefined);
+  const savedContinuation = useRef<BuilderHandoffContinuationInput | undefined>(undefined);
   const [continuation, dispatchContinuation, continuationPending] = useActionState(
-    continueBuilderHandoff,
+    async (
+      previous: BuilderHandoffContinuationState | undefined,
+      input: BuilderHandoffContinuationInput,
+    ): Promise<BuilderHandoffContinuationState> => {
+      try {
+        return await continueBuilderHandoff(previous, input);
+      } catch {
+        // A dropped response can follow a successful durable commit. Keep the
+        // acknowledged checkpoint available for an idempotent action retry.
+        return { status: "error" };
+      }
+    },
     undefined,
   );
 
@@ -71,9 +93,8 @@ export function AuthenticatedBuilder({
     if (continuation.status === "error") return;
     if (completedHandoff.current === continuation.handoff.handoffId) return;
     completedHandoff.current = continuation.handoff.handoffId;
-    if (activeDraftId.current) void clearBuilderDraftAction?.(activeDraftId.current);
     router.replace(`/handoff/${continuation.handoff.handoffId}`);
-  }, [clearBuilderDraftAction, continuation, continuationPending, router]);
+  }, [continuation, continuationPending, router]);
 
   // The request-fresh server draft is authoritative after provider return.
   const resumedDraft = initialDurableDraft;
@@ -83,45 +104,64 @@ export function AuthenticatedBuilder({
 
   return (
     <>
+      <Builder
+        key={builderKey}
+        initialBrief={savedBrief}
+        submissionPending={continuationPending}
+        generatedNameSeed={generatedNameSeed}
+        initialDraft={resumedDraft}
+        resumeKey={providerResumeKey}
+        durableDraftId={durableDraftId}
+        durableDraftRevision={durableDraftRevision}
+        durableDraftUpdatedAt={durableDraftUpdatedAt}
+        saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
+        loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
+        connectionsEnabled={connectionsEnabled}
+        comingSoonEnabled={comingSoonEnabled}
+        integrations={integrations}
+        providerNotices={providerNotices}
+        onCreate={(draftCheckpoint, intentKey) => {
+          // Retrying an interrupted action reuses its durable idempotency
+          // keys. A failed attempt never unmounts or resets the RHF form.
+          if (
+            continuationRequest.current?.draftId !== draftCheckpoint.draftId ||
+            continuationRequest.current.intentKey !== intentKey
+          ) {
+            continuationRequest.current = {
+              draftId: draftCheckpoint.draftId,
+              intentKey,
+              requestId: crypto.randomUUID(),
+              creationRequestId: crypto.randomUUID(),
+            };
+          }
+          savedContinuation.current = {
+            version: 1,
+            requestId: continuationRequest.current!.requestId,
+            creationRequestId: continuationRequest.current!.creationRequestId,
+            provisioningEnabled,
+            draftCheckpoint,
+          };
+          startTransition(() => dispatchContinuation(savedContinuation.current!));
+        }}
+      />
       {continuationPending ? (
-        <main className={styles.flowPage} id="main-content">
-          <section className={styles.readyCard} aria-busy="true">
-            <h1>Preparing your handoff</h1>
-            <p>Your saved app is being prepared.</p>
-          </section>
-        </main>
-      ) : (
-        <Builder
-          key={builderKey}
-          initialBrief={savedBrief}
-          generatedNameSeed={generatedNameSeed}
-          initialDraft={resumedDraft}
-          resumeKey={providerResumeKey}
-          durableDraftId={durableDraftId}
-          durableDraftRevision={durableDraftRevision}
-          durableDraftUpdatedAt={durableDraftUpdatedAt}
-          saveActiveBuilderDraftAction={saveActiveBuilderDraftAction}
-          loadActiveBuilderDraftAction={loadActiveBuilderDraftAction}
-          connectionsEnabled={connectionsEnabled}
-          comingSoonEnabled={comingSoonEnabled}
-          integrations={integrations}
-          providerNotices={providerNotices}
-          onCreate={(form, draftId) => {
-            activeDraftId.current = draftId ?? durableDraftId;
-            startTransition(() =>
-              dispatchContinuation({
-                version: 1,
-                requestId: crypto.randomUUID(),
-                creationRequestId: crypto.randomUUID(),
-                provisioningEnabled,
-                form,
-              }),
-            );
-          }}
-        />
-      )}
+        <p className={styles.draftStatus} role="status">
+          Preparing your saved handoff…
+        </p>
+      ) : null}
       {continuation?.status === "error" && !continuationPending ? (
-        <p role="alert">We couldn’t prepare your handoff. Your saved draft is still available.</p>
+        <div role="alert">
+          <p>We couldn’t confirm your handoff. Your saved app is still available.</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (savedContinuation.current)
+                startTransition(() => dispatchContinuation(savedContinuation.current!));
+            }}
+          >
+            Retry saved handoff
+          </button>
+        </div>
       ) : null}
     </>
   );

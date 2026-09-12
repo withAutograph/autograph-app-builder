@@ -25,11 +25,21 @@ export function BuilderLoadingShell({ title = "Create an app" }: BuilderLoadingS
         aria-label="Builder form loading"
         className="rounded-xl border border-neutral-200 p-6 dark:border-neutral-800"
       >
-        <div className="h-5 w-40 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-        <div className="mt-4 h-10 animate-pulse rounded bg-neutral-100 dark:bg-neutral-900" />
-        <div className="mt-5 h-5 w-32 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
-        <div className="mt-4 h-24 animate-pulse rounded bg-neutral-100 dark:bg-neutral-900" />
-        <div className="mt-5 h-10 w-32 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
+        <div className="space-y-5">
+          {[
+            ["App Name", "h-10"],
+            ["What should this app do?", "h-24"],
+            ["Where should we prepare it?", "h-10"],
+          ].map(([label, height]) => (
+            <div className="grid gap-2 text-sm font-medium" key={label}>
+              <p>{label}</p>
+              <div
+                aria-hidden="true"
+                className={`${height} w-full animate-pulse rounded bg-neutral-100 dark:bg-neutral-900`}
+              />
+            </div>
+          ))}
+        </div>
       </section>
     </main>
   );
