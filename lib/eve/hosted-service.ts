@@ -563,7 +563,6 @@ export function createHostedEveSessionService(input: {
           default:
             return assertNever(operation);
         }
-        break;
       }
       default:
         return assertNever(reservation);
