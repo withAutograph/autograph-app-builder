@@ -1,3 +1,4 @@
+import type { Page } from "playwright";
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -583,11 +584,28 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
   try {
     await mkdir(destination, { recursive: true, mode: 0o700 });
     const { capturePreview } = await import("./design-quality/browser");
+    const fixtureReceipts: unknown[] = [];
+    const fixtureRoot = label === "reference" ? referenceFixtureRoot : undefined;
+    const preparePage = fixtureRoot
+      ? async (page: Page) => {
+          const { prepareReferenceCaptureFixture } =
+            await import("../evals/support/self-reproduction-reference-capture-fixture");
+          await prepareReferenceCaptureFixture(page, {
+            fixtureRoot,
+            referenceUrl: url,
+            recordReceipt: async (receipt) => {
+              fixtureReceipts.push(receipt);
+              await jsonFile(`captures/${label}/fixture.json`, fixtureReceipts);
+            },
+          });
+        }
+      : undefined;
     const previewFiles = await capturePreview({
       url,
       output: destination,
       tokens: {},
       scenarios: [],
+      preparePage,
       ignoreHTTPSErrors: label === "reference" && referenceFixtureRoot !== undefined,
       generatedSourcePaths: sourceRoot
         ? (await readSource(sourceRoot)).map((file) => file.path)
@@ -595,8 +613,13 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
     });
     return {
       label,
-      files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
-      status: "captured",
+      files: [
+        ...previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
+        ...(fixtureRoot ? [`captures/${label}/fixture.json`] : []),
+      ],
+      status: fixtureRoot
+        ? "captured: authenticated durable draft; candidate authentication parity is separately assessed"
+        : "captured: unseeded; authenticated state parity is unassessed",
     };
   } catch (error) {
     await mkdir(destination, { recursive: true, mode: 0o700 });

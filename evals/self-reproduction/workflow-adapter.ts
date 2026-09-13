@@ -1,3 +1,4 @@
+import { selfReproductionDraft } from "../support/self-reproduction-draft-fixture";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { encryptOverrides } from "flags";
@@ -33,8 +34,8 @@ export interface WorkflowAdapterFactoryInput {
   outputRoot: string;
 }
 
-const fixedName = "Self reproduction parity draft";
-const fixedBrief = "Create one small independent issue tracker with durable server persistence.";
+const fixedName = selfReproductionDraft.appName;
+const fixedBrief = selfReproductionDraft.brief;
 
 function assertion(id: string, passed: boolean, detail: string): AssertionResult {
   return { id, passed, detail };
