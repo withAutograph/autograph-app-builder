@@ -55,8 +55,9 @@ startup is a prerequisite, not workflow credit. Deeper workflows remain
 unassessed until trusted browser adapters exercise them.
 
 For already-running reference and candidate URLs, add `--reference-url` and
-`--candidate-url` to retain generic design captures. To execute the authoritative
-paired state matrix, also pass an evaluator-owned adapter module:
+`--candidate-url`. This retains generic design captures and executes the
+authoritative paired state matrix with the checked-in semantic adapter. An
+evaluator-owned custom adapter remains available for specialized fixture hooks:
 
 ```sh
 mise run eval:self-reproduction -- --report-only \

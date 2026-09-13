@@ -101,7 +101,11 @@ let candidate: Record<string, unknown> = {
 const errors: string[] = [];
 
 async function runConfiguredPairedCaptures() {
-  const adapterFile = values["capture-adapter"];
+  const adapterFile =
+    values["capture-adapter"] ??
+    (values["reference-url"] && values["candidate-url"]
+      ? join(root, "evals/self-reproduction/default-capture-adapter.ts")
+      : undefined);
   if (!adapterFile) return;
   if (!values["reference-url"] || !values["candidate-url"])
     throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");

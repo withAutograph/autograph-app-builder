@@ -46,7 +46,7 @@ export interface TrustedFrameworkAdapter {
       }
     | {
         ready: false;
-        disposition: "missing-functionality" | "infrastructure-unavailable";
+        disposition: "missing-functionality" | "infrastructure-unavailable" | "not-run";
         reason: string;
       }
   >;
