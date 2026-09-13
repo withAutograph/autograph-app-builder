@@ -1,5 +1,7 @@
 /* oxlint-disable eslint/require-await -- mocked filesystem ports are asynchronous */
 /* oxlint-disable unicorn/import-style -- the standalone worker consumes the complete path module namespace */
+import { userInfo } from "node:os";
+import pathModule from "node:path";
 import { EventEmitter } from "node:events";
 import { afterEach, expect, it, vi } from "vitest";
 /* oxlint-disable unicorn/prefer-event-target -- child_process streams implement Node EventEmitter */
@@ -15,6 +17,7 @@ const runHostedEvalWorker = () => {
       if (specifier === "node:child_process") return import("node:child_process");
       if (specifier === "node:fs/promises") return import("node:fs/promises");
       if (specifier === "node:path") return import("node:path");
+      if (specifier === "node:os") return import("node:os");
       throw new Error("Unexpected worker dependency");
     },
     process,
@@ -37,7 +40,10 @@ vi.mock("node:fs/promises", () => ({
   readFile: async (path: string) =>
     path === "/etc/os-release"
       ? "ID=ubuntu\n"
-      : JSON.stringify({ environment: {}, toolchain: "trusted-toolchain" }),
+      : JSON.stringify({
+          environment: { MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data" },
+          toolchain: "trusted-toolchain",
+        }),
   readdir: async () => [
     { name: "report.json" },
     { name: "eval-output.log" },
@@ -105,6 +111,12 @@ it("executes fixed hosted task with process PostgreSQL and keeps clone credentia
     ]),
   );
   expect(evaluation?.args.slice(-2)).toEqual(["--postgres-backend", "process"]);
+  const accountMiseData = pathModule.join(userInfo().homedir, ".local/share/mise");
+  expect(evaluation?.env.MISE_DATA_DIR).toBe(accountMiseData);
+  const install = state.commands.find(({ args }) => args[0] === "install" && args.includes("node"));
+  expect(install?.env.MISE_DATA_DIR).toBe(accountMiseData);
+  const dependencies = state.commands.find(({ args }) => args.includes("dependencies:install"));
+  expect(dependencies?.env.MISE_DATA_DIR).toBe(accountMiseData);
   expect(evaluation?.env.APP_BUILDER_TEMPLATE_READ_TOKEN).toBeUndefined();
   expect(evaluation?.env.GIT_CONFIG_VALUE_0).toBeUndefined();
   expect(evaluation?.env.PATH).toMatch(/^\/usr\/lib\/postgresql\/16\/bin:/u);
