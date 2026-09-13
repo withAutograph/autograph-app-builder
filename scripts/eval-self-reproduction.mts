@@ -94,6 +94,7 @@ const { values } = parseArgs({
     "workflow-adapter-module": { type: "string" },
     "output-dir": { type: "string" },
     "generation-timeout-ms": { type: "string" },
+    "hosted-oidc": { type: "boolean", default: false },
     "report-only": { type: "boolean" },
     generator: { type: "string" },
     "generator-arg": { type: "string", multiple: true },
@@ -299,7 +300,15 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
   }
 }
 
-function loadProjectOidc(): { token: string; teamId: string; projectId: string } {
+async function loadProjectOidc(): Promise<{ token: string; teamId: string; projectId: string }> {
+  if (values["hosted-oidc"]) {
+    const { acquireHostedEvalOidc } = await import("../lib/eve/hosted-eval-oidc");
+    return acquireHostedEvalOidc({
+      projectId: process.env.VERCEL_PROJECT_ID ?? "",
+      teamId: process.env.VERCEL_TEAM_ID ?? "",
+      environment: process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || "",
+    });
+  }
   const token = parseLocalVercelOidcToken(
     readOwnerBoundLocalFile(join(root, ".env.local"), { confidential: true }),
   );
@@ -1065,7 +1074,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       }
     }
     if (values["candidate-runtime"] || (!values["report-only"] && !values.generator)) {
-      const credentials = loadProjectOidc();
+      const credentials = await loadProjectOidc();
       if (credentials) candidateEvidenceSecrets.push(credentials.token);
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
