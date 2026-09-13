@@ -174,7 +174,7 @@ export async function evaluateCandidateRuntime(input: {
       };
     const build = await command(
       handle,
-      `${bun} .config/mise/scripts/repository/app-validation.ts check-build ${input.candidateAppId}`,
+      `${bun} run --cwd apps/${input.candidateAppId} build`,
       controller.signal,
     );
     commands.push(build);
