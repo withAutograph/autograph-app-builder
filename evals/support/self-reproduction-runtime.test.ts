@@ -192,6 +192,7 @@ describe("self-reproduction candidate runtime", () => {
       backend: fixture.backend,
       candidateAppId: "candidate",
       files: [],
+      publicBasePath: "",
       workspaceArchive: Buffer.from("archive"),
       credentials: { token: "private-credential", teamId: "team", projectId: "project" },
       onReady: () => Promise.reject(new Error("Evaluator disk write failed: private-credential")),
