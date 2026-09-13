@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Observation } from "./self-reproduction-parity";
 import { mergeRuntimeEvidence } from "./self-reproduction-runtime-evidence";
 
-function observation(disposition: Observation["disposition"], reason = disposition): Observation {
+function observation(
+  disposition: Observation["disposition"],
+  reason: string = disposition,
+): Observation {
   return {
     requirementId: "documentation",
     disposition,
