@@ -55,7 +55,25 @@ startup is a prerequisite, not workflow credit. Deeper workflows remain
 unassessed until trusted browser adapters exercise them.
 
 For already-running reference and candidate URLs, add `--reference-url` and
-`--candidate-url` to retain generic design captures.
+`--candidate-url` to retain generic design captures. To execute the authoritative
+paired state matrix, also pass an evaluator-owned adapter module:
+
+```sh
+mise run eval:self-reproduction -- --report-only \
+  --candidate-root /absolute/path/to/exported-candidate \
+  --reference-url http://127.0.0.1:3000 \
+  --candidate-url http://127.0.0.1:3001 \
+  --capture-adapter evals/self-reproduction/capture-adapter.ts \
+  --output-dir /absolute/external/evidence/comparison
+```
+
+The adapter must live under `evals/` and export
+`createCaptureAdapters({ referenceURL, candidateURL })`. Each side implements
+the `CaptureAdapter` contract from
+`evals/support/self-reproduction-captures.ts`. Generated output cannot supply
+this module. The runner ingests the resulting evaluator-owned observations into
+`parity-evidence.json` and writes an advisory side-by-side manifest at
+`parity/captures/manifest.json`.
 
 The report labels an operator-supplied candidate separately from the live
 generation that produced it. Credentials and dependencies are never copied.

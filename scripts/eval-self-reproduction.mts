@@ -5,6 +5,7 @@ import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "nod
 import { homedir, tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { create as createTar } from "tar";
 import { activeBuilderModelId } from "../lib/integrations/active-model";
@@ -42,6 +43,12 @@ import type {
   ParityEvidence,
 } from "../evals/support/self-reproduction-parity";
 import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
+import {
+  runPairedCaptureEvidence,
+  unavailableCaptureObservations,
+  writePairedCaptureManifest,
+} from "../evals/support/self-reproduction-captures";
+import type { CaptureAdapter, PairedCaptureRun } from "../evals/support/self-reproduction-captures";
 
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
@@ -51,6 +58,7 @@ const { values } = parseArgs({
     "candidate-url": { type: "string" },
     "candidate-runtime": { type: "boolean" },
     "reference-url": { type: "string" },
+    "capture-adapter": { type: "string" },
     "output-dir": { type: "string" },
     "generation-timeout-ms": { type: "string" },
     "report-only": { type: "boolean" },
@@ -81,6 +89,7 @@ let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let workflowEvidence: WorkflowEvidence | undefined;
 let parityAssessment: Assessment | undefined;
+let pairedCaptures: PairedCaptureRun | undefined;
 let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
   status: "not-run",
   reason: "Candidate runtime evaluation was not requested.",
@@ -90,6 +99,51 @@ let candidate: Record<string, unknown> = {
   reason: "No candidate export has been supplied.",
 };
 const errors: string[] = [];
+
+async function runConfiguredPairedCaptures() {
+  const adapterFile = values["capture-adapter"];
+  if (!adapterFile) return;
+  if (!values["reference-url"] || !values["candidate-url"])
+    throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");
+  const evaluatorRoot = await realpath(join(root, "evals"));
+  const resolvedAdapter = await realpath(resolve(adapterFile));
+  const adapterRelative = relative(evaluatorRoot, resolvedAdapter);
+  if (
+    !adapterRelative ||
+    adapterRelative === ".." ||
+    adapterRelative.startsWith(`..${sep}`) ||
+    adapterRelative.startsWith(sep)
+  )
+    throw new Error("Capture adapter must be an evaluator-owned module under evals/.");
+  const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
+    createCaptureAdapters?: (input: {
+      referenceURL: string;
+      candidateURL: string;
+    }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
+  };
+  if (typeof loaded.createCaptureAdapters !== "function")
+    throw new Error("Capture adapter must export createCaptureAdapters().");
+  const adapters = await loaded.createCaptureAdapters({
+    referenceURL: values["reference-url"],
+    candidateURL: values["candidate-url"],
+  });
+  try {
+    pairedCaptures = await runPairedCaptureEvidence({ outputRoot: output, adapters });
+  } catch {
+    const observations = unavailableCaptureObservations(
+      "The evaluator could not launch or retain its paired browser capture runtime.",
+    );
+    pairedCaptures = {
+      observations,
+      manifest: await writePairedCaptureManifest(output, observations),
+    };
+  }
+  captures.push({
+    label: "paired-state-manifest",
+    files: ["parity/captures/manifest.json"],
+    status: "captured",
+  });
+}
 
 function loadProjectOidc(): { token: string; teamId: string; projectId: string } {
   const token = parseLocalVercelOidcToken(
@@ -489,7 +543,7 @@ async function saveReport() {
       sourceRevision: String(
         (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
       ),
-      observations: [],
+      observations: pairedCaptures?.observations.reference ?? [],
     },
     candidate: {
       output: candidateOutput,
@@ -500,7 +554,7 @@ async function saveReport() {
       sourceRevision: String(
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
-      observations: runtimeObservations(),
+      observations: [...runtimeObservations(), ...(pairedCaptures?.observations.candidate ?? [])],
     },
   };
   await jsonFile("parity-evidence.json", parityEvidence);
@@ -559,6 +613,7 @@ async function saveReport() {
           { label: "reference", files: [], status: "unassessed: capture has not run" },
           { label: "candidate", files: [], status: "unassessed: capture has not run" },
         ],
+    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
     limitations: [
       "No deployment, provider publication, or provisioning is performed by this report pipeline.",
       "The native eval retains reviewed sandbox status but does not export a candidate tree; supply --candidate-root with --report-only for an independently exported tree.",
@@ -598,7 +653,7 @@ async function saveReport() {
 async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
-  [--reference-url URL] [--candidate-url URL] [--generation-timeout-ms N]
+  [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
   [--candidate-runtime]
   [--report-only --candidate-root PATH]
 
@@ -607,6 +662,8 @@ sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
+--capture-adapter loads an evaluator-owned module under evals/ and executes the
+complete paired desktop state matrix against both supplied URLs.
 --generator FILE and repeatable --generator-arg VALUE select a test launcher.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
@@ -772,6 +829,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         capture("candidate", values["candidate-url"], candidateRoot),
       ])),
     );
+    await runConfiguredPairedCaptures();
   } catch (error) {
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
     generation = { ...generation, status: "failed" };

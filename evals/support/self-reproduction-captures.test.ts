@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
-import { captureParity, runPairedCaptureEvidence } from "./self-reproduction-captures";
+import {
+  captureParity,
+  runPairedCaptureEvidence,
+  unavailableCaptureObservations,
+  writePairedCaptureManifest,
+} from "./self-reproduction-captures";
 import type { CaptureAdapter } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
@@ -133,6 +138,27 @@ describe("paired capture orchestration", () => {
       expect(manifest.rows).toHaveLength(15);
       expect(manifest.rows[0].reference.png).toContain("/reference.png");
       expect(manifest.rows[0].candidate.png).toContain("/candidate.png");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("reports browser launch failure as blocked paired evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "parity-capture-blocked-manifest-"));
+    try {
+      const observations = unavailableCaptureObservations("Chromium could not launch.");
+      const manifest = await writePairedCaptureManifest(root, observations);
+      expect(manifest.rows).toHaveLength(15);
+      expect(
+        [...observations.reference, ...observations.candidate].every(
+          (row) => row.disposition === "infrastructure-unavailable",
+        ),
+      ).toBe(true);
+      expect(manifest.rows[0]).toMatchObject({
+        reference: { disposition: "infrastructure-unavailable" },
+        candidate: { disposition: "infrastructure-unavailable" },
+      });
+      expect(manifest.rows[0]!.reference).not.toHaveProperty("png");
+      expect(manifest.rows[0]!.reference).not.toHaveProperty("receipt");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

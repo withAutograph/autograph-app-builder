@@ -41,8 +41,8 @@ export interface PairedCaptureManifestRow {
   requirementId: string;
   state: CaptureState;
   viewport: (typeof desktopViewports)[number];
-  reference: { disposition: Observation["disposition"]; png?: string; receipt: string };
-  candidate: { disposition: Observation["disposition"]; png?: string; receipt: string };
+  reference: { disposition: Observation["disposition"]; png?: string; receipt?: string };
+  candidate: { disposition: Observation["disposition"]; png?: string; receipt?: string };
 }
 
 export interface PairedCaptureRun {
@@ -52,6 +52,65 @@ export interface PairedCaptureRun {
     visualScoresAdvisory: true;
     rows: PairedCaptureManifestRow[];
   };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function unavailableCaptureObservations(reason: string): PairedCaptureRun["observations"] {
+  return Object.fromEntries(
+    sides.map((side) => [
+      side,
+      desktopViewports.flatMap((viewport) =>
+        captureStates.map((state): Observation => ({
+          requirementId: `capture/${viewport.name}/${state}`,
+          disposition: "infrastructure-unavailable",
+          reason,
+          method: "none",
+          artifacts: [],
+          assertions: [],
+        })),
+      ),
+    ]),
+  ) as PairedCaptureRun["observations"];
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function writePairedCaptureManifest(
+  outputRoot: string,
+  observations: PairedCaptureRun["observations"],
+): Promise<PairedCaptureRun["manifest"]> {
+  const rows = desktopViewports.flatMap((viewport) =>
+    captureStates.map((state): PairedCaptureManifestRow => {
+      const requirementId = `capture/${viewport.name}/${state}`;
+      const pair = Object.fromEntries(
+        sides.map((side) => {
+          const observation = observations[side].find(
+            (item) => item.requirementId === requirementId,
+          );
+          const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
+          return [
+            side,
+            {
+              disposition: observation?.disposition ?? "not-run",
+              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
+              ...(observation?.artifacts.includes(`${prefix}.json`)
+                ? { receipt: `${prefix}.json` }
+                : {}),
+            },
+          ];
+        }),
+      ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
+      return { requirementId, viewport, state, ...pair };
+    }),
+  );
+  const manifest: PairedCaptureRun["manifest"] = {
+    schemaVersion: "self-reproduction-captures/v1",
+    visualScoresAdvisory: true,
+    rows,
+  };
+  const manifestPath = join(outputRoot, "parity/captures/manifest.json");
+  await mkdir(dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  return manifest;
 }
 
 /** Uses an already available browser; never starts a server or provider job. */
@@ -180,35 +239,6 @@ export async function runPairedCaptureEvidence(input: {
   } finally {
     await browser.close();
   }
-  const rows = desktopViewports.flatMap((viewport) =>
-    captureStates.map((state): PairedCaptureManifestRow => {
-      const requirementId = `capture/${viewport.name}/${state}`;
-      const pair = Object.fromEntries(
-        sides.map((side) => {
-          const observation = observations[side].find(
-            (item) => item.requirementId === requirementId,
-          );
-          const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-          return [
-            side,
-            {
-              disposition: observation?.disposition ?? "not-run",
-              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
-              receipt: `${prefix}.json`,
-            },
-          ];
-        }),
-      ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
-      return { requirementId, viewport, state, ...pair };
-    }),
-  );
-  const manifest: PairedCaptureRun["manifest"] = {
-    schemaVersion: "self-reproduction-captures/v1",
-    visualScoresAdvisory: true,
-    rows,
-  };
-  const manifestPath = join(input.outputRoot, "parity/captures/manifest.json");
-  await mkdir(dirname(manifestPath), { recursive: true });
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  const manifest = await writePairedCaptureManifest(input.outputRoot, observations);
   return { observations, manifest };
 }
