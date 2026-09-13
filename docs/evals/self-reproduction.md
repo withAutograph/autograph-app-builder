@@ -64,6 +64,18 @@ sandbox. It records bounded command output in `candidate-runtime.json`. Runtime
 startup is a prerequisite, not workflow credit. Deeper workflows remain
 unassessed until trusted browser adapters exercise them.
 
+While the candidate Sandbox remains alive, the evaluator also runs the supported
+candidate workflow and desktop interaction fixtures. Unknown generated layouts
+remain unassessed until an evaluator adapter is supplied. Documentation uses the
+actual visible navigation control; a guessed `/docs` response is diagnostic only.
+
+Native generation runs the reference's isolated production-navigation suite and
+retains its JSON reporter output. For report-only runs, opt in with
+`--reference-navigation`, or reuse an existing evaluator output directory with
+`--reference-navigation-evidence /absolute/path/to/reference-navigation`.
+Reused evidence retains its original source snapshot, revision, and timestamps;
+it is not represented as a new production test run.
+
 For already-running reference and candidate URLs, add `--reference-url` and
 `--candidate-url`. This retains generic design captures and executes the
 authoritative paired state matrix with the checked-in semantic adapter. An

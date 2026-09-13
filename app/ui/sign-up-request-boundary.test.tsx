@@ -17,7 +17,6 @@ vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
   getPreviewOAuthDeploymentOrigin: () => "https://builder.example",
 }));
 
-
 it("waits for a real request before starting shared auth initialization", async () => {
   let release: (() => void) | undefined;
   dependencies.connection.mockImplementation(

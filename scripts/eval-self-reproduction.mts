@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,6 +51,13 @@ import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction
 import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
 import { mergeRuntimeEvidence } from "../evals/support/self-reproduction-runtime-evidence";
 import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
+import {
+  candidateWorkflowReceipts,
+  sandboxCandidateWorkflowComparison,
+} from "../evals/support/self-reproduction-candidate-workflows";
+import type { CandidateWorkflowOutcome } from "../evals/support/self-reproduction-candidate-workflows";
+import { sandboxCandidateInteractionCaptures } from "../evals/support/self-reproduction-candidate-captures";
+import { runtimeReceiptSchema } from "../evals/support/self-reproduction-parity-evidence";
 import { startSelfReproductionReferenceRuntime } from "../evals/support/self-reproduction-reference-runtime";
 import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
 import type { TrustedBrowserWorkflowAdapter } from "../evals/support/self-reproduction-workflow-adapters";
@@ -71,6 +78,8 @@ const { values } = parseArgs({
     "debug-prerender": { type: "boolean" },
     "reference-url": { type: "string" },
     "reference-runtime": { type: "boolean" },
+    "reference-navigation": { type: "boolean" },
+    "reference-navigation-evidence": { type: "string" },
     "mise-executable": { type: "string" },
     "capture-adapter": { type: "string" },
     "workflow-adapter-module": { type: "string" },
@@ -106,6 +115,9 @@ let workflowEvidence: WorkflowEvidence | undefined;
 let parityAssessment: Assessment | undefined;
 let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
+let sandboxWorkflowReceipts: unknown[] = [];
+let sandboxCaptureObservations: Observation[] = [];
+let referenceNavigationReceipts: unknown[] = [];
 let trustedFrameworkReceipts: unknown[] = [];
 let referenceFixtureRoot: string | undefined;
 let referenceDatabaseUrl: string | undefined;
@@ -623,68 +635,19 @@ function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Obser
       receipt: candidateRuntime,
       existingRequirementIds,
     });
-  const artifact = "candidate-runtime.json";
-  const notRun = workflowMatrix
-    .filter(
-      (row) =>
-        row.id !== "anonymous-entry" &&
-        row.id !== "documentation" &&
-        !existingRequirementIds.has(row.id),
-    )
+  // Readiness and a guessed /docs route are diagnostics, not workflow evidence.
+  // Only the evaluator adapter that activates the actual controls can assess docs.
+  return workflowMatrix
+    .filter((row) => row.id !== "anonymous-entry" && !existingRequirementIds.has(row.id))
     .map((row): Observation => ({
       requirementId: row.id,
       disposition: "not-run",
       reason:
-        candidateRuntime.status === "available"
-          ? "Candidate runtime started, but no trusted workflow adapter exists for this behavior."
-          : `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+        "Candidate runtime started, but no trusted workflow adapter exists for this behavior.",
       assertions: [],
-      artifacts: [artifact],
+      artifacts: ["candidate-runtime.json"],
       method: "none",
     }));
-  if (!("probes" in candidateRuntime) || existingRequirementIds.has("documentation")) return notRun;
-  const docs = candidateRuntime.probes.find((probe) => probe.id === "documentation");
-  if (!docs)
-    return [
-      ...notRun,
-      {
-        requirementId: "documentation",
-        disposition: "not-run",
-        reason: `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
-        assertions: [],
-        artifacts: [artifact],
-        method: "none",
-      },
-    ];
-  return [
-    ...notRun,
-    {
-      requirementId: "documentation",
-      disposition:
-        docs.disposition === "infrastructure-unavailable"
-          ? "infrastructure-unavailable"
-          : docs.passed
-            ? "observed"
-            : "missing-functionality",
-      reason: docs.detail,
-      assertions: [
-        {
-          id: "docs-readable",
-          passed: docs.readable ?? docs.passed,
-          detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
-          artifacts: [artifact],
-        },
-        {
-          id: "return-navigation-works",
-          passed: docs.returned ?? docs.passed,
-          detail: docs.detail,
-          artifacts: [artifact],
-        },
-      ],
-      artifacts: [artifact],
-      method: "browser",
-    },
-  ];
 }
 
 async function saveReport() {
@@ -699,7 +662,12 @@ async function saveReport() {
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
   const runtimeReceipts = mergeRuntimeEvidence({
-    trustedReceipts: [...trustedWorkflowReceipts, ...trustedFrameworkReceipts],
+    trustedReceipts: [
+      ...sandboxWorkflowReceipts,
+      ...referenceNavigationReceipts,
+      ...trustedWorkflowReceipts,
+      ...trustedFrameworkReceipts,
+    ],
     candidateFallback: runtimeObservations(new Set()),
   });
   const completedCaptures = pairedCaptures;
@@ -714,6 +682,19 @@ async function saveReport() {
           : [];
       }),
     ) ?? [];
+  for (const observation of sandboxCaptureObservations) {
+    if (
+      observedCaptureReceipts.some(
+        (row) => row.side === "candidate" && row.requirementId === observation.requirementId,
+      )
+    )
+      continue;
+    const [, viewportName, stateName] = observation.requirementId.split("/");
+    const viewport = desktopViewports.find((item) => item.name === viewportName);
+    const state = captureStates.find((item) => item === stateName);
+    if (viewport && state)
+      observedCaptureReceipts.push({ side: "candidate", viewport, state, ...observation });
+  }
   const observedCandidateCaptureIds = new Set(
     observedCaptureReceipts
       .filter((receipt) => receipt.side === "candidate")
@@ -1071,6 +1052,67 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   files: artifacts.map(({ path }) => `candidate-browser/${path}`),
                   status: `${comparison.status}; unseeded captures do not establish workflow-state parity`,
                 });
+                const workflows = await runSandboxRuntimeComparison({
+                  session,
+                  ...sandboxCandidateWorkflowComparison(),
+                  payload: { baseURL },
+                  abortSignal,
+                });
+                const { artifacts: workflowArtifacts, ...workflowReceipt } = workflows;
+                await jsonFile("candidate-browser-workflows.json", {
+                  ...workflowReceipt,
+                  artifacts: workflowArtifacts.map(({ path }) => path),
+                });
+                const observations = workflows.output as {
+                  outcomes?: CandidateWorkflowOutcome[];
+                } | null;
+                if (Array.isArray(observations?.outcomes)) {
+                  sandboxWorkflowReceipts = candidateWorkflowReceipts(
+                    observations.outcomes,
+                    "candidate-browser-workflows.json",
+                  );
+                  await jsonFile("candidate-workflow-receipts.json", sandboxWorkflowReceipts);
+                }
+                const interactions = await runSandboxRuntimeComparison({
+                  session,
+                  ...sandboxCandidateInteractionCaptures(),
+                  payload: { baseURL },
+                  abortSignal,
+                });
+                const { artifacts: interactionArtifacts, ...interactionReceipt } = interactions;
+                await jsonFile("candidate-interactions.json", {
+                  ...interactionReceipt,
+                  artifacts: interactionArtifacts.map(
+                    ({ path }) => `candidate-interactions/${path}`,
+                  ),
+                });
+                for (const artifact of interactionArtifacts) {
+                  const target = join(output, "candidate-interactions", artifact.path);
+                  await mkdir(resolve(target, ".."), { recursive: true });
+                  await writeFile(target, artifact.content, { mode: 0o600 });
+                }
+                const captured = interactions.output as { observations?: Observation[] } | null;
+                if (Array.isArray(captured?.observations)) {
+                  sandboxCaptureObservations = captured.observations.map((observation) => ({
+                    ...observation,
+                    artifacts: [
+                      "candidate-interactions.json",
+                      ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
+                    ],
+                    assertions: observation.assertions.map((assertion) => ({
+                      ...assertion,
+                      artifacts: [
+                        "candidate-interactions.json",
+                        ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
+                      ],
+                    })),
+                  }));
+                }
+                captures.push({
+                  label: "candidate desktop interactions",
+                  files: interactionArtifacts.map(({ path }) => `candidate-interactions/${path}`),
+                  status: `${interactions.status}; state coverage is recorded per assertion`,
+                });
               },
             })
           : {
@@ -1097,6 +1139,35 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         )}`,
       );
       await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+    }
+    if (values["reference-navigation-evidence"]) {
+      const directory = resolve(values["reference-navigation-evidence"]);
+      // Reuse evaluator evidence without rerunning production builds. Preserve its own provenance.
+      for (const file of ["run.json", "navigation.spec.ts", "playwright.json", "receipt.json"]) {
+        await mkdir(join(output, "reference-navigation"), { recursive: true });
+        await cp(join(directory, file), join(output, "reference-navigation", file));
+      }
+      const receipt = runtimeReceiptSchema.parse(
+        JSON.parse(await readFile(join(output, "reference-navigation/receipt.json"), "utf-8")),
+      );
+      if (
+        receipt.side !== "reference" ||
+        receipt.observation.requirementId !== "instant-navigation"
+      )
+        throw new Error("Expected reference instant-navigation evaluator evidence.");
+      referenceNavigationReceipts = [receipt];
+    } else if (values["reference-navigation"] || (!values["report-only"] && !values.generator)) {
+      if (!values["mise-executable"])
+        throw new Error("Reference navigation requires the mise-owned eval entrypoint.");
+      const { runReferenceNavigationEvidence } =
+        await import("../evals/support/self-reproduction-reference-navigation");
+      const receipt = await runReferenceNavigationEvidence({
+        repositoryRoot: root,
+        outputRoot: output,
+        miseExecutable: values["mise-executable"],
+      });
+      referenceNavigationReceipts = [receipt];
+      await jsonFile("reference-navigation/receipt.json", receipt);
     }
     await saveReport();
     await runConfiguredPairedCaptures();
