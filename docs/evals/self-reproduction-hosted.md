@@ -51,8 +51,9 @@ the report; the candidate is never patched by the evaluator.
 The reference uses an isolated PostgreSQL process instead of Docker. This is an
 explicit `--postgres-backend process` option; normal local runs retain Docker.
 Sandbox networking remains `allow-all`, and persistence snapshots are disabled.
-The worker has a 45-minute provider cleanup deadline. The GitHub client allows
-50 minutes for completion and evidence retrieval within a 60-minute job.
+The evaluation has a 45-minute deadline, followed by five minutes for artifact
+collection before the Sandbox provider hard timeout. The GitHub client allows
+55 minutes for completion and evidence retrieval within a 60-minute job.
 
 On each authorized status call the controller obtains its current Vercel identity
 and atomically replaces a private worker file outside source and reports. The
