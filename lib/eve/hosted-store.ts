@@ -642,6 +642,8 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const current = this.sessions.get(key);
     if (current === undefined) throw new Error("Hosted session was not found.");
     const durable = toDurableHostedSessionRecord(current);
+    // Cancellation is terminal for this session; explicit resume creates a new child.
+    if (durable.status === "cancelled") return structuredClone(durable);
     const observed = durableHostedSessionRecordSchema.parse({
       ...durable,
       status: input.checkpoint.status,

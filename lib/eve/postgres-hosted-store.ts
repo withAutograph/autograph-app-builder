@@ -502,6 +502,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error("Hosted session was not found.");
         }
         const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
+        // Hold the row lock while refusing late observations after cancellation.
+        if (current.status === "cancelled") return current;
         const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
         const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
         const observed = durableHostedSessionRecordSchema.parse({
