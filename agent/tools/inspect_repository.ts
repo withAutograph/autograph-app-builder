@@ -33,7 +33,7 @@ export default defineTool({
         if (requestedPath === undefined) return;
         const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
         const content = await sandbox.readTextFile({
-          path: ["/workspace/repository", relativePath].join("/"),
+          path: `/workspace/repository/${relativePath}`,
         });
         if (content === null) missingPaths.push(requestedPath);
         else files.push({ content, path: requestedPath });
@@ -90,7 +90,7 @@ export default defineTool({
       const overviewPath = sandboxOverviewPaths[index];
       if (overviewPath === undefined) return;
       const content = await sandbox.readTextFile({
-        path: ["repository", overviewPath].join("/"),
+        path: `repository/${overviewPath}`,
       });
       if (content === null) missingPaths.push(overviewPath);
       else availablePaths.push(overviewPath);
