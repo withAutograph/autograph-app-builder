@@ -18,7 +18,13 @@ vi.mock("../../e2e/support/harness", () => ({
 }));
 vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
 const page = {
-  getByLabel: () => ({ fill: vi.fn() }),
+  getByLabel: (name: string) => ({
+    fill: vi.fn(),
+    inputValue: () =>
+      Promise.resolve(
+        name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
+      ),
+  }),
   getByRole: () => ({ filter: () => ({ waitFor: vi.fn() }) }),
   viewportSize: () => ({ height: 900, width: 1440 }),
 } as unknown as Page;
@@ -58,4 +64,45 @@ it("records a blocker and rejects when emulated authentication fails", async () 
   ).rejects.toThrow("fixture is unavailable");
   expect(recordReceipt).toHaveBeenCalledWith(expect.objectContaining({ status: "blocked" }));
   expect(JSON.stringify(recordReceipt.mock.calls)).not.toContain("sensitive diagnostic");
+});
+
+it("captures three restored contexts without waiting for a new write acknowledgement", async () => {
+  fixture.query.mockResolvedValue([{ ...selfReproductionDraft, revision: 7 }]);
+  const fill = vi.fn();
+  const status = vi.fn(() => {
+    throw new Error("Unchanged draft has no new acknowledgement");
+  });
+  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
+    Promise.resolve(),
+  );
+  for (const width of [1440, 1920, 1024]) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Match the sequential desktop capture lifecycle.
+    await prepareReferenceCaptureFixture(
+      {
+        ...page,
+        getByLabel: (name: string) => ({
+          fill,
+          inputValue: () =>
+            Promise.resolve(
+              name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
+            ),
+        }),
+        getByRole: status,
+        viewportSize: () => ({ width, height: 900 }),
+      } as unknown as Page,
+      {
+        fixtureRoot: "/tmp/isolated-reference",
+        recordReceipt,
+        referenceUrl: "https://localhost:3001",
+      },
+    );
+  }
+  expect(fill).not.toHaveBeenCalled();
+  expect(status).not.toHaveBeenCalled();
+  expect(recordReceipt).toHaveBeenCalledTimes(3);
+  expect(
+    recordReceipt.mock.calls.every(
+      ([receipt]) => receipt.status === "ready" && receipt.stage === "complete",
+    ),
+  ).toBe(true);
 });

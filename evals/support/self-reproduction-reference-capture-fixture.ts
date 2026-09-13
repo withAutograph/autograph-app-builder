@@ -14,6 +14,7 @@ export interface ReferenceCaptureFixtureReceipt {
   draftRevision?: number;
   draft: typeof selfReproductionDraft;
   reason: string;
+  stage: string;
 }
 
 /** Uses only the isolated reference's ordinary emulated OAuth and durable writes. */
@@ -30,6 +31,7 @@ export const prepareReferenceCaptureFixture = async (
     fixtureRoot: input.fixtureRoot,
     reason: "Reference authentication and durable draft have not been established.",
     referenceUrl: input.referenceUrl,
+    stage: "fixture-binding",
     state: "authenticated-durable-draft",
     status: "blocked",
     viewport: page.viewportSize(),
@@ -40,13 +42,21 @@ export const prepareReferenceCaptureFixture = async (
       await import("../../e2e/support/harness");
     if (new URL(input.referenceUrl).origin !== appOrigin)
       throw new Error("Reference capture origin does not match the isolated emulator fixture.");
+    receipt.stage = "authentication";
     await finishOAuth(page, "GitHub");
+    receipt.stage = "builder-readiness";
     await waitForBuilderReady(page);
     const ownerId = (await currentSession(page))?.user?.id;
     if (typeof ownerId !== "string") throw new Error("Emulated OAuth did not establish an owner.");
-    await page.getByLabel("App Name").fill(selfReproductionDraft.appName);
-    await page.getByLabel("App Brief", { exact: true }).fill(selfReproductionDraft.brief);
-    await page.getByRole("status").filter({ hasText: "Draft saved" }).waitFor();
+    receipt.stage = "draft-inputs";
+    const appName = page.getByLabel("App Name");
+    const brief = page.getByLabel("App Brief", { exact: true });
+    if ((await appName.inputValue()) !== selfReproductionDraft.appName)
+      await appName.fill(selfReproductionDraft.appName);
+    if ((await brief.inputValue()) !== selfReproductionDraft.brief)
+      await brief.fill(selfReproductionDraft.brief);
+    // Restored unchanged drafts need no new write acknowledgement. Read both UI and server state.
+    receipt.stage = "durable-readback";
     const sql = postgres(databaseUrl, { max: 1 });
     let draftRevision: number | undefined;
     try {
@@ -61,6 +71,8 @@ export const prepareReferenceCaptureFixture = async (
         `;
             draftRevision = row?.revision;
             return (
+              (await appName.inputValue()) === selfReproductionDraft.appName &&
+              (await brief.inputValue()) === selfReproductionDraft.brief &&
               row?.appName === selfReproductionDraft.appName &&
               row?.brief === selfReproductionDraft.brief
             );
@@ -76,7 +88,8 @@ export const prepareReferenceCaptureFixture = async (
       draftRevision,
       ownerDigest: createHash("sha256").update(ownerId).digest("hex"),
       reason:
-        "Normal emulated OAuth established the owner; both UI-written draft fields matched its PostgreSQL row before capture. Candidate authentication parity remains separately assessed.",
+        "Normal emulated OAuth established the owner; both visible draft fields matched its PostgreSQL row before capture. Candidate authentication parity remains separately assessed.",
+      stage: "complete",
       status: "ready",
     });
   } catch {
