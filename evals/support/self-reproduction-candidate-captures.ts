@@ -1,6 +1,9 @@
 import { captureStates, desktopViewports } from "./self-reproduction-parity";
 
-/** Portable evaluator code; no candidate implementation or fabricated product state is injected. */
+/** Portable evaluator code; no candidate implementation or fabricated product state is injected.
+ * Loading credit requires an evaluator-owned payload.creationMutation { pathname, method }
+ * binding; the default records diagnostics without inferring an operation from arbitrary requests.
+ */
 export function sandboxCandidateInteractionCaptures() {
   const artifactPaths = desktopViewports.flatMap(({ name }) =>
     captureStates.map((state) => `${name}/${state}.png`),
@@ -88,6 +91,66 @@ try {
             { id: 'focus-visible', passed: focus.visible, detail: JSON.stringify(focus) },
             { id: 'keyboard-activation-changes-state', passed: changed, detail: 'Enter opened the candidate documentation view.' },
           ];
+        } else if (state === 'empty') {
+          const brief = page.getByRole('textbox', { name: 'What would you like to build?', exact: true });
+          const continueButton = page.getByRole('button', { name: 'Continue to review', exact: true });
+          const originalBrief = await brief.inputValue();
+          await brief.fill('');
+          const empty = await brief.inputValue() === '';
+          const blocked = await continueButton.isDisabled();
+          const guidance = (await brief.getAttribute('placeholder') ?? '').trim();
+          await mkdir(dirname(join(artifactRoot, screenshot)), { recursive: true });
+          await page.screenshot({ path: join(artifactRoot, screenshot), fullPage: true });
+          row.artifacts.push(screenshot);
+          await brief.fill(originalBrief || 'Create a private task tracker for the synthetic evaluation workspace.');
+          const enabled = await continueButton.isEnabled();
+          if (enabled) await continueButton.click();
+          const approve = page.getByRole('button', { name: 'Approve and create', exact: true });
+          if (enabled) await approve.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
+          row.disposition = 'observed';
+          row.reason = 'Cleared the real brief, captured its empty guidance and blocked continuation, then refilled it and opened review.';
+          row.assertions = [
+            { id: 'empty-state-visible', passed: empty && blocked && guidance.length > 0, detail: JSON.stringify({ empty, continuationDisabled: blocked, placeholder: guidance }) },
+            { id: 'next-action-works', passed: enabled && await approve.isVisible(), detail: 'Refilling the real field enabled continuation and opened approval review.' },
+          ];
+        } else if (state === 'loading') {
+          const held = [];
+          const requests = [];
+          const origin = new URL(input.baseURL).origin;
+          const intercept = async route => {
+            const request = route.request();
+            if (input.creationMutation && new URL(request.url()).origin === origin && new URL(request.url()).pathname === input.creationMutation.pathname && request.method() === input.creationMutation.method && ['fetch', 'xhr'].includes(request.resourceType()) && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
+              requests.push({ method: request.method(), path: new URL(request.url()).pathname });
+              held.push(route);
+            } else await route.continue();
+          };
+          try {
+            await page.getByRole('button', { name: 'Continue to review', exact: true }).click();
+            const approve = page.getByRole('button', { name: 'Approve and create', exact: true });
+            await approve.waitFor({ state: 'visible', timeout: 5000 });
+            await page.route('**/*', intercept);
+            await approve.click();
+            const pending = page.getByText('Creating private preview', { exact: true }).first();
+            await pending.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
+            const visible = await pending.isVisible();
+            const manualCompletion = await page.getByRole('button', { name: 'Finish preview', exact: true }).isVisible();
+            await mkdir(dirname(join(artifactRoot, screenshot)), { recursive: true });
+            await page.screenshot({ path: join(artifactRoot, screenshot), fullPage: true });
+            row.artifacts.push(screenshot);
+            if (held.length > 0) {
+              row.disposition = 'observed';
+              row.reason = 'Held an actual same-origin creation mutation and captured its pending UI before releasing the request.';
+              row.assertions = [
+                { id: 'pending-held', passed: true, detail: JSON.stringify({ heldRequests: requests }) },
+                { id: 'useful-loading-visible', passed: visible, detail: 'Creation-specific pending text remained visible while the actual mutation was held.' },
+              ];
+            } else {
+              row.reason = 'Creation controls were exercised, but no evaluator-bound creation mutation was held. Static creating text or a manual completion button cannot establish pending behavior. Observed: ' + JSON.stringify({ pendingLabelVisible: visible, manualCompletionVisible: manualCompletion, requests });
+            }
+          } finally {
+            await Promise.all(held.map(route => route.abort('aborted').catch(() => undefined)));
+            await page.unroute('**/*', intercept);
+          }
         } else {
           row.reason = state === 'keyboard' ? 'Unknown candidate shape has no supported keyboard outcome binding.' : 'No evaluator-owned real ' + state + ' operation/fixture is bound. Static stage labels and synthetic UI toggles receive no transient-state credit.';
         }
