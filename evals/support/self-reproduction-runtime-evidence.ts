@@ -2,10 +2,10 @@ import type { Observation } from "./self-reproduction-parity";
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 
 /** Merge candidate runtime fallback with trusted receipts without duplicating requirement rows. */
-export function mergeRuntimeEvidence(input: {
+export const mergeRuntimeEvidence = (input: {
   trustedReceipts: readonly unknown[];
   candidateFallback: readonly Observation[];
-}): unknown[] {
+}): unknown[] => {
   const invalid: unknown[] = [];
   const receipts = new Map<string, unknown>();
   const dispositions = new Map<string, string>();
@@ -31,12 +31,12 @@ export function mergeRuntimeEvidence(input: {
     )
       continue;
     receipts.set(key, {
-      schemaVersion: "self-reproduction-runtime-receipt/v1",
-      producer: "evaluator",
-      side: "candidate",
       observation,
+      producer: "evaluator",
+      schemaVersion: "self-reproduction-runtime-receipt/v1",
+      side: "candidate",
     });
     dispositions.set(key, observation.disposition);
   }
   return [...invalid, ...receipts.values()];
-}
+};

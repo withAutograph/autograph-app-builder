@@ -8,146 +8,141 @@ import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-te
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
+const isReviewedPhase = (
+  state: ReturnType<typeof appBuilderWorkflowState.get>,
+): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
     phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local";
   }
-> {
-  return (
-    state.phase === "reviewed" ||
-    state.phase === "publication_pending" ||
-    state.phase === "publication_failed" ||
-    state.phase === "published_local"
-  );
-}
+> =>
+  state.phase === "reviewed" ||
+  state.phase === "publication_pending" ||
+  state.phase === "publication_failed" ||
+  state.phase === "published_local";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function statusReceipt(
+const statusReceipt = (
   state: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
   recovered: boolean,
-) {
-  return {
-    artifacts: state.artifacts.map(prototypeArtifactReceipt),
-    phase: state.phase,
-    preparedByCallId: state.preparedByCallId,
-    recovered,
-    version: state.version,
-    workspace: state.workspace,
-    ...(state.phase === "app_spec_accepted" ||
-    state.phase === "dependencies_prepared" ||
-    state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-      ? {
-          appSpec: {
-            acceptedByCallId: state.appSpec.acceptedByCallId,
-            appId: state.appSpec.appId,
-            artifactPath: state.appSpec.artifactPath,
-            artifactRevision: state.appSpec.artifactRevision,
-            digest: state.appSpec.digest,
-            ...(state.appSpec.approvalReceipt === undefined
-              ? {}
-              : { approvalReceipt: state.appSpec.approvalReceipt }),
-          },
-        }
-      : {}),
-    ...(state.phase === "dependencies_prepared" ||
-    state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-      ? { dependencies: { digest: state.dependencyReceipt.digest } }
-      : {}),
-    ...(state.phase === "identity_resolved" ||
-    state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-      ? { identity: { digest: state.identityReceipt.digest } }
-      : {}),
-    ...(state.phase === "planned" ||
-    state.phase === "apply_failed" ||
-    state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-      ? { proposal: { digest: state.proposal.digest } }
-      : {}),
-    ...(state.phase === "apply_failed"
-      ? {
-          apply: {
-            digest: state.applyFailure.digest,
-            reason: state.applyFailure.reason,
-            recoveryRequired: true,
-            status: state.applyFailure.status,
-          },
-        }
-      : {}),
-    ...(state.phase === "applied" ||
-    state.phase === "validation_pending" ||
-    state.phase === "validation_failed" ||
-    state.phase === "validated" ||
-    isReviewedPhase(state)
-      ? {
-          apply: {
-            changedContentDigest: state.applyReceipt.changedContentDigest,
-            digest: state.applyReceipt.digest,
-            status: state.applyReceipt.status,
-          },
-        }
-      : {}),
-    ...(state.phase === "validation_pending"
-      ? {
-          validation: {
-            digest: state.validationAttempt.digest,
-            recoveryRequired: true,
-            status: state.validationAttempt.status,
-          },
-        }
-      : {}),
-    ...(state.phase === "validation_failed"
-      ? {
-          validation: {
-            digest: state.validationFailure.digest,
-            reason: state.validationFailure.reason,
-            recoveryRequired: true,
-            status: state.validationFailure.status,
-          },
-        }
-      : {}),
-    ...(state.phase === "validated" || isReviewedPhase(state)
-      ? {
-          validation: {
-            digest: state.validationReceipt.digest,
-            status: state.validationReceipt.status,
-          },
-        }
-      : {}),
-    ...(isReviewedPhase(state)
-      ? {
-          review: {
-            changeSetDigest: state.reviewReceipt.changeSetDigest,
-            digest: state.reviewReceipt.digest,
-          },
-        }
-      : {}),
-  };
-}
+) => ({
+  artifacts: state.artifacts.map(prototypeArtifactReceipt),
+  phase: state.phase,
+  preparedByCallId: state.preparedByCallId,
+  recovered,
+  version: state.version,
+  workspace: state.workspace,
+  ...(state.phase === "app_spec_accepted" ||
+  state.phase === "dependencies_prepared" ||
+  state.phase === "identity_resolved" ||
+  state.phase === "planned" ||
+  state.phase === "apply_failed" ||
+  state.phase === "applied" ||
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state)
+    ? {
+        appSpec: {
+          acceptedByCallId: state.appSpec.acceptedByCallId,
+          appId: state.appSpec.appId,
+          artifactPath: state.appSpec.artifactPath,
+          artifactRevision: state.appSpec.artifactRevision,
+          digest: state.appSpec.digest,
+          ...(state.appSpec.approvalReceipt === undefined
+            ? {}
+            : { approvalReceipt: state.appSpec.approvalReceipt }),
+        },
+      }
+    : {}),
+  ...(state.phase === "dependencies_prepared" ||
+  state.phase === "identity_resolved" ||
+  state.phase === "planned" ||
+  state.phase === "apply_failed" ||
+  state.phase === "applied" ||
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state)
+    ? { dependencies: { digest: state.dependencyReceipt.digest } }
+    : {}),
+  ...(state.phase === "identity_resolved" ||
+  state.phase === "planned" ||
+  state.phase === "apply_failed" ||
+  state.phase === "applied" ||
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state)
+    ? { identity: { digest: state.identityReceipt.digest } }
+    : {}),
+  ...(state.phase === "planned" ||
+  state.phase === "apply_failed" ||
+  state.phase === "applied" ||
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state)
+    ? { proposal: { digest: state.proposal.digest } }
+    : {}),
+  ...(state.phase === "apply_failed"
+    ? {
+        apply: {
+          digest: state.applyFailure.digest,
+          reason: state.applyFailure.reason,
+          recoveryRequired: true,
+          status: state.applyFailure.status,
+        },
+      }
+    : {}),
+  ...(state.phase === "applied" ||
+  state.phase === "validation_pending" ||
+  state.phase === "validation_failed" ||
+  state.phase === "validated" ||
+  isReviewedPhase(state)
+    ? {
+        apply: {
+          changedContentDigest: state.applyReceipt.changedContentDigest,
+          digest: state.applyReceipt.digest,
+          status: state.applyReceipt.status,
+        },
+      }
+    : {}),
+  ...(state.phase === "validation_pending"
+    ? {
+        validation: {
+          digest: state.validationAttempt.digest,
+          recoveryRequired: true,
+          status: state.validationAttempt.status,
+        },
+      }
+    : {}),
+  ...(state.phase === "validation_failed"
+    ? {
+        validation: {
+          digest: state.validationFailure.digest,
+          reason: state.validationFailure.reason,
+          recoveryRequired: true,
+          status: state.validationFailure.status,
+        },
+      }
+    : {}),
+  ...(state.phase === "validated" || isReviewedPhase(state)
+    ? {
+        validation: {
+          digest: state.validationReceipt.digest,
+          status: state.validationReceipt.status,
+        },
+      }
+    : {}),
+  ...(isReviewedPhase(state)
+    ? {
+        review: {
+          changeSetDigest: state.reviewReceipt.changeSetDigest,
+          digest: state.reviewReceipt.digest,
+        },
+      }
+    : {}),
+});
 
 export default defineTool({
   description:

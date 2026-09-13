@@ -25,16 +25,16 @@ export const exerciseCandidateNavigation = async (
       reason: "Candidate runtime could not be opened.",
     };
   }
-  const name = page.getByRole("textbox", { name: "App name", exact: true });
-  const brief = page.getByRole("textbox", { name: "What would you like to build?", exact: true });
-  const docs = page.getByRole("button", { name: "Docs", exact: true });
+  const name = page.getByRole("textbox", { exact: true, name: "App name" });
+  const brief = page.getByRole("textbox", { exact: true, name: "What would you like to build?" });
+  const docs = page.getByRole("button", { exact: true, name: "Docs" });
   try {
     await Promise.all(
       [
         name,
         brief,
         docs,
-        page.getByRole("button", { name: "Continue to review", exact: true }),
+        page.getByRole("button", { exact: true, name: "Continue to review" }),
       ].map((control) => control.waitFor({ state: "visible", timeout: 10_000 })),
     );
   } catch {
@@ -60,11 +60,11 @@ export const exerciseCandidateNavigation = async (
       if (inert)
         observation.assertions = [
           {
-            id: "back-forward-preserves-draft",
-            passed: false,
+            artifacts: [],
             detail:
               "Docs activation produced no product transition to traverse with browser history.",
-            artifacts: [],
+            id: "back-forward-preserves-draft",
+            passed: false,
           },
         ];
       await capture("documentation");
@@ -92,16 +92,16 @@ export const exerciseCandidateNavigation = async (
     await capture("forward");
     observation.assertions = [
       {
+        artifacts: [],
+        detail: `Browser Back restored draft=${valuesRestored}; Forward restored Docs=${forwarded}. No custom Back control was used.`,
         id: "back-forward-preserves-draft",
         passed: Boolean(valuesRestored && forwarded),
-        detail: `Browser Back restored draft=${valuesRestored}; Forward restored Docs=${forwarded}. No custom Back control was used.`,
-        artifacts: [],
       },
       {
+        artifacts: [],
+        detail: "Browser Back must restore focus to the activated Docs control.",
         id: "focus-restored",
         passed: Boolean(focusRestored),
-        detail: "Browser Back must restore focus to the activated Docs control.",
-        artifacts: [],
       },
     ];
     observation.disposition = observation.assertions.some((assertion) => !assertion.passed)
@@ -150,36 +150,36 @@ try {
 });
 
 /** Failed execution must remain a linked blocker, independently of runtime readiness. */
-export const candidateNavigationReceipt = (output: { observation?: Observation } | null) => ({
-  schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-  producer: "evaluator" as const,
-  side: "candidate" as const,
-  observation: output?.observation
-    ? {
-        ...output.observation,
-        assertions: output.observation.assertions.map((assertion) => ({
-          ...assertion,
+export const candidateNavigationReceipt = (output: { observation?: Observation } | null) => {
+  const observation = output?.observation;
+  return {
+    observation: observation
+      ? {
+          ...observation,
           artifacts: [
             "candidate-navigation.json",
-            ...new Set(
-              [...output.observation!.artifacts, ...assertion.artifacts].map(
-                (path) => `candidate-navigation/${path}`,
-              ),
-            ),
+            ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
           ],
-        })),
-        artifacts: [
-          "candidate-navigation.json",
-          ...output.observation.artifacts.map((path) => `candidate-navigation/${path}`),
-        ],
-      }
-    : {
-        requirementId: "navigation-continuity",
-        disposition: "infrastructure-unavailable" as const,
-        method: "none" as const,
-        assertions: [],
-        artifacts: ["candidate-navigation.json"],
-        reason:
-          "Candidate runtime was available, but the separate navigation probe failed to retain an evaluator observation.",
-      },
-});
+          assertions: observation.assertions.map((assertion) => ({
+            ...assertion,
+            artifacts: [
+              "candidate-navigation.json",
+              ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
+              ...assertion.artifacts.map((path) => `candidate-navigation/${path}`),
+            ],
+          })),
+        }
+      : {
+          artifacts: ["candidate-navigation.json"],
+          assertions: [],
+          disposition: "infrastructure-unavailable" as const,
+          method: "none" as const,
+          reason:
+            "Candidate runtime was available, but the separate navigation probe failed to retain an evaluator observation.",
+          requirementId: "navigation-continuity",
+        },
+    producer: "evaluator" as const,
+    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+    side: "candidate" as const,
+  };
+};

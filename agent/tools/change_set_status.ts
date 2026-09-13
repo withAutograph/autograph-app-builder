@@ -12,24 +12,22 @@ import {
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function isCandidateExportTextPath(path: string): boolean {
+export const isCandidateExportTextPath = (path: string): boolean => {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
     return false;
   }
   return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql|pkl)$/u.test(
     path,
   );
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function exactNormalizedChangeSet(input: {
+export const exactNormalizedChangeSet = async (input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
     { phase: "validated" | "reviewed" }
   >;
   sandbox: SandboxSession;
-}): Promise<ReturnType<typeof deriveNormalizedChangeSet>> {
+}) => {
   const observed = hasTestCapability("simulated-target")
     ? await inspectFixtureApplyOverlay(
         input.sandbox,
@@ -47,25 +45,24 @@ export async function exactNormalizedChangeSet(input: {
   return deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,
+      changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
+      changes,
       postTree: observed.files,
       postTreeDigest: observed.treeDigest,
-      changes,
-      changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
     },
     input.state.validationReceipt,
     input.state.proposal.contractDigest,
     input.state.sourceReceipt.contractDigest,
   );
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function exportAppliedTextFiles(input: {
+const exportAppliedTextFiles = async (input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
     { phase: "validated" | "reviewed" | "validation_failed" }
   >;
   sandbox: SandboxSession;
-}) {
+}) => {
   const observed = hasTestCapability("simulated-target")
     ? await inspectFixtureApplyOverlay(
         input.sandbox,
@@ -87,22 +84,21 @@ async function exportAppliedTextFiles(input: {
     changes,
     exportFiles: await Promise.all(
       textFiles.map(async (file) => ({
-        path: file.path,
         content: await input.sandbox.readTextFile({
           path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${file.path}`,
         }),
+        path: file.path,
       })),
     ),
     exportOmissions: appFiles
       .filter((file) => !textFiles.includes(file))
       .map((file) => ({ path: file.path, reason: "non-text artifact" })),
   };
-}
+};
 
 export default defineTool({
   description:
     "Summarize changes after repository validation succeeds, or export the applied source for diagnosis when validation fails. A failed change set is explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
-  inputSchema: z.strictObject({ includeContent: z.boolean().default(false) }),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -115,20 +111,20 @@ export default defineTool({
     if (state.phase === "validation_failed") {
       if (!input.includeContent)
         return {
-          status: "validation_failed" as const,
           reviewed: false,
+          status: "validation_failed" as const,
           validationFailure: state.validationFailure,
         };
       return {
-        status: "validation_failed" as const,
+        ...(await exportAppliedTextFiles({ sandbox, state })),
         reviewed: false,
+        status: "validation_failed" as const,
         validationFailure: state.validationFailure,
-        ...(await exportAppliedTextFiles({ state, sandbox })),
       };
     }
-    const changeSet = await exactNormalizedChangeSet({ state, sandbox });
+    const changeSet = await exactNormalizedChangeSet({ sandbox, state });
     const exported = input.includeContent
-      ? await exportAppliedTextFiles({ state, sandbox })
+      ? await exportAppliedTextFiles({ sandbox, state })
       : undefined;
     return {
       ...changeSet,
@@ -138,4 +134,5 @@ export default defineTool({
         : { exportFiles: exported.exportFiles, exportOmissions: exported.exportOmissions }),
     };
   },
+  inputSchema: z.strictObject({ includeContent: z.boolean().default(false) }),
 });

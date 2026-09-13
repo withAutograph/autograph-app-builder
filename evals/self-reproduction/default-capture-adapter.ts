@@ -2,20 +2,21 @@ import type { Locator, Page } from "playwright";
 
 import type { CaptureAdapter, CaptureState } from "../support/self-reproduction-captures";
 
-async function firstVisible(locators: Locator[]): Promise<Locator | undefined> {
+const firstVisible = async (locators: Locator[]): Promise<Locator | undefined> => {
   const counts = await Promise.all(locators.map((locator) => locator.count()));
   const candidates = locators.flatMap((locator, locatorIndex) =>
     Array.from({ length: counts[locatorIndex] ?? 0 }, (_, index) => locator.nth(index)),
   );
   const visibility = await Promise.all(candidates.map((candidate) => candidate.isVisible()));
   return candidates.find((_, index) => visibility[index]);
-}
+};
 
-async function signature(page: Page) {
-  return `${page.url()}\n${(await page.locator("body").textContent())?.slice(0, 4000) ?? ""}`;
-}
+const signature = async (page: Page) => {
+  const text = await page.locator("body").textContent();
+  return `${page.url()}\n${text?.slice(0, 4000) ?? ""}`;
+};
 
-function stateTarget(page: Page, state: CaptureState) {
+const stateTarget = (page: Page, state: CaptureState) => {
   if (state === "panel-resize")
     return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);
   if (state === "loading")
@@ -37,9 +38,9 @@ function stateTarget(page: Page, state: CaptureState) {
     page.getByRole("button", { name: /build|create|continue|connect|documentation|docs/iu }),
     page.getByRole("link", { name: /build|create|continue|connect|documentation|docs/iu }),
   ]);
-}
+};
 
-function unavailableState(state: CaptureState, side: "reference" | "candidate") {
+const unavailableState = (state: CaptureState, side: "reference" | "candidate") => {
   if (["loading", "empty", "error"].includes(state))
     return {
       disposition: "not-run" as const,
@@ -51,129 +52,126 @@ function unavailableState(state: CaptureState, side: "reference" | "candidate") 
     ready: false as const,
     reason: `The ${side} application exposes no visible semantic control for ${state}.`,
   };
-}
+};
 
-export function createSemanticCaptureAdapter(
+export const createSemanticCaptureAdapter = (
   baseURL: string,
   side: "reference" | "candidate",
-): CaptureAdapter {
-  return {
-    async exercise(page, state, capture) {
-      const target = await stateTarget(page, state);
-      if (!target)
-        return [
-          {
-            detail: `The ${state} target disappeared before exercise.`,
-            id: "fixture-execution",
-            passed: false,
-          },
-        ];
-      if (state === "panel-resize") {
-        const before = await target.boundingBox();
-        if (before) {
-          await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
-          await page.mouse.down();
-          await page.mouse.move(before.x + before.width / 2 + 80, before.y + before.height / 2, {
-            steps: 4,
-          });
-          await page.mouse.up();
-        }
-        const after = await target.boundingBox();
-        await capture();
-        return [
-          {
-            detail: `Separator x-position changed from ${before?.x ?? "unavailable"} to ${after?.x ?? "unavailable"}.`,
-            id: "panel-dimension-changed",
-            passed: Boolean(before && after && Math.abs(after.x - before.x) >= 8),
-          },
-          {
-            detail: "Primary page content remained visible after the resize gesture.",
-            id: "content-remains-reachable",
-            passed: await page.locator("main, body").first().isVisible(),
-          },
-        ];
+): CaptureAdapter => ({
+  async exercise(page, state, capture) {
+    const target = await stateTarget(page, state);
+    if (!target)
+      return [
+        {
+          detail: `The ${state} target disappeared before exercise.`,
+          id: "fixture-execution",
+          passed: false,
+        },
+      ];
+    if (state === "panel-resize") {
+      const before = await target.boundingBox();
+      if (before) {
+        await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(before.x + before.width / 2 + 80, before.y + before.height / 2, {
+          steps: 4,
+        });
+        await page.mouse.up();
       }
-      if (state === "keyboard") {
-        await target.focus();
-        const focused = await target.evaluate((element) => element === document.activeElement);
-        const before = await signature(page);
-        await capture();
-        await page.keyboard.press("Enter");
-        await page.waitForTimeout(100);
-        return [
-          { detail: "Semantic control received focus.", id: "focus-visible", passed: focused },
-          {
-            detail: "Enter activation was compared against URL and visible page content.",
-            id: "keyboard-activation-changes-state",
-            passed: (await signature(page)) !== before,
-          },
-        ];
-      }
-      if (state === "loading") {
-        await capture();
-        const text = (await target.textContent().catch(() => "")) ?? "";
-        return [
-          {
-            detail: "Pending UI stayed visible.",
-            id: "pending-held",
-            passed: await target.isVisible(),
-          },
-          {
-            detail: "Pending UI exposed visible text or an accessible label.",
-            id: "useful-loading-visible",
-            passed: text.trim().length > 0 || (await target.getAttribute("aria-label")) !== null,
-          },
-        ];
-      }
-      const recovery = await firstVisible([
-        page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
-        page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
-      ]);
+      const after = await target.boundingBox();
+      await capture();
+      return [
+        {
+          detail: `Separator x-position changed from ${before?.x ?? "unavailable"} to ${after?.x ?? "unavailable"}.`,
+          id: "panel-dimension-changed",
+          passed: Boolean(before && after && Math.abs(after.x - before.x) >= 8),
+        },
+        {
+          detail: "Primary page content remained visible after the resize gesture.",
+          id: "content-remains-reachable",
+          passed: await page.locator("main, body").first().isVisible(),
+        },
+      ];
+    }
+    if (state === "keyboard") {
+      await target.focus();
+      const focused = await target.evaluate((element) => element === document.activeElement);
       const before = await signature(page);
       await capture();
-      await recovery?.click();
+      await page.keyboard.press("Enter");
       await page.waitForTimeout(100);
-      const changed = Boolean(recovery) && (await signature(page)) !== before;
-      return state === "empty"
-        ? [
-            {
-              detail: "Empty-state guidance was visible.",
-              id: "empty-state-visible",
-              passed: true,
-            },
-            {
-              detail: "The empty-state action changed UI state.",
-              id: "next-action-works",
-              passed: changed,
-            },
-          ]
-        : [
-            { detail: "Error feedback was visible.", id: "error-visible", passed: true },
-            {
-              detail: "The recovery action changed UI state.",
-              id: "recovery-action-works",
-              passed: changed,
-            },
-          ];
-    },
-    async prepare(page, state) {
-      try {
-        await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-        return (await stateTarget(page, state)) ? { ready: true } : unavailableState(state, side);
-      } catch {
-        return {
-          disposition: "infrastructure-unavailable",
-          ready: false,
-          reason: "The application URL could not be opened by the evaluator browser.",
-        };
-      }
-    },
-  };
-}
+      return [
+        { detail: "Semantic control received focus.", id: "focus-visible", passed: focused },
+        {
+          detail: "Enter activation was compared against URL and visible page content.",
+          id: "keyboard-activation-changes-state",
+          passed: (await signature(page)) !== before,
+        },
+      ];
+    }
+    if (state === "loading") {
+      await capture();
+      const text = (await target.textContent().catch(() => "")) ?? "";
+      return [
+        {
+          detail: "Pending UI stayed visible.",
+          id: "pending-held",
+          passed: await target.isVisible(),
+        },
+        {
+          detail: "Pending UI exposed visible text or an accessible label.",
+          id: "useful-loading-visible",
+          passed: text.trim().length > 0 || (await target.getAttribute("aria-label")) !== null,
+        },
+      ];
+    }
+    const recovery = await firstVisible([
+      page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
+      page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
+    ]);
+    const before = await signature(page);
+    await capture();
+    await recovery?.click();
+    await page.waitForTimeout(100);
+    const changed = Boolean(recovery) && (await signature(page)) !== before;
+    return state === "empty"
+      ? [
+          {
+            detail: "Empty-state guidance was visible.",
+            id: "empty-state-visible",
+            passed: true,
+          },
+          {
+            detail: "The empty-state action changed UI state.",
+            id: "next-action-works",
+            passed: changed,
+          },
+        ]
+      : [
+          { detail: "Error feedback was visible.", id: "error-visible", passed: true },
+          {
+            detail: "The recovery action changed UI state.",
+            id: "recovery-action-works",
+            passed: changed,
+          },
+        ];
+  },
+  async prepare(page, state) {
+    try {
+      await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+      return (await stateTarget(page, state)) ? { ready: true } : unavailableState(state, side);
+    } catch {
+      return {
+        disposition: "infrastructure-unavailable",
+        ready: false,
+        reason: "The application URL could not be opened by the evaluator browser.",
+      };
+    }
+  },
+});
 
-export function createCaptureAdapters(input: { referenceURL: string; candidateURL: string }) {
-  return Promise.resolve({
+export const createCaptureAdapters = (input: { referenceURL: string; candidateURL: string }) =>
+  Promise.resolve({
     candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
     reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
   });
-}

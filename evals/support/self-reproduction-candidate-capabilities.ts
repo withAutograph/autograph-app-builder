@@ -7,28 +7,28 @@ interface Credentials {
 }
 
 /** Caller owns project/expiry validation; this never reads the parent environment. */
-export function candidateCapabilities(credentials?: Credentials): {
+export const candidateCapabilities = (
+  credentials?: Credentials,
+): {
   environment: Record<string, string>;
   receipt: { modelGateway: string; childSandbox: string; persistence: string };
-} {
-  return {
-    environment: credentials
-      ? {
-          VERCEL_OIDC_TOKEN: credentials.token,
-          VERCEL_TEAM_ID: credentials.teamId,
-          VERCEL_PROJECT_ID: credentials.projectId,
-        }
-      : {},
-    receipt: {
-      modelGateway: credentials ? "configured-unverified" : "not-configured",
-      childSandbox: credentials ? "configured-unverified" : "not-configured",
-      persistence: "application-owned; no external database provisioned",
-    },
-  };
-}
+} => ({
+  environment: credentials
+    ? {
+        VERCEL_OIDC_TOKEN: credentials.token,
+        VERCEL_PROJECT_ID: credentials.projectId,
+        VERCEL_TEAM_ID: credentials.teamId,
+      }
+    : {},
+  receipt: {
+    childSandbox: credentials ? "configured-unverified" : "not-configured",
+    modelGateway: credentials ? "configured-unverified" : "not-configured",
+    persistence: "application-owned; no external database provisioned",
+  },
+});
 
 /** Redact complete diagnostics before serialization, including bare credential values. */
-export function redactCandidateEvidence<T>(value: T, secrets: readonly string[]): T {
+export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[]): T => {
   const redact = (item: unknown): unknown => {
     if (typeof item === "string") {
       let text = item;
@@ -43,4 +43,4 @@ export function redactCandidateEvidence<T>(value: T, secrets: readonly string[])
     return item;
   };
   return sanitizeEvidence(redact(value)) as T;
-}
+};

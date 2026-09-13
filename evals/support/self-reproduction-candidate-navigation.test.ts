@@ -14,35 +14,35 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
     let view = "editor";
     const values = new Map<string, string>();
     const control = (name: string) => ({
+      evaluate: async () => view === "editor" && mode === "history",
+      fill: async (value: string) => {
+        values.set(name, value);
+      },
+      first: () => control(name),
+      focus: vi.fn(),
+      inputValue: async () => values.get(name),
+      isVisible: async () => (name === "back" ? view === "docs" : view === "editor"),
+      press: async () => {
+        if (mode !== "inert") view = "docs";
+      },
       waitFor: async () => {
         if (mode === "unknown" || (mode === "inert" && name === "back"))
           throw new Error("Unavailable control");
       },
-      fill: async (value: string) => {
-        values.set(name, value);
-      },
-      inputValue: async () => values.get(name),
-      focus: vi.fn(),
-      press: async () => {
-        if (mode !== "inert") view = "docs";
-      },
-      isVisible: async () => (name === "back" ? view === "docs" : view === "editor"),
-      evaluate: async () => view === "editor" && mode === "history",
-      first: () => control(name),
     });
     const page = {
-      goto: async () => ({ ok: () => mode !== "unavailable" }),
       getByRole: (_role: string, options: { name: string | RegExp }) =>
         control(typeof options.name === "string" ? options.name : "back"),
-      locator: () => ({ textContent: async () => view }),
-      url: () =>
-        mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
       goBack: async () => {
         if (mode === "history") view = "editor";
       },
       goForward: async () => {
         view = "docs";
       },
+      goto: async () => ({ ok: () => mode !== "unavailable" }),
+      locator: () => ({ textContent: async () => view }),
+      url: () =>
+        mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
     } as unknown as Page;
     const capture = vi.fn(async () => {});
     // oxlint-disable-next-line eslint/no-new-func -- Verify serialized portable function has no module closure dependencies.
@@ -68,8 +68,8 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         history: "observed",
         inert: "missing-functionality",
         "local-state": "missing-functionality",
-        unknown: "not-run",
         unavailable: "infrastructure-unavailable",
+        unknown: "not-run",
       }[mode],
     );
     if (mode === "history") expect(result.assertions.every(({ passed }) => passed)).toBe(true);
@@ -77,9 +77,10 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
       expect(
         result.assertions.find(({ id }) => id === "back-forward-preserves-draft")?.passed,
       ).toBe(false);
-    expect(capture).toHaveBeenCalledTimes(
-      mode === "inert" ? 1 : ["history", "local-state"].includes(mode) ? 3 : 0,
-    );
+    let expectedCaptureCount = 0;
+    if (mode === "inert") expectedCaptureCount = 1;
+    else if (["history", "local-state"].includes(mode)) expectedCaptureCount = 3;
+    expect(capture).toHaveBeenCalledTimes(expectedCaptureCount);
   },
 );
 

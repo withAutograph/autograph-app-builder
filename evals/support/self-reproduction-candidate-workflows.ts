@@ -12,11 +12,11 @@ export interface CandidateWorkflowOutcome {
 }
 
 /** Evaluator-owned browser checks. Serialized into Sandbox, never supplied to generation. */
-export async function exerciseCandidateBrowserWorkflows(
+export const exerciseCandidateBrowserWorkflows = async (
   browser: Browser,
   baseURL: string,
   retain: (outcomes: CandidateWorkflowOutcome[]) => Promise<void>,
-) {
+) => {
   const outcomes: CandidateWorkflowOutcome[] = [];
   const ids = [
     "documentation",
@@ -37,11 +37,16 @@ export async function exerciseCandidateBrowserWorkflows(
     });
     const assertions: CandidateWorkflowOutcome["assertions"] = [];
     const check = (id: string, passed: boolean | null, detail: string) =>
-      assertions.push({ id, passed, detail });
+      assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
     const exists = (locator: ReturnType<Page["locator"]>) => locator.isVisible().catch(() => false);
     const text = () => page.locator("body").textContent();
-    let outcome: CandidateWorkflowOutcome;
+    let outcome: CandidateWorkflowOutcome = {
+      assertions: [],
+      reason: "Candidate workflow did not produce an outcome.",
+      requirementId,
+      status: "blocked",
+    };
     let knownShape = false;
     let runtimeReady = false;
     try {
@@ -53,17 +58,17 @@ export async function exerciseCandidateBrowserWorkflows(
         (await exists(page.getByRole("textbox", { name: /app name/iu }).first()));
       if (runtimeReady && !knownShape && requirementId !== "documentation") {
         outcome = {
+          assertions: [],
+          reason: "This candidate layout has no supported evaluator fixture binding.",
           requirementId,
           status: "unassessed",
-          reason: "This candidate layout has no supported evaluator fixture binding.",
-          assertions: [],
         };
       } else if (!response?.ok()) {
         outcome = {
+          assertions: [],
+          reason: "Candidate runtime did not answer successfully.",
           requirementId,
           status: "blocked",
-          reason: "Candidate runtime did not answer successfully.",
-          assertions: [],
         };
       } else {
         if (requirementId === "documentation") {
@@ -94,14 +99,17 @@ export async function exerciseCandidateBrowserWorkflows(
             const back = button(/return to builder|back to builder|back/iu);
             if (await exists(back)) await back.click();
             else await page.goBack();
+            let returnNavigationPassed: boolean | null;
+            if (knownShape)
+              returnNavigationPassed =
+                (await exists(originalEditor)) &&
+                (await originalEditor.inputValue()) === originalValue;
+            else if (navigated)
+              returnNavigationPassed = page.url() === initialURL && (await exists(docs));
+            else returnNavigationPassed = null;
             check(
               "return-navigation-works",
-              knownShape
-                ? (await exists(originalEditor)) &&
-                    (await originalEditor.inputValue()) === originalValue
-                : navigated
-                  ? page.url() === initialURL && (await exists(docs))
-                  : null,
+              returnNavigationPassed,
               "Return must restore the original editor value or original navigated URL and control; dynamic whole-page text is not compared.",
             );
           }
@@ -127,14 +135,19 @@ export async function exerciseCandidateBrowserWorkflows(
               .catch(() => false);
             await page.waitForLoadState("networkidle");
             await page.reload({ waitUntil: "networkidle" });
+            const nameValue = await name.inputValue();
+            const briefValue = await brief.inputValue();
+            let draftDurability: boolean | null;
+            if (
+              nameValue === "Evaluator persistence sentinel" &&
+              briefValue.includes("independent issue tracker")
+            )
+              draftDurability = true;
+            else if (writes.length > 0 || !acknowledged) draftDurability = null;
+            else draftDurability = false;
             check(
               "draft-survives-reload",
-              (await name.inputValue()) === "Evaluator persistence sentinel" &&
-                (await brief.inputValue()).includes("independent issue tracker")
-                ? true
-                : writes.length > 0 || !acknowledged
-                  ? null
-                  : false,
+              draftDurability,
               "Reload follows blur and visible save acknowledgement. If a backend write is still unresolved, durability remains unknown rather than imposing a timing SLA.",
             );
             check(
@@ -229,15 +242,21 @@ export async function exerciseCandidateBrowserWorkflows(
                 name: /preview|open app|view app|download/iu,
               });
               const count = await links.count();
-              check(
-                "child-artifact-linked",
-                count > 0 ? true : writes.length > 0 ? null : false,
-                count > 0
-                  ? "Creation exposed a navigable artifact link; its contents still require verification."
-                  : writes.length > 0
-                    ? "A server request was observed but no child artifact is available yet; completion needs a durable job fixture."
-                    : "No server operation or navigable child artifact exists after the visible creation flow.",
-              );
+              let linkedStatus: boolean | null;
+              if (count > 0) linkedStatus = true;
+              else if (writes.length > 0) linkedStatus = null;
+              else linkedStatus = false;
+              let linkedReason: string;
+              if (count > 0)
+                linkedReason =
+                  "Creation exposed a navigable artifact link; its contents still require verification.";
+              else if (writes.length > 0)
+                linkedReason =
+                  "A server request was observed but no child artifact is available yet; completion needs a durable job fixture.";
+              else
+                linkedReason =
+                  "No server operation or navigable child artifact exists after the visible creation flow.";
+              check("child-artifact-linked", linkedStatus, linkedReason);
               if (count > 0) {
                 const href = await links.first().getAttribute("href");
                 if (
@@ -253,10 +272,11 @@ export async function exerciseCandidateBrowserWorkflows(
                 else {
                   const target = new URL(href, page.url());
                   const artifact = await page.request.get(target.href);
+                  const artifactText = await artifact.text();
                   check(
                     "child-artifact-readable",
                     artifact.ok() &&
-                      (await artifact.text()).length > 40 &&
+                      artifactText.length > 40 &&
                       target.href !== new URL(baseURL).href,
                     "The distinct linked artifact must answer successfully with content.",
                   );
@@ -270,32 +290,32 @@ export async function exerciseCandidateBrowserWorkflows(
             }
           }
         }
-        const status = assertions.some((item) => item.passed === false)
-          ? "failed"
-          : assertions.length === 0 || assertions.some((item) => item.passed === null)
-            ? "unassessed"
-            : "passed";
+        let status: CandidateWorkflowOutcome["status"];
+        if (assertions.some((item) => item.passed === false)) status = "failed";
+        else if (assertions.length === 0 || assertions.some((item) => item.passed === null))
+          status = "unassessed";
+        else status = "passed";
         outcome = {
-          requirementId,
-          status,
+          assertions,
           reason:
             "Evaluator exercised visible controls; server orchestration requires durable evidence beyond UI stage changes.",
-          assertions,
+          requirementId,
+          status,
         };
       }
     } catch (error) {
       outcome = {
+        assertions,
+        reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
         requirementId,
         status:
           assertions.some((item) => item.passed === false) || (runtimeReady && knownShape)
             ? "failed"
             : "blocked",
-        reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
-        assertions,
       };
     } finally {
-      if (knownShape) {
-        outcome!.evidence = {
+      if (knownShape && outcome) {
+        outcome.evidence = {
           buttons: await page
             .getByRole("button")
             .allTextContents()
@@ -313,9 +333,9 @@ export async function exerciseCandidateBrowserWorkflows(
     await retain(outcomes);
   }
   return outcomes;
-}
+};
 
-export function sandboxCandidateWorkflowComparison() {
+export const sandboxCandidateWorkflowComparison = () => {
   const script = `
 import {readFile,writeFile} from 'node:fs/promises';
 import {chromium} from 'playwright';
@@ -327,42 +347,42 @@ const browser = await chromium.launch({headless:true});
 try { await run(browser,input.baseURL,async outcomes => {await writeFile(process.argv[3],JSON.stringify(sanitize({producer:'evaluator',kind:'candidate-browser-workflows',outcomes})));}); }
 finally {await browser.close();}
 `;
-  return { script, artifactPaths: [] as string[] };
-}
+  return { artifactPaths: [] as string[], script };
+};
 
 /** Convert only evaluator-produced observations; unknown assertions stay unknown. */
-export function candidateWorkflowReceipts(
+export const candidateWorkflowReceipts = (
   outcomes: CandidateWorkflowOutcome[],
   artifactPath: string,
-) {
-  return outcomes.map((outcome) =>
+) =>
+  outcomes.map((outcome) =>
     runtimeReceiptSchema.parse({
-      schemaVersion: "self-reproduction-runtime-receipt/v1",
-      producer: "evaluator",
-      side: "candidate",
       observation: {
-        requirementId: outcome.requirementId,
-        disposition: outcome.assertions.some((item) => item.passed === false)
-          ? "observed"
-          : outcome.status === "blocked"
-            ? "infrastructure-unavailable"
-            : outcome.status === "unassessed"
-              ? "not-run"
-              : outcome.status === "failed" &&
-                  !outcome.assertions.some((item) => item.passed === false)
-                ? "missing-functionality"
-                : "observed",
-        reason: sanitizeEvidence(outcome.reason),
-        method: "browser",
         artifacts: [artifactPath],
         assertions: outcome.assertions
           .filter((item) => item.passed !== null)
           .map((item) => ({
             ...item,
-            detail: sanitizeEvidence(item.detail),
             artifacts: [artifactPath],
+            detail: sanitizeEvidence(item.detail),
           })),
+        disposition: (() => {
+          if (outcome.assertions.some((item) => item.passed === false)) return "observed";
+          if (outcome.status === "blocked") return "infrastructure-unavailable";
+          if (outcome.status === "unassessed") return "not-run";
+          if (
+            outcome.status === "failed" &&
+            !outcome.assertions.some((item) => item.passed === false)
+          )
+            return "missing-functionality";
+          return "observed";
+        })(),
+        method: "browser",
+        reason: sanitizeEvidence(outcome.reason),
+        requirementId: outcome.requirementId,
       },
+      producer: "evaluator",
+      schemaVersion: "self-reproduction-runtime-receipt/v1",
+      side: "candidate",
     }),
   );
-}

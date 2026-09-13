@@ -1,16 +1,15 @@
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix, resolve } from "node:path";
+import path from "node:path";
 
-const repositoryRoot = resolve(process.cwd());
-const skillSourceRoot = join(repositoryRoot, "agent/skills");
-const skillOutputPath = join(repositoryRoot, "lib/sandbox/hosted-managed-seeds.generated.ts");
+const repositoryRoot = path.resolve(process.cwd());
+const skillSourceRoot = path.join(repositoryRoot, "agent/skills");
+const skillOutputPath = path.join(repositoryRoot, "lib/sandbox/hosted-managed-seeds.generated.ts");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function listRegularFiles(directory: string, relativeDirectory = "."): string[] {
+const listRegularFiles = (directory: string, relativeDirectory = "."): string[] => {
   const files: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const relativePath = posix.join(relativeDirectory, entry.name);
-    const absolutePath = join(directory, entry.name);
+    const relativePath = path.posix.join(relativeDirectory, entry.name);
+    const absolutePath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...listRegularFiles(absolutePath, relativePath));
       continue;
@@ -22,13 +21,13 @@ function listRegularFiles(directory: string, relativeDirectory = "."): string[] 
     files.push(relativePath);
   }
   return files;
-}
+};
 
 const skillEntries = listRegularFiles(skillSourceRoot)
   .toSorted((left, right) => left.localeCompare(right))
-  .map((path) => ({
-    content: readFileSync(join(skillSourceRoot, path), "utf-8"),
-    path,
+  .map((relativePath) => ({
+    content: readFileSync(path.join(skillSourceRoot, relativePath), "utf-8"),
+    path: relativePath,
   }));
 
 if (skillEntries.length === 0) throw new Error("The hosted managed skill seed set is empty.");

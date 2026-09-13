@@ -83,7 +83,7 @@ export interface ParityReceiptInput {
 
 // Converts evaluator-owned receipts into the sole observation shape accepted by
 // assessParity. Candidate-authored summaries never enter this boundary.
-export function parityEvidenceFromReceipts(input: ParityReceiptInput): ParityEvidence {
+export const parityEvidenceFromReceipts = (input: ParityReceiptInput): ParityEvidence => {
   const observations: Record<(typeof sides)[number], Observation[]> = {
     candidate: [],
     reference: [],
@@ -105,4 +105,4 @@ export function parityEvidenceFromReceipts(input: ParityReceiptInput): ParityEvi
     runId: input.runId,
     schemaVersion: parityVersion,
   });
-}
+};

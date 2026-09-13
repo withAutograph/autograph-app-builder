@@ -7,11 +7,6 @@ import {
   developmentPinnedToolchainCommand,
 } from "../../lib/sandbox/development-toolchain";
 import { requirements } from "./self-reproduction-parity";
-import {
-  candidateCapabilities,
-  redactCandidateEvidence,
-} from "./self-reproduction-candidate-capabilities";
-import type { Observation } from "./self-reproduction-parity";
 
 export interface RuntimeCommandReceipt {
   command: string;
@@ -23,11 +18,6 @@ export interface RuntimeCommandReceipt {
 export interface CandidateRuntimeReceipt {
   producer: "evaluator";
   sandboxId?: string;
-  evaluatorErrors?: {
-    stage: "onReady";
-    disposition: "infrastructure-unavailable";
-    detail: string;
-  }[];
   status: "available" | "failed" | "infrastructure-unavailable";
   reason: string;
   commands: RuntimeCommandReceipt[];
@@ -49,12 +39,12 @@ export interface CandidateRuntimeReceipt {
  * Existing, more specific evaluator observations win, and anonymous entry is
  * intentionally outside the current baseline.
  */
-function runtimeFailureObservations(input: {
+const runtimeFailureObservations = (input: {
   receipt: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string };
   existingRequirementIds?: ReadonlySet<string>;
   artifact?: string;
   kind: "capture" | "runtime";
-}): Observation[] {
+}) => {
   if (input.receipt.status === "available" || input.receipt.status === "not-run") return [];
   const disposition =
     input.receipt.status === "infrastructure-unavailable"
@@ -81,40 +71,35 @@ function runtimeFailureObservations(input: {
           : `Candidate runtime infrastructure was unavailable: ${input.receipt.reason}`,
       requirementId: requirement.id,
     }));
-}
+};
 
 /** Returns evaluator-owned fallback evidence accepted by the runtime receipt schema. */
-export function candidateRuntimeFailureObservations(
+export const candidateRuntimeFailureObservations = (
   input: Omit<Parameters<typeof runtimeFailureObservations>[0], "kind">,
-) {
-  return runtimeFailureObservations({ ...input, kind: "runtime" });
-}
+) => runtimeFailureObservations({ ...input, kind: "runtime" });
 
 /** Returns fallback observations that capture receipt assembly can attach to viewport metadata. */
-export function candidateRuntimeCaptureFailureObservations(
+export const candidateRuntimeCaptureFailureObservations = (
   input: Omit<Parameters<typeof runtimeFailureObservations>[0], "kind">,
-) {
-  return runtimeFailureObservations({ ...input, kind: "capture" });
-}
+) => runtimeFailureObservations({ ...input, kind: "capture" });
 
 type Backend = SandboxBackend<Record<string, never>, Record<string, never>>;
 
 const excerpt = (value: string) => value.slice(-8000);
 
-async function runCommand(
+const command = async (
   handle: SandboxBackendHandle<Record<string, never>>,
   value: string,
   abortSignal: AbortSignal,
-  secrets: readonly string[],
-): Promise<RuntimeCommandReceipt> {
+): Promise<RuntimeCommandReceipt> => {
   const result = await handle.session.run({ abortSignal, command: value });
   return {
     command: value,
     exitCode: result.exitCode,
-    stderr: excerpt(redactCandidateEvidence(result.stderr, secrets)),
-    stdout: excerpt(redactCandidateEvidence(result.stdout, secrets)),
+    stderr: excerpt(result.stderr),
+    stdout: excerpt(result.stdout),
   };
-}
+};
 
 const readinessScript = (publicBasePath: string) => String.raw`
 const basePath = ${JSON.stringify(publicBasePath)};
@@ -134,7 +119,7 @@ try {
 console.log(JSON.stringify(probes));
 `;
 
-function candidatePackageName(files: readonly SandboxSeedFile[], appId: string) {
+const candidatePackageName = (files: readonly SandboxSeedFile[], appId: string) => {
   const manifest = files.find((file) => file.path === "package.json");
   if (manifest)
     try {
@@ -144,7 +129,7 @@ function candidatePackageName(files: readonly SandboxSeedFile[], appId: string) 
       /* Candidate build reports malformed package metadata. */
     }
   return `@autograph/${appId}`;
-}
+};
 
 const registerMicrofrontendScript = (appId: string, packageName: string) => String.raw`
 import { readFile, writeFile } from "node:fs/promises";
@@ -186,7 +171,7 @@ console.log(JSON.stringify([result]));
 
 /** Starts an exported candidate in a fresh evaluator-owned Vercel Sandbox.
  * The generated application never receives the backend handle or probe code. */
-async function executeCandidateRuntime(input: {
+export const evaluateCandidateRuntime = async (input: {
   files: readonly SandboxSeedFile[];
   workspaceArchive: Buffer;
   candidateAppId: string;
@@ -203,14 +188,8 @@ async function executeCandidateRuntime(input: {
     baseURL: string;
     abortSignal: AbortSignal;
   }) => Promise<void>;
-}): Promise<CandidateRuntimeReceipt> {
-  const command = (
-    handle: SandboxBackendHandle<Record<string, never>>,
-    value: string,
-    signal: AbortSignal,
-  ) => runCommand(handle, value, signal, input.credentials ? [input.credentials.token] : []);
+}): Promise<CandidateRuntimeReceipt> => {
   const commands: RuntimeCommandReceipt[] = [];
-  const evaluatorErrors: NonNullable<CandidateRuntimeReceipt["evaluatorErrors"]> = [];
   let handle: SandboxBackendHandle<Record<string, never>> | undefined;
   const controller = new AbortController();
   const timer = setTimeout(
@@ -218,13 +197,7 @@ async function executeCandidateRuntime(input: {
     input.timeoutMs ?? 600_000,
   );
   try {
-    const backend =
-      input.backend ??
-      vercel({
-        networkPolicy: "allow-all",
-        ...input.credentials,
-        env: candidateCapabilities(input.credentials).environment,
-      });
+    const backend = input.backend ?? vercel({ networkPolicy: "allow-all", ...input.credentials });
     handle = await backend.create({
       runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
       sessionKey: `self-reproduction-runtime-${randomUUID()}`,
@@ -250,9 +223,11 @@ async function executeCandidateRuntime(input: {
         sandboxId: handle.session.id,
         status: "failed",
       };
+    const activeHandle = handle;
+    if (!activeHandle) throw new Error("Candidate runtime handle was lost during reconstruction.");
     await Promise.all([
       ...input.files.map((file) =>
-        handle!.session.writeTextFile({
+        activeHandle.session.writeTextFile({
           content: String(file.content),
           path: `apps/${input.candidateAppId}/${file.path}`,
         }),
@@ -366,12 +341,12 @@ async function executeCandidateRuntime(input: {
       // Custom output layouts retain the caller's explicit runtime path.
     }
     await handle.session.writeTextFile({
-      path: ".self-reproduction-readiness.mjs",
       content: readinessScript(runtimeBasePath),
+      path: ".self-reproduction-readiness.mjs",
     });
     await handle.session.writeTextFile({
-      path: ".self-reproduction-browser.mjs",
       content: browserProbeScript(runtimeBasePath),
+      path: ".self-reproduction-browser.mjs",
     });
     const startCommand = `PORT=3000 ${bun} run --cwd apps/${input.candidateAppId} start`;
     const server = await handle.session.spawn({
@@ -381,27 +356,20 @@ async function executeCandidateRuntime(input: {
     const startup: RuntimeCommandReceipt = {
       command: startCommand,
       exitCode: null,
-      stdout: "",
       stderr: "",
+      stdout: "",
     };
     commands.push(startup);
     // Drain both streams while readiness runs, retaining bounded startup diagnostics.
     for (const stream of ["stdout", "stderr"] as const) {
       const decoder = new TextDecoder();
-      let pending = "";
       void server[stream]
         .pipeTo(
           new WritableStream({
             write(chunk) {
-              pending = (
-                pending +
-                (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true }))
-              ).slice(-(8000 + (input.credentials?.token.length ?? 0)));
               startup[stream] = excerpt(
-                redactCandidateEvidence(
-                  pending,
-                  input.credentials ? [input.credentials.token] : [],
-                ),
+                startup[stream] +
+                  (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })),
               );
             },
           }),
@@ -428,19 +396,11 @@ async function executeCandidateRuntime(input: {
         controller.signal,
       );
       commands.push(browserSetup);
-      try {
-        await input.onReady?.({
-          session: handle.session,
-          baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
-          abortSignal: controller.signal,
-        });
-      } catch (error) {
-        evaluatorErrors.push({
-          stage: "onReady",
-          disposition: "infrastructure-unavailable",
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      }
+      await input.onReady?.({
+        abortSignal: controller.signal,
+        baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
+        session: handle.session,
+      });
       const browser = await command(
         handle,
         `${runtimeEnvironment} node .self-reproduction-browser.mjs`,
@@ -464,7 +424,6 @@ async function executeCandidateRuntime(input: {
     return {
       commands,
       probes: Array.isArray(probes) ? probes : [],
-      evaluatorErrors,
       producer: "evaluator",
       reason:
         root?.passed === true
@@ -476,15 +435,15 @@ async function executeCandidateRuntime(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
+      commands: [],
       producer: "evaluator",
+      reason: message,
       ...(handle === undefined ? {} : { sandboxId: handle.session.id }),
+      probes: [],
       status:
         handle === undefined && /credential|oidc|sandbox|network|fetch/iu.test(message)
           ? "infrastructure-unavailable"
           : "failed",
-      reason: message,
-      commands,
-      probes: [],
     };
   } finally {
     clearTimeout(timer);
@@ -492,18 +451,4 @@ async function executeCandidateRuntime(input: {
       /* empty */
     });
   }
-}
-
-/** Credentials remain runtime configuration, never evidence or generated source. */
-export async function evaluateCandidateRuntime(
-  input: Parameters<typeof executeCandidateRuntime>[0],
-) {
-  const receipt = await executeCandidateRuntime(input);
-  return redactCandidateEvidence(
-    {
-      ...receipt,
-      capabilities: candidateCapabilities(input.credentials).receipt,
-    },
-    input.credentials ? [input.credentials.token] : [],
-  );
-}
+};

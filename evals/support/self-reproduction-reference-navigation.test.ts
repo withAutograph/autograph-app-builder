@@ -5,24 +5,22 @@ const titles = [
   "/auth/sign-in?callbackURL=%2F streams its meaningful production shell and resolves",
   "real Sign In Link uses a prefetched production destination",
 ];
-function report(statuses: string[]) {
-  return {
-    suites: [
-      {
-        file: "navigation.spec.ts",
-        specs: titles.map((title, index) => ({
-          title,
-          tests: [{ results: [{ status: statuses[index] }] }],
-        })),
-      },
-    ],
-  };
-}
+const report = (statuses: string[]) => ({
+  suites: [
+    {
+      file: "navigation.spec.ts",
+      specs: titles.map((title, index) => ({
+        tests: [{ results: [{ status: statuses[index] }] }],
+        title,
+      })),
+    },
+  ],
+});
 describe("reference navigation evidence", () => {
   it("credits exact direct and Link tests with resolved controls", () => {
     const result = referenceNavigationObservation({
-      report: report(["passed", "passed"]),
       artifacts: ["run.json"],
+      report: report(["passed", "passed"]),
     });
     expect(result.method).toBe("@next/playwright/instant");
     expect(result.assertions).toHaveLength(3);
@@ -30,23 +28,25 @@ describe("reference navigation evidence", () => {
   });
   it("retains an actual assertion failure without treating it as missing infrastructure", () => {
     const result = referenceNavigationObservation({
-      report: report(["passed", "failed"]),
       artifacts: ["run.json"],
+      report: report(["passed", "failed"]),
     });
     expect(result.disposition).toBe("observed");
     expect(result.assertions.map(({ passed }) => passed)).toEqual([true, false, false]);
   });
   it("does not credit aggregate passes, skipped cases, or similarly named unrelated tests", () => {
-    expect(referenceNavigationObservation({ report: {}, artifacts: [] }).disposition).toBe(
+    expect(referenceNavigationObservation({ artifacts: [], report: {} }).disposition).toBe(
       "not-run",
     );
     expect(
-      referenceNavigationObservation({ report: report(["passed", "skipped"]), artifacts: [] })
+      referenceNavigationObservation({ artifacts: [], report: report(["passed", "skipped"]) })
         .assertions,
     ).toEqual([]);
     const unrelated = report(["passed", "passed"]);
-    unrelated.suites[0]!.file = "unrelated.spec.ts";
-    expect(referenceNavigationObservation({ report: unrelated, artifacts: [] }).disposition).toBe(
+    const [suite] = unrelated.suites;
+    if (!suite) throw new Error("Expected a navigation suite.");
+    suite.file = "unrelated.spec.ts";
+    expect(referenceNavigationObservation({ artifacts: [], report: unrelated }).disposition).toBe(
       "not-run",
     );
   });

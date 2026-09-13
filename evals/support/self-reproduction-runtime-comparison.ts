@@ -12,7 +12,7 @@ export interface RuntimeComparisonResult {
 }
 
 /** Runs evaluator code against loopback while the caller retains the live sandbox. */
-export async function runSandboxRuntimeComparison(input: {
+export const runSandboxRuntimeComparison = async (input: {
   session: Pick<SandboxSession, "writeTextFile" | "run" | "readTextFile" | "readBinaryFile">;
   /** Trusted evaluator code, never generated application code. */
   script: string;
@@ -20,7 +20,7 @@ export async function runSandboxRuntimeComparison(input: {
   /** Explicit evaluator-owned artifact paths relative to the comparison directory. */
   artifactPaths?: readonly string[];
   abortSignal: AbortSignal;
-}): Promise<RuntimeComparisonResult> {
+}): Promise<RuntimeComparisonResult> => {
   const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
     .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
     .join(" ");
@@ -30,24 +30,24 @@ export async function runSandboxRuntimeComparison(input: {
     if (path.startsWith("/") || path.split(/[\\/]/u).some((part) => part === ".." || part === ""))
       throw new Error(`Comparison artifact must be a relative child path: ${path}`);
   const result: RuntimeComparisonResult = {
-    status: "failed",
-    reason: "Evaluator comparison did not complete.",
-    command: { exitCode: null, stdout: "", stderr: "" },
-    output: null,
     artifacts: [],
+    command: { exitCode: null, stderr: "", stdout: "" },
     errors: [],
+    output: null,
+    reason: "Evaluator comparison did not complete.",
+    status: "failed",
   };
   try {
-    await input.session.writeTextFile({ path: `${directory}/runner.mjs`, content: input.script });
+    await input.session.writeTextFile({ content: input.script, path: `${directory}/runner.mjs` });
     await input.session.writeTextFile({
-      path: `${directory}/input.json`,
       content: JSON.stringify(input.payload),
+      path: `${directory}/input.json`,
     });
     const command = await input.session.run({
-      command: `${runtimeEnvironment} node ${directory}/runner.mjs ${directory}/input.json ${directory}/output.json`,
       abortSignal: input.abortSignal,
+      command: `${runtimeEnvironment} node ${directory}/runner.mjs ${directory}/input.json ${directory}/output.json`,
     });
-    result.command = { exitCode: command.exitCode, stdout: command.stdout, stderr: command.stderr };
+    result.command = { exitCode: command.exitCode, stderr: command.stderr, stdout: command.stdout };
     if (command.exitCode !== 0)
       result.errors.push(`Evaluator exited with code ${command.exitCode}.`);
   } catch (error) {
@@ -68,7 +68,7 @@ export async function runSandboxRuntimeComparison(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve partial artifacts individually
       const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
       if (content === null) throw new Error("Evaluator artifact file is missing.");
-      result.artifacts.push({ path, content });
+      result.artifacts.push({ content, path });
     } catch (error) {
       result.errors.push(
         `Artifact ${path}: ${error instanceof Error ? error.message : String(error)}`,
@@ -80,4 +80,4 @@ export async function runSandboxRuntimeComparison(input: {
       ? "Evaluator comparison completed in the live sandbox."
       : result.errors.join(" ");
   return result;
-}
+};
