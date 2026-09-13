@@ -215,6 +215,11 @@ export const runPublicSession = async (options: {
       save();
       return;
     }
+    if (session.status === "waiting") {
+      state.outcome = "waiting";
+      save();
+      return;
+    }
     if (session.status === "input_required") {
       const requests = session.inputRequests ?? [];
       if (requests.some((request) => request.kind === "authorization")) {

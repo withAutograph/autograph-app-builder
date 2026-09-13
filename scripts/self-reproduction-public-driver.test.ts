@@ -273,12 +273,12 @@ describe("public self-reproduction driver", () => {
       transport: {
         call: async (name) => {
           calls.push(name);
-          return session("completed");
+          return session("waiting");
         },
       },
     });
     expect(calls).toEqual(["autograph_get"]);
     expect(current.error).toBeUndefined();
-    expect(current.outcome).toBe("completed");
+    expect(current.outcome).toBe("waiting");
   });
 });
