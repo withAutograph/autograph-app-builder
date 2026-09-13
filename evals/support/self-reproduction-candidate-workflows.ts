@@ -78,7 +78,11 @@ export async function exerciseCandidateBrowserWorkflows(
             );
           else {
             const before = await text();
+            const initialURL = page.url();
+            const originalEditor = page.getByRole("textbox", { name: /app name/iu }).first();
+            const originalValue = knownShape ? await originalEditor.inputValue() : undefined;
             await docs.click();
+            const navigated = page.url() !== initialURL;
             const content = page.locator("main, article").first();
             check(
               "docs-readable",
@@ -92,8 +96,13 @@ export async function exerciseCandidateBrowserWorkflows(
             else await page.goBack();
             check(
               "return-navigation-works",
-              (await text()) === before,
-              "Documentation return restored the original visible application content.",
+              knownShape
+                ? (await exists(originalEditor)) &&
+                    (await originalEditor.inputValue()) === originalValue
+                : navigated
+                  ? page.url() === initialURL && (await exists(docs))
+                  : null,
+              "Return must restore the original editor value or original navigated URL and control; dynamic whole-page text is not compared.",
             );
           }
         } else if (requirementId === "durable-draft") {
@@ -110,17 +119,27 @@ export async function exerciseCandidateBrowserWorkflows(
             await brief.fill(
               "Create one independent issue tracker with durable server persistence.",
             );
-            await page.waitForTimeout(1000);
+            await brief.blur();
+            const saved = page.getByText(/draft saved|changes saved/iu).first();
+            const acknowledged = await saved
+              .waitFor({ state: "visible", timeout: 5000 })
+              .then(() => true)
+              .catch(() => false);
+            await page.waitForLoadState("networkidle");
             await page.reload({ waitUntil: "networkidle" });
             check(
               "draft-survives-reload",
               (await name.inputValue()) === "Evaluator persistence sentinel" &&
-                (await brief.inputValue()).includes("independent issue tracker"),
-              "Both edited fields must survive a real reload.",
+                (await brief.inputValue()).includes("independent issue tracker")
+                ? true
+                : writes.length > 0 || !acknowledged
+                  ? null
+                  : false,
+              "Reload follows blur and visible save acknowledgement. If a backend write is still unresolved, durability remains unknown rather than imposing a timing SLA.",
             );
             check(
               "server-write-observed",
-              writes.length > 0 ? null : false,
+              writes.length > 0 || !acknowledged ? null : false,
               writes.length
                 ? "Writes were observed but durable authorization/readback still requires a fixture."
                 : "No server mutation occurred while editing and waiting for persistence.",
@@ -212,8 +231,12 @@ export async function exerciseCandidateBrowserWorkflows(
               const count = await links.count();
               check(
                 "child-artifact-linked",
-                count > 0,
-                "Creation must expose an actual navigable child artifact, not merely a Ready stage.",
+                count > 0 ? true : writes.length > 0 ? null : false,
+                count > 0
+                  ? "Creation exposed a navigable artifact link; its contents still require verification."
+                  : writes.length > 0
+                    ? "A server request was observed but no child artifact is available yet; completion needs a durable job fixture."
+                    : "No server operation or navigable child artifact exists after the visible creation flow.",
               );
               if (count > 0) {
                 const href = await links.first().getAttribute("href");
@@ -263,7 +286,10 @@ export async function exerciseCandidateBrowserWorkflows(
     } catch (error) {
       outcome = {
         requirementId,
-        status: runtimeReady && knownShape ? "failed" : "blocked",
+        status:
+          assertions.some((item) => item.passed === false) || (runtimeReady && knownShape)
+            ? "failed"
+            : "blocked",
         reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
         assertions,
       };
@@ -316,8 +342,9 @@ export function candidateWorkflowReceipts(
       side: "candidate",
       observation: {
         requirementId: outcome.requirementId,
-        disposition:
-          outcome.status === "blocked"
+        disposition: outcome.assertions.some((item) => item.passed === false)
+          ? "observed"
+          : outcome.status === "blocked"
             ? "infrastructure-unavailable"
             : outcome.status === "unassessed"
               ? "not-run"

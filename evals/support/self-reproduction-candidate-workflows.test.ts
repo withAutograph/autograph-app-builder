@@ -6,7 +6,12 @@ import {
   sandboxCandidateWorkflowComparison,
 } from "./self-reproduction-candidate-workflows";
 
-function browserFixture(visible = false, reachable = true, missingDocs = false) {
+function browserFixture(
+  visible = false,
+  reachable = true,
+  missingDocs = false,
+  serverRequest = false,
+) {
   const locator = {
     first: () => locator,
     isVisible: async () => visible,
@@ -14,13 +19,21 @@ function browserFixture(visible = false, reachable = true, missingDocs = false) 
       "Unchanged visible candidate content long enough to look like documentation",
     click: vi.fn(),
     fill: vi.fn(),
+    blur: vi.fn(),
+    waitFor: async () => undefined,
     inputValue: async () => "Default draft value",
     count: async () => 0,
     allTextContents: async () => ["Synthetic control"],
   };
   const page = {
     setDefaultTimeout: vi.fn(),
-    on: vi.fn(),
+    on: (
+      _event: string,
+      listener: (request: { method: () => string; url: () => string }) => void,
+    ) => {
+      if (serverRequest)
+        listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });
+    },
     goto: async () => ({ ok: () => reachable }),
     getByRole: (_role: string, options?: { name?: RegExp }) => {
       if (missingDocs && options?.name?.source.includes("docs")) {
@@ -30,6 +43,8 @@ function browserFixture(visible = false, reachable = true, missingDocs = false) 
       return locator;
     },
     locator: () => locator,
+    getByText: () => locator,
+    waitForLoadState: vi.fn(),
     goBack: vi.fn(),
     waitForTimeout: vi.fn(),
     reload: vi.fn(),
@@ -114,4 +129,31 @@ it("preserves unknown assertions when converting retained evaluator outcomes", (
   );
   expect(receipts[0]?.observation.disposition).toBe("not-run");
   expect(receipts[0]?.observation.assertions).toHaveLength(1);
+});
+
+it("does not fail an unfinished backend creation merely because no link appeared immediately", async () => {
+  const outcomes = await exerciseCandidateBrowserWorkflows(
+    browserFixture(true, true, false, true) as never,
+    "https://candidate.example/app/",
+    vi.fn(),
+  );
+  const creation = outcomes.find((row) => row.requirementId === "independent-child");
+  expect(creation?.status).toBe("unassessed");
+  expect(creation?.assertions.find((row) => row.id === "child-artifact-linked")?.passed).toBeNull();
+});
+
+it("retains a proven failure if later infrastructure prevents completion", () => {
+  const receipts = candidateWorkflowReceipts(
+    [
+      {
+        requirementId: "documentation",
+        status: "blocked",
+        reason: "Browser later disconnected",
+        assertions: [{ id: "docs-readable", passed: false, detail: "Inert Docs control" }],
+      },
+    ],
+    "candidate-workflows.json",
+  );
+  expect(receipts[0]?.observation.disposition).toBe("observed");
+  expect(receipts[0]?.observation.assertions[0]?.passed).toBe(false);
 });
