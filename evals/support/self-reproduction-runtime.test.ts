@@ -9,6 +9,7 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
     return Promise.resolve({ stdout: "", stderr: "", ...result });
   });
   const writeTextFile = vi.fn(() => Promise.resolve());
+  const writeBinaryFile = vi.fn(() => Promise.resolve());
   const spawn = vi.fn(() =>
     Promise.resolve({
       stdout: new ReadableStream(),
@@ -28,6 +29,7 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
             run,
             spawn,
             writeTextFile,
+            writeBinaryFile,
           },
           useSessionFn: () => {
             throw new Error("unused");
@@ -41,6 +43,7 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
     run,
     spawn,
     writeTextFile,
+    writeBinaryFile,
     shutdown,
   };
 }
@@ -50,13 +53,20 @@ describe("self-reproduction candidate runtime", () => {
     const fixture = backend([
       { exitCode: 0 },
       { exitCode: 0 },
+      { exitCode: 0 },
       {
         exitCode: 0,
         stdout: JSON.stringify([
-          { id: "root", url: "http://127.0.0.1:3000/", status: 200, passed: true, detail: "ok" },
+          {
+            id: "root",
+            url: "http://127.0.0.1:3000/candidate",
+            status: 200,
+            passed: true,
+            detail: "ok",
+          },
           {
             id: "documentation",
-            url: "http://127.0.0.1:3000/docs",
+            url: "http://127.0.0.1:3000/candidate/docs",
             status: 200,
             passed: true,
             detail: "ok",
@@ -66,13 +76,15 @@ describe("self-reproduction candidate runtime", () => {
     ]);
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
+      workspaceArchive: Buffer.from("archive"),
+      candidateAppId: "candidate",
+      publicBasePath: "/candidate",
       files: [{ path: "package.json", content: "{}" }],
-      baseFiles: [{ path: "package.json", content: '{"workspaces":["apps/*"]}' }],
-      candidateAppId: "replica",
     });
     expect(receipt).toMatchObject({ producer: "evaluator", status: "available" });
     expect(receipt.probes).toHaveLength(2);
-    expect(fixture.writeTextFile).toHaveBeenCalledTimes(2);
+    expect(fixture.writeBinaryFile).toHaveBeenCalledOnce();
+    expect(fixture.writeTextFile).toHaveBeenCalledOnce();
     expect(fixture.spawn).toHaveBeenCalledOnce();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
   });
@@ -80,16 +92,18 @@ describe("self-reproduction candidate runtime", () => {
   it("retains build diagnostics and never starts a failed candidate", async () => {
     const fixture = backend([
       { exitCode: 0 },
+      { exitCode: 0 },
       { exitCode: 1, stderr: "Type error in app/page.tsx" },
     ]);
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
+      workspaceArchive: Buffer.from("archive"),
+      candidateAppId: "candidate",
+      publicBasePath: "/candidate",
       files: [],
-      baseFiles: [],
-      candidateAppId: "replica",
     });
     expect(receipt).toMatchObject({ status: "failed", reason: "Candidate build failed." });
-    expect(receipt.commands[1]?.stderr).toContain("Type error");
+    expect(receipt.commands[2]?.stderr).toContain("Type error");
     expect(fixture.spawn).not.toHaveBeenCalled();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
   });
@@ -101,9 +115,10 @@ describe("self-reproduction candidate runtime", () => {
         prewarm: () => Promise.resolve({ reused: false }),
         create: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
       },
+      workspaceArchive: Buffer.from("archive"),
+      candidateAppId: "candidate",
+      publicBasePath: "/candidate",
       files: [],
-      baseFiles: [],
-      candidateAppId: "replica",
     });
     expect(receipt).toMatchObject({ status: "infrastructure-unavailable", probes: [] });
   });

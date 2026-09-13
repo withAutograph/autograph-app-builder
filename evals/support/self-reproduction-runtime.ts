@@ -43,8 +43,9 @@ async function command(
   };
 }
 
-const probeScript = String.raw`
-const targets = [["root", "http://127.0.0.1:3000/"], ["documentation", "http://127.0.0.1:3000/docs"]];
+const probeScript = (publicBasePath: string) => String.raw`
+const basePath = ${JSON.stringify(publicBasePath)};
+const targets = [["root", "http://127.0.0.1:3000" + basePath], ["documentation", "http://127.0.0.1:3000" + basePath + "/docs"]];
 const deadline = Date.now() + 120000;
 while (Date.now() < deadline) {
   try { if ((await fetch(targets[0][1])).status < 500) break; } catch {}
@@ -66,8 +67,9 @@ console.log(JSON.stringify(probes));
  * The generated application never receives the backend handle or probe code. */
 export async function evaluateCandidateRuntime(input: {
   files: readonly SandboxSeedFile[];
-  baseFiles: readonly SandboxSeedFile[];
+  workspaceArchive: Buffer;
   candidateAppId: string;
+  publicBasePath: string;
   appRoot?: string;
   backend?: Backend;
   timeoutMs?: number;
@@ -87,11 +89,25 @@ export async function evaluateCandidateRuntime(input: {
       tags: { purpose: "self-reproduction-eval" },
       runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
     });
-    await Promise.all(
-      input.baseFiles.map((file) =>
-        handle!.session.writeTextFile({ path: file.path, content: String(file.content) }),
-      ),
+    await handle.session.writeBinaryFile({
+      path: ".self-reproduction-workspace.tar",
+      content: input.workspaceArchive,
+    });
+    const unpack = await command(
+      handle,
+      "tar -xf .self-reproduction-workspace.tar && rm .self-reproduction-workspace.tar",
+      controller.signal,
     );
+    commands.push(unpack);
+    if (unpack.exitCode !== 0)
+      return {
+        producer: "evaluator",
+        sandboxId: handle.session.id,
+        status: "failed",
+        reason: "Reference workspace reconstruction failed.",
+        commands,
+        probes: [],
+      };
     await Promise.all(
       input.files.map((file) =>
         handle!.session.writeTextFile({
@@ -132,7 +148,7 @@ export async function evaluateCandidateRuntime(input: {
     });
     const probe = await command(
       handle,
-      `node --input-type=module --eval ${JSON.stringify(probeScript)}`,
+      `node --input-type=module --eval ${JSON.stringify(probeScript(input.publicBasePath))}`,
       controller.signal,
     );
     commands.push(probe);

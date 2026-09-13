@@ -6,6 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
+import { create as createTar } from "tar";
 import { activeBuilderModelId } from "../lib/integrations/active-model";
 
 import {
@@ -84,6 +85,33 @@ let candidate: Record<string, unknown> = {
   reason: "No candidate export has been supplied.",
 };
 const errors: string[] = [];
+
+async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
+  const tracked = execFileSync("git", ["ls-files", "-z"], {
+    cwd: directory,
+    encoding: "utf-8",
+    maxBuffer: 16 * 1024 * 1024,
+  })
+    .split("\0")
+    .filter(Boolean);
+  const chunks: Buffer[] = [];
+  const archive = createTar({ cwd: directory, portable: true, noMtime: true }, tracked);
+  for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+function candidatePublicBasePath(files: Awaited<ReturnType<typeof readSource>>): string {
+  const contract = files.find((file) => file.path === "app.contract.json");
+  if (contract)
+    try {
+      const parsed = JSON.parse(contract.content) as { appId?: unknown };
+      if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId))
+        return `/${parsed.appId}`;
+    } catch {
+      /* Runtime readiness reports malformed candidate metadata as a failure. */
+    }
+  return "/";
+}
 
 async function artifactFile(name: string, content: string) {
   const path = join(output, name);
@@ -661,13 +689,16 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     await saveReport();
     if (values["candidate-runtime"]) {
-      const arrustedFiles = arrustedRoot ? await readSource(arrustedRoot) : undefined;
+      const workspaceArchive = arrustedRoot
+        ? await trackedWorkspaceArchive(arrustedRoot)
+        : undefined;
       candidateRuntime =
-        candidateFiles && arrustedFiles
+        candidateFiles && workspaceArchive
           ? await evaluateCandidateRuntime({
               files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
-              baseFiles: arrustedFiles.map((file) => ({ path: file.path, content: file.content })),
+              workspaceArchive,
               candidateAppId: "self-reproduction-candidate",
+              publicBasePath: candidatePublicBasePath(candidateFiles),
               appRoot: "/workspace",
             })
           : {
