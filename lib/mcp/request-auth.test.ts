@@ -76,44 +76,47 @@ describe("hosted MCP request authentication", () => {
     });
   });
 
-  it("verifies exact issuer, audience, algorithm, kid, time, scope, and workspace claims", async () => {
-    const { privateKey, publicKey } = await generateKeyPair("ES256");
-    const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
-    const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetchImplementation: typeof fetch = async (url, options) => {
-      fetchCalls.push([url, options]);
-      return Response.json({ keys: [jwk] });
-    };
-    const verifier = createRemoteJwksAccessTokenVerifier({
-      config,
-      fetchImplementation,
-    });
-    const now = 2_000_000_000;
-    const token = await new SignJWT({
-      scope: "autograph:session autograph:get",
-      workspace_id: "workspace-one",
-    })
-      .setProtectedHeader({ alg: "ES256", kid: "key-1" })
-      .setIssuer(config.issuer)
-      .setAudience(config.audience)
-      .setSubject("user-one")
-      .setIssuedAt(now - 1)
-      .setNotBefore(now - 1)
-      .setExpirationTime(now + 60)
-      .sign(privateKey);
+  it.each([0, 1])(
+    "verifies claims when membership not-before follows issuance by %s seconds",
+    async (claimDelay) => {
+      const { privateKey, publicKey } = await generateKeyPair("ES256");
+      const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
+      const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      const fetchImplementation: typeof fetch = async (url, options) => {
+        fetchCalls.push([url, options]);
+        return Response.json({ keys: [jwk] });
+      };
+      const verifier = createRemoteJwksAccessTokenVerifier({
+        config,
+        fetchImplementation,
+      });
+      const now = 2_000_000_000;
+      const token = await new SignJWT({
+        scope: "autograph:session autograph:get",
+        workspace_id: "workspace-one",
+      })
+        .setProtectedHeader({ alg: "ES256", kid: "key-1" })
+        .setIssuer(config.issuer)
+        .setAudience(config.audience)
+        .setSubject("user-one")
+        .setIssuedAt(now - 1)
+        .setNotBefore(now - 1 + claimDelay)
+        .setExpirationTime(now + 60)
+        .sign(privateKey);
 
-    await expect(verifier.verify({ nowEpochSeconds: now, token })).resolves.toEqual({
-      audience: config.audience,
-      issuer: config.issuer,
-      scopes: ["autograph:session", "autograph:get"],
-      subject: "user-one",
-      workspaceId: "workspace-one",
-    });
-    expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0]?.[0]).toBe(config.jwksUrl);
-    expect(fetchCalls[0]?.[1]).toMatchObject({ redirect: "manual" });
-  });
+      await expect(verifier.verify({ nowEpochSeconds: now, token })).resolves.toEqual({
+        audience: config.audience,
+        issuer: config.issuer,
+        scopes: ["autograph:session", "autograph:get"],
+        subject: "user-one",
+        workspaceId: "workspace-one",
+      });
+      expect(fetchCalls).toHaveLength(1);
+      expect(fetchCalls[0]?.[0]).toBe(config.jwksUrl);
+      expect(fetchCalls[0]?.[1]).toMatchObject({ redirect: "manual" });
+    },
+  );
 
   it.each<
     [
@@ -130,6 +133,14 @@ describe("hosted MCP request authentication", () => {
     ["wrong audience", { audience: "another-audience" }],
     ["expired", { expirationTime: 1_999_999_999 }],
     ["long-lived", { expirationTime: 2_000_000_301 }],
+    [
+      "long lifetime hidden by later not-before",
+      { expirationTime: 2_000_000_060, issuedAt: 1_999_999_600, notBefore: 1_999_999_999 },
+    ],
+    [
+      "early not-before exceeds existing validity cap",
+      { expirationTime: 2_000_000_060, issuedAt: 1_999_999_999, notBefore: 1_999_999_600 },
+    ],
     ["future issued-at", { issuedAt: 2_000_000_001 }],
     ["future not-before", { notBefore: 2_000_000_001 }],
     ["missing key id", { kid: undefined }],

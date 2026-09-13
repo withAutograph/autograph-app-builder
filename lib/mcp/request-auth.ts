@@ -177,9 +177,10 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         !Number.isInteger(nbf) ||
         exp <= nowEpochSeconds ||
         nbf > nowEpochSeconds ||
-        iat < nbf ||
         iat > nowEpochSeconds ||
+        // Issuance precedes async membership claims; nbf can legitimately be later.
         exp - nbf > 300 ||
+        exp - iat > 300 ||
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
         typeof payload.workspace_id !== "string"
