@@ -248,3 +248,18 @@ cannot inherit a previous probe's JSON or screenshots. Empty-state checks clear
 and refill real controls; loading credit requires an explicitly bound creation
 request held in flight. Static progress labels and unsupported error fixtures
 remain unassessed.
+
+A repaired reference fixture can be rerun independently and combined with the
+retained candidate assessment by adding
+`--reference-run-dir /absolute/path/to/reference-only-run` to the supplementary
+report command. Its reference observations and captures retain a separate
+artifact namespace and source revision. It cannot replace candidate outcomes
+or turn blocked reference evidence into passing assertions. The normal run's
+authenticated capture receipts now supply screenshot pairing automatically;
+external capture provenance remains supported for earlier runs.
+
+Reference setup holds its local port reservations through installation and
+checks both provider emulators as well as the authentication page before
+reporting readiness. Evaluator callback errors are retained separately from
+successful candidate startup, so a report-writing failure is not blamed on
+the generated application.
