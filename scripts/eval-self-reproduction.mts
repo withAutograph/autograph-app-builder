@@ -1,3 +1,4 @@
+import { sandboxCandidateNavigation } from "../evals/support/self-reproduction-candidate-navigation";
 import type { Page } from "playwright";
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
@@ -121,6 +122,7 @@ let parityAssessment: Assessment | undefined;
 let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
 let sandboxWorkflowReceipts: unknown[] = [];
+let sandboxNavigationReceipts: unknown[] = [];
 let sandboxCaptureObservations: Observation[] = [];
 let referenceNavigationReceipts: unknown[] = [];
 let trustedFrameworkReceipts: unknown[] = [];
@@ -696,6 +698,7 @@ async function saveReport() {
   const runtimeReceipts = mergeRuntimeEvidence({
     trustedReceipts: [
       ...sandboxWorkflowReceipts,
+      ...sandboxNavigationReceipts,
       ...referenceNavigationReceipts,
       ...trustedWorkflowReceipts,
       ...trustedFrameworkReceipts,
@@ -1095,6 +1098,38 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                     status:
                       "Live access diagnostic only; no generated application functionality credit.",
                   });
+                }
+                const navigation = await runSandboxRuntimeComparison({
+                  session,
+                  ...sandboxCandidateNavigation(),
+                  payload: { baseURL },
+                  abortSignal,
+                });
+                const { artifacts: navigationArtifacts, ...navigationReceipt } = navigation;
+                await jsonFile("candidate-navigation.json", navigationReceipt);
+                for (const artifact of navigationArtifacts) {
+                  const target = join(output, "candidate-navigation", artifact.path);
+                  await mkdir(resolve(target, ".."), { recursive: true });
+                  await writeFile(target, artifact.content, { mode: 0o600 });
+                }
+                const navigationOutput = navigation.output as { observation?: Observation } | null;
+                if (navigationOutput?.observation) {
+                  sandboxNavigationReceipts = [
+                    {
+                      schemaVersion: "self-reproduction-runtime-receipt/v1",
+                      producer: "evaluator",
+                      side: "candidate",
+                      observation: {
+                        ...navigationOutput.observation,
+                        artifacts: [
+                          "candidate-navigation.json",
+                          ...navigationOutput.observation.artifacts.map(
+                            (path) => `candidate-navigation/${path}`,
+                          ),
+                        ],
+                      },
+                    },
+                  ];
                 }
                 const comparison = await runSandboxRuntimeComparison({
                   session,
