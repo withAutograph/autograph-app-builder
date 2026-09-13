@@ -15,6 +15,7 @@ import {
 } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
+  assertImplementationArchitecture,
   implementationFilesSchema,
   withImplementationFiles,
 } from "@/lib/agent/apply-implementation-files";
@@ -35,6 +36,10 @@ export default defineTool({
       current.phase !== "applied"
     )
       throw new Error("Derive an exact canonical proposal before requesting target apply.");
+    assertImplementationArchitecture(
+      input.implementationFiles,
+      current.proposal.target.plan.source.schema.kind,
+    );
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
