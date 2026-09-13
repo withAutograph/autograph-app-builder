@@ -17,9 +17,14 @@ export default defineConfig({
       // focused cleanup batches land. Do not broaden this list or add a
       // catch-all pattern: agent/agent.ts remains fully checked here.
       files: [
-        "app/(docs)/docs/**",
-        "app/(product)/local-connections/**",
-        "app/(product)/local-oauth/**",
+        "app/(docs)/docs/[slug]/page.tsx",
+        "app/(product)/local-connections/[provider]/complete/route.ts",
+        "app/(product)/local-connections/[provider]/page.tsx",
+        "app/(product)/local-connections/vercel/oauth-callback/route.ts",
+        "app/(product)/local-oauth/[provider]/approve/[approval]/route.ts",
+        "app/(product)/local-oauth/[provider]/approve/completion.ts",
+        "app/(product)/local-oauth/[provider]/approve/route.ts",
+        "app/(product)/local-oauth/[provider]/authorize/page.tsx",
         ".config/mise/scripts/prepare-emulate-runtime.mjs",
         ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
         ".config/mise/scripts/repository/build-starter-source-release.mts",
