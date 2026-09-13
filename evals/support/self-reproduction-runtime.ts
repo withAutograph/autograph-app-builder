@@ -67,6 +67,31 @@ try {
 console.log(JSON.stringify(probes));
 `;
 
+
+function candidatePackageName(files: readonly SandboxSeedFile[], appId: string) {
+  const manifest = files.find((file) => file.path === "package.json");
+  if (manifest)
+    try {
+      const parsed = JSON.parse(String(manifest.content)) as { name?: unknown };
+      if (typeof parsed.name === "string" && parsed.name.length > 0) return parsed.name;
+    } catch {
+      /* Candidate build reports malformed package metadata. */
+    }
+  return `@autograph/${appId}`;
+}
+
+const registerMicrofrontendScript = (appId: string, packageName: string) => String.raw`
+import { readFile, writeFile } from "node:fs/promises";
+const path = "/workspace/.scratch/microfrontends/microfrontends.json";
+const config = JSON.parse(await readFile(path, "utf8"));
+config.applications["apps-" + ${JSON.stringify(appId)}] = {
+  packageName: ${JSON.stringify(packageName)},
+  development: { local: 3000 },
+  routing: [{ paths: [${JSON.stringify(`/${appId}`)}, ${JSON.stringify(`/${appId}/:path*`)}] }],
+};
+await writeFile(path, JSON.stringify(config, null, 2) + "\n");
+`;
+
 const browserProbeScript = (publicBasePath: string) => String.raw`
 import { chromium } from "playwright";
 const baseURL = "http://127.0.0.1:3000" + ${JSON.stringify(publicBasePath)};
@@ -184,6 +209,21 @@ export async function evaluateCandidateRuntime(input: {
         sandboxId: handle.session.id,
         status: "failed",
         reason: "Candidate microfrontend configuration failed.",
+        commands,
+        probes: [],
+      };
+    const registration = await command(
+      handle,
+      `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(registerMicrofrontendScript(input.candidateAppId, candidatePackageName(input.files, input.candidateAppId)))}`,
+      controller.signal,
+    );
+    commands.push(registration);
+    if (registration.exitCode !== 0)
+      return {
+        producer: "evaluator",
+        sandboxId: handle.session.id,
+        status: "failed",
+        reason: "Candidate microfrontend registration failed.",
         commands,
         probes: [],
       };
