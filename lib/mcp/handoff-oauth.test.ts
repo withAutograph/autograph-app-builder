@@ -349,6 +349,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         previewOAuthScopes.join(" "),
       );
       const switched = await callStart(handler, second.tokens.access_token, handoffId);
+      expect(switched.isError, JSON.stringify(switched)).not.toBe(true);
       expect(switched.structuredContent.sessionId).toBe(result.structuredContent.sessionId);
       expect(start).toHaveBeenCalledTimes(1);
       const strangerCredentials = {

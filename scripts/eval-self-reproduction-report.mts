@@ -3,8 +3,10 @@ import { writeSupplementaryAssessment } from "../evals/support/self-reproduction
 
 const { values } = parseArgs({
   options: {
+    "candidate-navigation-run-dir": { type: "string" },
     "output-dir": { type: "string" },
     "reference-captures-dir": { type: "string" },
+    "reference-run-dir": { type: "string" },
     "run-dir": { type: "string" },
     "source-review-dir": { type: "string" },
   },
@@ -14,8 +16,10 @@ if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"])
     "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
   );
 const report = await writeSupplementaryAssessment({
+  candidateNavigationRunDirectory: values["candidate-navigation-run-dir"],
   outputDirectory: values["output-dir"],
   referenceCapturesDirectory: values["reference-captures-dir"],
+  referenceRunDirectory: values["reference-run-dir"],
   runDirectory: values["run-dir"],
   sourceReviewDirectory: values["source-review-dir"],
 });

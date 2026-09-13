@@ -7,6 +7,10 @@ import {
   developmentPinnedToolchainCommand,
 } from "../../lib/sandbox/development-toolchain";
 import { requirements } from "./self-reproduction-parity";
+import {
+  candidateCapabilities,
+  redactCandidateEvidence,
+} from "./self-reproduction-candidate-capabilities";
 import type { Observation } from "./self-reproduction-parity";
 
 export interface RuntimeCommandReceipt {
@@ -19,6 +23,11 @@ export interface RuntimeCommandReceipt {
 export interface CandidateRuntimeReceipt {
   producer: "evaluator";
   sandboxId?: string;
+  evaluatorErrors?: {
+    stage: "onReady";
+    disposition: "infrastructure-unavailable";
+    detail: string;
+  }[];
   status: "available" | "failed" | "infrastructure-unavailable";
   reason: string;
   commands: RuntimeCommandReceipt[];
@@ -92,17 +101,18 @@ type Backend = SandboxBackend<Record<string, never>, Record<string, never>>;
 
 const excerpt = (value: string) => value.slice(-8000);
 
-async function command(
+async function runCommand(
   handle: SandboxBackendHandle<Record<string, never>>,
   value: string,
   abortSignal: AbortSignal,
+  secrets: readonly string[],
 ): Promise<RuntimeCommandReceipt> {
   const result = await handle.session.run({ abortSignal, command: value });
   return {
     command: value,
     exitCode: result.exitCode,
-    stderr: excerpt(result.stderr),
-    stdout: excerpt(result.stdout),
+    stderr: excerpt(redactCandidateEvidence(result.stderr, secrets)),
+    stdout: excerpt(redactCandidateEvidence(result.stdout, secrets)),
   };
 }
 
@@ -176,7 +186,7 @@ console.log(JSON.stringify([result]));
 
 /** Starts an exported candidate in a fresh evaluator-owned Vercel Sandbox.
  * The generated application never receives the backend handle or probe code. */
-export async function evaluateCandidateRuntime(input: {
+async function executeCandidateRuntime(input: {
   files: readonly SandboxSeedFile[];
   workspaceArchive: Buffer;
   candidateAppId: string;
@@ -194,7 +204,13 @@ export async function evaluateCandidateRuntime(input: {
     abortSignal: AbortSignal;
   }) => Promise<void>;
 }): Promise<CandidateRuntimeReceipt> {
+  const command = (
+    handle: SandboxBackendHandle<Record<string, never>>,
+    value: string,
+    signal: AbortSignal,
+  ) => runCommand(handle, value, signal, input.credentials ? [input.credentials.token] : []);
   const commands: RuntimeCommandReceipt[] = [];
+  const evaluatorErrors: NonNullable<CandidateRuntimeReceipt["evaluatorErrors"]> = [];
   let handle: SandboxBackendHandle<Record<string, never>> | undefined;
   const controller = new AbortController();
   const timer = setTimeout(
@@ -202,7 +218,13 @@ export async function evaluateCandidateRuntime(input: {
     input.timeoutMs ?? 600_000,
   );
   try {
-    const backend = input.backend ?? vercel({ networkPolicy: "allow-all", ...input.credentials });
+    const backend =
+      input.backend ??
+      vercel({
+        networkPolicy: "allow-all",
+        ...input.credentials,
+        env: candidateCapabilities(input.credentials).environment,
+      });
     handle = await backend.create({
       runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
       sessionKey: `self-reproduction-runtime-${randomUUID()}`,
@@ -366,13 +388,20 @@ export async function evaluateCandidateRuntime(input: {
     // Drain both streams while readiness runs, retaining bounded startup diagnostics.
     for (const stream of ["stdout", "stderr"] as const) {
       const decoder = new TextDecoder();
+      let pending = "";
       void server[stream]
         .pipeTo(
           new WritableStream({
             write(chunk) {
+              pending = (
+                pending +
+                (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true }))
+              ).slice(-(8000 + (input.credentials?.token.length ?? 0)));
               startup[stream] = excerpt(
-                startup[stream] +
-                  (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })),
+                redactCandidateEvidence(
+                  pending,
+                  input.credentials ? [input.credentials.token] : [],
+                ),
               );
             },
           }),
@@ -399,11 +428,19 @@ export async function evaluateCandidateRuntime(input: {
         controller.signal,
       );
       commands.push(browserSetup);
-      await input.onReady?.({
-        session: handle.session,
-        baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
-        abortSignal: controller.signal,
-      });
+      try {
+        await input.onReady?.({
+          session: handle.session,
+          baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
+          abortSignal: controller.signal,
+        });
+      } catch (error) {
+        evaluatorErrors.push({
+          stage: "onReady",
+          disposition: "infrastructure-unavailable",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       const browser = await command(
         handle,
         `${runtimeEnvironment} node .self-reproduction-browser.mjs`,
@@ -427,6 +464,7 @@ export async function evaluateCandidateRuntime(input: {
     return {
       commands,
       probes: Array.isArray(probes) ? probes : [],
+      evaluatorErrors,
       producer: "evaluator",
       reason:
         root?.passed === true
@@ -454,4 +492,18 @@ export async function evaluateCandidateRuntime(input: {
       /* empty */
     });
   }
+}
+
+/** Credentials remain runtime configuration, never evidence or generated source. */
+export async function evaluateCandidateRuntime(
+  input: Parameters<typeof executeCandidateRuntime>[0],
+) {
+  const receipt = await executeCandidateRuntime(input);
+  return redactCandidateEvidence(
+    {
+      ...receipt,
+      capabilities: candidateCapabilities(input.credentials).receipt,
+    },
+    input.credentials ? [input.credentials.token] : [],
+  );
 }

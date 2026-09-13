@@ -156,7 +156,12 @@ The authoritative paired capture matrix requires both reachable URLs and
 installed Playwright Chromium. The candidate Sandbox stays alive while its
 in-Sandbox callback captures diagnostic root/documentation screens at the
 existing desktop viewports; this loopback URL is not exposed to the host browser.
-Those diagnostic captures do not establish authenticated or seeded-state parity.
+Supported candidate controls receive the shared synthetic draft before capture.
+The isolated reference signs in through its emulator and confirms that same
+draft through an owner-scoped PostgreSQL readback at each viewport. Its fixture
+receipt is retained; authentication failure never falls back to an anonymous
+screenshot. Matching visible inputs do not establish candidate authentication
+or durable persistence. Unfamiliar candidate controls remain diagnostic.
 Use a reachable candidate URL and equivalent evaluator-owned fixtures for the
 host-side paired matrix. Partial screenshots survive later failures. Missing
 fixtures and unavailable runtimes remain unassessed or blocked in all report
@@ -209,3 +214,52 @@ cannot provide browser credit. Missing referenced evidence remains unassessed.
 The JSON, Markdown, and HTML outputs explicitly identify themselves as a
 supplementary assessment. Initial screenshot pairs are diagnostic; their state
 and authentication differences remain visible in the capture qualification.
+
+### Candidate runtime access and infrastructure proof
+
+The evaluator uses the linked project's short-lived Development OIDC for the
+outer Sandbox and supplies only `VERCEL_OIDC_TOKEN`, `VERCEL_TEAM_ID`, and
+`VERCEL_PROJECT_ID` to its candidate environment through the structured Sandbox
+API. It never forwards the host environment or writes credentials into command
+strings, source, or evidence. Raw credentials are redacted from retained runtime
+and comparison diagnostics. Expiration and project validation remain owned by
+the existing local OIDC entrypoint.
+
+Native live runs also test infrastructure access with a small model request and
+a child Sandbox sentinel command. A comparison-only replay can opt in:
+
+```sh
+mise run eval:self-reproduction -- --report-only \
+  --candidate-root /absolute/path/to/preserved-candidate \
+  --candidate-runtime --candidate-capability-probe --reference-runtime \
+  --output-dir /absolute/external/new-comparison
+```
+
+`candidate-capability-proof.json` reports model access, child execution, and
+child cleanup separately. Sandbox SDK tooling lives in evaluator scratch space;
+the candidate implementation and dependencies are not patched. A successful
+probe establishes infrastructure access, never independent app creation by the
+candidate. Configured credentials alone remain unverified. Local file or SQLite
+persistence is application-owned; no external database is implied or required.
+A database-dependent implementation still needs a real isolated database setup.
+
+Each browser or capability probe has its own artifact directory. A failed probe
+cannot inherit a previous probe's JSON or screenshots. Empty-state checks clear
+and refill real controls; loading credit requires an explicitly bound creation
+request held in flight. Static progress labels and unsupported error fixtures
+remain unassessed.
+
+A repaired reference fixture can be rerun independently and combined with the
+retained candidate assessment by adding
+`--reference-run-dir /absolute/path/to/reference-only-run` to the supplementary
+report command. Its reference observations and captures retain a separate
+artifact namespace and source revision. It cannot replace candidate outcomes
+or turn blocked reference evidence into passing assertions. The normal run's
+authenticated capture receipts now supply screenshot pairing automatically;
+external capture provenance remains supported for earlier runs.
+
+Reference setup holds its local port reservations through installation and
+checks both provider emulators as well as the authentication page before
+reporting readiness. Evaluator callback errors are retained separately from
+successful candidate startup, so a report-writing failure is not blamed on
+the generated application.

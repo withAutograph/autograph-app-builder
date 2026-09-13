@@ -995,6 +995,8 @@ export async function capturePreview(input: {
   additionalDesktopSize?: DesktopSize;
   /** For evaluator-owned local HTTPS fixtures with self-signed certificates. */
   ignoreHTTPSErrors?: boolean;
+  /** Evaluator-owned state preparation; exceptions stop capture without fallback. */
+  preparePage?: (page: Page) => Promise<void>;
 }) {
   const browser = await chromium.launch();
   const captures = [];
@@ -1002,6 +1004,7 @@ export async function capturePreview(input: {
     for (const viewport of captureViewports(input.additionalDesktopSize)) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const context = await browser.newContext({
+        baseURL: input.url,
         deviceScaleFactor: 1,
         ignoreHTTPSErrors: input.ignoreHTTPSErrors ?? false,
         viewport: { height: viewport.height, width: viewport.width },
@@ -1016,7 +1019,11 @@ export async function capturePreview(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await page.goto(input.url, { waitUntil: "load" });
       if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      if (input.preparePage) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each disposable viewport needs its own fixture.
+        await input.preparePage(page);
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve intentional sequential control flow.
       await page.evaluate(() => document.fonts.ready);
       for (let index = 0; index <= input.scenarios.length; index += 1) {
         const scenario = index === 0 ? undefined : input.scenarios[index - 1];

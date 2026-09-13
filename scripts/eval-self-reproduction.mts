@@ -1,3 +1,8 @@
+import {
+  candidateNavigationReceipt,
+  sandboxCandidateNavigation,
+} from "../evals/support/self-reproduction-candidate-navigation";
+import type { Page } from "playwright";
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -51,6 +56,7 @@ import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction
 import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
 import { mergeRuntimeEvidence } from "../evals/support/self-reproduction-runtime-evidence";
 import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
+import { redactCandidateEvidence } from "../evals/support/self-reproduction-candidate-capabilities";
 import {
   candidateWorkflowReceipts,
   sandboxCandidateWorkflowComparison,
@@ -77,6 +83,7 @@ const { values } = parseArgs({
     "arrusted-root": { type: "string" },
     "candidate-url": { type: "string" },
     "candidate-runtime": { type: "boolean" },
+    "candidate-capability-probe": { type: "boolean" },
     "debug-prerender": { type: "boolean" },
     "reference-url": { type: "string" },
     "reference-runtime": { type: "boolean" },
@@ -118,6 +125,7 @@ let parityAssessment: Assessment | undefined;
 let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
 let sandboxWorkflowReceipts: unknown[] = [];
+let sandboxNavigationReceipts: unknown[] = [];
 let sandboxCaptureObservations: Observation[] = [];
 let referenceNavigationReceipts: unknown[] = [];
 let trustedFrameworkReceipts: unknown[] = [];
@@ -368,8 +376,13 @@ function escape(value: string) {
   );
 }
 
+const candidateEvidenceSecrets: string[] = [];
+
 async function jsonFile(name: string, data: unknown) {
-  await artifactFile(name, `${JSON.stringify(sanitizeEvidence(data), null, 2)}\n`);
+  await artifactFile(
+    name,
+    `${JSON.stringify(redactCandidateEvidence(data, candidateEvidenceSecrets), null, 2)}\n`,
+  );
 }
 
 function revision(directory: string | undefined) {
@@ -425,7 +438,7 @@ function reportHtml(report: {
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>${report.generation.status === "not-run" ? "Comparison-only replay; no generation was run." : "One unassisted baseline."} Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Runtime and browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -583,11 +596,28 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
   try {
     await mkdir(destination, { recursive: true, mode: 0o700 });
     const { capturePreview } = await import("./design-quality/browser");
+    const fixtureReceipts: unknown[] = [];
+    const fixtureRoot = label === "reference" ? referenceFixtureRoot : undefined;
+    const preparePage = fixtureRoot
+      ? async (page: Page) => {
+          const { prepareReferenceCaptureFixture } =
+            await import("../evals/support/self-reproduction-reference-capture-fixture");
+          await prepareReferenceCaptureFixture(page, {
+            fixtureRoot,
+            referenceUrl: url,
+            recordReceipt: async (receipt) => {
+              fixtureReceipts.push(receipt);
+              await jsonFile(`captures/${label}/fixture.json`, fixtureReceipts);
+            },
+          });
+        }
+      : undefined;
     const previewFiles = await capturePreview({
       url,
       output: destination,
       tokens: {},
       scenarios: [],
+      preparePage,
       ignoreHTTPSErrors: label === "reference" && referenceFixtureRoot !== undefined,
       generatedSourcePaths: sourceRoot
         ? (await readSource(sourceRoot)).map((file) => file.path)
@@ -595,8 +625,13 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
     });
     return {
       label,
-      files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
-      status: "captured",
+      files: [
+        ...previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
+        ...(fixtureRoot ? [`captures/${label}/fixture.json`] : []),
+      ],
+      status: fixtureRoot
+        ? "captured: authenticated durable draft; candidate authentication parity is separately assessed"
+        : "captured: unseeded; authenticated state parity is unassessed",
     };
   } catch (error) {
     await mkdir(destination, { recursive: true, mode: 0o700 });
@@ -666,6 +701,7 @@ async function saveReport() {
   const runtimeReceipts = mergeRuntimeEvidence({
     trustedReceipts: [
       ...sandboxWorkflowReceipts,
+      ...sandboxNavigationReceipts,
       ...referenceNavigationReceipts,
       ...trustedWorkflowReceipts,
       ...trustedFrameworkReceipts,
@@ -846,7 +882,7 @@ async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
-  [--candidate-runtime] [--debug-prerender] [--reference-runtime]
+  [--candidate-runtime] [--candidate-capability-probe] [--debug-prerender] [--reference-runtime]
   [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
@@ -854,6 +890,8 @@ Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
 --reference-runtime starts an isolated emulated reference; live native runs do this by default.
+--candidate-capability-probe checks live model and child Sandbox access during a replay.
+Native live runs include this infrastructure proof; it gives no product functionality credit.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
 --debug-prerender retains an additional diagnostic build after production build failure;
@@ -1028,6 +1066,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     if (values["candidate-runtime"] || (!values["report-only"] && !values.generator)) {
       const credentials = loadProjectOidc();
+      if (credentials) candidateEvidenceSecrets.push(credentials.token);
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
       const workspaceArchive = arrustedRoot
@@ -1044,6 +1083,50 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
               appRoot: "/workspace",
               debugPrerender: values["debug-prerender"],
               onReady: async ({ session, baseURL, abortSignal }) => {
+                if (
+                  values["candidate-capability-probe"] ||
+                  (!values["report-only"] && !values.generator)
+                ) {
+                  const { runCandidateCapabilityProbe } =
+                    await import("../evals/support/self-reproduction-candidate-capability-probe");
+                  const capabilityProof = await runCandidateCapabilityProbe({
+                    session,
+                    abortSignal,
+                    model: activeBuilderModelId,
+                  });
+                  await jsonFile("candidate-capability-proof.json", capabilityProof);
+                  captures.push({
+                    label: "candidate infrastructure proof",
+                    files: ["candidate-capability-proof.json"],
+                    status:
+                      "Live access diagnostic only; no generated application functionality credit.",
+                  });
+                }
+                const navigation = await runSandboxRuntimeComparison({
+                  session,
+                  ...sandboxCandidateNavigation(),
+                  payload: { baseURL },
+                  abortSignal,
+                });
+                const { artifacts: navigationArtifacts, ...navigationReceipt } = navigation;
+                await jsonFile("candidate-navigation.json", navigationReceipt);
+                for (const artifact of navigationArtifacts) {
+                  const target = join(output, "candidate-navigation", artifact.path);
+                  await mkdir(resolve(target, ".."), { recursive: true });
+                  await writeFile(target, artifact.content, { mode: 0o600 });
+                }
+                const navigationOutput = navigation.output as { observation?: Observation } | null;
+                sandboxNavigationReceipts = [candidateNavigationReceipt(navigationOutput)];
+                captures.push({
+                  label: "candidate navigation diagnostic",
+                  files: [
+                    "candidate-navigation.json",
+                    ...navigationArtifacts.map(({ path }) => `candidate-navigation/${path}`),
+                  ],
+                  status:
+                    navigationOutput?.observation?.disposition ??
+                    "blocked: navigation probe failed",
+                });
                 const comparison = await runSandboxRuntimeComparison({
                   session,
                   ...sandboxBrowserComparison(),

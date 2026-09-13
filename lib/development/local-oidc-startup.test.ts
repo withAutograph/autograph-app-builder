@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ensureLocalDevelopmentOidc,
@@ -19,14 +19,14 @@ const PROJECT = {
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function token(expiresAt = NOW + 3600): string {
+function token(expiresAt = NOW + 3600, issuedAt = NOW - 10): string {
   const claims = {
     aud: "https://vercel.com/autographing",
     environment: "development",
     exp: expiresAt,
-    iat: NOW - 10,
+    iat: issuedAt,
     iss: "https://oidc.vercel.com/autographing",
-    nbf: NOW - 10,
+    nbf: issuedAt,
     owner: "autographing",
     owner_id: PROJECT.orgId,
     project: PROJECT.projectName,
@@ -122,6 +122,33 @@ describe("local Development OIDC startup", () => {
         operation: "owner-bind",
       },
     ]);
+  });
+
+  it("validates a refreshed token against the clock after the pull", () => {
+    const repositoryRoot = fixture({ expiresAt: NOW + 60 });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
+    try {
+      expect(
+        ensureLocalDevelopmentOidc({
+          environment: baseInput(repositoryRoot).environment,
+          miseExecutable: "/mise/mise",
+          repositoryRoot,
+          runCommand: (invocation) => {
+            if (invocation.operation === "development-env-pull") {
+              clock.mockReturnValue((NOW + 2) * 1000);
+              writeFileSync(
+                path.join(repositoryRoot, ".env.local"),
+                `VERCEL_OIDC_TOKEN=${token(NOW + 3600, NOW + 2)}\n`,
+                { mode: 0o600 },
+              );
+            }
+          },
+          vercelExecutable: "/mise/vercel",
+        }),
+      ).toEqual({ refreshed: true });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("does not refresh malformed or unsafe installed OIDC", () => {

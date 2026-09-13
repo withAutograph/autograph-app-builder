@@ -2,7 +2,8 @@
 #MISE description="Validate instant navigation against an isolated production Next build"
 set -eu
 
-docker=$(mise which docker)
+mise_executable=${MISE_BIN_PATH:-mise}
+docker=$("$mise_executable" which docker)
 docker_host=$("$docker" context inspect --format '{{.Endpoints.docker.Host}}')
 # OrbStack exposes an owner-local socket even when Docker's default context
 # still points at an absent /var/run/docker.sock. Do not change user context.
@@ -10,5 +11,5 @@ if [ "$(uname -s)" = Darwin ] && ! "$docker" --host "$docker_host" info >/dev/nu
   docker_host=$("$docker" context inspect orbstack --format '{{.Endpoints.docker.Host}}')
 fi
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" --import tsx scripts/test-production-navigation.mts \
+  "$("$mise_executable" which node)" --import tsx scripts/test-production-navigation.mts \
   --docker "$docker" --docker-host "$docker_host" "$@"
