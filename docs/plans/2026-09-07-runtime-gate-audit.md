@@ -22,7 +22,7 @@ This audit is incomplete until the outstanding items below are resolved.
   proposal/source/dependency/image identity binding remain. Actual backend/image
   resolution remains required. A cache miss can still leave the image unresolved;
   this change does not claim that all cache-miss blockers are eliminated.
-  `agent/tools/target_execution_status.ts` calls it in the live tool path.
+  `agent/tools/target-execution-status.ts` calls it in the live tool path.
 - Planning and application also contain selected-proposal/content checks. These
   must be distinguished from incidental cache and source metadata: removing
   them indiscriminately can apply different work than the user approved.

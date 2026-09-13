@@ -36,8 +36,8 @@ export function resolveBetterAuthInfrastructure(options: BetterAuthInfrastructur
       plugins: [],
       summary: {
         enabled: false,
-        plan: null,
         organizationAuthorityReady: options.organizationAuthorityReady,
+        plan: null,
       } satisfies BetterAuthInfrastructureSummary,
     };
   }
@@ -58,8 +58,8 @@ export function resolveBetterAuthInfrastructure(options: BetterAuthInfrastructur
     plugins: [dash({ apiKey })],
     summary: {
       enabled: true,
-      plan: "starter",
       organizationAuthorityReady: true,
+      plan: "starter",
     } satisfies BetterAuthInfrastructureSummary,
   };
 }

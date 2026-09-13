@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -9,9 +9,9 @@ async function sourceFiles(directory: string): Promise<string[]> {
   const nested = await Promise.all(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     entries.map(async (entry) => {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFiles(path);
-      return entry.isFile() && /\.[jt]sx?$/u.test(entry.name) ? [path] : [];
+      const filePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) return sourceFiles(filePath);
+      return entry.isFile() && /\.[jt]sx?$/u.test(entry.name) ? [filePath] : [];
     }),
   );
   return nested.flat();
@@ -20,14 +20,13 @@ async function sourceFiles(directory: string): Promise<string[]> {
 describe("library architecture boundaries", () => {
   it("keeps library modules independent of UI and agent entry points", async () => {
     const files = await sourceFiles("lib");
-    const violations = (
-      await Promise.all(
-        files.map(async (file) => ({
-          file,
-          source: await readFile(file, "utf-8"),
-        })),
-      )
-    )
+    const sources = await Promise.all(
+      files.map(async (file) => ({
+        file,
+        source: await readFile(file, "utf-8"),
+      })),
+    );
+    const violations = sources
       .filter(({ source }) => /from ["']@\/(?<namespace>app|components|agent)\//u.test(source))
       .map(({ file }) => file);
 

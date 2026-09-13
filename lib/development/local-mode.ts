@@ -16,10 +16,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { promisify } from "node:util";
-import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
+import nodePath from "node:path";
 
 const execFileAsync = promisify(execFile);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+const { dirname, isAbsolute, join, relative, resolve: pathResolve, sep } = nodePath;
 
 const dependencyInputs = [
   ".config/mise/config.toml",
@@ -57,27 +58,27 @@ export type DevelopmentSnapshot = Readonly<{
   }>[];
 }>;
 
-function argumentValue(args: readonly string[], index: number, name: string) {
+const argumentValue = (args: readonly string[], index: number, name: string) => {
   const value = args[index + 1];
   if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
-}
+};
 
-function port(value: string, name: string) {
+const port = (value: string, name: string) => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1024 || parsed > 65_535)
     throw new Error(`${name} must be an unprivileged TCP port.`);
   return parsed;
-}
+};
 
-export function parseDevelopmentArguments(args: readonly string[]): DevelopmentArguments {
+export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
   const parsed: {
     arrustedRoot?: string;
     stateRoot?: string;
     destinationRoot?: string;
     nextPort: number;
     evePort: number;
-  } = { nextPort: 3000, evePort: 2000 };
+  } = { evePort: 2000, nextPort: 3000 };
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     if (name === undefined || !name.startsWith("--"))
@@ -117,26 +118,24 @@ export function parseDevelopmentArguments(args: readonly string[]): DevelopmentA
   if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot))
     throw new Error("--destination-root must be absolute.");
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };
-}
+};
 
-function gitEnvironment(): NodeJS.ProcessEnv {
-  return {
-    NODE_ENV: "production",
-    PATH: "/usr/bin:/bin",
-    HOME: "/dev/null",
-    XDG_CONFIG_HOME: "/dev/null",
-    LC_ALL: "C",
-    LANG: "C",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_SYSTEM: "/dev/null",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_ATTR_NOSYSTEM: "1",
-    GIT_NO_LAZY_FETCH: "1",
-    GIT_TERMINAL_PROMPT: "0",
-  };
-}
+const gitEnvironment = (): NodeJS.ProcessEnv => ({
+  GIT_ATTR_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_NO_LAZY_FETCH: "1",
+  GIT_TERMINAL_PROMPT: "0",
+  HOME: "/dev/null",
+  LANG: "C",
+  LC_ALL: "C",
+  NODE_ENV: "production",
+  PATH: "/usr/bin:/bin",
+  XDG_CONFIG_HOME: "/dev/null",
+});
 
-async function canonicalOwnedDirectory(path: string, label: string) {
+const canonicalOwnedDirectory = async (path: string, label: string) => {
   const requested = pathResolve(path);
   if (!isAbsolute(path) || requested !== path || (await realpath(path)) !== path)
     throw new Error(`${label} must be an absolute canonical directory.`);
@@ -152,18 +151,15 @@ async function canonicalOwnedDirectory(path: string, label: string) {
       `${label} must be owned by the current account and not writable by another account.`,
     );
   return path;
-}
+};
 
-function safeRelativePath(path: string) {
-  return (
-    path !== "" &&
-    !isAbsolute(path) &&
-    !path.includes("\\") &&
-    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
-  );
-}
+const safeRelativePath = (path: string) =>
+  path !== "" &&
+  !isAbsolute(path) &&
+  !path.includes("\\") &&
+  path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 
-async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
+const assertSafeSourceAncestors = async (sourceRoot: string, absolute: string) => {
   let ancestor = dirname(absolute);
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -175,9 +171,9 @@ async function assertSafeSourceAncestors(sourceRoot: string, absolute: string) {
     if (parent === ancestor) throw new Error("Development source path escaped its checkout.");
     ancestor = parent;
   }
-}
+};
 
-async function sourcePaths(sourceRoot: string): Promise<string[]> {
+const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
   const { stdout } = await execFileAsync(
     "/usr/bin/git",
     [
@@ -230,9 +226,9 @@ async function sourcePaths(sourceRoot: string): Promise<string[]> {
   return [...new Set(paths)].toSorted((left, right) =>
     Buffer.from(left).compare(Buffer.from(right)),
   );
-}
+};
 
-async function sourceEntry(sourceRoot: string, path: string) {
+const sourceEntry = async (sourceRoot: string, path: string) => {
   const absolute = join(sourceRoot, path);
   try {
     await assertSafeSourceAncestors(sourceRoot, absolute);
@@ -250,11 +246,11 @@ async function sourceEntry(sourceRoot: string, path: string) {
         if (final.dev !== opened.dev || final.ino !== opened.ino)
           throw new Error(`Development source file changed during read: ${path}`);
         return {
-          path,
+          content,
           kind: "file" as const,
           // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           mode: opened.mode & 0o111 ? "100755" : "100644",
-          content,
+          path,
         };
       } finally {
         await descriptor.close();
@@ -268,10 +264,10 @@ async function sourceEntry(sourceRoot: string, path: string) {
       if (escaped === ".." || escaped.startsWith(`..${sep}`) || isAbsolute(escaped))
         throw new Error(`Development source link escapes the checkout: ${path}`);
       return {
-        path,
+        content: Buffer.from(target),
         kind: "link" as const,
         mode: "120000",
-        content: Buffer.from(target),
+        path,
       };
     }
     throw new Error(
@@ -281,9 +277,9 @@ async function sourceEntry(sourceRoot: string, path: string) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-}
+};
 
-async function developmentEntries(sourceRoot: string) {
+const developmentEntries = async (sourceRoot: string) => {
   const paths = await sourcePaths(sourceRoot);
   const entries: Awaited<ReturnType<typeof sourceEntry>>[] = [];
   for (let offset = 0; offset < paths.length; offset += 32)
@@ -294,9 +290,9 @@ async function developmentEntries(sourceRoot: string) {
       )),
     );
   return entries.filter((entry) => entry !== undefined);
-}
+};
 
-function fingerprintEntries(entries: readonly Awaited<ReturnType<typeof sourceEntry>>[]) {
+const fingerprintEntries = (entries: readonly Awaited<ReturnType<typeof sourceEntry>>[]) => {
   const hash = createHash("sha256");
   for (const entry of entries) {
     if (entry === undefined) continue;
@@ -310,91 +306,89 @@ function fingerprintEntries(entries: readonly Awaited<ReturnType<typeof sourceEn
     hash.update(entry.content);
   }
   return hash.digest("hex");
-}
+};
 
-export async function fingerprintDevelopmentSource(sourceRoot: string) {
+export const fingerprintDevelopmentSource = async (sourceRoot: string) => {
   await canonicalOwnedDirectory(sourceRoot, "Arrusted checkout");
   return fingerprintEntries(await developmentEntries(sourceRoot));
-}
+};
 
-export function waitForDevelopmentSourceChange(input: {
+export const waitForDevelopmentSourceChange = (input: {
   sourceRoot: string;
   expectedFingerprint: string;
   signal?: AbortSignal;
   debounceMs?: number;
   auditMs?: number;
-}) {
-  return new Promise<boolean>((resolve) => {
-    let checking = false;
-    let pending = false;
-    let settled = false;
-    const handlers: { aborted?: () => void } = {};
-    let debounce: NodeJS.Timeout | undefined;
-    const timers: { audit?: NodeJS.Timeout } = {};
-    let watcher: FSWatcher | undefined;
-    const finish = (changed: boolean) => {
-      if (settled) return;
-      settled = true;
-      if (debounce !== undefined) clearTimeout(debounce);
-      if (timers.audit !== undefined) clearInterval(timers.audit);
-      watcher?.close();
-      if (handlers.aborted !== undefined)
-        input.signal?.removeEventListener("abort", handlers.aborted);
-      resolve(changed);
-    };
-    handlers.aborted = () => finish(false);
-    const check = async () => {
-      if (checking) {
-        pending = true;
-        return;
-      }
-      checking = true;
-      try {
-        if ((await fingerprintDevelopmentSource(input.sourceRoot)) !== input.expectedFingerprint) {
-          finish(true);
-          return;
-        }
-      } catch {
-        finish(true);
-        return;
-      } finally {
-        checking = false;
-      }
-      if (pending) {
-        pending = false;
-        await check();
-      }
-    };
-    function schedule(delay = 0) {
-      if (settled) return;
-      if (debounce !== undefined) clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        check();
-      }, delay);
-    }
-    if (input.signal?.aborted) {
-      finish(false);
+}) => {
+  const { promise, resolve } = Promise.withResolvers<boolean>();
+  let checking = false;
+  let pending = false;
+  let settled = false;
+  const handlers: { aborted?: () => void } = {};
+  let debounce: NodeJS.Timeout | undefined;
+  const timers: { audit?: NodeJS.Timeout } = {};
+  let watcher: FSWatcher | undefined;
+  const finish = (changed: boolean) => {
+    if (settled) return;
+    settled = true;
+    if (debounce !== undefined) clearTimeout(debounce);
+    if (timers.audit !== undefined) clearInterval(timers.audit);
+    watcher?.close();
+    if (handlers.aborted !== undefined)
+      input.signal?.removeEventListener("abort", handlers.aborted);
+    resolve(changed);
+  };
+  handlers.aborted = () => finish(false);
+  const check = async () => {
+    if (checking) {
+      pending = true;
       return;
     }
-    input.signal?.addEventListener("abort", handlers.aborted, { once: true });
+    checking = true;
     try {
-      watcher = watch(input.sourceRoot, { recursive: true }, () =>
-        schedule(input.debounceMs ?? 150),
-      );
+      if ((await fingerprintDevelopmentSource(input.sourceRoot)) !== input.expectedFingerprint) {
+        finish(true);
+        return;
+      }
     } catch {
       finish(true);
       return;
+    } finally {
+      checking = false;
     }
-    watcher.once("error", () => finish(true));
-    timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
-    schedule();
-  });
-}
+    if (pending) {
+      pending = false;
+      await check();
+    }
+  };
+  const schedule = (delay = 0) => {
+    if (settled) return;
+    if (debounce !== undefined) clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      check();
+    }, delay);
+  };
+  if (input.signal?.aborted) {
+    finish(false);
+    return promise;
+  }
+  input.signal?.addEventListener("abort", handlers.aborted, { once: true });
+  try {
+    watcher = watch(input.sourceRoot, { recursive: true }, () => schedule(input.debounceMs ?? 150));
+  } catch {
+    finish(true);
+    return promise;
+  }
+  watcher.once("error", () => finish(true));
+  timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
+  schedule();
+  return promise;
+};
 
-export async function createDevelopmentSnapshot(input: {
+export const createDevelopmentSnapshot = async (input: {
   sourceRoot: string;
   runRoot: string;
-}): Promise<DevelopmentSnapshot> {
+}): Promise<DevelopmentSnapshot> => {
   const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
   const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
   const root = join(runRoot, "source");
@@ -405,8 +399,8 @@ export async function createDevelopmentSnapshot(input: {
     for (const entry of entries) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(dirname(join(root, entry.path)), {
-        recursive: true,
         mode: 0o700,
+        recursive: true,
       });
       if (entry.kind === "link")
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -467,28 +461,28 @@ export async function createDevelopmentSnapshot(input: {
     // source. It is removed after the cycle and never crosses into hosted or
     // release execution.
     return {
-      root,
-      fingerprint,
       commit,
-      tree,
       entries: entries.map((entry) => ({
-        path: entry.path,
-        digest: sha256(entry.content),
         bytes: entry.content.byteLength,
+        digest: sha256(entry.content),
+        path: entry.path,
       })),
+      fingerprint,
+      root,
+      tree,
     };
   } catch (error) {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
     throw error;
   }
-}
+};
 
 // Keep filesystem mutation helpers scoped to local development mode.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
-export async function removeDevelopmentSnapshot(root: string) {
+export const removeDevelopmentSnapshot = async (root: string) => {
   // Keep snapshot cleanup helpers local to this operation.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  async function makeWritable(path: string) {
+  const makeWritable = async (path: string) => {
     const info = await lstat(path);
     if (info.isSymbolicLink()) return;
     if (info.isDirectory()) {
@@ -496,16 +490,16 @@ export async function removeDevelopmentSnapshot(root: string) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       for (const entry of await readdir(path)) await makeWritable(join(path, entry));
     } else await chmod(path, 0o600);
-  }
+  };
   try {
     await makeWritable(root);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  await rm(root, { recursive: true, force: true });
-}
+  await rm(root, { force: true, recursive: true });
+};
 
-async function digestFileOrAbsent(path: string) {
+const digestFileOrAbsent = async (path: string) => {
   try {
     const info = await lstat(path);
     if (!info.isFile() || info.isSymbolicLink())
@@ -515,13 +509,13 @@ async function digestFileOrAbsent(path: string) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
     throw error;
   }
-}
+};
 
-export async function developmentDependencyKey(input: {
+export const developmentDependencyKey = async (input: {
   sourceRoot: string;
   platform: string;
   tools: DevelopmentTools;
-}) {
+}) => {
   const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
   if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform))
     throw new Error("Development dependency platform is unsupported.");
@@ -535,10 +529,10 @@ export async function developmentDependencyKey(input: {
   );
   return sha256(
     JSON.stringify({
-      version: DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
+      lockfiles,
       platform: input.platform,
       tools: input.tools,
-      lockfiles,
+      version: DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
     }),
   );
-}
+};

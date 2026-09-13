@@ -46,7 +46,7 @@ function validateBaseUrl(value) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateUuid(value, field, optional = false) {
-  if (value === undefined && optional) return undefined;
+  if (value === undefined && optional) return;
   if (typeof value !== "string" || !uuidPattern.test(value)) fail(field);
   return value;
 }
@@ -65,7 +65,7 @@ function validateTransportSecret(value) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateWorkflowTimeout(value, field) {
-  if (value === undefined) return undefined;
+  if (value === undefined) return;
   if (value !== "360000") fail(field);
   return value;
 }
@@ -79,22 +79,22 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
   if (source.PORT !== port) fail("port");
   if (source.EVE_EVALUATION !== "1") fail("evaluation marker");
   return Object.freeze({
-    version: 1,
     appRoot: expectedAppRoot,
     baseUrl,
-    port,
-    transportSecret: validateTransportSecret(source.EVE_DEV_WORKFLOW_TRANSPORT_SECRET),
+    bodyTimeout: validateWorkflowTimeout(source.WORKFLOW_LOCAL_BODY_TIMEOUT_MS, "body timeout"),
     developmentSandboxRunId: validateUuid(
       source.EVE_DEVELOPMENT_SANDBOX_RUN_ID,
       "sandbox run id",
       true,
     ),
     evaluationRunId: validateUuid(source.EVE_EVALUATION_RUN_ID, "evaluation run id"),
-    bodyTimeout: validateWorkflowTimeout(source.WORKFLOW_LOCAL_BODY_TIMEOUT_MS, "body timeout"),
     headersTimeout: validateWorkflowTimeout(
       source.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS,
       "headers timeout",
     ),
+    port,
+    transportSecret: validateTransportSecret(source.EVE_DEV_WORKFLOW_TRANSPORT_SECRET),
+    version: 1,
   });
 }
 
@@ -124,13 +124,13 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   const captured = captureEveWorkerEnvelope(
     {
       EVE_DEV: "1",
-      EVE_DEV_WORKER_APP_ROOT: value.appRoot,
-      WORKFLOW_LOCAL_BASE_URL: value.baseUrl,
-      PORT: value.port,
-      EVE_DEV_WORKFLOW_TRANSPORT_SECRET: value.transportSecret,
       EVE_DEVELOPMENT_SANDBOX_RUN_ID: value.developmentSandboxRunId,
+      EVE_DEV_WORKER_APP_ROOT: value.appRoot,
+      EVE_DEV_WORKFLOW_TRANSPORT_SECRET: value.transportSecret,
       EVE_EVALUATION: "1",
       EVE_EVALUATION_RUN_ID: value.evaluationRunId,
+      PORT: value.port,
+      WORKFLOW_LOCAL_BASE_URL: value.baseUrl,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: value.bodyTimeout,
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: value.headersTimeout,
     },

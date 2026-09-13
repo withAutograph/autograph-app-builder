@@ -9,7 +9,7 @@ import {
   rm,
   symlink,
 } from "node:fs/promises";
-import { join } from "node:path";
+import nodePath from "node:path";
 
 import { createDevelopmentSnapshot, removeDevelopmentSnapshot } from "./local-mode";
 import type { DevelopmentSnapshot } from "./local-mode";
@@ -35,7 +35,7 @@ async function makeDevelopmentWorkAreaWritable(
     for (const entry of await readdir(path)) {
       if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) continue;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await makeDevelopmentWorkAreaWritable(join(path, entry), preserveRuntime);
+      await makeDevelopmentWorkAreaWritable(nodePath.join(path, entry), preserveRuntime);
     }
     return;
   }
@@ -53,15 +53,15 @@ export async function createDevelopmentApplication(input: {
   repositoryRoot: string;
   runRoot: string;
 }): Promise<DevelopmentSnapshot> {
-  const materializationRoot = join(input.runRoot, "eve-application");
+  const materializationRoot = nodePath.join(input.runRoot, "eve-application");
   await mkdir(materializationRoot, { mode: 0o700 });
   try {
     const application = await createDevelopmentSnapshot({
-      sourceRoot: input.repositoryRoot,
       runRoot: await realpath(materializationRoot),
+      sourceRoot: input.repositoryRoot,
     });
     await makeDevelopmentWorkAreaWritable(application.root);
-    const modules = await realpath(join(input.repositoryRoot, "node_modules"));
+    const modules = await realpath(nodePath.join(input.repositoryRoot, "node_modules"));
     const modulesInfo = await lstat(modules);
     if (
       !modulesInfo.isDirectory() ||
@@ -71,9 +71,9 @@ export async function createDevelopmentApplication(input: {
       (modulesInfo.mode & 0o022) !== 0
     )
       throw new Error("App Builder node_modules was not owner-bound.");
-    await symlink(modules, join(application.root, "node_modules"));
+    await symlink(modules, nodePath.join(application.root, "node_modules"));
     try {
-      await lstat(join(application.root, ".eve"));
+      await lstat(nodePath.join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -101,19 +101,19 @@ export async function createDevelopmentCycle(input: {
   workflowData: string;
 }> {
   const supervisorRoot = await realpath(input.supervisorRoot);
-  const root = await realpath(await mkdtemp(join(supervisorRoot, "cycle-")));
+  const root = await realpath(await mkdtemp(nodePath.join(supervisorRoot, "cycle-")));
   try {
     const application = await createDevelopmentApplication({
       repositoryRoot: input.repositoryRoot,
       runRoot: root,
     });
-    const runtimeHome = join(root, "home");
-    const workflowData = join(root, "workflow-data");
+    const runtimeHome = nodePath.join(root, "home");
+    const workflowData = nodePath.join(root, "workflow-data");
     await mkdir(runtimeHome, { mode: 0o700 });
     await mkdir(workflowData, { mode: 0o700 });
     return {
-      root,
       application,
+      root,
       runtimeHome: await realpath(runtimeHome),
       workflowData: await realpath(workflowData),
     };
@@ -139,14 +139,14 @@ export async function refreshDevelopmentApplication(input: {
 }): Promise<void> {
   const applicationRoot = await realpath(input.applicationRoot);
   const runRoot = await realpath(input.runRoot);
-  const stageRoot = await mkdtemp(join(runRoot, "eve-application-stage-"));
+  const stageRoot = await mkdtemp(nodePath.join(runRoot, "eve-application-stage-"));
   try {
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: input.repositoryRoot,
       runRoot: await realpath(stageRoot),
+      sourceRoot: input.repositoryRoot,
     });
     try {
-      await lstat(join(snapshot.root, ".eve"));
+      await lstat(nodePath.join(snapshot.root, ".eve"));
       throw new Error("A live development checkout cannot supply Eve state.");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -160,11 +160,11 @@ export async function refreshDevelopmentApplication(input: {
     for (const entry of await readdir(applicationRoot)) {
       if (entry === ".eve" || entry === "node_modules") continue;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await rm(join(applicationRoot, entry), { recursive: true, force: true });
+      await rm(nodePath.join(applicationRoot, entry), { force: true, recursive: true });
     }
     for (const entry of await readdir(snapshot.root))
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await rename(join(snapshot.root, entry), join(applicationRoot, entry));
+      await rename(nodePath.join(snapshot.root, entry), nodePath.join(applicationRoot, entry));
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live
     // generation and overlays, not merely the staging parent used by rename.

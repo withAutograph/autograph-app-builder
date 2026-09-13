@@ -3,8 +3,8 @@ import type { Adapter } from "flags";
 import { flag } from "flags/next";
 
 const booleanOptions = [
-  { value: false, label: "Disabled" },
-  { value: true, label: "Enabled" },
+  { label: "Disabled", value: false },
+  { label: "Enabled", value: true },
 ];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -30,6 +30,10 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Ent
   }
 
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async decide(input) {
+      return resolveAdapter().decide(input);
+    },
     // `flag()` resolves adapter metadata during module initialization, before
     // Next has loaded `.env.local`. Keep the SDK key lazy so local evaluation
     // uses its server-only value at request time.
@@ -39,49 +43,45 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Ent
         return process.env.FLAGS;
       },
     }),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async decide(input) {
-      return resolveAdapter().decide(input);
-    },
   };
 }
 
 export const builderConnectionsFlag = flag<boolean>({
-  key: "builder-connections",
   adapter: managedVercelAdapter,
   defaultValue: false,
   description: "Show Connections in the authenticated App Builder.",
+  key: "builder-connections",
   options: booleanOptions,
 });
 
 export const builderResourceProvisioningFlag = flag<boolean>({
-  key: "builder-resource-provisioning",
   adapter: managedVercelAdapter,
   defaultValue: false,
   description: "Provision selected GitHub repositories and Vercel projects before handoff.",
+  key: "builder-resource-provisioning",
   options: booleanOptions,
 });
 
 export const builderComingSoonFlag = flag<boolean>({
-  key: "builder-coming-soon",
   adapter: managedVercelAdapter,
   defaultValue: false,
   description: "Show Coming soon builder options and connections.",
+  key: "builder-coming-soon",
   options: booleanOptions,
 });
 
 export const selfServiceSignupFlag = flag<boolean>({
-  key: "self-service-signup",
   adapter: managedVercelAdapter,
   defaultValue: false,
   description: "Allow verified users to create a personal workspace.",
+  key: "self-service-signup",
   options: booleanOptions,
 });
 
 export const passkeysFlag = flag<boolean>({
-  key: "passkeys",
   adapter: managedVercelAdapter,
   defaultValue: false,
   description: "Show passkey authentication and account-management controls.",
+  key: "passkeys",
   options: booleanOptions,
 });

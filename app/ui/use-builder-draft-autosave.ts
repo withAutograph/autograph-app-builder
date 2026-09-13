@@ -90,9 +90,9 @@ export function useBuilderDraftAutosave<T>(
   const [status, setStatus] = useState<BuilderDraftAutosaveStatus>("idle");
   const [error, setError] = useState<Error>();
   const [lastSavedAt, setLastSavedAt] = useState<string>();
-  const queued = useRef<Pending<T> | undefined>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const draining = useRef<Promise<boolean> | undefined>(undefined);
+  const queued = useRef<Pending<T> | undefined>(globalThis.undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(globalThis.undefined);
+  const draining = useRef<Promise<boolean> | undefined>(globalThis.undefined);
   const acknowledgedRevision = useRef(options.initialRevision ?? 0);
   const mounted = useRef(true);
   const save = useRef(options.save);
@@ -139,10 +139,10 @@ export function useBuilderDraftAutosave<T>(
           try {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const acknowledgement = await save.current({
-              mutationId: current.mutationId,
-              snapshot: current.snapshot,
-              reason,
               keepalive: reason === "visibilitychange" || reason === "pagehide",
+              mutationId: current.mutationId,
+              reason,
+              snapshot: current.snapshot,
             });
             if (acknowledgement.mutationId !== current.mutationId)
               throw new Error("builder-draft-acknowledgement-mismatch");
@@ -201,11 +201,11 @@ export function useBuilderDraftAutosave<T>(
   const schedule = useCallback(
     (snapshot: T) => {
       const entry: Pending<T> = {
-        version: 1,
         baseRevision: acknowledgedRevision.current,
+        createdAt: Date.now(),
         mutationId: createMutationId(),
         snapshot: cloneSnapshot(snapshot),
-        createdAt: Date.now(),
+        version: 1,
       };
       queued.current = entry;
       void options.outbox.write(entry);
@@ -293,15 +293,15 @@ export function useBuilderDraftAutosave<T>(
   }, []);
 
   return {
-    status,
-    error,
-    lastSavedAt,
-    schedule,
-    flush,
-    retry,
-    restorePending,
-    resumePending,
     discardPending,
     discardSupersededByRemoteRevision,
+    error,
+    flush,
+    lastSavedAt,
+    restorePending,
+    resumePending,
+    retry,
+    schedule,
+    status,
   };
 }

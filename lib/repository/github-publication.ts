@@ -455,32 +455,32 @@ export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissi
   switch (operation) {
     case "resolve-existing-source": {
       return {
-        metadata: "read",
-        contents: "read",
-        workflows: "none",
-        pullRequests: "none",
         administration: "none",
+        contents: "read",
+        metadata: "read",
+        pullRequests: "none",
         variables: "read",
+        workflows: "none",
       };
     }
     case "create-fresh-repository": {
       return {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
         administration: "write",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "none",
         variables: "read",
+        workflows: "write",
       };
     }
     case "publish-draft-pull-request": {
       return {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "write",
         administration: "none",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "write",
         variables: "read",
+        workflows: "write",
       };
     }
     default: {
@@ -565,25 +565,37 @@ function contentManifest(
 ): ReviewedChangeSetReceipt["changes"] {
   return changes.map((change) => {
     if (change.kind === "added") {
-      return {
-        path: change.path,
-        kind: change.kind,
-        after: { mode: change.after.mode, digest: change.after.digest },
-      };
+      return Object.fromEntries([
+        ["path", change.path],
+        ["kind", change.kind],
+        [
+          "after",
+          Object.fromEntries([
+            ["mode", change.after.mode],
+            ["digest", change.after.digest],
+          ]),
+        ],
+      ]) as ReviewedChangeSetReceipt["changes"][number];
     }
     if (change.kind === "modified") {
-      return {
-        path: change.path,
-        kind: change.kind,
-        before: change.before,
-        after: { mode: change.after.mode, digest: change.after.digest },
-      };
+      return Object.fromEntries([
+        ["path", change.path],
+        ["kind", change.kind],
+        ["before", change.before],
+        [
+          "after",
+          Object.fromEntries([
+            ["mode", change.after.mode],
+            ["digest", change.after.digest],
+          ]),
+        ],
+      ]) as ReviewedChangeSetReceipt["changes"][number];
     }
-    return {
-      path: change.path,
-      kind: change.kind,
-      before: change.before,
-    };
+    return Object.fromEntries([
+      ["path", change.path],
+      ["kind", change.kind],
+      ["before", change.before],
+    ]) as ReviewedChangeSetReceipt["changes"][number];
   });
 }
 
@@ -640,8 +652,8 @@ function freshContentTree(
     | { kind: "directory"; children: Map<string, Node> }
     | { kind: "file"; file: GitHubFreshRepositoryContentFile };
   const root: Extract<Node, { kind: "directory" }> = {
-    kind: "directory",
     children: new Map(),
+    kind: "directory",
   };
   for (const file of files) {
     let directory = root;
@@ -650,14 +662,16 @@ function freshContentTree(
       const existing = directory.children.get(segment);
       if (existing?.kind === "file")
         throw new Error("The fresh repository source manifest overlaps paths.");
-      const child = existing ?? ({ kind: "directory", children: new Map() } as const);
+      const child = existing ?? ({ children: new Map(), kind: "directory" } as const);
       directory.children.set(segment, child);
       directory = child;
     }
-    const name = segments.at(-1)!;
+    const name = segments.at(-1);
+    if (name === undefined)
+      throw new Error("The fresh repository source manifest is missing a path segment.");
     if (directory.children.has(name))
       throw new Error("The fresh repository source manifest duplicates paths.");
-    directory.children.set(name, { kind: "file", file });
+    directory.children.set(name, { file, kind: "file" });
   }
   const encodeTree = (directory: Extract<Node, { kind: "directory" }>): Buffer => {
     const entries = [...directory.children.entries()].toSorted(
@@ -787,8 +801,8 @@ export async function readExactGitHubFreshRepositoryContent(input: {
     })),
   };
   assertExactGitHubFreshRepositoryContent({
-    proposal: input.proposal,
     content,
+    proposal: input.proposal,
   });
   return content;
 }
@@ -806,9 +820,9 @@ export async function readExactGitHubPublicationContent(input: {
       if (change.before === undefined)
         throw new Error("The reviewed deletion preimage is missing.");
       changes.push({
-        path: change.path,
-        kind: change.kind,
         before: change.before,
+        kind: change.kind,
+        path: change.path,
       });
       continue;
     }
@@ -832,34 +846,34 @@ export async function readExactGitHubPublicationContent(input: {
       throw new Error(`The approved publication postimage changed for ${change.path}.`);
     if (change.kind === "added") {
       changes.push({
-        path: change.path,
-        kind: change.kind,
         after: { ...change.after, bytes },
+        kind: change.kind,
+        path: change.path,
       });
       continue;
     }
     if (change.before === undefined)
       throw new Error("The reviewed modification preimage is missing.");
     changes.push({
-      path: change.path,
-      kind: change.kind,
-      before: change.before,
       after: { ...change.after, bytes },
+      before: change.before,
+      kind: change.kind,
+      path: change.path,
     });
   }
   const content: GitHubDraftPullRequestContent = {
-    version: 1,
-    kind: "draft-reviewed-change-set",
-    reviewDigest: input.review.digest,
+    approvedPaths: input.review.approvedPaths,
     changeSetDigest: input.review.changeSetDigest,
     changedContentDigest: input.review.changedContentDigest,
-    approvedPaths: input.review.approvedPaths,
     changes,
+    kind: "draft-reviewed-change-set",
+    reviewDigest: input.review.digest,
+    version: 1,
   };
   assertExactGitHubPublicationContent({
+    content,
     proposal: input.proposal,
     review: input.review,
-    content,
   });
   return content;
 }
@@ -922,15 +936,15 @@ export function createGitHubInstallationIdentity(
   )
     throw new Error("The GitHub installation identity is invalid.");
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    operation: input.operation,
-    installationId: input.installationId,
     accountId: input.accountId,
     accountLogin: input.accountLogin,
     accountType: input.accountType,
+    installationId: input.installationId,
+    operation: input.operation,
+    permissions: githubPermissionsFor(input.operation),
     repositorySelection: input.repositorySelection,
     selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
-    permissions: githubPermissionsFor(input.operation),
+    version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -940,11 +954,11 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
   if (!exactKeys(identity, installationKeys) || !exactKeys(identity.permissions, permissionKeys))
     throw new Error("The GitHub installation identity schema is not closed.");
   const rebuilt = createGitHubInstallationIdentity({
-    operation: identity.operation,
-    installationId: identity.installationId,
     accountId: identity.accountId,
     accountLogin: identity.accountLogin,
     accountType: identity.accountType,
+    installationId: identity.installationId,
+    operation: identity.operation,
     repositorySelection: identity.repositorySelection,
     selectedRepositoryIds: identity.selectedRepositoryIds,
   });
@@ -993,15 +1007,15 @@ export function assertExactRepositoryObservation(repository: GitHubRepositoryObs
   if (!exactKeys(repository, repositoryKeys))
     throw new Error("The repository observation schema is not closed.");
   const rebuilt = createRepositoryObservation({
-    repositoryId: repository.repositoryId,
-    owner: repository.owner,
-    name: repository.name,
-    visibility: repository.visibility,
     defaultBranch: repository.defaultBranch,
     headSha: repository.headSha,
     headTree: repository.headTree,
     installationIdentityDigest: repository.installationIdentityDigest,
+    name: repository.name,
+    owner: repository.owner,
     releaseGate: repository.releaseGate,
+    repositoryId: repository.repositoryId,
+    visibility: repository.visibility,
   });
   if (JSON.stringify(repository) !== JSON.stringify(rebuilt))
     throw new Error("The repository observation is non-canonical.");
@@ -1035,8 +1049,8 @@ export async function resolveImmutableExistingSource(input: {
     throw new Error("The installation is not selected for source resolution.");
   const repository = await input.adapter.inspectRepository({
     operation: "resolve-existing-source",
-    repositoryId: input.repositoryId,
     ref: input.ref,
+    repositoryId: input.repositoryId,
   });
   assertExactRepositoryObservation(repository);
   if (
@@ -1047,13 +1061,13 @@ export async function resolveImmutableExistingSource(input: {
   )
     throw new Error("The GitHub source changed or is outside the approved installation.");
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
+    installationIdentityDigest: installation.digest,
     repository,
+    resolvedByCallId: input.resolvedByCallId,
     resolvedRef: input.ref,
     resolvedSha: repository.headSha,
     resolvedTree: repository.headTree,
-    installationIdentityDigest: installation.digest,
-    resolvedByCallId: input.resolvedByCallId,
+    version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1130,30 +1144,30 @@ export function createFreshRepositoryProposal(input: {
   )
     throw new Error("Fresh repository creation is outside the approved destination.");
   const idempotencyKey = digest({
-    installationIdentityDigest: input.installation.digest,
-    destinationOwner: input.destinationOwner,
     destinationName: input.destinationName,
-    sourceReceiptDigest: input.source.digest,
+    destinationOwner: input.destinationOwner,
+    installationIdentityDigest: input.installation.digest,
     reviewDigest: input.review.digest,
+    sourceReceiptDigest: input.source.digest,
   });
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    installationIdentityDigest: input.installation.digest,
-    destinationOwner: input.destinationOwner,
-    destinationName: input.destinationName,
-    visibility: "private" as const,
+    changeSetDigest: input.review.changeSetDigest,
+    contractDigest: input.source.contractDigest,
     defaultBranch: "main" as const,
+    destinationName: input.destinationName,
+    destinationOwner: input.destinationOwner,
+    eligibilityDigest: input.source.eligibilityDigest,
+    idempotencyKey,
+    initialCommitMessage: "Initialize repository from supported template" as const,
+    installationIdentityDigest: input.installation.digest,
+    intendedOutcome: "create-private-fresh-history-repository" as const,
+    releaseGate: { configured: false as const, name: REPOSITORY_RELEASE_GATE },
+    reviewDigest: input.review.digest,
     sourceReceiptDigest: input.source.digest,
     sourceSha: input.source.sourceSha,
     sourceTree: input.source.sourceTree,
-    contractDigest: input.source.contractDigest,
-    eligibilityDigest: input.source.eligibilityDigest,
-    reviewDigest: input.review.digest,
-    changeSetDigest: input.review.changeSetDigest,
-    releaseGate: { name: REPOSITORY_RELEASE_GATE, configured: false as const },
-    initialCommitMessage: "Initialize repository from supported template" as const,
-    idempotencyKey,
-    intendedOutcome: "create-private-fresh-history-repository" as const,
+    version: GITHUB_PUBLICATION_VERSION,
+    visibility: "private" as const,
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1167,11 +1181,11 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     throw new Error("The fresh repository proposal schema is not closed.");
   exactDigest(proposal, "Fresh repository proposal");
   const expectedKey = digest({
-    installationIdentityDigest: proposal.installationIdentityDigest,
-    destinationOwner: proposal.destinationOwner,
     destinationName: proposal.destinationName,
-    sourceReceiptDigest: proposal.sourceReceiptDigest,
+    destinationOwner: proposal.destinationOwner,
+    installationIdentityDigest: proposal.installationIdentityDigest,
     reviewDigest: proposal.reviewDigest,
+    sourceReceiptDigest: proposal.sourceReceiptDigest,
   });
   if (
     proposal.version !== GITHUB_PUBLICATION_VERSION ||
@@ -1257,26 +1271,26 @@ export function createDraftPullRequestProposal(input: {
     reviewDigest: input.review.digest,
   });
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    installationIdentityDigest: input.installation.digest,
-    repositoryId: input.repository.repositoryId,
-    owner: input.repository.owner,
-    name: input.repository.name,
-    visibility: "private" as const,
+    approvedPaths,
     baseBranch: input.repository.defaultBranch,
     baseSha: input.repository.headSha,
     baseTree: input.repository.headTree,
-    repositoryObservationDigest: input.repository.digest,
-    releaseGate: input.repository.releaseGate,
-    reviewDigest: input.review.digest,
+    branchName: `app-builder/review-${idempotencyKey.slice(0, 20)}`,
     changeSetDigest: input.review.changeSetDigest,
     changedContentDigest: input.review.changedContentDigest,
-    approvedPaths,
-    branchName: `app-builder/review-${idempotencyKey.slice(0, 20)}`,
     draft: true as const,
-    title: input.title,
     idempotencyKey,
+    installationIdentityDigest: input.installation.digest,
     intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request" as const,
+    name: input.repository.name,
+    owner: input.repository.owner,
+    releaseGate: input.repository.releaseGate,
+    repositoryId: input.repository.repositoryId,
+    repositoryObservationDigest: input.repository.digest,
+    reviewDigest: input.review.digest,
+    title: input.title,
+    version: GITHUB_PUBLICATION_VERSION,
+    visibility: "private" as const,
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1461,41 +1475,43 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     "idempotencyKey",
     "approvedByCallId",
   ];
-  const extra =
-    value.status === "pending"
-      ? []
-      : value.status === "failed"
-        ? ["failureCode", "providerCode", "recoveryRequired"]
-        : value.kind === "fresh-repository"
-          ? [
-              "installationIdentityDigest",
-              "repository",
-              "initialCommitSha",
-              "initialCommitTree",
-              "parentCount",
-              "freshHistory",
-              "releaseGateAbsent",
-              "recoveredFromPending",
-              "providerReadBackDigest",
-            ]
-          : [
-              "installationIdentityDigest",
-              "repositoryId",
-              "branchName",
-              "branchSha",
-              "branchTree",
-              "pullRequestId",
-              "pullRequestNumber",
-              "draft",
-              "baseBranch",
-              "baseSha",
-              "changeSetDigest",
-              "changedContentDigest",
-              "normalizedChangedPaths",
-              "releaseGateUnchanged",
-              "recoveredFromPending",
-              "providerReadBackDigest",
-            ];
+  let extra: string[];
+  if (value.status === "pending") {
+    extra = [];
+  } else if (value.status === "failed") {
+    extra = ["failureCode", "providerCode", "recoveryRequired"];
+  } else if (value.kind === "fresh-repository") {
+    extra = [
+      "installationIdentityDigest",
+      "repository",
+      "initialCommitSha",
+      "initialCommitTree",
+      "parentCount",
+      "freshHistory",
+      "releaseGateAbsent",
+      "recoveredFromPending",
+      "providerReadBackDigest",
+    ];
+  } else {
+    extra = [
+      "installationIdentityDigest",
+      "repositoryId",
+      "branchName",
+      "branchSha",
+      "branchTree",
+      "pullRequestId",
+      "pullRequestNumber",
+      "draft",
+      "baseBranch",
+      "baseSha",
+      "changeSetDigest",
+      "changedContentDigest",
+      "normalizedChangedPaths",
+      "releaseGateUnchanged",
+      "recoveredFromPending",
+      "providerReadBackDigest",
+    ];
+  }
   if (!exactKeys(value, [...common, ...extra, "digest"]))
     throw new Error("GitHub mutation receipt schema is not closed.");
   exactDigest(value, "GitHub mutation receipt");
@@ -1583,12 +1599,12 @@ async function claimPending(input: {
   approvedByCallId: string;
 }): Promise<GitHubMutationPendingReceipt> {
   const pending = receipt({
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: input.kind,
-    status: "pending" as const,
-    proposalDigest: input.proposalDigest,
-    idempotencyKey: input.idempotencyKey,
     approvedByCallId: input.approvedByCallId,
+    idempotencyKey: input.idempotencyKey,
+    kind: input.kind,
+    proposalDigest: input.proposalDigest,
+    status: "pending" as const,
+    version: GITHUB_PUBLICATION_VERSION,
   });
   if (!(await input.store.compareAndSet(input.proposalDigest, undefined, pending)))
     throw new Error("The GitHub journal changed concurrently.");
@@ -1615,21 +1631,21 @@ function freshSuccess(input: {
 }): FreshRepositorySuccessReceipt {
   assertFreshReadBack(input.readBack, input.proposal);
   return receipt({
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: "fresh-repository" as const,
-    status: "succeeded" as const,
-    proposalDigest: input.proposal.digest,
-    idempotencyKey: input.proposal.idempotencyKey,
     approvedByCallId: input.pending.approvedByCallId,
-    installationIdentityDigest: input.proposal.installationIdentityDigest,
-    repository: input.readBack.repository,
+    freshHistory: true as const,
+    idempotencyKey: input.proposal.idempotencyKey,
     initialCommitSha: input.readBack.initialCommit.sha,
     initialCommitTree: input.readBack.initialCommit.tree,
+    installationIdentityDigest: input.proposal.installationIdentityDigest,
+    kind: "fresh-repository" as const,
     parentCount: 0 as const,
-    freshHistory: true as const,
-    releaseGateAbsent: true as const,
-    recoveredFromPending: input.recovered,
+    proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
+    recoveredFromPending: input.recovered,
+    releaseGateAbsent: true as const,
+    repository: input.readBack.repository,
+    status: "succeeded" as const,
+    version: GITHUB_PUBLICATION_VERSION,
   });
 }
 
@@ -1644,28 +1660,28 @@ function draftSuccess(input: {
   if (input.readBack.branch.status !== "present" || input.readBack.pullRequest.status !== "present")
     throw new Error("The approved branch and draft pull request are not both present.");
   return receipt({
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: "draft-pull-request" as const,
-    status: "succeeded" as const,
-    proposalDigest: input.proposal.digest,
-    idempotencyKey: input.proposal.idempotencyKey,
     approvedByCallId: input.pending.approvedByCallId,
-    installationIdentityDigest: input.proposal.installationIdentityDigest,
-    repositoryId: input.proposal.repositoryId,
+    baseBranch: input.readBack.pullRequest.baseBranch,
+    baseSha: input.readBack.pullRequest.baseSha,
     branchName: input.readBack.branch.branchName,
     branchSha: input.readBack.branch.branchSha,
     branchTree: input.readBack.branch.branchTree,
-    pullRequestId: input.readBack.pullRequest.pullRequestId,
-    pullRequestNumber: input.readBack.pullRequest.pullRequestNumber,
-    draft: true as const,
-    baseBranch: input.readBack.pullRequest.baseBranch,
-    baseSha: input.readBack.pullRequest.baseSha,
     changeSetDigest: input.readBack.pullRequest.changeSetDigest,
     changedContentDigest: input.readBack.branch.changedContentDigest,
+    draft: true as const,
+    idempotencyKey: input.proposal.idempotencyKey,
+    installationIdentityDigest: input.proposal.installationIdentityDigest,
+    kind: "draft-pull-request" as const,
     normalizedChangedPaths: input.readBack.branch.normalizedChangedPaths,
-    releaseGateUnchanged: true as const,
-    recoveredFromPending: input.recovered,
+    proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
+    pullRequestId: input.readBack.pullRequest.pullRequestId,
+    pullRequestNumber: input.readBack.pullRequest.pullRequestNumber,
+    recoveredFromPending: input.recovered,
+    releaseGateUnchanged: true as const,
+    repositoryId: input.proposal.repositoryId,
+    status: "succeeded" as const,
+    version: GITHUB_PUBLICATION_VERSION,
   });
 }
 
@@ -1677,15 +1693,15 @@ function rejectionReceipt(
 ): GitHubMutationFailureReceipt {
   const safeCode = /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : "provider-rejected";
   return receipt({
-    version: GITHUB_PUBLICATION_VERSION,
-    kind,
-    status: "failed" as const,
-    proposalDigest: pending.proposalDigest,
-    idempotencyKey: pending.idempotencyKey,
     approvedByCallId: pending.approvedByCallId,
     failureCode: "provider-rejected" as const,
+    idempotencyKey: pending.idempotencyKey,
+    kind,
+    proposalDigest: pending.proposalDigest,
     providerCode: safeCode,
     recoveryRequired: true as const,
+    status: "failed" as const,
+    version: GITHUB_PUBLICATION_VERSION,
   });
 }
 
@@ -1710,11 +1726,11 @@ export async function createApprovedFreshRepository(input: {
   const pending =
     prior ??
     (await claimPending({
-      store: input.store,
+      approvedByCallId: input.approvedByCallId,
+      idempotencyKey: input.proposal.idempotencyKey,
       kind: "fresh-repository",
       proposalDigest: input.proposal.digest,
-      idempotencyKey: input.proposal.idempotencyKey,
-      approvedByCallId: input.approvedByCallId,
+      store: input.store,
     }));
   if (pending.status !== "pending") throw new Error("Unreachable journal status.");
   let existing: FreshRepositoryReadBack | undefined;
@@ -1725,8 +1741,8 @@ export async function createApprovedFreshRepository(input: {
   }
   if (existing !== undefined) {
     const success = freshSuccess({
-      proposal: input.proposal,
       pending,
+      proposal: input.proposal,
       readBack: existing,
       recovered: true,
     });
@@ -1736,8 +1752,8 @@ export async function createApprovedFreshRepository(input: {
   const installation = await input.adapter.inspectInstallation("create-fresh-repository");
   assertExactInstallationIdentity(installation);
   const destination = await input.adapter.inspectDestination({
-    owner: input.proposal.destinationOwner,
     name: input.proposal.destinationName,
+    owner: input.proposal.destinationOwner,
   });
   if (
     installation.operation !== "create-fresh-repository" ||
@@ -1775,8 +1791,8 @@ export async function createApprovedFreshRepository(input: {
   let success: FreshRepositorySuccessReceipt;
   try {
     success = freshSuccess({
-      proposal: input.proposal,
       pending,
+      proposal: input.proposal,
       readBack,
       recovered: false,
     });
@@ -1808,11 +1824,11 @@ export async function publishApprovedDraftPullRequest(input: {
   const pending =
     prior ??
     (await claimPending({
-      store: input.store,
+      approvedByCallId: input.approvedByCallId,
+      idempotencyKey: input.proposal.idempotencyKey,
       kind: "draft-pull-request",
       proposalDigest: input.proposal.digest,
-      idempotencyKey: input.proposal.idempotencyKey,
-      approvedByCallId: input.approvedByCallId,
+      store: input.store,
     }));
   if (pending.status !== "pending") throw new Error("Unreachable journal status.");
   let observed: DraftPublicationReadBack;
@@ -1824,8 +1840,8 @@ export async function publishApprovedDraftPullRequest(input: {
   assertDraftReadBack(observed, input.proposal);
   if (observed.pullRequest.status === "present") {
     const success = draftSuccess({
-      proposal: input.proposal,
       pending,
+      proposal: input.proposal,
       readBack: observed,
       recovered: true,
     });
@@ -1868,8 +1884,8 @@ export async function publishApprovedDraftPullRequest(input: {
   let success: DraftPullRequestSuccessReceipt;
   try {
     success = draftSuccess({
-      proposal: input.proposal,
       pending,
+      proposal: input.proposal,
       readBack: observed,
       recovered: false,
     });

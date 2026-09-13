@@ -4,13 +4,12 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { ApprovalRequest } from "./approval-request";
 
 const meta = {
-  title: "MCP/Authorization/Approval Request",
-  component: ApprovalRequest,
   args: {
-    title: "Build this app?",
     description: "Build and validate the preview shown above in the private App Builder workspace.",
     onAnswer: fn(),
+    title: "Build this app?",
   },
+  component: ApprovalRequest,
   decorators: [
     (Story) => (
       <McpBlockStoryLayout>
@@ -18,6 +17,7 @@ const meta = {
       </McpBlockStoryLayout>
     ),
   ],
+  title: "MCP/Authorization/Approval Request",
 } satisfies Meta<typeof ApprovalRequest>;
 export default meta;
 type Story = StoryObj<typeof meta>;

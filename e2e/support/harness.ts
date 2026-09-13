@@ -18,30 +18,30 @@ export type EmulatedProvider = (typeof emulatedProviders)[number];
 
 const providerDescriptors = {
   GitHub: {
-    slug: "github",
-    installationButton: "Install or update GitHub access",
     approvalButton: "Connect emulated GitHub",
+    authorizationStateTable: "github_installation_authorization_state",
+    bindingCount: "githubInstallations",
+    callbackPath: "/github/installations/callback",
+    emulatorOrigin: githubEmulatorOrigin,
+    installationButton: "Install or update GitHub access",
+    reconnectButton: "Update GitHub access",
     seededScopes: ["autograph-local/demo-app"],
     selectedControl: "Git Scope",
     selectedValue: "autograph-local",
-    reconnectButton: "Update GitHub access",
-    emulatorOrigin: githubEmulatorOrigin,
-    callbackPath: "/github/installations/callback",
-    authorizationStateTable: "github_installation_authorization_state",
-    bindingCount: "githubInstallations",
+    slug: "github",
   },
   Vercel: {
-    slug: "vercel",
-    installationButton: "Connect to Vercel",
     approvalButton: "Connect emulated Vercel",
+    authorizationStateTable: "vercel_installation_authorization_state",
+    bindingCount: "vercelInstallations",
+    callbackPath: "/vercel/installations/callback",
+    emulatorOrigin: vercelEmulatorOrigin,
+    installationButton: "Connect to Vercel",
+    reconnectButton: "Connect another Vercel team",
     seededScopes: ["autograph-local", "icfg_local_1"],
     selectedControl: "Select a Vercel Team",
     selectedValue: "Autograph Local",
-    reconnectButton: "Connect another Vercel team",
-    emulatorOrigin: vercelEmulatorOrigin,
-    callbackPath: "/vercel/installations/callback",
-    authorizationStateTable: "vercel_installation_authorization_state",
-    bindingCount: "vercelInstallations",
+    slug: "vercel",
   },
 } as const;
 
@@ -180,7 +180,7 @@ export async function waitForHandoffContent(page: Page, appName: string) {
   // The handoff route streams its shell while request-fresh session and journal
   // data resolve on the server. Match the route navigation budget instead of
   // treating Playwright's five-second assertion default as data readiness.
-  await expect(page.getByRole("heading", { name: appName, exact: true })).toBeVisible({
+  await expect(page.getByRole("heading", { exact: true, name: appName })).toBeVisible({
     timeout: 30_000,
   });
 }

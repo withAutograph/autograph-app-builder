@@ -65,8 +65,8 @@ export function ProviderButton({
     if (socialSignInMode === "popup") {
       signInPopup(
         {
-          provider: providerId,
           callbackURL: callbackURL.toString(),
+          provider: providerId,
           requestSignUp: view === "signUp",
         },
         {
@@ -76,8 +76,18 @@ export function ProviderButton({
       return;
     }
 
-    signInSocial({ provider: providerId, callbackURL: callbackURL.toString() });
+    signInSocial({ callbackURL: callbackURL.toString(), provider: providerId });
   };
+
+  let providerLabel: string | null = null;
+  if (display === "full") {
+    providerLabel = localization.auth.continueWith.replace(
+      "{{provider}}",
+      getProviderName(provider),
+    );
+  } else if (display === "name") {
+    providerLabel = getProviderName(provider);
+  }
 
   return (
     <Button
@@ -90,11 +100,7 @@ export function ProviderButton({
     >
       {signInSocialPending || signInPopupPending ? <Spinner /> : providerIcon}
 
-      {display === "full"
-        ? localization.auth.continueWith.replace("{{provider}}", getProviderName(provider))
-        : display === "name"
-          ? getProviderName(provider)
-          : null}
+      {providerLabel}
 
       {display === "icon" && <span className="sr-only">{getProviderName(provider)}</span>}
 

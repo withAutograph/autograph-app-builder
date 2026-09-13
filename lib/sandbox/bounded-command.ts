@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import type { SandboxCommandResult, SandboxRunOptions, SandboxSession } from "eve/sandbox";
 
 import { SANDBOX_EXECUTION_POLICY } from "./execution-policy";
@@ -44,38 +46,48 @@ function decodeChunks(chunks: readonly Uint8Array[]) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function timeoutRejection(error: Error, timeoutMs: number) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const promise = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(error), timeoutMs);
-    timeout.unref?.();
-  });
-  return { promise, clear: () => clearTimeout(timeout) };
+  const controller = new AbortController();
+  const promise = (async () => {
+    await delay(timeoutMs, undefined, { ref: false, signal: controller.signal });
+    throw error;
+  })();
+  return { clear: () => controller.abort(), promise };
 }
 
 // Keep timeout rejection construction private to command execution.
 // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 function resettableTimeoutRejection(error: Error, timeoutMs: number) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  // Keep settlement state local to this timeout promise.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
-  let rejectPromise: (error: Error) => void = () => undefined;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const clear = () => clearTimeout(timeout);
-  const reset = () => {
-    clear();
-    timeout = setTimeout(() => rejectPromise(error), timeoutMs);
-    timeout.unref?.();
+  let cleared = false;
+  let controller = new AbortController();
+  const waitForTimeout = async (): Promise<never> => {
+    const currentController = controller;
+    try {
+      await delay(timeoutMs, undefined, { ref: false, signal: currentController.signal });
+    } catch {
+      if (cleared) throw currentController.signal.reason;
+      if (currentController !== controller) return waitForTimeout();
+      throw error;
+    }
+    if (currentController === controller) throw error;
+    return waitForTimeout();
   };
-  return { promise, clear, reset };
+  const promise = waitForTimeout();
+  const clear = () => {
+    cleared = true;
+    controller.abort();
+  };
+  const reset = () => {
+    controller.abort();
+    controller = new AbortController();
+  };
+  return { clear, promise, reset };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function settleWithin(operation: Promise<unknown>, timeoutMs: number) {
   const bounded = timeoutRejection(new Error("cleanup timed out"), timeoutMs);
   try {
-    await Promise.race([operation.catch(() => undefined), bounded.promise]);
+    await Promise.race([operation.catch(() => null), bounded.promise]);
   } catch {
     // Cleanup evidence is the bounded return itself. The original command
     // error remains authoritative and is never replaced by cleanup failure.
@@ -128,14 +140,14 @@ export async function runBoundedSandboxCommand(
     const spawnPromise = Promise.resolve(
       sandbox.spawn({
         ...options,
-        command: options.command,
         abortSignal: signal,
+        command: options.command,
       }),
     );
     process = await Promise.race([spawnPromise, wallTimeout.promise]);
     // The losing promise is observed to prevent an unhandled rejection.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    spawnPromise.catch(() => undefined);
+    spawnPromise.catch(() => null);
     const stdoutReader = process.stdout.getReader();
     const stderrReader = process.stderr.getReader();
     readers = [stdoutReader, stderrReader];
@@ -149,23 +161,21 @@ export async function runBoundedSandboxCommand(
     const completion = Promise.all([stdoutPromise, stderrPromise, Promise.resolve(process.wait())]);
     // The losing promise is observed to prevent an unhandled rejection.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    completion.catch(() => undefined);
+    completion.catch(() => null);
+    const abortRejection = Promise.withResolvers<never>();
+    const rejectOnAbort = () => abortRejection.reject(signal.reason);
+    if (signal.aborted) rejectOnAbort();
+    else signal.addEventListener("abort", rejectOnAbort, { once: true });
     const [stdout, stderr, result] = await Promise.race([
       completion,
       wallTimeout.promise,
       noOutputTimeout.promise,
-      new Promise<never>((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else
-          signal.addEventListener("abort", () => reject(signal.reason), {
-            once: true,
-          });
-      }),
+      abortRejection.promise,
     ]);
     return {
       exitCode: result.exitCode,
-      stdout: decodeChunks(stdout),
       stderr: decodeChunks(stderr),
+      stdout: decodeChunks(stdout),
     };
   } catch (error) {
     controller.abort(error);

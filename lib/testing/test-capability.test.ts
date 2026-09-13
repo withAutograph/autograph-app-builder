@@ -4,9 +4,9 @@ import { TEST_CAPABILITIES, testCapabilityEnabled } from "./test-capability";
 
 const id = "a".repeat(64);
 const injected = Object.freeze({
-  version: 1 as const,
-  id,
   capabilities: Object.freeze([...TEST_CAPABILITIES]),
+  id,
+  version: 1 as const,
 });
 
 describe("testCapabilityEnabled", () => {
@@ -16,18 +16,18 @@ describe("testCapabilityEnabled", () => {
         testCapabilityEnabled(
           capability,
           {
-            APP_BUILDER_TEST_MODEL: "1",
             APP_BUILDER_TEST_CAPABILITY_ID: id,
+            APP_BUILDER_TEST_MODEL: "1",
           },
-          undefined,
+          null,
         ),
       ).toBe(false);
   });
 
   it("requires the exact task-owned nonce and a closed V1 capability", () => {
     const environment = {
-      APP_BUILDER_TEST_MODEL: "1",
       APP_BUILDER_TEST_CAPABILITY_ID: id,
+      APP_BUILDER_TEST_MODEL: "1",
     };
     expect(testCapabilityEnabled("simulated-target", environment, injected)).toBe(true);
     expect(
@@ -65,9 +65,9 @@ describe("testCapabilityEnabled", () => {
 
   it("keeps real sandbox proof free of target and publication simulation", () => {
     const environment = {
-      APP_BUILDER_TEST_MODEL: "1",
-      APP_BUILDER_TEST_CAPABILITY_ID: id,
       APP_BUILDER_REAL_SANDBOX: "1",
+      APP_BUILDER_TEST_CAPABILITY_ID: id,
+      APP_BUILDER_TEST_MODEL: "1",
     };
     expect(testCapabilityEnabled("mock-model", environment, injected)).toBe(true);
     expect(testCapabilityEnabled("simulated-target", environment, injected)).toBe(false);

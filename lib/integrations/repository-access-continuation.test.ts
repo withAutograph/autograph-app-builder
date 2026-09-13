@@ -7,10 +7,10 @@ import type {
 } from "./repository-access-continuation";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 };
 const continuationId = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 
@@ -25,11 +25,6 @@ function memoryStore(): RepositoryAccessContinuationStore & {
 } {
   const records: RepositoryAccessContinuation[] = [];
   return {
-    records,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async create(record) {
-      records.push(record);
-    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
       const record = records.find(
@@ -40,7 +35,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) return;
       record.authorizedAt = input.now;
       return record;
     },
@@ -58,9 +53,13 @@ function memoryStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) return;
       record.consumedAt = input.now;
       return record;
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async create(record) {
+      records.push(record);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
@@ -73,6 +72,7 @@ function memoryStore(): RepositoryAccessContinuationStore & {
           candidate.expiresAt > input.now,
       );
     },
+    records,
   };
 }
 
@@ -81,18 +81,18 @@ describe("GitHub repository access continuation", () => {
     const store = memoryStore();
     let current = new Date("2026-09-01T12:00:00.000Z");
     const service = createRepositoryAccessContinuationService({
-      store,
-      now: () => current,
       createId: () => continuationId,
+      now: () => current,
+      store,
     });
     const created = await service.create({
       authority,
-      sessionId: "ses_one",
-      requestId: "call_one",
-      repository: "withAutograph/app-builder-dogfood",
-      selectedInstallationId: "10",
       callbackUrl:
         "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      selectedInstallationId: "10",
+      sessionId: "ses_one",
     });
     expect(created.continuationId).toBe(continuationId);
     expect(JSON.stringify(store.records)).not.toContain(continuationId);
@@ -105,23 +105,23 @@ describe("GitHub repository access continuation", () => {
       service.consume({
         authority,
         continuationId,
-        sessionId: "ses_one",
-        requestId: "call_one",
         repository: "withAutograph/app-builder-dogfood",
+        requestId: "call_one",
         selectedInstallationId: "10",
+        sessionId: "ses_one",
       }),
     ).resolves.toMatchObject({
-      sessionId: "ses_one",
       requestId: "call_one",
+      sessionId: "ses_one",
     });
     await expect(
       service.consume({
         authority,
         continuationId,
-        sessionId: "ses_one",
-        requestId: "call_one",
         repository: "withAutograph/app-builder-dogfood",
+        requestId: "call_one",
         selectedInstallationId: "10",
+        sessionId: "ses_one",
       }),
     ).resolves.toBeUndefined();
   });
@@ -129,28 +129,28 @@ describe("GitHub repository access continuation", () => {
   it("exposes only exact-tenant authorized callbacks for Check access recovery", async () => {
     const store = memoryStore();
     const service = createRepositoryAccessContinuationService({
-      store,
       createId: () => continuationId,
       now: () => new Date("2026-09-01T12:00:00.000Z"),
+      store,
     });
     await service.create({
       authority,
-      sessionId: "ses_one",
-      requestId: "call_one",
-      repository: "withAutograph/app-builder-dogfood",
       callbackUrl:
         "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      sessionId: "ses_one",
     });
     await service.authorize({ authority, continuationId });
     await expect(
       service.authorizedForSession({ authority, sessionId: "ses_one" }),
     ).resolves.toMatchObject([
       {
+        callbackUrl:
+          "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
         record: {
           repository: { fullName: "withAutograph/app-builder-dogfood" },
         },
-        callbackUrl:
-          "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
       },
     ]);
     await expect(
@@ -165,18 +165,18 @@ describe("GitHub repository access continuation", () => {
     const store = memoryStore();
     let current = new Date("2026-09-01T12:00:00.000Z");
     const service = createRepositoryAccessContinuationService({
-      store,
-      now: () => current,
       createId: () => continuationId,
       lifetimeMs: 60_000,
+      now: () => current,
+      store,
     });
     await service.create({
       authority,
-      sessionId: "ses_one",
-      requestId: "call_one",
-      repository: "withAutograph/app-builder-dogfood",
       callbackUrl:
         "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      sessionId: "ses_one",
     });
     await expect(
       service.authorize({
@@ -190,9 +190,9 @@ describe("GitHub repository access continuation", () => {
       service.consume({
         authority,
         continuationId,
-        sessionId: "ses_other",
-        requestId: "call_one",
         repository: "withAutograph/app-builder-dogfood",
+        requestId: "call_one",
+        sessionId: "ses_other",
       }),
     ).resolves.toBeUndefined();
     current = new Date("2026-09-01T12:02:00.000Z");
@@ -200,17 +200,17 @@ describe("GitHub repository access continuation", () => {
       service.consume({
         authority,
         continuationId,
-        sessionId: "ses_one",
-        requestId: "call_one",
         repository: "withAutograph/app-builder-dogfood",
+        requestId: "call_one",
+        sessionId: "ses_one",
       }),
     ).resolves.toBeUndefined();
   });
 
   it("accepts only exact Eve callback routes on the canonical or loopback origin", async () => {
     const service = createRepositoryAccessContinuationService({
-      store: memoryStore(),
       createId: () => continuationId,
+      store: memoryStore(),
     });
     for (const callbackUrl of [
       "https://attacker.example/eve/v1/connections/github/callback/a/b",
@@ -221,10 +221,10 @@ describe("GitHub repository access continuation", () => {
       await expect(
         service.create({
           authority,
-          sessionId: "ses_one",
-          requestId: "call_one",
-          repository: "withAutograph/app-builder-dogfood",
           callbackUrl,
+          repository: "withAutograph/app-builder-dogfood",
+          requestId: "call_one",
+          sessionId: "ses_one",
         }),
       ).rejects.toThrow("repository-access-callback-invalid");
     }

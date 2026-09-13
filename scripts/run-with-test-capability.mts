@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, realpathSync, rmSync, statSync } from "node:fs";
-import { isAbsolute, resolve as pathResolve } from "node:path";
+import path from "node:path";
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 
@@ -14,10 +14,10 @@ const MODE_MASK = 18;
 const ZERO = 0;
 const ONE = 1;
 
-const repositoryRoot = pathResolve(import.meta.dirname, "..");
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
-  !isAbsolute(repositoryRoot) ||
+  !path.isAbsolute(repositoryRoot) ||
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
@@ -26,13 +26,13 @@ if (
 )
   throw new Error("The structural test package root was not owner-bound.");
 const preload = pathToFileURL(
-  pathResolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
+  path.resolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
 ).href;
 const evalFetchPreload = pathToFileURL(
-  pathResolve(repositoryRoot, "scripts/eve-eval-fetch-preload.mjs"),
+  path.resolve(repositoryRoot, "scripts/eve-eval-fetch-preload.mjs"),
 ).href;
 const maximumFrameBytes = 4096;
-const launcher = pathResolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
+const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
 const launcherDigest = "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
 const allowedEnvironment = [
   "HOME",
@@ -79,16 +79,18 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof: Record<string, unknown>) {
-  return JSON.stringify({
-    version: proof.version,
-    nonce: proof.nonce,
-    context: proof.context,
-    authorization: proof.authorization,
-    expiresAt: proof.expiresAt,
-    capabilities: proof.capabilities,
-    publicKey: proof.publicKey,
-    gateAEvalProfile: proof.gateAEvalProfile,
-  });
+  return JSON.stringify(
+    Object.fromEntries([
+      ["version", proof.version],
+      ["nonce", proof.nonce],
+      ["context", proof.context],
+      ["authorization", proof.authorization],
+      ["expiresAt", proof.expiresAt],
+      ["capabilities", proof.capabilities],
+      ["publicKey", proof.publicKey],
+      ["gateAEvalProfile", proof.gateAEvalProfile],
+    ]),
+  );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -125,14 +127,14 @@ function exactParentArguments(): readonly string[] {
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
         encoding: "utf-8",
-        env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+        env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       }),
     ) as unknown;
     if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string"))
       throw new Error("The structural test launcher argv was invalid.");
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
       encoding: "utf-8",
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       stdio: ["ignore", "pipe", "ignore"],
     })
       .split("\n")
@@ -187,7 +189,7 @@ export async function runWithTestCapability(options: {
   verifyTrustedLauncher(options.profile);
   if (process.env.NODE_OPTIONS !== undefined)
     throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
-  const expectedEntry = pathResolve(
+  const expectedEntry = path.resolve(
     repositoryRoot,
     options.profile === "vitest" ? "node_modules/vitest/vitest.mjs" : "node_modules/eve/bin/eve.js",
   );
@@ -206,31 +208,31 @@ export async function runWithTestCapability(options: {
   const child = spawn(options.command, [...options.args], {
     cwd: repositoryRoot,
     detached: options.profile === "eve" && process.platform !== "win32",
-    stdio: ["inherit", "inherit", "inherit", "pipe"],
     env: {
       ...childEnvironment(),
-      HOME: evalRuntime?.home ?? process.env.HOME,
+      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
+      APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+      APP_BUILDER_TEST_MODEL: undefined,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
-      // Never recover another eval's unfinished queues. Failed runs retain
-      // this task-owned directory for diagnostics; successful runs remove it.
-      WORKFLOW_LOCAL_DATA_DIR: options.profile === "eve" ? evalRuntime?.workflowData : undefined,
-      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
-      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
+      HOME: evalRuntime?.home ?? process.env.HOME,
       NODE_OPTIONS:
         options.profile === "eve"
           ? `--import=${preload} --import=${evalFetchPreload}`
           : `--import=${preload}`,
-      APP_BUILDER_EVE_EVAL_FETCH_PRELOAD: options.profile === "eve" ? "1" : undefined,
-      APP_BUILDER_TEST_MODEL: undefined,
-      APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+      // Never recover another eval's unfinished queues. Failed runs retain
+      // this task-owned directory for diagnostics; successful runs remove it.
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
+      WORKFLOW_LOCAL_DATA_DIR: options.profile === "eve" ? evalRuntime?.workflowData : undefined,
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: gateAEvalWorkflowBodyTimeout(options.gateAEvalProfile),
     },
+    stdio: ["inherit", "inherit", "inherit", "pipe"],
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
   if (authorization === null || authorization === undefined)
     throw new Error("The structural test authorization pipe was not created.");
   let buffered = "";
   let answered = false;
-  authorization.write(`${JSON.stringify({ version: 2, publicKey: publicKeySource })}\n`);
+  authorization.write(`${JSON.stringify({ publicKey: publicKeySource, version: 2 })}\n`);
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
   authorization.setEncoding("utf-8");
@@ -262,19 +264,19 @@ export async function runWithTestCapability(options: {
       )
         throw new Error("Malformed authorization request.");
       const proof: Record<string, unknown> = {
-        version: 2,
-        nonce: request.nonce,
-        context: request.context,
         authorization: randomBytes(32).toString("hex"),
-        expiresAt: Date.now() + 5000,
         capabilities: options.capabilities,
-        publicKey: publicKeySource,
+        context: request.context,
+        expiresAt: Date.now() + 5000,
         gateAEvalProfile: options.gateAEvalProfile ?? null,
+        nonce: request.nonce,
+        publicKey: publicKeySource,
+        version: 2,
       };
       const signature = sign(null, Buffer.from(canonical(proof)), privateKey).toString("base64");
       answered = true;
       authorization.write(
-        `${JSON.stringify({ ...proof, signature, delegationPrivateKey: privateKeySource })}\n`,
+        `${JSON.stringify({ ...proof, delegationPrivateKey: privateKeySource, signature })}\n`,
       );
       clearTimeout(timeout);
     } catch {

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 const originIndex = process.argv.indexOf("--origin");
 const originValue = originIndex === -1 ? undefined : process.argv[originIndex + 1];
@@ -8,8 +8,8 @@ const origin = new URL(originValue);
 if (origin.protocol !== "https:" || origin.pathname !== "/")
   throw new Error("Origin must be a literal HTTPS origin without a path.");
 
-const path = resolve("mcp.json");
-const manifest = JSON.parse(await readFile(path, "utf-8"));
+const manifestPath = path.resolve("mcp.json");
+const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
 manifest.mcpServers["app-builder"].url = `${origin.origin}/mcp`;
-await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
+await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Configured MCP endpoint: ${origin.origin}/mcp`);

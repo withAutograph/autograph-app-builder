@@ -10,7 +10,7 @@ describe("hosted Bun runtime", () => {
   it("installs Bun once per sandbox and exposes its binary path", async () => {
     // Eve exposes a PromiseLike command, not a native Promise with .catch().
     const run = vi.fn(() => {
-      const result = Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       const thenProperty = String.fromCodePoint(116, 104, 101, 110);
       return Object.fromEntries([
         [thenProperty, result.then.bind(result)],

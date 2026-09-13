@@ -1,23 +1,26 @@
 import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve as pathResolve } from "node:path";
+import nodePath from "node:path";
 
 import { archiveFiles, verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { deterministicGzip, deterministicTar, sha256 } from "./portable-release";
 
-const run = (script: string, args: string[], expected = 0) =>
-  new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [...process.execArgv, `scripts/${script}`, ...args], {
-      stdio: expected === 0 ? "inherit" : "ignore",
-    });
-    child.once("error", reject);
-    child.once("exit", (code) =>
-      code === expected
-        ? resolve()
-        : reject(new Error(`${script} exited ${code}; expected ${expected}.`)),
-    );
+const { join, resolve: pathResolve } = nodePath;
+
+const run = async (script: string, args: string[], expected = 0) => {
+  const child = spawn(process.execPath, [...process.execArgv, `scripts/${script}`, ...args], {
+    stdio: expected === 0 ? "inherit" : "ignore",
   });
+  const [code] = await Promise.race([
+    once(child, "error").then(([error]) => {
+      throw error;
+    }),
+    once(child, "exit"),
+  ]);
+  if (code !== expected) throw new Error(`${script} exited ${code}; expected ${expected}.`);
+};
 
 const temp = await mkdtemp(join(tmpdir(), "autograph-portable-"));
 try {
@@ -85,8 +88,8 @@ try {
   const extracted = join(temp, "extracted");
   await mkdir(extracted);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, archiveName), "-C", extracted], {
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
     stdio: "inherit",
-    env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
   });
   await run("validate-plugin.mts", [
     "--root",
@@ -97,8 +100,8 @@ try {
   const marketplace = join(temp, "codex-marketplace");
   await mkdir(marketplace);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, marketplaceArchiveName), "-C", marketplace], {
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
     stdio: "inherit",
-    env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
   });
   const marketplaceManifest = JSON.parse(
     await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf-8"),
@@ -110,7 +113,8 @@ try {
   )
     throw new Error("Codex marketplace manifest must authenticate App Builder on first use.");
   const codexPluginRoot = join(marketplace, marketplaceManifest.plugins[0].source.path);
-  if (!(await stat(codexPluginRoot)).isDirectory())
+  const codexPluginRootStat = await stat(codexPluginRoot);
+  if (!codexPluginRootStat.isDirectory())
     throw new Error("Codex marketplace source path did not resolve to the packaged plugin.");
   const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8"));
   if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`)
@@ -124,7 +128,8 @@ try {
     if (typeof reference !== "string" || !reference.startsWith("./"))
       throw new Error("Codex marketplace asset reference was invalid.");
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (!(await stat(join(codexPluginRoot, reference))).isFile())
+    const assetStat = await stat(join(codexPluginRoot, reference));
+    if (!assetStat.isFile())
       throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
   }
   const installs = join(temp, "installs");
@@ -140,8 +145,8 @@ try {
     ]);
   await run("smoke-portable-plugin.mts", ["--release", first, "--install-root", installs]);
   await verifyPortableProofArtifact({
-    releaseRoot: first,
     installRoot: installs,
+    releaseRoot: first,
     repositoryRoot: pathResolve("."),
   });
 
@@ -158,8 +163,8 @@ try {
     await expectRejected(
       () =>
         verifyPortableProofArtifact({
-          releaseRoot: root,
           installRoot: installs,
+          releaseRoot: root,
           repositoryRoot: pathResolve("."),
         }),
       name,
@@ -217,8 +222,8 @@ try {
   await expectRejected(
     () =>
       verifyPortableProofArtifact({
-        releaseRoot: missingMarketplaceAsset,
         installRoot: installs,
+        releaseRoot: missingMarketplaceAsset,
         repositoryRoot: pathResolve("."),
       }),
     "marketplace archive with a missing manifest-referenced asset",
@@ -234,15 +239,15 @@ try {
   const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, "release-receipt.json");
   const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8"));
   tamperedAssetReceipt.codexMarketplaceArchive.sha256 = sha256(tamperedAssetArchive);
-  tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(
-    tamperedAssetFiles.get(missingAssetPath)!,
-  );
+  const tamperedAssetFile = tamperedAssetFiles.get(missingAssetPath);
+  if (!tamperedAssetFile) throw new Error("Expected generated marketplace asset was absent.");
+  tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(tamperedAssetFile);
   await writeFile(tamperedAssetReceiptPath, `${JSON.stringify(tamperedAssetReceipt, null, 2)}\n`);
   await expectRejected(
     () =>
       verifyPortableProofArtifact({
-        releaseRoot: tamperedMarketplaceAsset,
         installRoot: installs,
+        releaseRoot: tamperedMarketplaceAsset,
         repositoryRoot: pathResolve("."),
       }),
     "marketplace archive with tampered manifest-referenced asset bytes and a fully rebound receipt",
@@ -253,8 +258,8 @@ try {
     "/usr/bin/git",
     ["clone", "--quiet", "--no-hardlinks", pathResolve("."), checkoutDriftRepository],
     {
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       stdio: "inherit",
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
     },
   );
   execFileSync(
@@ -268,8 +273,8 @@ try {
       "https://github.com/withAutograph/autograph-app-builder.git",
     ],
     {
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       stdio: "inherit",
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C", NODE_ENV: "test" },
     },
   );
   const fullyReboundTreeDrift = join(temp, "fully-rebound-tree-drift");
@@ -289,8 +294,8 @@ try {
   await expectRejected(
     () =>
       verifyPortableProofArtifact({
-        releaseRoot: fullyReboundTreeDrift,
         installRoot: installs,
+        releaseRoot: fullyReboundTreeDrift,
         repositoryRoot: checkoutDriftRepository,
       }),
     "marketplace archive and receipt rebound to checkout bytes that differ from the receipt tree",
@@ -303,8 +308,8 @@ try {
   await expectRejected(
     () =>
       verifyPortableProofArtifact({
-        releaseRoot: archiveTamper,
         installRoot: installs,
+        releaseRoot: archiveTamper,
         repositoryRoot: pathResolve("."),
       }),
     "archive contents drift",
@@ -319,12 +324,12 @@ try {
   await expectRejected(
     () =>
       verifyPortableProofArtifact({
-        releaseRoot: first,
         installRoot: installedTamper,
+        releaseRoot: first,
         repositoryRoot: pathResolve("."),
       }),
     "installed client adapter drift",
   );
 } finally {
-  await rm(temp, { recursive: true, force: true });
+  await rm(temp, { force: true, recursive: true });
 }

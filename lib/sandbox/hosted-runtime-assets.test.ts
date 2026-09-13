@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,10 +17,10 @@ afterEach(() => {
 
 describe("hosted runtime asset bundle", () => {
   it("loads every managed seed and immutable artifact identity without authored bytes", () => {
-    const runtimeRoot = mkdtempSync(join(tmpdir(), "hosted-runtime-assets-"));
+    const runtimeRoot = mkdtempSync(path.join(tmpdir(), "hosted-runtime-assets-"));
     temporaryRoots.push(runtimeRoot);
-    const seedsModule = pathToFileURL(resolve("lib/sandbox/hosted-managed-seeds.ts")).href;
-    const artifactModule = pathToFileURL(resolve("lib/sandbox/hosted-artifact.ts")).href;
+    const seedsModule = pathToFileURL(path.resolve("lib/sandbox/hosted-managed-seeds.ts")).href;
+    const artifactModule = pathToFileURL(path.resolve("lib/sandbox/hosted-artifact.ts")).href;
     const tsxLoader = import.meta.resolve("tsx/esm");
     const childEnvironment = { ...process.env };
     delete childEnvironment.NODE_OPTIONS;

@@ -16,25 +16,25 @@ function fixture() {
   const archiveUrl = `https://releases.example.test/${archiveSha256}.tar.gz`;
   const manifestBytes = new TextEncoder().encode(
     JSON.stringify({
-      version: 1,
+      archive: {
+        bytes: archive.byteLength,
+        sha256: archiveSha256,
+        url: archiveUrl,
+      },
+      files: [
+        {
+          bytes: file.byteLength,
+          mode: "100644",
+          path: "README.md",
+          sha256: sha256(file),
+        },
+      ],
       source: {
         repository: "https://github.com/withAutograph/arrusted-development",
         sha: ARRUSTED_TARGET_SHA,
         tree: ARRUSTED_TARGET_TREE,
       },
-      archive: {
-        url: archiveUrl,
-        sha256: archiveSha256,
-        bytes: archive.byteLength,
-      },
-      files: [
-        {
-          path: "README.md",
-          mode: "100644",
-          sha256: sha256(file),
-          bytes: file.byteLength,
-        },
-      ],
+      version: 1,
     }),
   );
   const manifestSha256 = sha256(manifestBytes);
@@ -58,8 +58,8 @@ describe("immutable Arrusted starter source", () => {
     );
     const source = await loadStarterSource({
       config: {
-        manifestUrl: value.manifestUrl,
         manifestSha256: value.manifestSha256,
+        manifestUrl: value.manifestUrl,
       },
       fetch: request,
     });
@@ -77,16 +77,16 @@ describe("immutable Arrusted starter source", () => {
     await expect(
       loadStarterSource({
         config: {
-          manifestUrl: "https://releases.example.test/latest.json",
           manifestSha256: value.manifestSha256,
+          manifestUrl: "https://releases.example.test/latest.json",
         },
       }),
     ).rejects.toThrow();
     await expect(
       loadStarterSource({
         config: {
-          manifestUrl: value.manifestUrl,
           manifestSha256: value.manifestSha256,
+          manifestUrl: value.manifestUrl,
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetch: vi.fn(async () => new Response("tampered")),

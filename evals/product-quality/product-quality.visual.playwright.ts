@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { promisify } from "node:util";
 
 import axe from "axe-core";
 import { expect, test } from "playwright/test";
@@ -36,26 +37,22 @@ test.beforeAll(async () => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(vendorOnboardingPrototype);
   });
-  await new Promise<void>((resolve) => {
-    prototypeServer?.listen(0, "127.0.0.1", resolve);
-  });
+  const { promise, resolve } = Promise.withResolvers<undefined>();
+  prototypeServer.listen(0, "127.0.0.1", () => resolve(undefined as undefined));
+  await promise;
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
 });
 
-test.afterAll(
-  async () =>
-    await new Promise<void>((resolve, reject) => {
-      prototypeServer?.close((error) => {
-        if (error === undefined) resolve();
-        else reject(error);
-      });
-    }),
-);
+test.afterAll(async () => {
+  if (prototypeServer) {
+    await promisify(prototypeServer.close.bind(prototypeServer))();
+  }
+});
 
 test.describe("recorded Vendor Onboarding prototype", () => {
   test("supports the desktop review flow", async ({ page }) => {
-    await page.setViewportSize({ width: 1592, height: 902 });
+    await page.setViewportSize({ height: 902, width: 1592 });
     await loadPrototype(page);
     await page.getByRole("button", { name: "Kiteworks GmbH" }).click();
     await expect(page.getByRole("heading", { name: "Kiteworks GmbH" })).toBeVisible();
@@ -63,7 +60,7 @@ test.describe("recorded Vendor Onboarding prototype", () => {
   });
 
   test("keeps the workflow usable on a narrow viewport", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ height: 844, width: 390 });
     await loadPrototype(page);
     await expect(page.getByRole("button", { name: "Send to finance" })).toBeVisible();
   });

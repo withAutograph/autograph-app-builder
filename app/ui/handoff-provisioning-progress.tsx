@@ -49,7 +49,7 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
-    undefined,
+    undefined as undefined,
   );
 
   useEffect(() => {
@@ -118,6 +118,12 @@ export function HandoffProvisioningProgress({
   }, [snapshot.provisioning.requestId, snapshot.provisioning.status, streamAttempt]);
 
   const failure = actionState?.status === "error" && !pending;
+  let progressMessage = "Preparing your selected providers…";
+  if (snapshot.provisioning.status === "settled") {
+    progressMessage = "Provider setup is complete.";
+  } else if (failure) {
+    progressMessage = "Provider setup paused. Your handoff is saved.";
+  }
   const retry = () => {
     if (pending) return;
     startTransition(() => dispatch({ handoffId }));
@@ -125,13 +131,7 @@ export function HandoffProvisioningProgress({
   return (
     <section aria-label="Provisioning progress">
       <p role="status" aria-live="polite">
-        {snapshot.provisioning.status === "settled"
-          ? "Provider setup is complete."
-          : pending
-            ? "Preparing your selected providers…"
-            : failure
-              ? "Provider setup paused. Your handoff is saved."
-              : "Preparing your selected providers…"}
+        {progressMessage}
       </p>
       {snapshot.provisioning.status !== "settled" && connection !== "connected" ? (
         <p role="status" aria-live="polite">

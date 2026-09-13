@@ -34,10 +34,10 @@ async function setGitHubCallbackFixture(page: Page, fixture: GitHubCallbackFixtu
   await page.context().addCookies([
     {
       name: "autograph-e2e-github-callback",
-      value: fixture,
-      url: appOrigin,
-      secure: true,
       sameSite: "Lax",
+      secure: true,
+      url: appOrigin,
+      value: fixture,
     },
   ]);
 }
@@ -97,7 +97,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
   await finishOAuth(page, "GitHub");
   await openBuilderPage(page);
   let checkpointStarted = false;
-  const releaseCheckpoint = Promise.withResolvers<undefined>();
+  const releaseCheckpoint = Promise.withResolvers<null>();
   let held = false;
   await page.route(`${appOrigin}/`, async (route) => {
     const request = route.request();
@@ -117,10 +117,10 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
   try {
     await page.locator("#app-brief").fill("Keep this GitHub brief through authorization.");
     await page.getByRole("checkbox", { name: /GitHub/u }).check();
-    await page.getByRole("button", { name: "Connect GitHub", exact: true }).click();
+    await page.getByRole("button", { exact: true, name: "Connect GitHub" }).click();
     await expect.poll(() => checkpointStarted).toBe(true);
     await page.getByLabel("App Name").fill("Edited During Checkpoint");
-    releaseCheckpoint.resolve(undefined);
+    releaseCheckpoint.resolve(null);
     await expect(page).toHaveURL(/\/github\/installations\?/u);
     await expectProviderCheckpoint(
       page,
@@ -134,7 +134,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
     await waitForBuilderReady(page);
     await expect(page.getByLabel("App Name")).toHaveValue("Edited During Checkpoint");
   } finally {
-    releaseCheckpoint.resolve(undefined);
+    releaseCheckpoint.resolve(null);
     await page.unrouteAll({ behavior: "wait" });
   }
 });
@@ -183,7 +183,8 @@ for (const provider of emulatedProviders) {
       `Keep this ${provider} brief through authorization.`,
     );
     await expectProviderSelection(page, provider);
-    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
+    const counts = await applicationCounts();
+    expect(counts[descriptor.bindingCount]).toBe(1);
   });
 }
 
@@ -198,7 +199,8 @@ for (const provider of emulatedProviders) {
     await reopenProviderConnection(page, provider);
     await advanceProviderConnectionToApproval(page, provider);
     await approveProviderConnection(page, provider);
-    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
+    const counts = await applicationCounts();
+    expect(counts[descriptor.bindingCount]).toBe(1);
     await expectProviderSelection(page, provider);
   });
 }
@@ -217,8 +219,8 @@ test("connections remain available when the user returns through the other OAuth
   await expectProviderSelection(page, "GitHub");
   await expectProviderSelection(page, "Vercel");
   expect(await applicationCounts()).toMatchObject({
-    users: 1,
     githubInstallations: 1,
+    users: 1,
     vercelInstallations: 1,
   });
 });
@@ -236,7 +238,8 @@ test("the emulated approval Back action restores the unchanged builder draft", a
   await waitForBuilderReady(page);
   await expect(page.getByLabel("App Name")).toHaveValue("Back Action Draft");
   await expect(page.locator("#app-brief")).toHaveValue("Keep this draft without connecting.");
-  expect((await applicationCounts()).githubInstallations).toBe(0);
+  const counts = await applicationCounts();
+  expect(counts.githubInstallations).toBe(0);
 });
 
 for (const provider of emulatedProviders) {
@@ -261,7 +264,8 @@ for (const provider of emulatedProviders) {
     await expect(page.locator("#app-brief")).toHaveValue(
       `Keep this ${provider} draft when leaving connections.`,
     );
-    expect((await applicationCounts())[descriptor.bindingCount]).toBe(0);
+    const counts = await applicationCounts();
+    expect(counts[descriptor.bindingCount]).toBe(0);
   });
 }
 
@@ -285,7 +289,8 @@ test("GitHub installation update accepts OAuth provider extensions and retains t
   await expect(page).toHaveURL(/\?github=connected&resume=/u);
   await expect(page.getByText("GitHub connected successfully.")).toBeVisible();
   await expect(page.getByLabel("Git Scope")).toHaveValue("autograph-local");
-  expect((await applicationCounts()).githubInstallations).toBe(1);
+  const counts = await applicationCounts();
+  expect(counts.githubInstallations).toBe(1);
 
   await openBuilderPage(page);
   await expect(page).toHaveURL(`${appOrigin}/`);
@@ -305,7 +310,8 @@ for (const key of ["code", "state", "installation_id", "setup_action"] as const)
     );
     await startGitHubConnection(page);
     await expect(page).toHaveURL(/github=failed&githubReason=callback-invalid/u);
-    expect((await applicationCounts()).githubInstallations).toBe(0);
+    const counts = await applicationCounts();
+    expect(counts.githubInstallations).toBe(0);
     await assertNoLeak();
   });
 }
@@ -318,16 +324,19 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await page.getByRole("button", { name: "Install or update GitHub access" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
+  if (!state) throw new Error("Expected GitHub callback state");
 
   await page.goto(
-    `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state!)}`,
+    `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state)}`,
   );
   await expect(page).toHaveURL(/vercel=failed/u);
-  expect((await applicationCounts()).vercelInstallations).toBe(0);
+  let counts = await applicationCounts();
+  expect(counts.vercelInstallations).toBe(0);
 
   await page.goto("/github/installations/callback?installation_id=1001");
   await expect(page).toHaveURL(/github=failed/u);
-  expect((await applicationCounts()).githubInstallations).toBe(0);
+  counts = await applicationCounts();
+  expect(counts.githubInstallations).toBe(0);
 });
 
 for (const provider of emulatedProviders) {
@@ -352,7 +361,8 @@ for (const provider of emulatedProviders) {
     await waitForBuilderReady(page);
     await expect(page.getByLabel("App Name")).toHaveValue(appName);
     await expect(page.locator("#app-brief")).toHaveValue(brief);
-    expect((await applicationCounts())[descriptor.bindingCount]).toBe(1);
+    const counts = await applicationCounts();
+    expect(counts[descriptor.bindingCount]).toBe(1);
   });
 }
 
@@ -386,6 +396,7 @@ for (const provider of emulatedProviders) {
     await waitForBuilderReady(page);
     await expect(page.getByLabel("App Name")).toHaveValue(appName);
     await expect(page.locator("#app-brief")).toHaveValue(brief);
-    expect((await applicationCounts())[descriptor.bindingCount]).toBe(0);
+    const counts = await applicationCounts();
+    expect(counts[descriptor.bindingCount]).toBe(0);
   });
 }

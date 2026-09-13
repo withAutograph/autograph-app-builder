@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { z } from "zod";
 
@@ -687,27 +687,27 @@ export const hostedStorageExpectedConstraints = [
 
 const migrationRowSchema = z
   .object({
-    hash: z.string().regex(/^[0-9a-f]{64}$/u),
     createdAt: z.string().regex(/^\d+$/u),
+    hash: z.string().regex(/^[0-9a-f]{64}$/u),
   })
   .strict();
 const columnRowSchema = z
   .object({
-    table: z.string(),
     column: z.string(),
-    type: z.string(),
     notNull: z.boolean(),
+    table: z.string(),
+    type: z.string(),
   })
   .strict();
-const namedObjectRowSchema = z.object({ table: z.string(), name: z.string() }).strict();
+const namedObjectRowSchema = z.object({ name: z.string(), table: z.string() }).strict();
 
 export const hostedStorageReadBackSchema = z
   .object({
-    transactionReadOnly: z.literal(true),
-    migrations: z.array(migrationRowSchema),
     columns: z.array(columnRowSchema),
-    indexes: z.array(namedObjectRowSchema),
     constraints: z.array(namedObjectRowSchema),
+    indexes: z.array(namedObjectRowSchema),
+    migrations: z.array(migrationRowSchema),
+    transactionReadOnly: z.literal(true),
   })
   .strict();
 
@@ -718,27 +718,27 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
   const [migrationFiles, rawJournal] = await Promise.all([
     Promise.all(
       hostedStorageMigrationTags.map(async (tag) => ({
+        content: await readFile(path.resolve(repositoryRoot, "drizzle", `${tag}.sql`), "utf-8"),
         tag,
-        content: await readFile(resolve(repositoryRoot, "drizzle", `${tag}.sql`), "utf-8"),
       })),
     ),
-    readFile(resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf-8"),
+    readFile(path.resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf-8"),
   ]);
   const journal = z
     .object({
-      version: z.literal("7"),
       dialect: z.literal("postgresql"),
       entries: z.array(
         z
           .object({
+            breakpoints: z.literal(true),
             idx: z.number().int().nonnegative(),
+            tag: z.string(),
             version: z.literal("7"),
             when: z.number().int().positive(),
-            tag: z.string(),
-            breakpoints: z.literal(true),
           })
           .strict(),
       ),
+      version: z.literal("7"),
     })
     .strict()
     .parse(JSON.parse(rawJournal));
@@ -747,9 +747,10 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
       JSON.stringify(hostedStorageMigrationTags.map((_, index) => index)) ||
     JSON.stringify(journal.entries.map(({ tag }) => tag)) !==
       JSON.stringify(hostedStorageMigrationTags) ||
-    journal.entries.some(
-      (entry, index) => index > 0 && entry.when <= journal.entries[index - 1]!.when,
-    )
+    journal.entries.some((entry, index) => {
+      const previousEntry = journal.entries[index - 1];
+      return index > 0 && previousEntry !== undefined && entry.when <= previousEntry.when;
+    })
   ) {
     throw new Error("Hosted storage migration journal is not exact.");
   }
@@ -777,19 +778,25 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     }
   }
   const sourceFiles = await Promise.all(
-    contractSourcePaths.map(async (path) => ({
-      path,
-      digest: sha256(await readFile(resolve(repositoryRoot, path), "utf-8")),
+    contractSourcePaths.map(async (sourcePath) => ({
+      digest: sha256(await readFile(path.resolve(repositoryRoot, sourcePath), "utf-8")),
+      path: sourcePath,
     })),
   );
-  const migrations = migrationFiles.map(({ tag, content }, index) => ({
-    tag,
-    hash: sha256(content),
-    createdAt: String(journal.entries[index]!.when),
-  }));
+  const migrations = migrationFiles.map(({ tag, content }, index) => {
+    const journalEntry = journal.entries[index];
+    if (journalEntry === undefined) {
+      throw new Error("Hosted storage migration journal is not exact.");
+    }
+    return {
+      createdAt: String(journalEntry.when),
+      hash: sha256(content),
+      tag,
+    };
+  });
   return {
-    migrations,
     migrationDigest: sha256(JSON.stringify(migrations)),
+    migrations,
     storageContractDigest: sha256(JSON.stringify(sourceFiles)),
   };
 }
@@ -817,12 +824,17 @@ export async function verifyHostedStorageReadBack(input: {
   }
   if (
     JSON.stringify(readBack.migrations) !==
-    JSON.stringify(contract.migrations.map(({ hash, createdAt }) => ({ hash, createdAt })))
+    JSON.stringify(contract.migrations.map(({ hash, createdAt }) => ({ createdAt, hash })))
   ) {
     throw new Error("Hosted storage migration order or digest drifted.");
   }
   const migrationTimes = readBack.migrations.map(({ createdAt }) => BigInt(createdAt));
-  if (migrationTimes.some((value, index) => index > 0 && value <= migrationTimes[index - 1]!)) {
+  if (
+    migrationTimes.some((value, index) => {
+      const previousTime = migrationTimes[index - 1];
+      return index > 0 && previousTime !== undefined && value <= previousTime;
+    })
+  ) {
     throw new Error("Hosted storage migration journal order is invalid.");
   }
   if (
@@ -837,57 +849,57 @@ export async function verifyHostedStorageReadBack(input: {
   }
   const schemaEvidence = {
     columns: readBack.columns,
-    indexes: readBack.indexes,
     constraints: readBack.constraints,
+    indexes: readBack.indexes,
   };
   const unsigned = {
-    version: 1 as const,
-    format: "autograph-hosted-storage-readiness-v1" as const,
-    status: "schema-verified" as const,
-    observedAt: input.observedAt.toISOString(),
-    database: {
-      dialect: "postgresql" as const,
-      verificationMode: "read-only-transaction" as const,
-      maxConnections: 1 as const,
-      connectionTimeoutSeconds: 5 as const,
-      idleTimeoutSeconds: 5 as const,
-      maximumLifetimeSeconds: 60 as const,
-      statementTimeoutSeconds: 15 as const,
-      lockTimeoutSeconds: 5 as const,
-      idleInTransactionTimeoutSeconds: 15 as const,
-    },
-    migrations: {
-      count: contract.migrations.length,
-      exactOrder: true as const,
-      noPendingMigration: true as const,
-      additiveOnly: true as const,
-      digest: contract.migrationDigest,
-    },
-    schema: {
-      managedColumnCount: readBack.columns.length,
-      managedIndexCount: readBack.indexes.length,
-      managedConstraintCount: readBack.constraints.length,
-      digest: sha256(JSON.stringify(schemaEvidence)),
-    },
     authority: {
-      tenantSessionPredicatesBound: true as const,
-      liveMembershipPredicateBound: true as const,
+      builderProvisionJournalCompareAndSetBound: true as const,
       githubJournalCompareAndSetBound: true as const,
       githubJournalExcludedFromTenantRetention: true as const,
-      builderProvisionJournalCompareAndSetBound: true as const,
       githubUserCredentialEnvelopeBound: true as const,
+      liveMembershipPredicateBound: true as const,
       oauthAuthorizationSchemaBound: true as const,
       sandboxExecutionLeaseBound: true as const,
       storageContractDigest: contract.storageContractDigest,
-    },
-    rollback: {
-      destructiveMigrationDetected: false as const,
-      automaticDownMigrationAvailable: false as const,
-      providerRestorePointRequiredBeforeApply: true as const,
-      providerRestorePointStatus: "not-proven" as const,
+      tenantSessionPredicatesBound: true as const,
     },
     containsSecrets: false as const,
     containsTenantIdentifiers: false as const,
+    database: {
+      connectionTimeoutSeconds: 5 as const,
+      dialect: "postgresql" as const,
+      idleInTransactionTimeoutSeconds: 15 as const,
+      idleTimeoutSeconds: 5 as const,
+      lockTimeoutSeconds: 5 as const,
+      maxConnections: 1 as const,
+      maximumLifetimeSeconds: 60 as const,
+      statementTimeoutSeconds: 15 as const,
+      verificationMode: "read-only-transaction" as const,
+    },
+    format: "autograph-hosted-storage-readiness-v1" as const,
+    migrations: {
+      additiveOnly: true as const,
+      count: contract.migrations.length,
+      digest: contract.migrationDigest,
+      exactOrder: true as const,
+      noPendingMigration: true as const,
+    },
+    observedAt: input.observedAt.toISOString(),
+    rollback: {
+      automaticDownMigrationAvailable: false as const,
+      destructiveMigrationDetected: false as const,
+      providerRestorePointRequiredBeforeApply: true as const,
+      providerRestorePointStatus: "not-proven" as const,
+    },
+    schema: {
+      digest: sha256(JSON.stringify(schemaEvidence)),
+      managedColumnCount: readBack.columns.length,
+      managedConstraintCount: readBack.constraints.length,
+      managedIndexCount: readBack.indexes.length,
+    },
+    status: "schema-verified" as const,
+    version: 1 as const,
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }

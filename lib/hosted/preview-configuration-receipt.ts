@@ -9,30 +9,23 @@ const gitObjectSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 
 const previewForwarderSchema = z
   .object({
-    teamSlug: z
-      .string()
-      .min(1)
-      .max(100)
-      .regex(/^[A-Za-z0-9_-]+$/u),
+    environment: z.literal("preview"),
     projectName: z
       .string()
       .min(1)
       .max(100)
       .regex(/^[A-Za-z0-9_-]+$/u),
-    environment: z.literal("preview"),
+    teamSlug: z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z0-9_-]+$/u),
   })
   .strict();
 
 const hostedPreviewConfigurationSchema = z
   .object({
     auth: hostedMcpAuthConfigSchema,
-    forwarder: previewForwarderSchema,
-    eve: z
-      .object({
-        baseUrl: z.string().url().startsWith("https://"),
-        packageVersion: z.literal("0.43.0"),
-      })
-      .strict(),
     database: z
       .object({
         dialect: z.literal("postgresql"),
@@ -46,46 +39,53 @@ const hostedPreviewConfigurationSchema = z
         ]),
       })
       .strict(),
+    eve: z
+      .object({
+        baseUrl: z.string().url().startsWith("https://"),
+        packageVersion: z.literal("0.43.0"),
+      })
+      .strict(),
+    forwarder: previewForwarderSchema,
   })
   .strict()
   .superRefine((config, context) => {
     if (new URL(config.auth.resourceUrl).origin !== config.eve.baseUrl) {
       context.addIssue({
         code: "custom",
-        path: ["eve", "baseUrl"],
         message: "Canonical Eve and MCP must share one exact origin.",
+        path: ["eve", "baseUrl"],
       });
     }
   });
 
 export const hostedPreviewSourceConfigurationReceiptSchema = z
   .object({
-    version: z.literal(1),
-    runtime: z.literal("hosted-preview"),
-    evidenceLevel: z.literal("source-configuration-only"),
-    sourceSha: gitObjectSchema,
-    sourceTree: gitObjectSchema,
-    configurationDigest: sha256Schema,
+    activation: z.object({ status: z.literal("not-proven") }).strict(),
     authContractDigest: sha256Schema,
-    forwarderContractDigest: sha256Schema,
-    databaseContractDigest: sha256Schema,
-    sameOriginContractDigest: sha256Schema,
     claims: z
       .object({
-        workspaceSelector: z.literal("signed-workspace_id-only"),
-        maximumAccessTokenLifetimeSeconds: z.literal(300),
-        liveMembershipCheck: z.literal(true),
         immediateTokenRevocationClaimed: z.literal(false),
+        liveMembershipCheck: z.literal(true),
+        maximumAccessTokenLifetimeSeconds: z.literal(300),
+        workspaceSelector: z.literal("signed-workspace_id-only"),
       })
       .strict(),
+    configurationDigest: sha256Schema,
+    databaseContractDigest: sha256Schema,
+    evidenceLevel: z.literal("source-configuration-only"),
+    forwarderContractDigest: sha256Schema,
+    runtime: z.literal("hosted-preview"),
+    sameOriginContractDigest: sha256Schema,
     secrets: z
       .object({
-        included: z.literal(false),
         databaseUrlTransport: z.literal("runtime-environment-only"),
+        included: z.literal(false),
         workloadIdentityTransport: z.literal("per-hop-vercel-oidc"),
       })
       .strict(),
-    activation: z.object({ status: z.literal("not-proven") }).strict(),
+    sourceSha: gitObjectSchema,
+    sourceTree: gitObjectSchema,
+    version: z.literal(1),
   })
   .strict();
 
@@ -95,32 +95,32 @@ export type HostedPreviewSourceConfigurationReceipt = z.infer<
 
 export const hostedPreviewActivationReceiptSchema = z
   .object({
-    version: z.literal(1),
-    runtime: z.literal("hosted-preview"),
-    evidenceLevel: z.literal("live-activation"),
-    environment: z.literal("preview"),
-    sourceSha: gitObjectSchema,
-    sourceTree: gitObjectSchema,
-    sourceConfigurationReceiptDigest: sha256Schema,
-    deploymentReadbackDigest: sha256Schema,
-    oauthMetadataReadbackDigest: sha256Schema,
-    mintedTokenContractDigest: sha256Schema,
-    databaseMigrationReadbackDigest: sha256Schema,
-    workloadIdentityProofDigest: sha256Schema,
-    tenantIsolationProofDigest: sha256Schema,
-    fiveToolLifecycleProofDigest: sha256Schema,
     claims: z
       .object({
-        oauthMounted: z.literal(true),
         databaseMigrated: z.literal(true),
-        mintedTokenVerified: z.literal(true),
-        workloadIdentityVerified: z.literal(true),
-        tenantIsolationVerified: z.literal(true),
         fiveToolLifecycleVerified: z.literal(true),
+        mintedTokenVerified: z.literal(true),
+        oauthMounted: z.literal(true),
         productionClaimed: z.literal(false),
+        tenantIsolationVerified: z.literal(true),
+        workloadIdentityVerified: z.literal(true),
       })
       .strict(),
+    databaseMigrationReadbackDigest: sha256Schema,
+    deploymentReadbackDigest: sha256Schema,
+    environment: z.literal("preview"),
+    evidenceLevel: z.literal("live-activation"),
+    fiveToolLifecycleProofDigest: sha256Schema,
+    mintedTokenContractDigest: sha256Schema,
+    oauthMetadataReadbackDigest: sha256Schema,
+    runtime: z.literal("hosted-preview"),
     secrets: z.object({ included: z.literal(false) }).strict(),
+    sourceConfigurationReceiptDigest: sha256Schema,
+    sourceSha: gitObjectSchema,
+    sourceTree: gitObjectSchema,
+    tenantIsolationProofDigest: sha256Schema,
+    version: z.literal(1),
+    workloadIdentityProofDigest: sha256Schema,
   })
   .strict();
 
@@ -139,30 +139,30 @@ export function buildHostedPreviewSourceConfigurationReceipt(input: {
 }): HostedPreviewSourceConfigurationReceipt {
   const configuration = hostedPreviewConfigurationSchema.parse(input.configuration);
   return hostedPreviewSourceConfigurationReceiptSchema.parse({
-    version: 1,
-    runtime: "hosted-preview",
-    evidenceLevel: "source-configuration-only",
-    sourceSha: input.sourceSha,
-    sourceTree: input.sourceTree,
-    configurationDigest: digest(configuration),
+    activation: { status: "not-proven" },
     authContractDigest: digest(configuration.auth),
-    forwarderContractDigest: digest(configuration.forwarder),
-    databaseContractDigest: digest(configuration.database),
-    sameOriginContractDigest: digest({
-      resourceOrigin: new URL(configuration.auth.resourceUrl).origin,
-      eveBaseUrl: configuration.eve.baseUrl,
-    }),
     claims: {
-      workspaceSelector: "signed-workspace_id-only",
-      maximumAccessTokenLifetimeSeconds: 300,
-      liveMembershipCheck: true,
       immediateTokenRevocationClaimed: false,
+      liveMembershipCheck: true,
+      maximumAccessTokenLifetimeSeconds: 300,
+      workspaceSelector: "signed-workspace_id-only",
     },
+    configurationDigest: digest(configuration),
+    databaseContractDigest: digest(configuration.database),
+    evidenceLevel: "source-configuration-only",
+    forwarderContractDigest: digest(configuration.forwarder),
+    runtime: "hosted-preview",
+    sameOriginContractDigest: digest({
+      eveBaseUrl: configuration.eve.baseUrl,
+      resourceOrigin: new URL(configuration.auth.resourceUrl).origin,
+    }),
     secrets: {
-      included: false,
       databaseUrlTransport: "runtime-environment-only",
+      included: false,
       workloadIdentityTransport: "per-hop-vercel-oidc",
     },
-    activation: { status: "not-proven" },
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    version: 1,
   });
 }

@@ -21,14 +21,14 @@ export function developmentLockInvocation(input: {
 }): DevelopmentLockInvocation {
   if (input.platform === "darwin")
     return {
-      command: "/usr/bin/lockf",
       args: ["-t", "0", input.lockPath, input.command, ...input.args],
       busyExitCode: 75,
+      command: "/usr/bin/lockf",
     };
   return {
-    command: "/usr/bin/flock",
     args: ["-E", "73", "-n", input.lockPath, input.command, ...input.args],
     busyExitCode: 73,
+    command: "/usr/bin/flock",
   };
 }
 
@@ -48,10 +48,10 @@ export async function runWithDevelopmentLock(input: {
   spawnChild?: typeof spawn;
 }): Promise<number> {
   const invocation = developmentLockInvocation({
-    platform: supportedPlatform(),
-    lockPath: input.lockPath,
-    command: input.command,
     args: input.args,
+    command: input.command,
+    lockPath: input.lockPath,
+    platform: supportedPlatform(),
   });
   const child: ChildProcess = (input.spawnChild ?? spawn)(
     invocation.command,
@@ -67,7 +67,7 @@ export async function runWithDevelopmentLock(input: {
       stopDevelopmentChild(child);
     };
     process.once(signal, handler);
-    return { signal, handler };
+    return { handler, signal };
   });
   try {
     const code = await developmentChildExit(child);

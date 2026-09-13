@@ -11,11 +11,11 @@ const gatewayModelSchema = z
     id: z.string().min(3).max(256),
     name: z.string().min(1).max(256),
     owned_by: z.string().min(1).max(128),
+    tags: z.array(z.string().min(1).max(128)).max(64).default([]),
     type: z.string().max(64),
     // Zod's schema fallback API is not a Promise method.
     // oxlint-disable-next-line promise/prefer-await-to-then
     zdr: z.enum(["all", "some", "none"]).catch("none"),
-    tags: z.array(z.string().min(1).max(128)).max(64).default([]),
   })
   .passthrough();
 
@@ -32,9 +32,9 @@ export async function loadGatewayModels(input?: {
 }): Promise<ModelState> {
   try {
     const response = await (input?.fetch ?? fetch)(GATEWAY_MODELS_URL, {
+      cache: "no-store",
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
-      cache: "no-store",
     });
     if (!response.ok) throw new Error("gateway-models-unavailable");
     const parsed = responseSchema.parse(await response.json());
@@ -42,10 +42,10 @@ export async function loadGatewayModels(input?: {
       .filter((model) => model.type === "language" && model.owned_by === "openai")
       .map((model) =>
         builderModelSchema.parse({
+          capabilities: model.tags,
           id: model.id,
           name: model.name,
           provider: model.owned_by,
-          capabilities: model.tags,
           zdr: model.zdr,
         }),
       )
@@ -55,16 +55,16 @@ export async function loadGatewayModels(input?: {
       ? activeBuilderModelId
       : undefined;
     const value: ModelState = {
-      status: "ready",
+      cached: false,
       entries,
       ...(defaultModelId ? { defaultModelId } : {}),
-      cached: false,
+      status: "ready",
     };
     lastKnownGood = value;
     return value;
   } catch {
     if (lastKnownGood) return { ...lastKnownGood, cached: true };
-    return { status: "unavailable", entries: [], cached: false };
+    return { cached: false, entries: [], status: "unavailable" };
   }
 }
 

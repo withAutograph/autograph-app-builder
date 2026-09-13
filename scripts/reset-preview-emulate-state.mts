@@ -18,10 +18,10 @@ const args = z
   .parse(process.argv.slice(2));
 
 const namespace = previewEmulationNamespace({
-  repository: args[3],
-  project: args[5],
   branch: args[7],
+  project: args[5],
+  repository: args[3],
 });
 const deleted = await resetPostgresPreviewEmulateState(readPrivateDatabaseUrl(0), namespace);
 
-process.stdout.write(`${JSON.stringify({ namespace, deleted, reseedOnNextRequest: true })}\n`);
+process.stdout.write(`${JSON.stringify({ deleted, namespace, reseedOnNextRequest: true })}\n`);

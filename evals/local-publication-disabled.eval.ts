@@ -22,8 +22,8 @@ export default defineEval({
         "capability reply omits disabled-host and local-publication boilerplate",
       ),
     );
-    t.notCalledTool("publish_reviewed_change_set");
+    t.notCalledTool("publish-reviewed-change-set");
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

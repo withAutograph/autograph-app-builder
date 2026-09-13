@@ -4,26 +4,8 @@ import core from "ultracite/oxlint/core";
 export default defineConfig({
   extends: [core],
   ignorePatterns: core.ignorePatterns,
-  overrides: [
-    {
-      files: ["agent/tools/**/*.ts"],
-      rules: {
-        // Eve derives public tool identities from these filenames, which must remain snake_case.
-        "unicorn/filename-case": "off",
-      },
-    },
-  ],
   rules: {
-    "unicorn/import-style": "off",
-    "eslint/curly": "off",
-    "eslint/no-bitwise": "off",
-    "eslint/no-nested-ternary": "off",
-    "eslint/func-style": "off",
     "eslint/complexity": "off",
-    "eslint/sort-keys": "off",
-    "promise/avoid-new": "off",
-    "typescript/no-non-null-assertion": "off",
-    "unicorn/no-await-expression-member": "off",
-    "unicorn/no-useless-undefined": "off",
+    "eslint/curly": "off",
   },
 });

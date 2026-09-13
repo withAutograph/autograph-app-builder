@@ -46,8 +46,8 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
 
     const formData = new FormData(e.currentTarget);
     changeEmail({
-      newEmail: formData.get("email") as string,
       callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
+      newEmail: formData.get("email") as string,
     });
   }
 

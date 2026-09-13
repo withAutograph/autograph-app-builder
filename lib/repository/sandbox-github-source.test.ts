@@ -4,11 +4,11 @@ import { cloneGitHubSource } from "./sandbox-github-source";
 
 describe("sandbox GitHub source", () => {
   it("passes the installation credential through git config without putting it in the command", async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     await cloneGitHubSource({
       sandbox: { run } as never,
-      url: "https://github.com/acme/private.git",
       token: "secret-installation-token",
+      url: "https://github.com/acme/private.git",
     });
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({

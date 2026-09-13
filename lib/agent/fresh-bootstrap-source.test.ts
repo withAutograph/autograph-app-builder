@@ -20,39 +20,39 @@ vi.mock("../repository/supported-template", () => ({
 }));
 
 const workspace: PreparedSandboxWorkspace = {
-  workspaceId: "workspace-canonical",
-  workspacePath: "/workspace/repository",
+  adapter: "arrusted-development-v0",
+  eligibilityDigest: "d".repeat(64),
   sourcePath: "/workspace/repository",
   sourceSha: "a".repeat(40),
   sourceTree: "b".repeat(40),
   workspaceDigest: "c".repeat(64),
-  adapter: "arrusted-development-v0",
-  eligibilityDigest: "d".repeat(64),
+  workspaceId: "workspace-canonical",
+  workspacePath: "/workspace/repository",
 };
 
 const canonicalReceipt = {
-  version: 4,
+  adapter: workspace.adapter,
+  contractDigest: "e".repeat(64),
+  digest: "f".repeat(64),
+  eligibilityDigest: workspace.eligibilityDigest,
+  provenance: {
+    method: "git-clone-v1",
+    readinessDigest: "1".repeat(64),
+    ref: "refs/heads/main",
+    repository: "https://github.com/withAutograph/arrusted-development.git",
+  },
+  releaseEnabled: false,
   sourceKind: "fresh-template",
   sourcePath: "/workspace/repository",
   sourceSha: workspace.sourceSha,
   sourceTree: workspace.sourceTree,
-  adapter: workspace.adapter,
-  eligibilityDigest: workspace.eligibilityDigest,
-  contractDigest: "e".repeat(64),
-  releaseEnabled: false,
-  digest: "f".repeat(64),
-  provenance: {
-    repository: "https://github.com/withAutograph/arrusted-development.git",
-    ref: "refs/heads/main",
-    method: "git-clone-v1",
-    readinessDigest: "1".repeat(64),
-  },
+  version: 4,
 } satisfies SourceReceipt;
 
 const legacyReceipt = {
   ...canonicalReceipt,
-  version: 3,
   provenance: undefined,
+  version: 3,
 } as unknown as SourceReceipt;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -87,8 +87,8 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: legacyReceipt,
+        sandbox,
         workspace,
       }),
     ).resolves.toBeUndefined();
@@ -112,17 +112,17 @@ describe("fresh bootstrap source workspace", () => {
     const { sandbox } = sandboxFixture();
 
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
 
     expect(source).toBeDefined();
     expect(calls).toEqual(["reverify", "manifest"]);
     expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
-      sandbox,
-      receipt: canonicalReceipt,
       expectedWorkspace: workspace,
+      receipt: canonicalReceipt,
+      sandbox,
     });
     expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
   });
@@ -130,8 +130,8 @@ describe("fresh bootstrap source workspace", () => {
   it("reads repository-relative source paths as binary data", async () => {
     const { readBinaryFile, sandbox } = sandboxFixture();
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
 
@@ -150,8 +150,8 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: canonicalReceipt,
+        sandbox,
         workspace,
       }),
     ).rejects.toBe(reverifyError);
@@ -166,8 +166,8 @@ describe("fresh bootstrap source workspace", () => {
 
     await expect(
       freshBootstrapSourceWorkspace({
-        sandbox,
         receipt: canonicalReceipt,
+        sandbox,
         workspace,
       }),
     ).rejects.toBe(manifestError);
@@ -178,8 +178,8 @@ describe("fresh bootstrap source workspace", () => {
   it("propagates drift discovered by the returned re-verification hook", async () => {
     const { sandbox } = sandboxFixture();
     const source = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: canonicalReceipt,
+      sandbox,
       workspace,
     });
     const driftError = new Error("canonical workspace changed after capture");

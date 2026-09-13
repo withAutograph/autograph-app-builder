@@ -211,10 +211,10 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
       return false;
     const diagnostic = {
       code,
-      path,
-      line,
       column,
+      line,
       message: diagnosticMessage(code),
+      path,
     };
     const key = JSON.stringify(diagnostic);
     if (!seen.has(key) && diagnostics.length < 50) diagnostics.push(diagnostic);
@@ -263,25 +263,25 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
 export function validationBinding(apply: TargetApplyReceipt): TargetValidationBinding {
   return {
     appId: apply.targetReceipt.appId,
-    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
-    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
-    sourceSha: apply.sourceSha,
-    sourceTree: apply.sourceTree,
-    sourceReceiptDigest: apply.sourceReceiptDigest,
-    eligibilityDigest: apply.eligibilityDigest,
-    workspaceDigest: apply.workspaceDigest,
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
+    appliedTreeDigest: apply.postTreeDigest,
+    applyDigest: apply.digest,
     artifactRevision: apply.artifactRevision,
+    changedContentDigest: apply.changedContentDigest,
+    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
+    dependencyCacheDigest: apply.dependencyCacheDigest,
     dependencyReceiptDigest: apply.dependencyReceiptDigest,
+    eligibilityDigest: apply.eligibilityDigest,
     identityDigest: apply.identityDigest,
     imageDigest: apply.imageDigest,
-    dependencyCacheDigest: apply.dependencyCacheDigest,
-    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
     proposalDigest: apply.proposalDigest,
-    applyDigest: apply.digest,
-    appliedTreeDigest: apply.postTreeDigest,
-    changedContentDigest: apply.changedContentDigest,
+    sourceReceiptDigest: apply.sourceReceiptDigest,
+    sourceSha: apply.sourceSha,
+    sourceTree: apply.sourceTree,
+    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+    workspaceDigest: apply.workspaceDigest,
   };
 }
 
@@ -291,15 +291,15 @@ export function createTargetValidationAttempt(
   startedByCallId: string,
 ): TargetValidationAttemptReceipt {
   const unsigned = {
-    version: 3 as const,
     status: "pending" as const,
+    version: 3 as const,
     ...validationBinding(apply),
     commands: supportedValidationCommands(
       apply.targetReceipt.appId,
       SUPPORTED_VALIDATION_TEST_SHARDS,
     ).map(({ command, name }) => ({
-      name,
       command,
+      name,
       validationRoot: apply.applyRoot,
     })),
     startedByCallId,
@@ -311,25 +311,25 @@ export function createTargetValidationAttempt(
 function attemptBinding(attempt: TargetValidationAttemptReceipt): TargetValidationBinding {
   return {
     appId: attempt.appId,
-    testShards: attempt.testShards,
-    appValidationSha256: attempt.appValidationSha256,
-    sourceSha: attempt.sourceSha,
-    sourceTree: attempt.sourceTree,
-    sourceReceiptDigest: attempt.sourceReceiptDigest,
-    eligibilityDigest: attempt.eligibilityDigest,
-    workspaceDigest: attempt.workspaceDigest,
     appSpecDigest: attempt.appSpecDigest,
     appSpecPath: attempt.appSpecPath,
+    appValidationSha256: attempt.appValidationSha256,
+    appliedTreeDigest: attempt.appliedTreeDigest,
+    applyDigest: attempt.applyDigest,
     artifactRevision: attempt.artifactRevision,
+    changedContentDigest: attempt.changedContentDigest,
+    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
+    dependencyCacheDigest: attempt.dependencyCacheDigest,
     dependencyReceiptDigest: attempt.dependencyReceiptDigest,
+    eligibilityDigest: attempt.eligibilityDigest,
     identityDigest: attempt.identityDigest,
     imageDigest: attempt.imageDigest,
-    dependencyCacheDigest: attempt.dependencyCacheDigest,
-    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
     proposalDigest: attempt.proposalDigest,
-    applyDigest: attempt.applyDigest,
-    appliedTreeDigest: attempt.appliedTreeDigest,
-    changedContentDigest: attempt.changedContentDigest,
+    sourceReceiptDigest: attempt.sourceReceiptDigest,
+    sourceSha: attempt.sourceSha,
+    sourceTree: attempt.sourceTree,
+    testShards: attempt.testShards,
+    workspaceDigest: attempt.workspaceDigest,
   };
 }
 
@@ -358,8 +358,8 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
       const built = await run("build");
       return {
         exitCode: built.exitCode,
-        stdout: `${checked.stdout}\n${built.stdout}`,
         stderr: `${checked.stderr}\n${built.stderr}`,
+        stdout: `${checked.stdout}\n${built.stdout}`,
       };
     }
     return await run("test");
@@ -371,8 +371,8 @@ export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async ({ appId, command }) =>
     appId === "validation-failure" && command.startsWith("mise run app:check-build ")
-      ? { exitCode: 1, stdout: "", stderr: "fixture validation failure" }
-      : { exitCode: 0, stdout: `${command} passed`, stderr: "" };
+      ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
+      : { exitCode: 0, stderr: "", stdout: `${command} passed` };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -387,12 +387,12 @@ function failureReceipt(
   const unsigned = {
     version: 3 as const,
     ...attemptBinding(attempt),
-    status: "failed" as const,
     attemptDigest: attempt.digest,
     commands,
-    validatedByCallId: attempt.startedByCallId,
     reason,
     recoveryRequired: true as const,
+    status: "failed" as const,
+    validatedByCallId: attempt.startedByCallId,
     ...(commandFailure === undefined ? {} : { commandFailure }),
     ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
     ...(output === undefined ? {} : { output }),
@@ -416,9 +416,9 @@ export async function executeProposalBoundValidation(input: {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       result = await input.executor({
-        sandbox: input.sandbox,
         appId: input.appId,
         command: planned.command,
+        sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
       });
     } catch (error) {
@@ -435,10 +435,10 @@ export async function executeProposalBoundValidation(input: {
     }
     const commandReceipt = {
       ...planned,
-      inputTreeDigest: input.apply.postTreeDigest,
       exitCode: result.exitCode,
-      stdoutDigest: sha256(result.stdout),
+      inputTreeDigest: input.apply.postTreeDigest,
       stderrDigest: sha256(result.stderr),
+      stdoutDigest: sha256(result.stdout),
     };
     commands.push(commandReceipt);
     if (result.exitCode !== 0)
@@ -449,8 +449,8 @@ export async function executeProposalBoundValidation(input: {
           commands,
           "command-failed",
           {
-            name: planned.name,
             exitCode: result.exitCode,
+            name: planned.name,
             ...(/(?:script not found|missing script)/iu.test(`${result.stderr}\n${result.stdout}`)
               ? {
                   hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
@@ -465,9 +465,9 @@ export async function executeProposalBoundValidation(input: {
   const unsigned = {
     version: 3 as const,
     ...attemptBinding(input.attempt),
-    status: "passed" as const,
     attemptDigest: input.attempt.digest,
     commands,
+    status: "passed" as const,
     validatedByCallId: input.attempt.startedByCallId,
   };
   return {

@@ -9,28 +9,28 @@ import {
 describe("hosted PostgreSQL connection policy", () => {
   it("keeps runtime and task pools bounded with finite lifetimes", () => {
     expect(hostedRuntimePostgresOptions).toMatchObject({
-      max: 5,
       connect_timeout: 5,
+      connection: {
+        idle_in_transaction_session_timeout: 30_000,
+        lock_timeout: 5000,
+        statement_timeout: 30_000,
+      },
       idle_timeout: 20,
+      max: 5,
       max_lifetime: 300,
       prepare: false,
-      connection: {
-        statement_timeout: 30_000,
-        lock_timeout: 5000,
-        idle_in_transaction_session_timeout: 30_000,
-      },
     });
     expect(hostedTaskPostgresOptions).toMatchObject({
-      max: 1,
       connect_timeout: 5,
+      connection: {
+        idle_in_transaction_session_timeout: 15_000,
+        lock_timeout: 5000,
+        statement_timeout: 15_000,
+      },
       idle_timeout: 5,
+      max: 1,
       max_lifetime: 60,
       prepare: false,
-      connection: {
-        statement_timeout: 15_000,
-        lock_timeout: 5000,
-        idle_in_transaction_session_timeout: 15_000,
-      },
     });
   });
 

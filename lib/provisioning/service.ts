@@ -74,8 +74,8 @@ export async function executeBuilderProvisioning(input: {
   const now = input.dependencies.now ?? Date.now;
   const reserved = await input.dependencies.journal.reserve({
     authority: input.authority,
-    request,
     now: new Date(now()),
+    request,
   });
   if (!sameIntent(request, reserved.record.request)) throw new Error("provision-request-id-reused");
   const existing = reserved.record.response[request.operation];
@@ -83,10 +83,10 @@ export async function executeBuilderProvisioning(input: {
 
   const leaseId = (input.dependencies.leaseId ?? randomUUID)();
   const leased = await updateBuilderProvisionJournal({
-    store: input.dependencies.journal,
     authority: input.authority,
-    requestId: request.requestId,
     now,
+    requestId: request.requestId,
+    store: input.dependencies.journal,
     update(current) {
       const operation = current.operations[request.operation];
       if (
@@ -105,10 +105,10 @@ export async function executeBuilderProvisioning(input: {
 
   const persist = async (kind: "candidate" | "absent", candidate: string) => {
     await updateBuilderProvisionJournal({
-      store: input.dependencies.journal,
       authority: input.authority,
-      requestId: request.requestId,
       now,
+      requestId: request.requestId,
+      store: input.dependencies.journal,
       update(current) {
         const values =
           kind === "candidate"
@@ -136,36 +136,36 @@ export async function executeBuilderProvisioning(input: {
         });
         if (!current) throw new Error("provision-journal-missing");
         result = await provisionGitHubRepository({
-          config: input.dependencies.githubConfig,
           authority: input.authority,
-          installation,
+          config: input.dependencies.githubConfig,
           credentialStore: input.dependencies.githubCredentials,
+          fetch: input.dependencies.fetch,
+          installation,
+          now,
+          persistAbsent: (candidate) => persist("absent", candidate),
+          persistCandidate: (candidate) => persist("candidate", candidate),
+          persistedAbsentCandidates: current.record.operations.github.absentCandidates,
+          persistedCandidates: current.record.operations.github.candidates,
+          private: request.repository.private,
           requestId: request.requestId,
           requestedName: request.repository.name,
-          private: request.repository.private,
           source,
-          persistedCandidates: current.record.operations.github.candidates,
-          persistedAbsentCandidates: current.record.operations.github.absentCandidates,
-          persistCandidate: (candidate) => persist("candidate", candidate),
-          persistAbsent: (candidate) => persist("absent", candidate),
-          fetch: input.dependencies.fetch,
-          now,
         });
       } catch (error) {
         result = {
-          status: "failed",
           code:
             error instanceof Error && error.message.includes("mismatch")
               ? "source_mismatch"
               : "source_unavailable",
           retryable: true,
+          status: "failed",
         };
       }
     } else {
       result = {
-        status: "failed",
         code: "installation_inactive",
         retryable: true,
+        status: "failed",
       };
     }
   } else {
@@ -174,22 +174,24 @@ export async function executeBuilderProvisioning(input: {
       requestId: request.requestId,
     });
     if (!current) throw new Error("provision-journal-missing");
+    const { vercelInstallationId } = request.providers;
+    if (vercelInstallationId === undefined) throw new Error("vercel-installation-missing");
     const credential = await input.dependencies.readVercelCredential({
       authority: input.authority,
-      installationId: request.providers.vercelInstallationId!,
+      installationId: vercelInstallationId,
     });
     if (credential?.binding.active) {
       result = await provisionVercelProject({
-        installation: credential.binding,
-        token: credential.token,
         appId: current.record.response.appId,
+        fetch: input.dependencies.fetch,
         github: current.record.response.github,
         githubSelected: request.providers.githubInstallationId !== undefined,
-        persistedCandidates: current.record.operations.vercel.candidates,
-        persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
-        persistCandidate: (candidate) => persist("candidate", candidate),
+        installation: credential.binding,
         persistAbsent: (candidate) => persist("absent", candidate),
-        fetch: input.dependencies.fetch,
+        persistCandidate: (candidate) => persist("candidate", candidate),
+        persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
+        persistedCandidates: current.record.operations.vercel.candidates,
+        token: credential.token,
       });
       if (result.status === "failed" && result.code === "credential_unavailable") {
         await input.dependencies.deactivateVercelInstallation(
@@ -199,18 +201,18 @@ export async function executeBuilderProvisioning(input: {
       }
     } else {
       result = {
-        status: "failed",
         code: "installation_inactive",
         retryable: true,
+        status: "failed",
       };
     }
   }
 
   const completed = await updateBuilderProvisionJournal({
-    store: input.dependencies.journal,
     authority: input.authority,
-    requestId: request.requestId,
     now,
+    requestId: request.requestId,
+    store: input.dependencies.journal,
     update(current) {
       if (request.operation === "github")
         current.response.github = githubProvisionResultSchema.parse(result);
@@ -222,9 +224,9 @@ export async function executeBuilderProvisioning(input: {
         current.response.vercel.code === "github_required"
       ) {
         current.response.vercel = {
-          status: "failed",
           code: "provider_unavailable",
           retryable: true,
+          status: "failed",
         };
         current.operations.vercel.attempted = false;
       }

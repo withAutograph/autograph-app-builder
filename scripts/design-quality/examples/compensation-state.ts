@@ -38,22 +38,18 @@ export type CompensationAction =
   | { type: "clear-decision" }
   | { type: "reset"; fixture: CompensationFixture };
 
-export function compensationAssumptions(fixture: CompensationFixture): CompensationAssumptions {
-  return {
-    ...fixture.proposal,
-    ...fixture.comparison,
-  };
-}
+export const compensationAssumptions = (fixture: CompensationFixture): CompensationAssumptions => ({
+  ...fixture.proposal,
+  ...fixture.comparison,
+});
 
-export function initialCompensationState(fixture: CompensationFixture): CompensationState {
-  return {
-    assumptions: compensationAssumptions(fixture),
-    assumptionsApplied: true,
-    decision: "none",
-  };
-}
+export const initialCompensationState = (fixture: CompensationFixture): CompensationState => ({
+  assumptions: compensationAssumptions(fixture),
+  assumptionsApplied: true,
+  decision: "none",
+});
 
-export function validateCompensation(input: CompensationAssumptions) {
+export const validateCompensation = (input: CompensationAssumptions) => {
   const errors: Partial<Record<keyof CompensationAssumptions, string>> = {};
   for (const field of ["baseSalary", "targetBonus", "annualBenefits", "bandMidpoint"] as const) {
     if (!Number.isFinite(input[field]) || input[field] < 0)
@@ -74,9 +70,9 @@ export function validateCompensation(input: CompensationAssumptions) {
   )
     errors.plannedIncrease = "Enter a percentage from -100 to 100.";
   return errors;
-}
+};
 
-export function calculateCompensation(input: CompensationAssumptions) {
+export const calculateCompensation = (input: CompensationAssumptions) => {
   if (Object.keys(validateCompensation(input)).length > 0) return;
   const currentTax = Math.round(input.baseSalary * input.employerTaxRate);
   const proposedBase = Math.round(input.baseSalary * (1 + input.plannedIncrease));
@@ -87,16 +83,16 @@ export function calculateCompensation(input: CompensationAssumptions) {
     currentTax,
     currentTotal,
     proposedBase,
+    proposedMidpointDelta: proposedBase - input.bandMidpoint,
     proposedTax,
     proposedTotal,
-    proposedMidpointDelta: proposedBase - input.bandMidpoint,
   };
-}
+};
 
-export function reduceCompensationState(
+export const reduceCompensationState = (
   state: CompensationState,
   action: CompensationAction,
-): CompensationState {
+): CompensationState => {
   if (action.type === "assumption-changed")
     return {
       assumptions: { ...state.assumptions, [action.field]: action.value },
@@ -113,17 +109,16 @@ export function reduceCompensationState(
     return state.assumptionsApplied ? { ...state, decision: "held" } : state;
   if (action.type === "clear-decision") return { ...state, decision: "none" };
   return initialCompensationState(action.fixture);
-}
+};
 
-export function compensationDecisionModel(state: CompensationState) {
+export const compensationDecisionModel = (state: CompensationState) => {
+  let status: string | undefined;
+  if (state.decision === "recommended") status = "Planning recommendation recorded in this preview";
+  else if (state.decision === "held") status = "Draft kept for further review";
+
   return {
-    status:
-      state.decision === "recommended"
-        ? "Planning recommendation recorded in this preview"
-        : state.decision === "held"
-          ? "Draft kept for further review"
-          : undefined,
     primaryLabel:
       state.decision === "recommended" ? "Recommended in preview" : "Recommend for planning",
+    status,
   };
-}
+};

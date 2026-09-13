@@ -1,12 +1,12 @@
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import {
   ensureLocalDevelopmentOidc,
   LocalOidcRefreshFailedError,
 } from "../../../../lib/development/local-oidc-startup";
 
-const repositoryRoot = resolve(import.meta.dirname, "../../../../");
+const repositoryRoot = path.resolve(import.meta.dirname, "../../../../");
 if (
   process.cwd() !== repositoryRoot ||
   realpathSync(process.cwd()) !== repositoryRoot ||
@@ -16,10 +16,12 @@ if (
 }
 
 try {
+  const [vercelExecutable, miseExecutable] = process.argv.slice(2) as [string, string];
+
   ensureLocalDevelopmentOidc({
+    miseExecutable,
     repositoryRoot,
-    vercelExecutable: process.argv[2]!,
-    miseExecutable: process.argv[3]!,
+    vercelExecutable,
   });
 } catch (error) {
   if (error instanceof LocalOidcRefreshFailedError) {

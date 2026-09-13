@@ -14,10 +14,10 @@ import {
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_one",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user_one",
+  workspaceId: "workspace_one",
 } as const;
 
 const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -27,12 +27,12 @@ function pendingReceipt(
   overrides: Partial<Omit<GitHubMutationReceipt, "version" | "kind" | "status" | "digest">> = {},
 ) {
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: "draft-pull-request" as const,
-    status: "pending" as const,
-    proposalDigest: "a".repeat(64),
-    idempotencyKey: "b".repeat(64),
     approvedByCallId: "approval-call",
+    idempotencyKey: "b".repeat(64),
+    kind: "draft-pull-request" as const,
+    proposalDigest: "a".repeat(64),
+    status: "pending" as const,
+    version: GITHUB_PUBLICATION_VERSION,
     ...overrides,
   };
   return { ...unsigned, digest: sha256(unsigned) };
@@ -41,13 +41,13 @@ function pendingReceipt(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function journalRow(receipt = pendingReceipt()) {
   return {
-    proposalDigest: receipt.proposalDigest,
-    receiptDigest: receipt.digest,
+    createdAt: new Date("2026-08-27T00:00:00.000Z"),
     idempotencyKey: receipt.idempotencyKey,
     kind: receipt.kind,
-    status: receipt.status,
+    proposalDigest: receipt.proposalDigest,
+    receiptDigest: receipt.digest,
     record: receipt,
-    createdAt: new Date("2026-08-27T00:00:00.000Z"),
+    status: receipt.status,
     updatedAt: new Date("2026-08-27T00:01:00.000Z"),
   };
 }
@@ -77,14 +77,14 @@ function databaseFixture(input: {
   const update = vi.fn(() => ({ set }));
 
   return {
-    database: { select, insert, update } as unknown as Database,
-    select,
-    limit,
+    database: { insert, select, update } as unknown as Database,
     insert,
-    values,
+    limit,
     onConflictDoNothing,
-    update,
+    select,
     set,
+    update,
+    values,
     whereUpdate,
   };
 }

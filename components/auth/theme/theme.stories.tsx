@@ -18,12 +18,12 @@ function ThemeControls() {
 }
 
 const meta = {
-  title: "Components/Auth/Theme Controls",
   component: ThemeControls,
   parameters: {
     authSession: storybookAuthenticatedSession,
     layout: "fullscreen",
   },
+  title: "Components/Auth/Theme Controls",
 } satisfies Meta<typeof ThemeControls>;
 
 export default meta;

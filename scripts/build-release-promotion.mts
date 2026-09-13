@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import path from "node:path";
 
 import { z } from "zod";
 
@@ -19,7 +19,7 @@ const option = (name: string) => {
   return value;
 };
 
-const repositoryRoot = await realpath(resolve("."));
+const repositoryRoot = await realpath(path.resolve("."));
 const outputInput = option("--output");
 const endpoint = `${releaseEndpoint(option("--endpoint"))}/mcp`;
 const deploymentUrl = new URL(option("--deployment-url"));
@@ -31,9 +31,9 @@ if (
   deploymentUrl.hash
 )
   throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
-if (!isAbsolute(outputInput)) throw new Error("Release output must be absolute.");
-const outputParent = await realpath(resolve(outputInput, ".."));
-const output = join(outputParent, basename(outputInput));
+if (!path.isAbsolute(outputInput)) throw new Error("Release output must be absolute.");
+const outputParent = await realpath(path.resolve(outputInput, ".."));
+const output = path.join(outputParent, path.basename(outputInput));
 try {
   await lstat(output);
   throw new Error(`Release output already exists: ${output}`);
@@ -46,10 +46,10 @@ const git = (...args: string[]) =>
   execFileSync("/usr/bin/git", ["-C", repositoryRoot, ...args], {
     encoding: "utf-8",
     env: {
-      PATH: "/usr/bin:/bin",
-      LC_ALL: "C",
       HOME: process.env.HOME,
+      LC_ALL: "C",
       NODE_ENV: "production",
+      PATH: "/usr/bin:/bin",
     },
   }).trim();
 if (git("status", "--porcelain=v1", "--untracked-files=all") !== "")
@@ -63,8 +63,9 @@ gitObject.parse(source.sha);
 gitObject.parse(source.tree);
 
 const node = process.env.APP_BUILDER_RELEASE_NODE_BIN;
-if (!node || !isAbsolute(node)) throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
-const packageRoot = join(output, "package");
+if (!node || !path.isAbsolute(node))
+  throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
+const packageRoot = path.join(output, "package");
 execFileSync(
   node,
   [
@@ -78,7 +79,7 @@ execFileSync(
   ],
   { cwd: repositoryRoot, env: process.env, stdio: "inherit" },
 );
-const installRoot = join(output, ".portable-install");
+const installRoot = path.join(output, ".portable-install");
 await mkdir(installRoot, { mode: 0o700 });
 for (const client of ["codex", "vscode", "cursor"]) {
   execFileSync(
@@ -98,8 +99,8 @@ for (const client of ["codex", "vscode", "cursor"]) {
   );
 }
 const portable = await verifyPortableProofArtifact({
-  releaseRoot: packageRoot,
   installRoot,
+  releaseRoot: packageRoot,
   repositoryRoot,
 });
 if (JSON.stringify(portable.receipt.tools) !== JSON.stringify(TOOL_NAMES))
@@ -118,48 +119,52 @@ const response = await fetch(`${new URL(endpoint).origin}/healthz`, {
 if (!response.ok) throw new Error("Canonical release health check failed.");
 const health = Buffer.from(await response.arrayBuffer());
 const digest = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
-const packageReceipt = await readFile(join(packageRoot, "release-receipt.json"));
-const checksums = await readFile(join(packageRoot, "SHA256SUMS"));
-const archive = await readFile(join(packageRoot, portable.receipt.archive.name));
+const packageReceipt = await readFile(path.join(packageRoot, "release-receipt.json"));
+const checksums = await readFile(path.join(packageRoot, "SHA256SUMS"));
+const archive = await readFile(path.join(packageRoot, portable.receipt.archive.name));
 const marketplaceArchive = await readFile(
-  join(packageRoot, portable.receipt.codexMarketplaceArchive.name),
+  path.join(packageRoot, portable.receipt.codexMarketplaceArchive.name),
 );
 const unsigned = {
-  format: "autograph-release-promotion-v2",
-  source,
+  bindings: {
+    authentication: "vercel-project-oidc",
+    deployment: "vercel-git",
+    execution: "vercel-sandbox",
+    marketplace: "immutable-release",
+  },
+  deployment: {
+    canonicalOrigin: new URL(endpoint).origin,
+    deploymentUrl: deploymentUrl.origin,
+    environment: "Production",
+    healthSha256: digest(health),
+    projectId: "prj_PpmXwhXGuNLAj7HHlkC1j6n3u1SY",
+    provider: "vercel-git",
+    sourceSha: source.sha,
+  },
   endpoint,
-  tools: [...TOOL_NAMES],
+  format: "autograph-release-promotion-v2",
   package: {
-    version: portable.receipt.version,
     archive: portable.receipt.archive.name,
     archiveSha256: digest(archive),
+    checksums: "SHA256SUMS",
+    checksumsSha256: digest(checksums),
     marketplaceArchive: portable.receipt.codexMarketplaceArchive.name,
     marketplaceArchiveSha256: digest(marketplaceArchive),
     receipt: "release-receipt.json",
     receiptSha256: digest(packageReceipt),
-    checksums: "SHA256SUMS",
-    checksumsSha256: digest(checksums),
+    version: portable.receipt.version,
   },
-  deployment: {
-    provider: "vercel-git",
-    projectId: "prj_PpmXwhXGuNLAj7HHlkC1j6n3u1SY",
-    environment: "Production",
-    sourceSha: source.sha,
-    deploymentUrl: deploymentUrl.origin,
-    canonicalOrigin: new URL(endpoint).origin,
-    healthSha256: digest(health),
-  },
-  bindings: {
-    execution: "vercel-sandbox",
-    authentication: "vercel-project-oidc",
-    deployment: "vercel-git",
-    marketplace: "immutable-release",
-  },
+  source,
+  tools: [...TOOL_NAMES],
 };
 const receipt = { ...unsigned, digest: digest(JSON.stringify(unsigned)) };
 hash.parse(receipt.digest);
-await writeFile(join(output, "promotion-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, {
-  mode: 0o600,
-  flag: "wx",
-});
+await writeFile(
+  path.join(output, "promotion-receipt.json"),
+  `${JSON.stringify(receipt, null, 2)}\n`,
+  {
+    flag: "wx",
+    mode: 0o600,
+  },
+);
 console.log(`Release candidate proved: ${receipt.digest}`);

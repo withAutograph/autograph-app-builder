@@ -17,7 +17,7 @@ export default defineEval({
     await t.send("Run target identity and planning.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.notCalledTool("plan_app_creation");
+    t.notCalledTool("plan-app-creation");
     t.check(t.reply, includes("private preview"));
     t.check(
       t.reply,
@@ -29,7 +29,7 @@ export default defineEval({
       ),
     );
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
     await t.send("Report artifact workflow status.");
     t.succeeded();
     t.check(t.reply, includes('"phase":"planned"'));

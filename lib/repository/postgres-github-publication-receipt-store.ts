@@ -13,13 +13,13 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const journalRowSchema = z
   .object({
-    proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    createdAt: z.date(),
     idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
     kind: z.enum(["fresh-repository", "draft-pull-request"]),
-    status: z.enum(["pending", "failed", "succeeded"]),
+    proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     record: z.unknown(),
-    createdAt: z.date(),
+    status: z.enum(["pending", "failed", "succeeded"]),
     updatedAt: z.date(),
   })
   .strict();
@@ -46,13 +46,13 @@ export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutation
 function journalValues(receipt: GitHubMutationReceipt, now: Date) {
   assertCanonicalGitHubMutationReceipt(receipt);
   return {
-    proposalDigest: receipt.proposalDigest,
-    receiptDigest: receipt.digest,
+    createdAt: now,
     idempotencyKey: receipt.idempotencyKey,
     kind: receipt.kind,
-    status: receipt.status,
+    proposalDigest: receipt.proposalDigest,
+    receiptDigest: receipt.digest,
     record: receipt,
-    createdAt: now,
+    status: receipt.status,
     updatedAt: now,
   };
 }
@@ -74,20 +74,6 @@ export function createPostgresGitHubPublicationReceiptStore(
     eq(hostedGitHubPublicationJournals.ownerUserId, authority.ownerUserId),
   );
   return {
-    async read(proposalDigest) {
-      if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
-        throw new Error("GitHub proposal digest is invalid.");
-      }
-      const rows = await database
-        .select()
-        .from(hostedGitHubPublicationJournals)
-        .where(
-          and(tenantPredicate, eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)),
-        )
-        .limit(1);
-      return rows[0] === undefined ? undefined : parseGitHubPublicationJournalRow(rows[0]);
-    },
-
     async compareAndSet(proposalDigest, expectedDigest, receipt) {
       if (
         !/^[0-9a-f]{64}$/u.test(proposalDigest) ||
@@ -114,11 +100,11 @@ export function createPostgresGitHubPublicationReceiptStore(
       const updated = await database
         .update(hostedGitHubPublicationJournals)
         .set({
-          receiptDigest: values.receiptDigest,
           idempotencyKey: values.idempotencyKey,
           kind: values.kind,
-          status: values.status,
+          receiptDigest: values.receiptDigest,
           record: values.record,
+          status: values.status,
           updatedAt: values.updatedAt,
         })
         .where(
@@ -134,6 +120,20 @@ export function createPostgresGitHubPublicationReceiptStore(
           proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
         });
       return updated.length === 1;
+    },
+
+    async read(proposalDigest) {
+      if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
+        throw new Error("GitHub proposal digest is invalid.");
+      }
+      const rows = await database
+        .select()
+        .from(hostedGitHubPublicationJournals)
+        .where(
+          and(tenantPredicate, eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)),
+        )
+        .limit(1);
+      return rows[0] === undefined ? undefined : parseGitHubPublicationJournalRow(rows[0]);
     },
   };
 }

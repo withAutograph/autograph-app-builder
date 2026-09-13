@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import pathModule from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -24,6 +24,7 @@ import {
   waitForDevelopmentSourceChange,
 } from "./local-mode";
 
+const { join } = pathModule;
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -31,18 +32,18 @@ afterEach(async () => {
   // Keep filesystem fixtures scoped to this local-mode test.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
-    await chmod(path, 0o700).catch(() => undefined);
+    await chmod(path, 0o700).catch(() => {});
     for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (entry.isDirectory()) await makeWritable(join(path, entry.name));
       else if (!entry.isSymbolicLink())
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await chmod(join(path, entry.name), 0o600).catch(() => undefined);
+        await chmod(join(path, entry.name), 0o600).catch(() => {});
     }
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
-    roots.splice(0).map((root) => removePath(root, { recursive: true, force: true })),
+    roots.splice(0).map((root) => removePath(root, { force: true, recursive: true })),
   );
 });
 
@@ -61,10 +62,10 @@ async function fixture() {
     execFileSync("/usr/bin/git", args, {
       cwd: root,
       env: {
-        PATH: "/usr/bin:/bin",
         HOME: "/dev/null",
         LC_ALL: "C",
         NODE_ENV: "test",
+        PATH: "/usr/bin:/bin",
       },
     });
   git("init", "-q");
@@ -107,8 +108,8 @@ describe("development source snapshots", () => {
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot,
+      sourceRoot: source,
     });
     expect(await readFile(join(snapshot.root, "plugin/tracked.txt"), "utf-8")).toBe("dirty");
     expect(await readFile(join(snapshot.root, "plugin/not-initialized.txt"), "utf-8")).toBe(
@@ -129,16 +130,18 @@ describe("development source snapshots", () => {
     await chmod(runRoot, 0o700);
 
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot,
+      sourceRoot: source,
     });
 
     expect(await readFile(join(snapshot.root, "README.md"), "utf-8")).toBe("dirty\n");
     expect(await readFile(join(snapshot.root, "new-file.ts"), "utf-8")).toContain("fresh");
+    const snapshotRootStats = await stat(snapshot.root);
+    const readmeStats = await stat(join(snapshot.root, "README.md"));
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission-mode bitmask.
-    expect((await stat(snapshot.root)).mode & 0o777).toBe(0o700);
+    expect(snapshotRootStats.mode & 0o777).toBe(0o700);
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission-mode bitmask.
-    expect((await stat(join(snapshot.root, "README.md"))).mode & 0o777).toBe(0o600);
+    expect(readmeStats.mode & 0o777).toBe(0o600);
     expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(source));
     expect(snapshot.commit).toMatch(/^[0-9a-f]{40}$/u);
   });
@@ -158,13 +161,13 @@ describe("development source snapshots", () => {
     await chmod(firstRunRoot, 0o700);
     await chmod(secondRunRoot, 0o700);
     const first = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot: firstRunRoot,
+      sourceRoot: source,
     });
     await writeFile(join(source, "README.md"), "changed after first plan\n");
     const second = await createDevelopmentSnapshot({
-      sourceRoot: source,
       runRoot: secondRunRoot,
+      sourceRoot: source,
     });
 
     expect(second.fingerprint).not.toBe(first.fingerprint);
@@ -193,21 +196,21 @@ describe("development source snapshots", () => {
     const source = await fixture();
     const expectedFingerprint = await fingerprintDevelopmentSource(source);
     const changed = waitForDevelopmentSourceChange({
-      sourceRoot: source,
-      expectedFingerprint,
-      debounceMs: 5,
       auditMs: 50,
+      debounceMs: 5,
+      expectedFingerprint,
+      sourceRoot: source,
     });
     await writeFile(join(source, "README.md"), "changed during run\n");
     await expect(changed).resolves.toBe(true);
 
     const controller = new AbortController();
     const stopped = waitForDevelopmentSourceChange({
-      sourceRoot: source,
+      auditMs: 50,
+      debounceMs: 5,
       expectedFingerprint: await fingerprintDevelopmentSource(source),
       signal: controller.signal,
-      debounceMs: 5,
-      auditMs: 50,
+      sourceRoot: source,
     });
     controller.abort();
     await expect(stopped).resolves.toBe(false);
@@ -219,43 +222,43 @@ describe("development dependency key", () => {
     expect(DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION).toBe(2);
     const source = await fixture();
     const tools = {
-      node: "24.18.0",
       bun: "1.3.14",
       mise: "2026.8.12",
+      node: "24.18.0",
       rust: "1.97.1",
     };
     const first = await developmentDependencyKey({
-      sourceRoot: source,
       platform: "linux/arm64",
+      sourceRoot: source,
       tools,
     });
     await writeFile(join(source, "README.md"), "ordinary source edit\n");
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools,
       }),
     ).toBe(first);
     await writeFile(join(source, "bun.lock"), "changed lock\n");
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools,
       }),
     ).not.toBe(first);
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/amd64",
+        sourceRoot: source,
         tools,
       }),
     ).not.toBe(first);
     expect(
       await developmentDependencyKey({
-        sourceRoot: source,
         platform: "linux/arm64",
+        sourceRoot: source,
         tools: { ...tools, rust: "1.97.2" },
       }),
     ).not.toBe(first);
@@ -275,8 +278,8 @@ describe("development CLI", () => {
     ).toThrow(/unsupported/u);
     expect(parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"])).toMatchObject({
       arrustedRoot: "/tmp/arrusted",
-      nextPort: 3000,
       evePort: 2000,
+      nextPort: 3000,
     });
   });
 });

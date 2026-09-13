@@ -13,20 +13,6 @@ export function createPostgresGitHubInstallationAuthorizationStateStore(
   database: Database,
 ): GitHubInstallationAuthorizationStateStore {
   return {
-    async create(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      await database.insert(githubInstallationAuthorizationStates).values({
-        stateDigest: input.stateDigest,
-        ...authority,
-        authorityDigest: input.authorityDigest,
-        createdAt: input.createdAt,
-        expiresAt: input.expiresAt,
-        returnTo: input.returnState.returnTo,
-        resumeKey: input.returnState.resumeKey ?? null,
-        consumedAt: null,
-      });
-    },
-
     async consume(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const rows = await database
@@ -48,6 +34,20 @@ export function createPostgresGitHubInstallationAuthorizationStateStore(
           stateDigest: githubInstallationAuthorizationStates.stateDigest,
         });
       return rows.length === 1;
+    },
+
+    async create(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      await database.insert(githubInstallationAuthorizationStates).values({
+        ...authority,
+        authorityDigest: input.authorityDigest,
+        consumedAt: null,
+        createdAt: input.createdAt,
+        expiresAt: input.expiresAt,
+        resumeKey: input.returnState.resumeKey ?? null,
+        returnTo: input.returnState.returnTo,
+        stateDigest: input.stateDigest,
+      });
     },
   };
 }

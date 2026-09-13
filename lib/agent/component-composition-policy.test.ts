@@ -6,15 +6,15 @@ import {
 } from "./component-composition-policy";
 
 const manifest = JSON.stringify({
-  version: 1,
   kind: "arrusted-component-composition-v1",
-  publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
-  tokenEntrypoints: ["@autograph/design-system/tokens.css"],
   providers: ["@autograph/components/providers"],
+  publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
   routeGlue: {
     allowedFiles: ["app/layout.tsx", "app/page.tsx"],
     allowedStyleFiles: [],
   },
+  tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+  version: 1,
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -31,9 +31,9 @@ function binding() {
 describe("Arrusted component composition policy", () => {
   it("binds the target-owned manifest to the exact selected source", () => {
     expect(binding()).toMatchObject({
+      policy: { kind: "arrusted-component-composition-v1" },
       sourceSha: "a".repeat(40),
       sourceTree: "b".repeat(40),
-      policy: { kind: "arrusted-component-composition-v1" },
     });
   });
 
@@ -61,9 +61,9 @@ describe("Arrusted component composition policy", () => {
         binding: binding(),
         files: [
           {
-            path: "apps/vendor-onboarding/app/page.tsx",
             content:
               'import { KpiCard } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\nexport default function Page() { return <KpiCard icon={Check} title="Ready" value={3} />; }\n',
+            path: "apps/vendor-onboarding/app/page.tsx",
           },
         ],
       }),
@@ -93,7 +93,7 @@ describe("Arrusted component composition policy", () => {
     const result = auditAppliedAppComposition({
       appId: "vendor-onboarding",
       binding: binding(),
-      files: [{ path, content }],
+      files: [{ content, path }],
     });
     expect(result.status).toBe("failed");
     if (result.status === "failed")

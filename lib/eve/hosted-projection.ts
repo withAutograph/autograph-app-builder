@@ -14,11 +14,11 @@ import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
   .object({
-    status: sessionStatusSchema,
     events: z.array(z.unknown()).max(100_000),
-    prototype: publicPrototypeSchema.optional(),
-    uiPreview: publicUiPreviewSchema.optional(),
     implementationPlan: publicImplementationPlanSchema.optional(),
+    prototype: publicPrototypeSchema.optional(),
+    status: sessionStatusSchema,
+    uiPreview: publicUiPreviewSchema.optional(),
   })
   .strict();
 
@@ -48,10 +48,10 @@ export function projectHostedSnapshot(
     ),
   );
   return eveSessionResultSchema.parse({
-    sessionId,
-    status: snapshot.status,
     cursor: Math.min(cursor + events.length, projected.length),
     events,
+    sessionId,
+    status: snapshot.status,
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
     ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),

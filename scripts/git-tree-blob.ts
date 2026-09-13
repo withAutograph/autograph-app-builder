@@ -7,10 +7,10 @@ function git(repositoryRoot: string, args: string[]) {
   return execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
     env: {
-      PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
       LC_ALL: "C",
       NODE_ENV: "production",
+      PATH: "/usr/bin:/bin",
     },
     maxBuffer: 16 * 1024 * 1024,
   });

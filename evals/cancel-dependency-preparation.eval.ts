@@ -16,11 +16,11 @@ export default defineEval({
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.notCalledTool("prepare_target_dependencies");
+    t.notCalledTool("prepare-target-dependencies");
     t.check(t.reply, includes("already available"));
-    t.notCalledTool("plan_app_creation");
+    t.notCalledTool("plan-app-creation");
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();

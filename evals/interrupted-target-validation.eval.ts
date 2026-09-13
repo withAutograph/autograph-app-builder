@@ -25,7 +25,7 @@ export default defineEval({
     t.check(t.reply, includes("checks did not finish"));
     t.check(t.reply, includes("preview still needs review"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
@@ -37,6 +37,6 @@ export default defineEval({
     t.notEvent("input.requested");
     t.check(t.reply, includes("checks did not finish"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

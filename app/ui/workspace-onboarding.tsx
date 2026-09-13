@@ -5,23 +5,23 @@ import type { WorkspaceOnboardingFailure } from "@/lib/auth/workspace-onboarding
 import styles from "./app-builder.module.css";
 
 const content = {
-  "workspace-setup-retry": {
-    title: "We couldn’t finish setting up your workspace",
-    description:
-      "Try again. Your progress is safe, and retrying won’t create a duplicate workspace.",
-    action: "Try again",
-  },
-  "workspace-ambiguous": {
-    title: "Choose your Autograph workspace",
-    description:
-      "We found more than one workspace for this account. Contact support to choose the one you want to use.",
-    action: "Try again",
-  },
   "access-denied": {
-    title: "Your workspace isn’t available",
+    action: "Try again",
     description:
       "This account can’t access an Autograph workspace. Sign out and use another account, or contact support.",
+    title: "Your workspace isn’t available",
+  },
+  "workspace-ambiguous": {
     action: "Try again",
+    description:
+      "We found more than one workspace for this account. Contact support to choose the one you want to use.",
+    title: "Choose your Autograph workspace",
+  },
+  "workspace-setup-retry": {
+    action: "Try again",
+    description:
+      "Try again. Your progress is safe, and retrying won’t create a duplicate workspace.",
+    title: "We couldn’t finish setting up your workspace",
   },
 } satisfies Record<
   WorkspaceOnboardingFailure,

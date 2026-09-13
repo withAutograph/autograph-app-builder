@@ -21,11 +21,11 @@ async function release(
   if (!isHostedSandboxExecutionEnabled(environment)) return;
   try {
     await releaseHostedSandboxExecutionLease({
-      sessionId: ctx.session.id,
-      sessionAuth: ctx.session.auth,
-      sandbox: await ctx.getSandbox(),
       environment,
       reason,
+      sandbox: await ctx.getSandbox(),
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
     });
   } catch {
     // The hard provider timeout remains authoritative. Keep the durable lease
@@ -35,30 +35,30 @@ async function release(
 
 export default defineHook({
   events: {
-    async "turn.started"(_event, ctx) {
-      const environment = process.env;
-      if (!isHostedSandboxExecutionEnabled(environment)) return;
-      await acquireHostedSandboxExecutionLease({
-        sessionId: ctx.session.id,
-        sessionAuth: ctx.session.auth,
-        sandbox: await ctx.getSandbox(),
-        environment,
-      });
-    },
-    "turn.completed"(_event, ctx) {
-      return release(ctx, "turn-completed");
-    },
-    "turn.cancelled"(_event, ctx) {
-      return release(ctx, "turn-cancelled");
-    },
-    "turn.failed"(_event, ctx) {
-      return release(ctx, "turn-failed");
-    },
     "session.completed"(_event, ctx) {
       return release(ctx, "session-completed");
     },
     "session.failed"(_event, ctx) {
       return release(ctx, "session-failed");
+    },
+    "turn.cancelled"(_event, ctx) {
+      return release(ctx, "turn-cancelled");
+    },
+    "turn.completed"(_event, ctx) {
+      return release(ctx, "turn-completed");
+    },
+    "turn.failed"(_event, ctx) {
+      return release(ctx, "turn-failed");
+    },
+    async "turn.started"(_event, ctx) {
+      const environment = process.env;
+      if (!isHostedSandboxExecutionEnabled(environment)) return;
+      await acquireHostedSandboxExecutionLease({
+        environment,
+        sandbox: await ctx.getSandbox(),
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+      });
     },
   },
 });

@@ -3,11 +3,11 @@ import { z } from "zod";
 
 const schema = z
   .object({
-    state: z.string().min(32).max(512),
     configurationId: z.string().min(1),
-    teamId: z.string().min(1),
-    origin: z.string().url(),
     expiresAt: z.number().int().positive(),
+    origin: z.string().url(),
+    state: z.string().min(32).max(512),
+    teamId: z.string().min(1),
   })
   .strict();
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

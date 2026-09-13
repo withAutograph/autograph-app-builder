@@ -7,13 +7,13 @@ import { z } from "zod";
 import type { BrowserContext } from "playwright/test";
 
 const fixtureSchema = z.object({
-  origin: z.string().url(),
   databaseUrl: z.string().url(),
-  secret: z.string().min(32),
   flagsSecret: z.string().min(32),
+  origin: z.string().url(),
+  secret: z.string().min(32),
 });
 
-export function readNavigationFixture() {
+export const readNavigationFixture = function readNavigationFixture() {
   const fixture = fixtureSchema.parse(
     JSON.parse(readFileSync(".navigation-fixture.json", "utf-8")),
   );
@@ -31,19 +31,19 @@ export function readNavigationFixture() {
     throw new Error("Production navigation requires its isolated loopback fixture.");
   }
   return fixture;
-}
+};
 
-export async function blockExternalRequests(context: BrowserContext) {
+export const blockExternalRequests = async function blockExternalRequests(context: BrowserContext) {
   await context.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     await (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
       ? route.continue()
       : route.abort("blockedbyclient"));
   });
-}
+};
 
 /** Seed real Better Auth rows in the runner-owned disposable database only. */
-export async function seedIdentity(context: BrowserContext, appName: string) {
+export const seedIdentity = async function seedIdentity(context: BrowserContext, appName: string) {
   const fixture = readNavigationFixture();
   const id = randomUUID();
   const organization = randomUUID();
@@ -68,31 +68,31 @@ export async function seedIdentity(context: BrowserContext, appName: string) {
       await transaction`insert into session (id, token, user_id, active_organization_id, expires_at, created_at, updated_at)
         values (${randomUUID()}, ${token}, ${id}, ${organization}, now() + interval '1 hour', now(), now())`;
       const record = {
-        version: 1,
         draft: {
-          version: 1,
+          appNameEditedByUser: true,
+          connectedConnections: [],
+          deploymentProvider: null,
+          focusOrigin: "github",
           form: {
             appName,
-            repository: "navigation-proof",
             brief: `Saved brief for ${appName}`,
-            privateRepository: true,
             buildDestination: "codex",
             connections: [],
             modelId: "",
+            privateRepository: true,
+            repository: "navigation-proof",
           },
-          team: "",
           gitScope: "",
           model: "",
-          zdrOnly: false,
-          showMoreConnections: false,
-          search: "",
-          connectedConnections: [],
-          storageProvider: null,
-          deploymentProvider: null,
-          focusOrigin: "github",
-          appNameEditedByUser: true,
           repositoryEditedByUser: true,
+          search: "",
+          showMoreConnections: false,
+          storageProvider: null,
+          team: "",
+          version: 1,
+          zdrOnly: false,
         },
+        version: 1,
       };
       await transaction`insert into builder_draft (issuer, audience, workspace_id, owner_user_id, draft_id, revision, record, created_at, updated_at)
         values (${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace}, ${id}, ${randomUUID()}, 1, ${transaction.json(record)}, now(), now())`;
@@ -103,12 +103,12 @@ export async function seedIdentity(context: BrowserContext, appName: string) {
   const signature = await makeSignature(token, fixture.secret);
   await context.addCookies([
     {
-      name: "__Secure-autograph_app_builder.session_token",
-      value: encodeURIComponent(`${token}.${signature}`),
-      url: fixture.origin,
       httpOnly: true,
-      secure: true,
+      name: "__Secure-autograph_app_builder.session_token",
       sameSite: "Lax",
+      secure: true,
+      url: fixture.origin,
+      value: encodeURIComponent(`${token}.${signature}`),
     },
   ]);
   const response = await context.request.get(`${fixture.origin}/api/auth/get-session`);
@@ -117,5 +117,5 @@ export async function seedIdentity(context: BrowserContext, appName: string) {
   if (z.object({ user: z.object({ id: z.literal(id) }) }).safeParse(session).success !== true) {
     throw new Error("Seeded Better Auth session did not resolve the expected identity.");
   }
-  return { id, email, appName };
-}
+  return { appName, email, id };
+};

@@ -51,8 +51,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
       body.byteLength > 1024 * 1024 ||
       !verify({
         body,
-        signature: request.headers.get("x-hub-signature-256") ?? "",
         secret,
+        signature: request.headers.get("x-hub-signature-256") ?? "",
       })
     )
       return new Response(null, { status: 401 });
@@ -89,8 +89,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
       });
     }
     return new Response(null, {
-      status: 202,
       headers: { "Cache-Control": "no-store" },
+      status: 202,
     });
   };
 }

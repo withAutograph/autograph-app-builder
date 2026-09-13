@@ -67,7 +67,7 @@ export function UserButton({
         className={
           size === "icon"
             ? cn("rounded-full", className)
-            : cn(buttonVariants({ variant, size: "lg" }), "py-2.5 h-auto font-normal", className)
+            : cn(buttonVariants({ size: "lg", variant }), "py-2.5 h-auto font-normal", className)
         }
       >
         {size === "icon" ? (

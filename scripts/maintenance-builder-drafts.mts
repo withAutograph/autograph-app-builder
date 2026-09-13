@@ -2,7 +2,14 @@ import { deleteInactiveBuilderDraftsForMaintenance } from "../lib/builder-drafts
 
 try {
   const removed = await deleteInactiveBuilderDraftsForMaintenance({ environment: process.env });
-  console.log(JSON.stringify({ task: "builder-drafts-maintenance", removed }));
+  console.log(
+    JSON.stringify(
+      Object.fromEntries([
+        ["task", "builder-drafts-maintenance"],
+        ["removed", removed],
+      ]),
+    ),
+  );
 } catch {
   // Configuration/database errors can contain credentials. Keep operator logs
   // sanitized while making failure observable to the invoking scheduler.

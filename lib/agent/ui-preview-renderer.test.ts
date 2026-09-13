@@ -9,9 +9,8 @@ describe("preview runtime initialization", () => {
   it.each([true, false])("initializes charts only when used (%s)", (usesCharts) => {
     const input = {
       appId: "chart-review",
-      routes: ["/", "/details"],
-      files: [],
       catalogGaps: [],
+      files: [],
       manifest: {
         productionCompositions: [
           {
@@ -20,14 +19,17 @@ describe("preview runtime initialization", () => {
           },
         ],
         screens: [
-          { route: "/", entry: "overview.tsx" },
-          { route: "/details", entry: "details.tsx" },
+          { entry: "overview.tsx", route: "/" },
+          { entry: "details.tsx", route: "/details" },
         ],
       },
+      routes: ["/", "/details"],
     } as unknown as UiPreviewInput;
-    const entry = uiPreviewRendererFiles(input).files.find(
-      (file) => file.path === "entry.tsx",
-    )!.content;
+    const entryFile = uiPreviewRendererFiles(input).files.find((file) => file.path === "entry.tsx");
+    if (!entryFile) {
+      throw new Error("Generated preview entry is missing");
+    }
+    const entry = entryFile.content;
     expect(entry.includes("import { bootstrapAgCharts }")).toBe(usesCharts);
     const initialized = vi.fn();
     const render = vi.fn();
@@ -43,8 +45,14 @@ describe("preview runtime initialization", () => {
     // Supply imports at the execution boundary; exercise the generated entry's
     // initialization and routing, without mounting a DOM or calling providers.
     runInNewContext(entry.replaceAll(/^import .*;\n/gmu, ""), {
+      React: { createElement: (component: unknown) => component },
       Screen0: overview,
       Screen1: details,
+      // The generated browser entrypoint uses the DOM callback contract.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
+      addEventListener: (_event: string, callback: () => void) => {
+        navigate = callback;
+      },
       bootstrapAgCharts: initialized,
       createRoot: () => {
         if (usesCharts) {
@@ -56,14 +64,8 @@ describe("preview runtime initialization", () => {
         }
         return { render };
       },
-      React: { createElement: (component: unknown) => component },
       document: { getElementById: () => ({}) },
       location,
-      // The generated browser entrypoint uses the DOM callback contract.
-      // oxlint-disable-next-line promise/prefer-await-to-callbacks
-      addEventListener: (_event: string, callback: () => void) => {
-        navigate = callback;
-      },
     });
 
     expect(render).toHaveBeenLastCalledWith(overview);
@@ -79,20 +81,23 @@ describe("preview stylesheet provenance", () => {
     const themeCss = ".origin { color: rgb(12, 34, 56); }\n";
     const output = await postcss([
       {
-        postcssPlugin: "preview-sources",
         Once(stylesheet) {
           stylesheet.append({ name: "source", params: '".builder-preview"' });
         },
+        postcssPlugin: "preview-sources",
       },
     ]).process(themeCss, {
       from: "/reference/theme.css",
-      map: { inline: true, annotation: true, sourcesContent: true },
+      map: { annotation: true, inline: true, sourcesContent: true },
     });
     const sourceMap = output.css.match(
       /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u,
     )?.[1];
     expect(sourceMap).toBeDefined();
-    const map = JSON.parse(Buffer.from(sourceMap!, "base64").toString("utf-8")) as {
+    if (!sourceMap) {
+      throw new Error("Inline source map is missing");
+    }
+    const map = JSON.parse(Buffer.from(sourceMap, "base64").toString("utf-8")) as {
       sourcesContent?: (string | null)[];
     };
     expect(map.sourcesContent).toContain(themeCss);
@@ -100,17 +105,21 @@ describe("preview stylesheet provenance", () => {
 
     const input = {
       appId: "style-map-review",
-      routes: ["/"],
-      files: [],
       catalogGaps: [],
+      files: [],
       manifest: {
         productionCompositions: [],
-        screens: [{ route: "/", entry: "page.tsx" }],
+        screens: [{ entry: "page.tsx", route: "/" }],
       },
+      routes: ["/"],
     } as unknown as UiPreviewInput;
-    const renderer = uiPreviewRendererFiles(input).files.find(
+    const rendererFile = uiPreviewRendererFiles(input).files.find(
       (file) => file.path === "render.mts",
-    )!.content;
+    );
+    if (!rendererFile) {
+      throw new Error("Generated preview renderer is missing");
+    }
+    const renderer = rendererFile.content;
     expect(renderer).toContain(".process(themeCss, {");
     expect(renderer).toContain("map: { inline: true, annotation: true, sourcesContent: true }");
     expect(renderer).toContain('stylesheet.append({ name: "source"');

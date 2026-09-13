@@ -12,9 +12,9 @@ import {
 describe("intrinsic class evidence", () => {
   const generated = collectIntrinsicClassSignatures([
     {
-      path: "src/Screen.tsx",
       content:
         'export function Screen(){ return <section className="generated-card tokenized">ok</section> }',
+      path: "src/Screen.tsx",
     },
   ]);
 
@@ -34,9 +34,9 @@ describe("intrinsic class evidence", () => {
     expect(
       collectIntrinsicClassSignatures([
         {
-          path: "src/InvalidCandidates.tsx",
           content:
             'export function Invalid(){ return <><div className /><div svg:className="not-a-class" /></> }',
+          path: "src/InvalidCandidates.tsx",
         },
       ]),
     ).toEqual([]);
@@ -49,9 +49,9 @@ describe("intrinsic class evidence", () => {
     ).toBe("unknown");
     const shared = collectIntrinsicClassSignatures([
       {
-        path: "packages/design-systems/Card.tsx",
         content:
           'export function Card(){ return <section className="generated-card tokenized">shared</section> }',
+        path: "packages/design-systems/Card.tsx",
       },
     ]);
     // The generated candidate is deliberately unrendered in this adversarial
@@ -65,9 +65,9 @@ describe("intrinsic class evidence", () => {
   it("offers a uniquely escaped utility token only as an origin candidate", () => {
     const shared = collectClassTokenEvidence([
       {
-        path: "packages/design-systems/RecordList.tsx",
         content:
           'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
+        path: "packages/design-systems/RecordList.tsx",
       },
     ]);
     const selector =
@@ -87,7 +87,7 @@ describe("intrinsic class evidence", () => {
       provenance: "shared",
       source: { path: "packages/design-systems/RecordList.tsx" },
     });
-    expect(classTokenAttribution([], [...shared, { ...shared[0]! }], selector).provenance).toBe(
+    expect(classTokenAttribution([], [...shared, { ...shared[0] }], selector).provenance).toBe(
       "unknown",
     );
     expect(classTokenAttribution([], shared, ".item:hover").provenance).toBe("unknown");

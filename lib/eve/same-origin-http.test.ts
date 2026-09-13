@@ -12,11 +12,11 @@ import {
 } from "./hosted-service";
 
 const principal: HostedPrincipal = {
-  issuer: "https://identity.example.test",
   audience: "eve-hosted",
-  workspaceId: "workspace_1",
+  issuer: "https://identity.example.test",
   ownerUserId: "user_1",
   scopes: ["autograph:session", ...Object.values(hostedEveOperationScopes)],
+  workspaceId: "workspace_1",
 };
 
 const config = { baseUrl: "https://builder.example.test" };
@@ -31,7 +31,7 @@ function identity(token = "project-oidc-token"): HostedWorkloadIdentity {
 function accepted(sessionId = "wrun_1") {
   return Response.json(
     { ok: true, sessionId, status: "accepted" },
-    { status: 202, headers: { "x-eve-session-id": sessionId } },
+    { headers: { "x-eve-session-id": sessionId }, status: 202 },
   );
 }
 
@@ -39,14 +39,13 @@ function accepted(sessionId = "wrun_1") {
 function stream(
   events: unknown[] = [
     {
-      type: "session.waiting",
       data: {},
       meta: { at: 1, id: "evt_1" },
+      type: "session.waiting",
     },
   ],
 ) {
   return new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
-    status: 200,
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
       "x-eve-session-id": "wrun_1",
@@ -54,6 +53,7 @@ function stream(
       "x-eve-stream-tail-index": String(events.length - 1),
       "x-eve-stream-version": "23",
     },
+    status: 200,
   });
 }
 
@@ -61,27 +61,27 @@ function stream(
 function pendingApprovalEvents(requestId: string) {
   return [
     {
-      type: "input.requested",
       data: {
         requests: [
           {
-            requestId,
-            kind: "tool-approval",
-            prompt: "Approve tool call: resolve_github_source",
             action: {
-              kind: "tool-call",
-              toolName: "resolve_github_source",
               input: { repository: "withAutograph/arrusted-development" },
+              kind: "tool-call",
+              toolName: "resolve-github-source",
             },
+            kind: "tool-approval",
+            prompt: "Approve tool call: resolve-github-source",
+            requestId,
           },
         ],
       },
       meta: { at: 1, id: "evt_input" },
+      type: "input.requested",
     },
     {
-      type: "session.waiting",
       data: {},
       meta: { at: 2, id: "evt_waiting" },
+      type: "session.waiting",
     },
   ];
 }
@@ -94,113 +94,113 @@ function plannedEvents() {
   const appSpecDigest = "a".repeat(64);
   const existingAppChanges = [
     {
-      path: "apps/vendor-onboarding/app/page.tsx",
       content: "export default function Page() { return 'Ready'; }\n",
+      path: "apps/vendor-onboarding/app/page.tsx",
     },
   ];
   // Keep fixture hashing local to the planned event factory.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   const target = {
+    blockers: [],
     contract: {
-      version: 1,
       appId: "vendor-onboarding",
       appSpec: {
         path: "prototype/vendor-onboarding/app-spec.md",
         sha256: appSpecDigest,
       },
+      version: 1,
     },
     futurePath: "apps/vendor-onboarding/app.contract.json",
-    plan: {
-      source: {
-        workspacePath: "apps/vendor-onboarding",
-        runtime: "nextjs",
-        packageName: "@autograph/vendor-onboarding",
-        schema: { kind: "none" },
-      },
-      product: {
-        owner: "operations",
-        appSpec: {
-          path: "prototype/vendor-onboarding/app-spec.md",
-          sha256: appSpecDigest,
-        },
-        optionalCapabilities: { integrations: [], hostedResources: [] },
-      },
-      topology: {
-        configPath: "microfrontends.json",
-        projectName: "apps-vendor-onboarding",
-        packageName: "@autograph/vendor-onboarding",
-        routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      },
-    },
-    blockers: [],
-    mutations: [],
-    operation: "iterate-existing-app",
     iteration: {
       changes: existingAppChanges.map(({ path, content }) => ({
+        after: { content, digest: hash(content), mode: "644" },
+        before: { digest: hash(`before:${path}`), mode: "644" },
         path,
-        before: { mode: "644", digest: hash(`before:${path}`) },
-        after: { mode: "644", digest: hash(content), content },
       })),
       digest: hash(
         JSON.stringify(
           existingAppChanges.map(({ path, content }) => ({
+            after: { content, digest: hash(content), mode: "644" },
+            before: { digest: hash(`before:${path}`), mode: "644" },
             path,
-            before: { mode: "644", digest: hash(`before:${path}`) },
-            after: { mode: "644", digest: hash(content), content },
           })),
         ),
       ),
     },
+    mutations: [],
+    operation: "iterate-existing-app",
+    plan: {
+      product: {
+        appSpec: {
+          path: "prototype/vendor-onboarding/app-spec.md",
+          sha256: appSpecDigest,
+        },
+        optionalCapabilities: { hostedResources: [], integrations: [] },
+        owner: "operations",
+      },
+      source: {
+        packageName: "@autograph/vendor-onboarding",
+        runtime: "nextjs",
+        schema: { kind: "none" },
+        workspacePath: "apps/vendor-onboarding",
+      },
+      topology: {
+        configPath: "microfrontends.json",
+        packageName: "@autograph/vendor-onboarding",
+        projectName: "apps-vendor-onboarding",
+        routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      },
+    },
   };
   const unsigned = {
-    version: 1,
-    sourceSha: "1".repeat(40),
-    sourceTree: "2".repeat(40),
-    sourceReceiptDigest: "0".repeat(64),
-    eligibilityDigest: "3".repeat(64),
-    workspaceDigest: "4".repeat(64),
-    imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
-    dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
     appSpecDigest,
     artifactRevision: "7".repeat(64),
-    identityDigest: "8".repeat(64),
     contractDigest: hash(JSON.stringify(target.contract)),
-    target,
+    dependencyCacheDigest: `sha256:${"6".repeat(64)}`,
+    eligibilityDigest: "3".repeat(64),
+    identityDigest: "8".repeat(64),
+    imageDigest: `vercel-sandbox-seed@sha256:${"5".repeat(64)}`,
     plannedByCallId: callId,
+    sourceReceiptDigest: "0".repeat(64),
+    sourceSha: "1".repeat(40),
+    sourceTree: "2".repeat(40),
+    target,
+    version: 1,
+    workspaceDigest: "4".repeat(64),
   };
   return [
     {
-      type: "actions.requested",
       data: {
         actions: [
           {
-            kind: "tool-call",
             callId,
-            toolName: "plan_app_creation",
             input: {
-              expectedAppSpecDigest: appSpecDigest,
               existingAppChanges,
+              expectedAppSpecDigest: appSpecDigest,
             },
+            kind: "tool-call",
+            toolName: "plan_app_creation",
           },
         ],
       },
+      type: "actions.requested",
     },
     {
-      type: "action.result",
       data: {
-        status: "completed",
         result: {
-          kind: "tool-result",
           callId,
-          toolName: "plan_app_creation",
+          kind: "tool-result",
           output: {
             ...unsigned,
             digest: hash(JSON.stringify(unsigned)),
             reused: false,
           },
+          toolName: "plan_app_creation",
         },
+        status: "completed",
       },
+      type: "action.result",
     },
   ];
 }
@@ -217,28 +217,28 @@ describe("same-origin canonical Eve transport", () => {
     });
     const adapter = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       fetchImplementation,
+      workloadIdentity: identity(),
     });
     await adapter.start({
-      principal,
-      sourceHandoffId,
       operationId: "start",
+      principal,
       prompt: "Build",
+      sourceHandoffId,
     });
     await adapter.send({
-      principal,
-      sourceHandoffId,
-      operationId: "send",
       adapterSessionId: "wrun_1",
       message: "Continue",
-    });
-    await adapter.respond({
+      operationId: "send",
       principal,
       sourceHandoffId,
-      operationId: "respond",
+    });
+    await adapter.respond({
       adapterSessionId: "wrun_1",
+      operationId: "respond",
+      principal,
       responses: [],
+      sourceHandoffId,
     });
     expect(bodies).toHaveLength(3);
     for (const body of bodies) {
@@ -254,25 +254,25 @@ describe("same-origin canonical Eve transport", () => {
     }
   });
   it("carries a verified target plan without projecting raw planning output", async () => {
-    const events = [...plannedEvents(), { type: "session.completed", data: {} }];
+    const events = [...plannedEvents(), { data: {}, type: "session.completed" }];
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
+      workloadIdentity: identity(),
     });
 
     const snapshot = await transport.get({
-      principal,
       adapterSessionId: "wrun_1",
+      principal,
     });
     expect(snapshot.implementationPlan).toEqual({
       appId: "vendor-onboarding",
-      runtime: "nextjs",
       packageName: "@autograph/vendor-onboarding",
       projectName: "apps-vendor-onboarding",
-      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
       readOnly: true,
+      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+      runtime: "nextjs",
     });
     expect(JSON.stringify(snapshot.events)).not.toContain("proposalDigest");
     expect(snapshot.events).toEqual([{ index: 0, status: "completed", type: "status" }]);
@@ -284,62 +284,62 @@ describe("same-origin canonical Eve transport", () => {
     const mediaType = "text/html";
     const digest = createHash("sha256").update(content).digest("hex");
     const revision = createHash("sha256")
-      .update(JSON.stringify({ path, mediaType, digest }))
+      .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
     const events = [
       {
-        type: "actions.requested",
         data: {
           actions: [
             {
-              kind: "tool-call",
               callId: "call_prototype",
+              input: { content, mediaType, path },
+              kind: "tool-call",
               toolName: "record_prototype_artifact",
-              input: { path, mediaType, content },
             },
           ],
         },
+        type: "actions.requested",
       },
       {
-        type: "action.result",
         data: {
-          status: "completed",
           result: {
-            kind: "tool-result",
             callId: "call_prototype",
-            toolName: "record_prototype_artifact",
+            kind: "tool-result",
             output: {
               appId: "vendor-onboarding",
-              path,
-              mediaType,
               digest,
+              mediaType,
+              path,
+              recordedByCallId: "call_prototype",
+              reused: false,
               revision,
               sessionId: "wrun_1",
-              recordedByCallId: "call_prototype",
               size: Buffer.byteLength(content),
-              reused: false,
             },
+            toolName: "record_prototype_artifact",
           },
+          status: "completed",
         },
+        type: "action.result",
       },
-      { type: "session.completed", data: {} },
+      { data: {}, type: "session.completed" },
     ];
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
+      workloadIdentity: identity(),
     });
 
     const snapshot = await transport.get({
-      principal,
       adapterSessionId: "wrun_1",
+      principal,
     });
     expect(snapshot.prototype).toEqual({
-      path,
-      mediaType,
       content,
       digest,
+      mediaType,
+      path,
       revision,
     });
     expect(JSON.stringify(snapshot.events)).not.toContain(content);
@@ -357,34 +357,34 @@ describe("same-origin canonical Eve transport", () => {
       if (String(url).includes("/stream?")) return stream();
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
-        message: "Build",
-        operationId: "op_1",
         forwardedPrincipal: {
           current: {
+            attributes: { "mcp:workspace-id": principal.workspaceId },
             authenticator: "mcp-oauth-jwks",
             issuer: principal.issuer,
             principalId: principal.ownerUserId,
             principalType: "user",
             subject: principal.ownerUserId,
-            attributes: { "mcp:workspace-id": principal.workspaceId },
           },
         },
+        message: "Build",
+        operationId: "op_1",
       });
       return accepted();
     });
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity,
       fetchImplementation,
+      workloadIdentity,
     });
 
     await expect(
-      transport.start({ principal, operationId: "op_1", prompt: "Build" }),
+      transport.start({ operationId: "op_1", principal, prompt: "Build" }),
     ).resolves.toEqual({
       adapterSessionId: "wrun_1",
       snapshot: {
-        status: "waiting",
         events: [{ index: 0, status: "waiting", type: "status" }],
+        status: "waiting",
       },
     });
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
@@ -406,20 +406,20 @@ describe("same-origin canonical Eve transport", () => {
     });
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       fetchImplementation,
+      workloadIdentity: identity(),
     });
 
     await transport.send({
-      principal,
-      operationId: "op_send",
       adapterSessionId: "wrun_1",
       message: "Continue",
+      operationId: "op_send",
+      principal,
     });
     await transport.respond({
-      principal,
-      operationId: "op_respond",
       adapterSessionId: "wrun_1",
+      operationId: "op_respond",
+      principal,
       responses: [
         { requestId: "req_1", response: { kind: "deny" } },
         { requestId: "req_2", response: { kind: "approve" } },
@@ -436,8 +436,8 @@ describe("same-origin canonical Eve transport", () => {
     });
     expect(bodies[1]).toMatchObject({
       inputResponses: [
-        { requestId: "req_1", optionId: "cancel" },
-        { requestId: "req_2", optionId: "approve" },
+        { optionId: "cancel", requestId: "req_1" },
+        { optionId: "approve", requestId: "req_2" },
         { requestId: "req_3", text: "Choice" },
       ],
     });
@@ -453,9 +453,9 @@ describe("same-origin canonical Eve transport", () => {
     const settled = [
       ...pending,
       {
-        type: "input.resolved",
         data: { resolutions: [{ requestId }] },
         meta: { at: 3, id: "evt_resolved" },
+        type: "input.resolved",
       },
     ];
     let streamReads = 0;
@@ -466,7 +466,7 @@ describe("same-origin canonical Eve transport", () => {
         return stream(streamReads < 3 ? pending : settled);
       }
       expect(JSON.parse(String(init?.body))).toMatchObject({
-        inputResponses: [{ requestId, optionId: "cancel" }],
+        inputResponses: [{ optionId: "cancel", requestId }],
       });
       return accepted();
     });
@@ -474,12 +474,12 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation,
+        workloadIdentity: identity(),
       }).respond({
-        principal,
-        operationId: "op_respond_settlement",
         adapterSessionId: "wrun_1",
+        operationId: "op_respond_settlement",
+        principal,
         responses: [{ requestId, response: { kind: "deny" } }],
       }),
     ).resolves.toMatchObject({ status: "waiting" });
@@ -501,12 +501,12 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation,
+        workloadIdentity: identity(),
       }).respond({
-        principal,
-        operationId: "op_respond_unsettled",
         adapterSessionId: "wrun_1",
+        operationId: "op_respond_unsettled",
+        principal,
         responses: [{ requestId, response: { kind: "deny" } }],
       }),
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
@@ -514,11 +514,11 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("waits for a new guarded cancel and waiting boundary", async () => {
-    const active = [{ type: "step.started", data: { turnId: "turn_1" } }];
+    const active = [{ data: { turnId: "turn_1" }, type: "step.started" }];
     const settled = [
       ...active,
-      { type: "turn.cancelled", data: { turnId: "turn_1" } },
-      { type: "session.waiting", data: {} },
+      { data: { turnId: "turn_1" }, type: "turn.cancelled" },
+      { data: {}, type: "session.waiting" },
     ];
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -536,17 +536,17 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation,
-      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+        workloadIdentity: identity(),
+      }).cancel({ adapterSessionId: "wrun_1", principal }),
     ).resolves.toMatchObject({ status: "waiting" });
   });
 
   it("does not accept stale or historical cancellation and times out honestly", async () => {
     const historical = [
-      { type: "turn.cancelled", data: { turnId: "turn_old" } },
-      { type: "session.waiting", data: {} },
-      { type: "step.started", data: { turnId: "turn_new" } },
+      { data: { turnId: "turn_old" }, type: "turn.cancelled" },
+      { data: {}, type: "session.waiting" },
+      { data: { turnId: "turn_new" }, type: "step.started" },
     ];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
@@ -557,40 +557,40 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation,
-      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+        workloadIdentity: identity(),
+      }).cancel({ adapterSessionId: "wrun_1", principal }),
     ).rejects.toMatchObject({ name: "HostedCancellationUnsettledError" });
   });
 
   it("rejects a stale guarded turn and keeps no-active-turn observational", async () => {
-    const active = [{ type: "step.started", data: { turnId: "turn_new" } }];
+    const active = [{ data: { turnId: "turn_new" }, type: "step.started" }];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const staleGuardFetch = vi.fn<typeof fetch>(async () => stream(active));
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation: staleGuardFetch,
+        workloadIdentity: identity(),
       }).cancel({
-        principal,
         adapterSessionId: "wrun_1",
+        principal,
         turnId: "turn_old",
       }),
     ).rejects.toMatchObject({ code: "turn_changed" });
     expect(staleGuardFetch).toHaveBeenCalledTimes(1);
 
-    const waiting = [{ type: "session.waiting", data: {} }];
+    const waiting = [{ data: {}, type: "session.waiting" }];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const noActiveGuardFetch = vi.fn<typeof fetch>(async () => stream(waiting));
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation: noActiveGuardFetch,
+        workloadIdentity: identity(),
       }).cancel({
-        principal,
         adapterSessionId: "wrun_1",
+        principal,
         turnId: "turn_0",
       }),
     ).rejects.toMatchObject({ code: "turn_changed" });
@@ -605,9 +605,9 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation: noActiveFetch,
-      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+        workloadIdentity: identity(),
+      }).cancel({ adapterSessionId: "wrun_1", principal }),
     ).resolves.toMatchObject({ status: "waiting" });
   });
 
@@ -616,14 +616,14 @@ describe("same-origin canonical Eve transport", () => {
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" }, { status: 202 })
-        : stream([{ type: "step.started", data: { turnId: "turn_1" } }]),
+        : stream([{ data: { turnId: "turn_1" }, type: "step.started" }]),
     );
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation,
-      }).cancel({ principal, adapterSessionId: "wrun_1" }),
+        workloadIdentity: identity(),
+      }).cancel({ adapterSessionId: "wrun_1", principal }),
     ).rejects.toThrow("status was inconsistent");
   });
 
@@ -632,26 +632,26 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
+        fetchImplementation,
         workloadIdentity: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           token: async () => {
             throw new Error("unavailable");
           },
         },
-        fetchImplementation,
-      }).start({ principal, operationId: "op_1", prompt: "Build" }),
+      }).start({ operationId: "op_1", principal, prompt: "Build" }),
     ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
     expect(fetchImplementation).not.toHaveBeenCalled();
 
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetchImplementation: vi.fn(async () => {
           throw new Error("connection lost");
         }),
-      }).start({ principal, operationId: "op_1", prompt: "Build" }),
+        workloadIdentity: identity(),
+      }).start({ operationId: "op_1", principal, prompt: "Build" }),
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
   });
 
@@ -659,7 +659,6 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetchImplementation: vi.fn(async () =>
           Response.json(
@@ -667,30 +666,31 @@ describe("same-origin canonical Eve transport", () => {
             { status: 409 },
           ),
         ),
+        workloadIdentity: identity(),
       }).send({
-        principal,
-        operationId: "op_2",
         adapterSessionId: "wrun_1",
         message: "Continue",
+        operationId: "op_2",
+        principal,
       }),
     ).rejects.toMatchObject({
-      name: SubmissionRejectedBeforeDispatchError.name,
       code: "session_not_active",
+      name: SubmissionRejectedBeforeDispatchError.name,
     });
 
     await expect(
       createSameOriginEveTransport({
         config,
-        workloadIdentity: identity(),
         fetchImplementation: vi.fn(
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async () =>
             new Response(null, {
-              status: 307,
               headers: { location: "https://attacker.example.test" },
+              status: 307,
             }),
         ),
-      }).start({ principal, operationId: "op_3", prompt: "Build" }),
+        workloadIdentity: identity(),
+      }).start({ operationId: "op_3", principal, prompt: "Build" }),
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
   });
 
@@ -698,36 +698,36 @@ describe("same-origin canonical Eve transport", () => {
     const generatedSource = "private-generated-source".repeat(140_000);
     const events = [
       {
-        type: "actions.requested",
         data: {
           actions: [
             {
-              kind: "tool-call",
               callId: "apply_1",
-              toolName: "apply_target_proposal",
               input: {
                 implementationFiles: [
                   {
-                    path: "apps/stock-exceptions/app/page.tsx",
                     content: generatedSource,
+                    path: "apps/stock-exceptions/app/page.tsx",
                   },
                 ],
               },
+              kind: "tool-call",
+              toolName: "apply_target_proposal",
             },
           ],
         },
+        type: "actions.requested",
       },
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ];
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: vi.fn(async () => stream(events)),
+      workloadIdentity: identity(),
     });
     const result = await transport.get({
-      principal,
       adapterSessionId: "wrun_1",
+      principal,
     });
     expect(result.status).toBe("waiting");
     expect(JSON.stringify(result)).not.toContain("private-generated-source");
@@ -743,12 +743,10 @@ describe("same-origin canonical Eve transport", () => {
 
     const transport = createSameOriginEveTransport({
       config,
-      workloadIdentity: identity(),
       fetchImplementation: vi.fn(
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async () =>
           new Response("", {
-            status: 200,
             headers: {
               "content-type": "application/x-ndjson; charset=utf-8",
               "x-eve-session-id": "wrun_1",
@@ -756,10 +754,12 @@ describe("same-origin canonical Eve transport", () => {
               "x-eve-stream-tail-index": "9007199254740992",
               "x-eve-stream-version": "23",
             },
+            status: 200,
           }),
       ),
+      workloadIdentity: identity(),
     });
-    await expect(transport.get({ principal, adapterSessionId: "wrun_1" })).rejects.toThrow(
+    await expect(transport.get({ adapterSessionId: "wrun_1", principal })).rejects.toThrow(
       "invalid durable stream tail",
     );
   });
@@ -778,10 +778,10 @@ describe("same-origin canonical Eve transport", () => {
       await expect(
         createSameOriginEveTransport({
           config,
-          workloadIdentity: identity(),
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           fetchImplementation: vi.fn(async () => response),
-        }).get({ principal, adapterSessionId: "wrun_1" }),
+          workloadIdentity: identity(),
+        }).get({ adapterSessionId: "wrun_1", principal }),
       ).rejects.toThrow("incompatible stream contract");
     }
   });

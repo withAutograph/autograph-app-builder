@@ -22,55 +22,55 @@ export function preparedJournal(
   const now = new Date();
   const record = initialBuilderProvisionJournalRecord(
     {
-      version: 1,
-      requestId,
-      operation: "github",
       appName: "Prepared Vendor Review",
-      repository: { name: "prepared-vendor-review", private: true },
+      operation: "github",
       providers: {
         githubInstallationId: "10",
         vercelInstallationId: "icfg_prepared",
       },
+      repository: { name: "prepared-vendor-review", private: true },
+      requestId,
+      version: 1,
     },
     now,
   );
   record.response.status = "settled";
   record.response.github = {
-    status: "succeeded",
-    installationId: "10",
-    repositoryId: "100",
-    owner: "acme",
-    name: "prepared-vendor-review",
-    fullName: "acme/prepared-vendor-review",
-    url: "https://github.com/acme/prepared-vendor-review",
-    scope: { type: "organization", id: "110", login: "acme" },
-    visibility: "private",
     defaultBranch: "main",
+    fullName: "acme/prepared-vendor-review",
     headSha: "a".repeat(40),
     headTree: "b".repeat(40),
+    installationId: "10",
+    name: "prepared-vendor-review",
+    owner: "acme",
+    repositoryId: "100",
+    scope: { id: "110", login: "acme", type: "organization" },
     starter: { sourceSha: "c".repeat(40), sourceTree: "d".repeat(40) },
+    status: "succeeded",
+    url: "https://github.com/acme/prepared-vendor-review",
+    visibility: "private",
   };
   record.response.vercel = {
-    status: "succeeded",
-    installationId: "icfg_prepared",
-    projectId: "prj_prepared",
-    name: "prepared-vendor-review",
     dashboardUrl: "https://vercel.com/acme/prepared-vendor-review",
-    scope: { type: "team", id: "team_prepared", slug: "acme" },
     framework: "nextjs",
-    rootDirectory: "apps/prepared-vendor-review",
+    installationId: "icfg_prepared",
     linkedGitHubRepository: "acme/prepared-vendor-review",
+    name: "prepared-vendor-review",
+    projectId: "prj_prepared",
+    rootDirectory: "apps/prepared-vendor-review",
+    scope: { id: "team_prepared", slug: "acme", type: "team" },
+    status: "succeeded",
   };
   record.operations.github.attempted = true;
   record.operations.vercel.attempted = true;
   return {
     authority,
-    requestId,
-    requestDigest: record.response.requestDigest,
-    state: "settled",
-    revision: 2,
-    record,
     createdAt: now,
+    record,
+    requestDigest: record.response.requestDigest,
+    requestId,
+    revision: 2,
+    state: "settled",
     updatedAt: now,
   };
 }
@@ -80,10 +80,10 @@ export function preparedJournal(
 export function sessionEnvelope(principal: HostedPrincipal, sourceHandoffId: string) {
   const current = {
     attributes: {
+      "autograph:source-handoff-id": sourceHandoffId,
       "mcp:audience": principal.audience,
       "mcp:scopes": principal.scopes,
       "mcp:workspace-id": principal.workspaceId,
-      "autograph:source-handoff-id": sourceHandoffId,
     },
     authenticator: "mcp-oauth-jwks",
     issuer: principal.issuer,
@@ -102,7 +102,7 @@ export function preparedProviderFixture(input: {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
   let credentialRevision = 1;
   let vercelStatus = 200;
   const githubToken = () => `ghs_mock_server_installation_token_${credentialRevision}`;
@@ -124,16 +124,16 @@ export function preparedProviderFixture(input: {
         );
         return Response.json(
           {
-            token: githubToken(),
-            permissions: body.permissions,
             expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            permissions: body.permissions,
+            token: githubToken(),
           },
           { status: 201 },
         );
       }
       return Response.json({
-        id: 10,
         account: { id: 110, login: "acme", type: "Organization" },
+        id: 10,
         repository_selection: "selected",
       });
     }
@@ -143,17 +143,17 @@ export function preparedProviderFixture(input: {
       return Response.json({ repositories: [{ id: 100 }] });
     if (["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(url.pathname))
       return Response.json({
-        id: 100,
-        owner: { login: "acme" },
-        name: "prepared-vendor-review",
-        private: true,
         archived: false,
         default_branch: "main",
+        id: 100,
+        name: "prepared-vendor-review",
+        owner: { login: "acme" },
+        private: true,
       });
     if (url.pathname === "/repos/acme/prepared-vendor-review/commits/main")
       return Response.json({
-        sha: "a".repeat(40),
         commit: { tree: { sha: "b".repeat(40) } },
+        sha: "a".repeat(40),
       });
     if (url.pathname === "/repos/acme/prepared-vendor-review/actions/variables")
       return Response.json({ variables: [] });
@@ -168,9 +168,9 @@ export function preparedProviderFixture(input: {
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${vercelToken()}`);
     return vercelStatus === 200
       ? Response.json({
+          accountId: "team_prepared",
           id: "prj_prepared",
           name: "observed-project-name",
-          accountId: "team_prepared",
           privateIgnoredField: vercelToken(),
         })
       : new Response(null, { status: vercelStatus });
@@ -183,26 +183,26 @@ export function preparedProviderFixture(input: {
         installationId: "icfg_prepared",
       });
       return {
-        token: vercelToken(),
         binding: {
-          installationId: "icfg_prepared",
           active: true,
+          displayName: "Acme",
+          installationId: "icfg_prepared",
+          plan: "pro",
           scopeId: "team_prepared",
           scopeType: "team" as const,
           slug: "acme",
-          displayName: "Acme",
-          plan: "pro",
           updatedAt: new Date(),
         },
+        token: vercelToken(),
       };
     },
   );
   const selectedInstallation = {
-    installationId: "10",
     accountId: "110",
     accountLogin: "acme",
     accountType: "Organization" as const,
     active: true,
+    installationId: "10",
     updatedAt: new Date(),
   };
   const github = vi.fn(
@@ -221,16 +221,16 @@ export function preparedProviderFixture(input: {
         authority,
         ...selection,
         installations: {
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-          read: async (owner) => {
-            expect(owner).toEqual(input.authority);
-          },
+          bind: vi.fn(),
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           list: async (owner) => {
             expect(owner).toEqual(input.authority);
             return [selectedInstallation, { ...selectedInstallation, installationId: "20" }];
           },
-          bind: vi.fn(),
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+          read: async (owner) => {
+            expect(owner).toEqual(input.authority);
+          },
         },
         providerFactory: ({ authority: owner, installation }) => {
           expect(owner).toEqual(input.authority);
@@ -238,8 +238,8 @@ export function preparedProviderFixture(input: {
           return createGitHubAppHttpProvider({
             config: {
               appId: "123",
-              privateKey: privateKeyPem,
               installationId: installation.installationId,
+              privateKey: privateKeyPem,
             },
             fetch: githubHttp,
           });
@@ -250,32 +250,32 @@ export function preparedProviderFixture(input: {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function createReader() {
     return createPreparedAppContextReader({
-      readHandoff: createPreparedHandoffReader({
-        read: input.handoffs.read,
-        isActiveMember: input.isActiveMember,
-      }),
       github,
+      readHandoff: createPreparedHandoffReader({
+        isActiveMember: input.isActiveMember,
+        read: input.handoffs.read,
+      }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       vercel: async (sessionAuth, intent) =>
         readPreparedVercelAccess({
-          intent,
           authority: exactForwardedSessionAuthority(sessionAuth).authority,
-          readCredential: credentialRead,
           fetch: vercelHttp,
+          intent,
+          readCredential: credentialRead,
         }),
     });
   }
   return {
     createReader,
+    credentialRead,
     github,
     githubHttp,
-    vercelHttp,
-    credentialRead,
     rotateCredentials: () => {
       credentialRevision += 1;
     },
     setVercelStatus: (status: number) => {
       vercelStatus = status;
     },
+    vercelHttp,
   };
 }

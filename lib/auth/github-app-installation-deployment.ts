@@ -59,20 +59,88 @@ export function createGitHubAppInstallationRouteHandlers(input: {
     returnState?: ProviderConnectionReturn,
   ) =>
     new Response(null, {
-      status: 303,
       headers: {
         ...noStoreHeaders,
         Location: providerConnectionRedirect({
           origin,
           provider: "github",
-          status,
           reason,
           returnState,
+          status,
         }),
       },
+      status: 303,
     });
 
   return {
+    async callback(request: Request): Promise<Response> {
+      const startedAt = Date.now();
+      const fail = (
+        reason: ProviderConnectionFailureReason,
+        diagnostic?: { stage: string; category?: string },
+        returnState?: ProviderConnectionReturn,
+      ) => {
+        logProviderConnectionFailure({
+          diagnostic,
+          phase: "callback",
+          provider: "github",
+          reason,
+          request,
+          startedAt,
+        });
+        return redirect("failed", reason, returnState);
+      };
+      if (request.method !== "GET") return fail("request-invalid");
+
+      let authority: Authority | undefined;
+      try {
+        authority = await input.authorityForRequest(request);
+      } catch {
+        return new Response(null, {
+          headers: {
+            ...noStoreHeaders,
+            Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
+          },
+          status: 303,
+        });
+      }
+      if (authority === undefined)
+        return new Response(null, {
+          headers: {
+            ...noStoreHeaders,
+            Location: signInForWorkspaceRedirect(origin),
+          },
+          status: 303,
+        });
+
+      try {
+        const result = await input.authorization.complete(request.url, authority);
+        if (result.status === "redirect") {
+          return new Response(null, {
+            headers: { ...noStoreHeaders, Location: result.redirectUrl },
+            status: 303,
+          });
+        }
+        const continuationRedirect = await input.onConnected?.({
+          authority,
+          returnState: result.returnState,
+        });
+        if (continuationRedirect) {
+          return new Response(null, {
+            headers: { ...noStoreHeaders, Location: continuationRedirect },
+            status: 303,
+          });
+        }
+        return redirect("connected", undefined, result.returnState);
+      } catch (error) {
+        return fail(
+          "callback-invalid",
+          githubInstallationAuthorizationDiagnostic(error),
+          error instanceof GitHubInstallationAuthorizationError ? error.returnState : undefined,
+        );
+      }
+    },
+
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
       const fail = (
@@ -81,12 +149,12 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         returnState?: ProviderConnectionReturn,
       ) => {
         logProviderConnectionFailure({
-          request,
-          provider: "github",
-          phase: "start",
-          reason,
-          startedAt,
           diagnostic,
+          phase: "start",
+          provider: "github",
+          reason,
+          request,
+          startedAt,
         });
         return redirect("failed", reason, returnState);
       };
@@ -104,102 +172,34 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         authority = await input.authorityForRequest(request);
       } catch {
         return new Response(null, {
-          status: 303,
           headers: {
             ...noStoreHeaders,
             Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
           },
+          status: 303,
         });
       }
       if (authority === undefined)
         return new Response(null, {
-          status: 303,
           headers: {
             ...noStoreHeaders,
             Location: signInForWorkspaceRedirect(origin),
           },
+          status: 303,
         });
 
       try {
         const returnState = providerConnectionReturnFromFormData(await request.formData());
         const result = await input.authorization.begin(authority, returnState);
         return new Response(null, {
-          status: 303,
           headers: {
             ...noStoreHeaders,
             Location: result.redirectUrl,
           },
+          status: 303,
         });
       } catch {
         return fail("authorization-failed");
-      }
-    },
-
-    async callback(request: Request): Promise<Response> {
-      const startedAt = Date.now();
-      const fail = (
-        reason: ProviderConnectionFailureReason,
-        diagnostic?: { stage: string; category?: string },
-        returnState?: ProviderConnectionReturn,
-      ) => {
-        logProviderConnectionFailure({
-          request,
-          provider: "github",
-          phase: "callback",
-          reason,
-          startedAt,
-          diagnostic,
-        });
-        return redirect("failed", reason, returnState);
-      };
-      if (request.method !== "GET") return fail("request-invalid");
-
-      let authority: Authority | undefined;
-      try {
-        authority = await input.authorityForRequest(request);
-      } catch {
-        return new Response(null, {
-          status: 303,
-          headers: {
-            ...noStoreHeaders,
-            Location: workspaceOnboardingRedirect(origin, "workspace-setup-retry"),
-          },
-        });
-      }
-      if (authority === undefined)
-        return new Response(null, {
-          status: 303,
-          headers: {
-            ...noStoreHeaders,
-            Location: signInForWorkspaceRedirect(origin),
-          },
-        });
-
-      try {
-        const result = await input.authorization.complete(request.url, authority);
-        if (result.status === "redirect") {
-          return new Response(null, {
-            status: 303,
-            headers: { ...noStoreHeaders, Location: result.redirectUrl },
-          });
-        }
-        const continuationRedirect = await input.onConnected?.({
-          authority,
-          returnState: result.returnState,
-        });
-        if (continuationRedirect) {
-          return new Response(null, {
-            status: 303,
-            headers: { ...noStoreHeaders, Location: continuationRedirect },
-          });
-        }
-        return redirect("connected", undefined, result.returnState);
-      } catch (error) {
-        return fail(
-          "callback-invalid",
-          githubInstallationAuthorizationDiagnostic(error),
-          error instanceof GitHubInstallationAuthorizationError ? error.returnState : undefined,
-        );
       }
     },
   };
@@ -219,57 +219,57 @@ export function getGitHubAppInstallationDeploymentHandlers(
   let credentialStore: ReturnType<typeof createPostgresGitHubUserCredentialStore> | undefined;
   try {
     credentialStore = createPostgresGitHubUserCredentialStore({
-      database,
       config: readGitHubUserCredentialEnvironment(environment),
+      database,
     });
   } catch {
     // Fall back to the default credential store when configuration is unavailable.
   }
   const membership = createPostgresPreviewOrganizationAuthority(database, {
-    issuer: previewConfig.issuer,
     audience: previewConfig.resource,
+    issuer: previewConfig.issuer,
   });
   const emulation = readProviderEmulation(resolvedEnvironment);
   const authorization = createGitHubAppInstallationAuthorization({
     config,
-    stateStore: createPostgresGitHubInstallationAuthorizationStateStore(database),
-    membership: {
-      isActiveMember: (authority) => membership.isActiveMember(authority),
-    },
-    installationStore: createPostgresHostedGitHubInstallationStore(database),
     credentialStore,
     emulation,
     fetch: emulation
       ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
+    installationStore: createPostgresHostedGitHubInstallationStore(database),
+    membership: {
+      isActiveMember: (authority) => membership.isActiveMember(authority),
+    },
+    stateStore: createPostgresGitHubInstallationAuthorizationStateStore(database),
   });
   const repositoryAccessContinuations = createRepositoryAccessContinuationService({
     store: createPostgresRepositoryAccessContinuationStore(database),
   });
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
-    origin: new URL(config.issuer).origin,
-    authorization,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async onConnected({ authority, returnState }) {
-      if (!returnState.resumeKey) return undefined;
-      return repositoryAccessContinuations.authorize({
-        authority,
-        continuationId: returnState.resumeKey,
-      });
-    },
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
         environment: resolvedEnvironment,
         headers: request.headers,
       });
-      if (session === undefined) return undefined;
+      if (session === undefined) return;
       return {
-        issuer: config.issuer,
         audience: config.resource,
-        workspaceId: session.organization.workspaceId,
+        issuer: config.issuer,
         ownerUserId: session.user.id,
+        workspaceId: session.organization.workspaceId,
       };
     },
+    authorization,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async onConnected({ authority, returnState }) {
+      if (!returnState.resumeKey) return;
+      return repositoryAccessContinuations.authorize({
+        authority,
+        continuationId: returnState.resumeKey,
+      });
+    },
+    origin: new URL(config.issuer).origin,
   });
   return deploymentHandlers;
 }
@@ -285,18 +285,18 @@ export function createGitHubAppInstallationDeploymentHandler(
       return await getGitHubAppInstallationDeploymentHandlers(environment)[kind](request);
     } catch {
       logProviderConnectionFailure({
-        request,
-        provider: "github",
         phase: kind,
+        provider: "github",
         reason: "configuration-unavailable",
+        request,
         startedAt,
       });
       return new Response(null, {
-        status: 303,
         headers: {
           ...noStoreHeaders,
           Location: "/github/installations?status=failed&reason=configuration-unavailable",
         },
+        status: 303,
       });
     }
   };

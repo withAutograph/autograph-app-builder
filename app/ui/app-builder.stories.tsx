@@ -24,18 +24,18 @@ const comingSoonEnabled = process.env.STORYBOOK_BUILDER_COMING_SOON_ENABLED === 
 const provisioningEnabled = process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED === "true";
 
 const meta = {
-  title: "Create App/Flow/Page",
-  component: AppBuilderStory,
   args: {
-    connectionsEnabled,
     comingSoonEnabled,
-    provisioningEnabled,
+    connectionsEnabled,
     integrations: storyIntegrations,
+    provisioningEnabled,
   },
+  component: AppBuilderStory,
   parameters: {
-    layout: "fullscreen",
     authSession: storybookAuthenticatedSession,
+    layout: "fullscreen",
   },
+  title: "Create App/Flow/Page",
 } satisfies Meta<typeof AppBuilderStory>;
 
 export default meta;
@@ -47,7 +47,10 @@ export const Default: Story = {
 
     const avatar = canvasElement.querySelector<HTMLElement>('[data-slot="avatar"]');
     await expect(avatar).not.toBeNull();
-    await expect(window.getComputedStyle(avatar!).width).toBe("32px");
+    if (avatar === null) {
+      throw new Error("Expected avatar to be present");
+    }
+    await expect(window.getComputedStyle(avatar).width).toBe("32px");
     await expect(canvasElement.querySelector('[data-slot="avatar-fallback"]')).toHaveTextContent(
       "AU",
     );

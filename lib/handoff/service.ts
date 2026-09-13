@@ -79,7 +79,7 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
   const repository = intent.repository.resolvedFullName ?? intent.repository.requestedName;
   return [
     `Create ${intent.appName} with Autograph App Builder.`,
-    "Call prepared_app_context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
+    "Call prepared-app-context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `App id: ${intent.appId}`,
     `Requested repository: ${repository}`,
     `Model preference: ${intent.modelId}`,
@@ -124,25 +124,27 @@ export function createBuilderHandoffService(input: {
   };
 
   const service = {
-    // Owner reads intentionally survive expiry; starting still uses resolve.
-    read,
-
-    async findLatestPending(value: { authority: Authority }) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      if (!input.store.findLatestPending) return;
-      const stored = await input.store.findLatestPending({ authority });
-      return stored ? requireOwnedRecord(stored, { authority }) : undefined;
-    },
-
-    async status(value: { authority: Authority; handoffId: string }) {
-      const record = await read(value);
-      const status =
-        record.sessionId === undefined
-          ? now() >= record.expiresAt
-            ? ("expired" as const)
-            : ("prepared" as const)
-          : ("continued" as const);
-      return { status, record };
+    async bindSession(value: {
+      authority: Authority;
+      handoffId: string;
+      requestDigest: string;
+      sessionId: string;
+    }) {
+      const record = await input.store.bindSession({
+        authority: hostedTenantAuthoritySchema.parse(value.authority),
+        handoffId: builderHandoffIdSchema.parse(value.handoffId),
+        now: now(),
+        requestDigest: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .parse(value.requestDigest),
+        sessionId: z.string().min(1).max(200).parse(value.sessionId),
+      });
+      if (!record) throw new BuilderHandoffUnavailableError();
+      const parsed = requireOwnedRecord(record, value);
+      if (parsed.requestDigest !== value.requestDigest || parsed.sessionId !== value.sessionId)
+        throw new BuilderHandoffConflictError();
+      return parsed;
     },
 
     async create(value: {
@@ -160,14 +162,14 @@ export function createBuilderHandoffService(input: {
       });
       const createdAt = now();
       const candidate = builderHandoffRecordSchema.parse({
-        version: 1,
-        handoffId: builderHandoffIdSchema.parse(createId()),
         authority,
-        creationRequestId,
-        requestDigest,
-        intent,
         createdAt,
+        creationRequestId,
         expiresAt: new Date(createdAt.getTime() + lifetimeMs),
+        handoffId: builderHandoffIdSchema.parse(createId()),
+        intent,
+        requestDigest,
+        version: 1,
       });
       const reserved = await input.store.reserve(candidate);
       const record = requireOwnedRecord(reserved.record, {
@@ -177,28 +179,21 @@ export function createBuilderHandoffService(input: {
       if (record.requestDigest !== requestDigest || record.creationRequestId !== creationRequestId)
         throw new BuilderHandoffConflictError();
       return {
-        handoffId: record.handoffId,
-        expiresAt: record.expiresAt,
         disposition: reserved.disposition,
+        expiresAt: record.expiresAt,
+        handoffId: record.handoffId,
       };
     },
 
-    async resolve(value: { authority: Authority; handoffId: string }) {
-      const record = await read(value);
-      if (record.sessionId !== undefined)
-        return {
-          status: "redeemed" as const,
-          sessionId: record.sessionId,
-          record,
-        };
-      if (now() >= record.expiresAt) throw new BuilderHandoffUnavailableError();
-      return {
-        status: "unredeemed" as const,
-        prompt: builderHandoffPrompt(record.intent),
-        deterministicClientRequestId: `handoff:${record.requestDigest}`,
-        record,
-      };
+    async findLatestPending(value: { authority: Authority }) {
+      const authority = hostedTenantAuthoritySchema.parse(value.authority);
+      if (!input.store.findLatestPending) return;
+      const stored = await input.store.findLatestPending({ authority });
+      return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
+
+    // Owner reads intentionally survive expiry; starting still uses resolve.
+    read,
 
     async renew(value: { authority: Authority; handoffId: string; creationRequestId: string }) {
       z.string().uuid().parse(value.creationRequestId);
@@ -206,9 +201,9 @@ export function createBuilderHandoffService(input: {
       const timestamp = now();
       if (record.sessionId !== undefined || timestamp < record.expiresAt)
         return {
-          handoffId: record.handoffId,
-          expiresAt: record.expiresAt,
           disposition: "existing" as const,
+          expiresAt: record.expiresAt,
+          handoffId: record.handoffId,
         };
 
       // Renew the same start identity: a durable start may have succeeded before
@@ -216,10 +211,10 @@ export function createBuilderHandoffService(input: {
       if (!input.store.renewExpired) throw new BuilderHandoffUnavailableError();
       const renewed = await input.store.renewExpired({
         authority: record.authority,
-        handoffId: record.handoffId,
-        requestDigest: record.requestDigest,
-        now: timestamp,
         expiresAt: new Date(timestamp.getTime() + lifetimeMs),
+        handoffId: record.handoffId,
+        now: timestamp,
+        requestDigest: record.requestDigest,
       });
       if (!renewed) throw new BuilderHandoffUnavailableError();
       const parsed = requireOwnedRecord(renewed.record, value);
@@ -231,33 +226,40 @@ export function createBuilderHandoffService(input: {
       if (parsed.sessionId === undefined && now() >= parsed.expiresAt)
         throw new BuilderHandoffUnavailableError();
       return {
-        handoffId: parsed.handoffId,
-        expiresAt: parsed.expiresAt,
         disposition: renewed.disposition,
+        expiresAt: parsed.expiresAt,
+        handoffId: parsed.handoffId,
       };
     },
 
-    async bindSession(value: {
-      authority: Authority;
-      handoffId: string;
-      requestDigest: string;
-      sessionId: string;
-    }) {
-      const record = await input.store.bindSession({
-        authority: hostedTenantAuthoritySchema.parse(value.authority),
-        handoffId: builderHandoffIdSchema.parse(value.handoffId),
-        requestDigest: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/u)
-          .parse(value.requestDigest),
-        sessionId: z.string().min(1).max(200).parse(value.sessionId),
-        now: now(),
-      });
-      if (!record) throw new BuilderHandoffUnavailableError();
-      const parsed = requireOwnedRecord(record, value);
-      if (parsed.requestDigest !== value.requestDigest || parsed.sessionId !== value.sessionId)
-        throw new BuilderHandoffConflictError();
-      return parsed;
+    async resolve(value: { authority: Authority; handoffId: string }) {
+      const record = await read(value);
+      if (record.sessionId !== undefined)
+        return {
+          record,
+          sessionId: record.sessionId,
+          status: "redeemed" as const,
+        };
+      if (now() >= record.expiresAt) throw new BuilderHandoffUnavailableError();
+      return {
+        deterministicClientRequestId: `handoff:${record.requestDigest}`,
+        prompt: builderHandoffPrompt(record.intent),
+        record,
+        status: "unredeemed" as const,
+      };
+    },
+
+    async status(value: { authority: Authority; handoffId: string }) {
+      const record = await read(value);
+      let status: "continued" | "expired" | "prepared";
+      if (record.sessionId !== undefined) {
+        status = "continued";
+      } else if (now() >= record.expiresAt) {
+        status = "expired";
+      } else {
+        status = "prepared";
+      }
+      return { record, status };
     },
   };
   return service;

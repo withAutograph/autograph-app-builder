@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import nodePath from "node:path";
 
 import { generateText, tool } from "ai";
 import { describe, expect, test } from "vitest";
@@ -12,7 +12,7 @@ import {
 
 const optIn = process.env.APP_BUILDER_G2_MODEL_EVAL === "1";
 const modelId = process.env.APP_BUILDER_G2_MODEL_ID;
-const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = nodePath.resolve(import.meta.dirname, "..");
 
 // Explicit live invocation (never part of the default unit-test task):
 // APP_BUILDER_G2_MODEL_EVAL=1 APP_BUILDER_G2_MODEL_ID=provider/model mise exec -- node node_modules/vitest/vitest.mjs run evals/g2-provider-brief-first-attempt.model.test.ts --config evals/g2-model.vitest.config.mts
@@ -20,9 +20,9 @@ const productBrief = `Build an internal release-readiness workspace for product 
 
 const recordPrototypeArtifactInput = z
   .object({
-    path: z.literal("prototype/release-readiness/app-spec.md"),
-    mediaType: z.literal("text/markdown"),
     content: z.string().min(1),
+    mediaType: z.literal("text/markdown"),
+    path: z.literal("prototype/release-readiness/app-spec.md"),
   })
   .strict();
 
@@ -34,7 +34,7 @@ async function productionAppSpecInstructions(): Promise<string> {
     "agent/skills/design-app/references/app-spec.md",
   ];
   const contents = await Promise.all(
-    paths.map((path) => readFile(resolve(repositoryRoot, path), "utf-8")),
+    paths.map((path) => readFile(nodePath.resolve(repositoryRoot, path), "utf-8")),
   );
   return contents.join("\n\n");
 }
@@ -55,8 +55,8 @@ function terminalBuildHandoff(raw: string): {
   expect(parsed.optionalCapabilities?.integrations).toEqual(expect.any(Array));
   expect(parsed.optionalCapabilities?.hostedResources).toEqual(expect.any(Array));
   return {
-    integrations: parsed.optionalCapabilities?.integrations as string[],
     hostedResources: parsed.optionalCapabilities?.hostedResources as string[],
+    integrations: parsed.optionalCapabilities?.integrations as string[],
   };
 }
 
@@ -67,44 +67,48 @@ describe.skipIf(!optIn)("G2 provider-named product brief", () => {
     }
 
     const { steps, toolCalls } = await generateText({
-      model: modelId,
-      maxRetries: 0,
       maxOutputTokens: 8000,
-      system: await productionAppSpecInstructions(),
-      tools: {
-        record_prototype_artifact: tool({
-          description:
-            "Record one complete internal planning artifact without changing a repository or provider.",
-          inputSchema: recordPrototypeArtifactInput,
-          strict: true,
-        }),
-      },
-      toolChoice: {
-        type: "tool",
-        toolName: "record_prototype_artifact",
-      },
+      maxRetries: 0,
+      model: modelId,
       prompt: `Author and record the complete build-ready AppSpec for this product brief in one attempt.
 
 Use the production authoring guidance supplied above. Record one AppSpec artifact for the reviewed prototype.
 
 Product brief:
 ${productBrief}`,
+      system: await productionAppSpecInstructions(),
+      toolChoice: {
+        toolName: "record-prototype-artifact",
+        type: "tool",
+      },
+      tools: {
+        "record-prototype-artifact": tool({
+          description:
+            "Record one complete internal planning artifact without changing a repository or provider.",
+          inputSchema: recordPrototypeArtifactInput,
+          strict: true,
+        }),
+      },
     });
 
     expect(steps).toHaveLength(1);
     expect(toolCalls).toHaveLength(1);
-    expect(toolCalls[0]?.toolName).toBe("record_prototype_artifact");
+    expect(toolCalls[0]?.toolName).toBe("record-prototype-artifact");
     const artifact = recordPrototypeArtifactInput.parse(toolCalls[0]?.input);
     expect(artifact).toMatchObject({
-      path: "prototype/release-readiness/app-spec.md",
       mediaType: "text/markdown",
+      path: "prototype/release-readiness/app-spec.md",
     });
     const rawFirstOutput = artifact.content;
     expect(validateBuildReadyAppSpec(rawFirstOutput)).toEqual({ valid: true });
 
-    const headings = [...rawFirstOutput.matchAll(/^## (?<heading>.+)$/gmu)].map(
-      (match) => match.groups!.heading!,
-    );
+    const headings = [...rawFirstOutput.matchAll(/^## (?<heading>.+)$/gmu)].map((match) => {
+      const heading = match.groups?.heading;
+      if (heading === undefined) {
+        throw new Error("Expected every matched heading to have a name.");
+      }
+      return heading;
+    });
     expect(headings).toEqual(REQUIRED_APP_SPEC_HEADINGS);
 
     const capabilities = terminalBuildHandoff(rawFirstOutput);

@@ -8,21 +8,21 @@ import {
 } from "./hosted-github-installation";
 
 const request = {
-  version: 1 as const,
   action: "github-installation.bind" as const,
   authority: {
-    issuer: "https://builder.example.test/api/auth",
     audience: "https://builder.example.test/mcp",
-    workspaceId: "workspace_one",
+    issuer: "https://builder.example.test/api/auth",
     ownerUserId: "user_one",
+    workspaceId: "workspace_one",
   },
   installation: {
-    installationId: "123",
     accountId: "456",
     accountLogin: "withAutograph",
     accountType: "Organization" as const,
+    installationId: "123",
   },
   requestedAt: "2026-08-28T00:00:00.000Z",
+  version: 1 as const,
 };
 
 describe("hosted GitHub installation binding", () => {
@@ -35,12 +35,12 @@ describe("hosted GitHub installation binding", () => {
       updatedAt: now,
     }));
     const receipt = await bindHostedGitHubInstallation({
+      now: () => new Date("2026-08-28T00:01:00.000Z"),
       request: {
         ...request,
         confirmationDigest: plan.requiredConfirmationDigest,
       },
-      store: { read: vi.fn(), bind },
-      now: () => new Date("2026-08-28T00:01:00.000Z"),
+      store: { bind, read: vi.fn() },
     });
     expect(bind).toHaveBeenCalledWith({
       authority: request.authority,
@@ -48,15 +48,15 @@ describe("hosted GitHub installation binding", () => {
       now: new Date("2026-08-28T00:01:00.000Z"),
     });
     expect(receipt).toMatchObject({
-      status: "applied",
       authorityDigest: plan.authorityDigest,
-      installationDigest: plan.installationDigest,
       effects: { bindingActive: true, installationId: "123" },
+      installationDigest: plan.installationDigest,
+      status: "applied",
     });
     await expect(
       bindHostedGitHubInstallation({
         request: { ...request, confirmationDigest: `sha256:${"0".repeat(64)}` },
-        store: { read: vi.fn(), bind },
+        store: { bind, read: vi.fn() },
       }),
     ).rejects.toThrow(/confirmation/u);
   });

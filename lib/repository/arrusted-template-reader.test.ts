@@ -9,7 +9,7 @@ import {
 } from "./arrusted-template-reader";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -33,34 +33,34 @@ function readerFetch(input?: {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
-    calls.push({ url, init });
+    calls.push({ init, url });
     if (url.endsWith("/app/installations/456/access_tokens"))
       return json(
         {
-          token: "ghs_reader_token_that_is_only_for_this_acquisition",
           expires_at: "2026-08-31T18:00:00Z",
           permissions: input?.permissions ?? {
-            metadata: "read",
-            contents: "read",
             checks: "read",
+            contents: "read",
+            metadata: "read",
           },
-          repository_selection: input?.repositorySelection ?? "all",
           repositories: (input?.tokenRepositoryIds ?? [ARRUSTED_TEMPLATE_REPOSITORY_ID]).map(
             (id) => ({ id }),
           ),
+          repository_selection: input?.repositorySelection ?? "all",
+          token: "ghs_reader_token_that_is_only_for_this_acquisition",
         },
         input?.status ?? 201,
       );
     if (url.includes("/installation/repositories?"))
       return json({
-        total_count: input?.totalCount ?? 1,
         repositories: [
           input?.repository ?? {
-            id: ARRUSTED_TEMPLATE_REPOSITORY_ID,
             full_name: "withAutograph/arrusted-development",
+            id: ARRUSTED_TEMPLATE_REPOSITORY_ID,
             private: true,
           },
         ],
+        total_count: input?.totalCount ?? 1,
       });
     throw new Error(`Unexpected GitHub request: ${url}`);
   };
@@ -72,8 +72,8 @@ function reader(fetch: typeof globalThis.fetch) {
   return createArrustedTemplateReader({
     config: {
       appId: "123",
-      privateKey: privateKeyPem,
       installationId: "456",
+      privateKey: privateKeyPem,
     },
     fetch,
   });
@@ -90,7 +90,7 @@ describe("Arrusted private template reader", () => {
       url.endsWith("/app/installations/456/access_tokens"),
     );
     expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
-      permissions: { contents: "read", checks: "read" },
+      permissions: { checks: "read", contents: "read" },
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });
     expect(
@@ -101,10 +101,10 @@ describe("Arrusted private template reader", () => {
   it("accepts additional read-only permissions on a repository-scoped token", async () => {
     const mock = readerFetch({
       permissions: {
-        metadata: "read",
-        contents: "read",
         checks: "read",
+        contents: "read",
         issues: "read",
+        metadata: "read",
       },
     });
 
@@ -134,24 +134,24 @@ describe("Arrusted private template reader", () => {
   it.each([
     {
       permissions: {
-        metadata: "read",
-        contents: "read",
         checks: "read",
+        contents: "read",
         issues: "write",
+        metadata: "read",
       },
     },
     { tokenRepositoryIds: [101] },
     {
       repository: {
-        id: 101,
         full_name: "withAutograph/another-private-repository",
+        id: 101,
         private: true,
       },
     },
     {
       repository: {
-        id: ARRUSTED_TEMPLATE_REPOSITORY_ID + 1,
         full_name: "withAutograph/arrusted-development",
+        id: ARRUSTED_TEMPLATE_REPOSITORY_ID + 1,
         private: true,
       },
     },
@@ -169,9 +169,9 @@ describe("Arrusted private template reader", () => {
     );
     expect(() =>
       readDeploymentArrustedTemplateReaderConfig({
+        APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID: "456",
         GITHUB_APP_ID: "123",
         GITHUB_APP_PRIVATE_KEY: privateKeyPem,
-        APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID: "456",
         GITHUB_TOKEN: "forbidden-ambient-token",
       }),
     ).not.toThrow();

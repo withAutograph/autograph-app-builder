@@ -193,11 +193,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "inspect_source",
             input: {
               path: developmentInspectionPath({ requestedPath }),
               sourceKind: "existing-repository",
             },
+            name: "inspect_source",
           },
         ],
       };
@@ -206,8 +206,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "prepare_workspace",
             input: {},
+            name: "prepare_workspace",
           },
         ],
       };
@@ -216,8 +216,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "record_ui_preview",
             input: renewalReviewUiPreview,
+            name: "record_ui_preview",
           },
         ],
       };
@@ -241,11 +241,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "inspect_source",
             input: {
               path: developmentInspectionPath({ requestedPath: requestedRepositoryPath }),
               sourceKind: "existing-repository",
             },
+            name: "inspect_source",
           },
         ],
       };
@@ -258,8 +258,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "prepare_workspace",
             input: {},
+            name: "prepare_workspace",
           },
         ],
       };
@@ -275,27 +275,27 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     );
     const missingArtifact = [
       {
-        path: "prototype/vendor-onboarding/index.html",
-        mediaType: "text/html" as const,
         content: vendorOnboardingPrototype,
+        mediaType: "text/html" as const,
+        path: "prototype/vendor-onboarding/index.html",
       },
       {
-        path: "prototype/vendor-onboarding/decisions.md",
-        mediaType: "text/markdown" as const,
         content: vendorOnboardingDecisions,
+        mediaType: "text/markdown" as const,
+        path: "prototype/vendor-onboarding/decisions.md",
       },
       {
-        path: "prototype/vendor-onboarding/app-spec.md",
-        mediaType: "text/markdown" as const,
         content: vendorOnboardingAppSpec,
+        mediaType: "text/markdown" as const,
+        path: "prototype/vendor-onboarding/app-spec.md",
       },
     ].find(({ path: artifactPath }) => !recordedPaths.has(artifactPath));
     if (missingArtifact !== undefined)
       return {
         toolCalls: [
           {
-            name: "record_prototype_artifact",
             input: missingArtifact,
+            name: "record_prototype_artifact",
           },
         ],
       };
@@ -331,12 +331,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "record_prototype_artifact",
             input: {
-              path: "prototype/vendor-onboarding/app-spec.md",
-              mediaType: "text/markdown",
               content: vendorOnboardingCompleteAppSpec,
+              mediaType: "text/markdown",
+              path: "prototype/vendor-onboarding/app-spec.md",
             },
+            name: "record_prototype_artifact",
           },
         ],
       };
@@ -363,12 +363,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "accept_app_spec",
             input: {
               appId: "vendor-onboarding",
               expectedArtifactDigest: currentAppSpec.digest,
               expectedArtifactRevision: currentAppSpec.revision,
             },
+            name: "accept_app_spec",
           },
         ],
       };
@@ -382,8 +382,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "plan_app_creation",
             input: {},
+            name: "plan_app_creation",
           },
         ],
       };
@@ -397,11 +397,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "apply_app_creation",
             input: {
               productSummary:
                 "Build the operations review queue, vendor detail panel, and conditional Finance tax-verification workflow shown in the preview.",
             },
+            name: "apply_app_creation",
           },
         ],
       };
@@ -413,8 +413,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "validate_app_creation",
             input: {},
+            name: "validate_app_creation",
           },
         ],
       };
@@ -426,8 +426,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "change_set_status",
             input: {},
+            name: "change_set_status",
           },
         ],
       };
@@ -438,8 +438,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "accept_change_set",
             input: {},
+            name: "accept_change_set",
           },
         ],
       };
@@ -453,28 +453,28 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "record_prototype_artifact",
             input: {
-              path: "prototype/parallel-proof/app-spec.md",
-              mediaType: "text/markdown",
               content: "# Build handoff\n",
-            },
-          },
-          {
-            name: "record_prototype_artifact",
-            input: {
-              path: "prototype/parallel-proof/decisions.md",
               mediaType: "text/markdown",
-              content: "# Decisions\n",
+              path: "prototype/parallel-proof/app-spec.md",
             },
+            name: "record_prototype_artifact",
           },
           {
-            name: "record_prototype_artifact",
             input: {
-              path: "prototype/parallel-proof/index.html",
-              mediaType: "text/html",
-              content: "<!doctype html><title>Proof</title>",
+              content: "# Decisions\n",
+              mediaType: "text/markdown",
+              path: "prototype/parallel-proof/decisions.md",
             },
+            name: "record_prototype_artifact",
+          },
+          {
+            input: {
+              content: "<!doctype html><title>Proof</title>",
+              mediaType: "text/html",
+              path: "prototype/parallel-proof/index.html",
+            },
+            name: "record_prototype_artifact",
           },
         ],
       };
@@ -485,7 +485,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("github publication status")) {
     const result = toolResults.at(-1);
     if (result?.name !== "github_publication_status")
-      return { toolCalls: [{ name: "github_publication_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "github_publication_status" }] };
     if (result.isError) return "The typed GitHub publication status could not be verified.";
     const status = result.output as
       | {
@@ -506,7 +506,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("report artifact workflow status")) {
     const result = toolResults.at(-1);
     if (result?.name !== "artifact_workflow_status")
-      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     return result.isError
       ? "The artifact workflow status could not be verified."
       : `Artifact workflow status: ${JSON.stringify(result.output)}`;
@@ -518,8 +518,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "inspect_existing_app",
             input: { appId: "vendor", paths: [] },
+            name: "inspect_existing_app",
           },
         ],
       };
@@ -543,8 +543,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "inspect_existing_app",
             input: { appId: "vendor", paths: [path] },
+            name: "inspect_existing_app",
           },
         ],
       };
@@ -561,7 +561,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       statusResult === undefined ||
       (planResults.length < requiredResults && toolResults.at(-1)?.name === "plan_app_creation")
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = statusResult.output as
       | { appSpec?: { digest?: string }; phase?: string }
       | undefined;
@@ -572,8 +572,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "plan_app_creation",
             input: {},
+            name: "plan_app_creation",
           },
         ],
       };
@@ -596,7 +596,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         observedPhase !== "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = statusResult.output as
       | { appSpec?: { digest?: string }; phase?: string }
       | undefined;
@@ -614,8 +614,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "prepare_target_dependencies",
             input: {},
+            name: "prepare_target_dependencies",
           },
         ],
       };
@@ -636,7 +636,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ((statusResult.output as { phase?: string } | undefined)?.phase !== "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = statusResult.output as
       | { appSpec?: { digest?: string }; phase?: string }
       | undefined;
@@ -657,16 +657,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           (opening) =>
             `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
         );
-        return changed === content ? [] : [{ path, content: changed }];
+        return changed === content ? [] : [{ content: changed, path }];
       });
       return {
         toolCalls: [
           {
-            name: "plan_app_creation",
             input:
               existingAppChanges === undefined || existingAppChanges.length === 0
                 ? {}
                 : { existingAppChanges },
+            name: "plan_app_creation",
           },
         ],
       };
@@ -683,7 +683,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale proposal digest");
     const lostResponse = message.includes("lost response");
     const applications = toolResults.filter(({ name }) => name === "apply_app_creation");
-    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    let requiredResults = 1;
+    if (lostResponse) requiredResults = 2;
+    if (stale) requiredResults = 3;
     const statusResults = toolResults.filter(({ name }) => name === "workspace_status");
     const latestStatus = statusResults.at(-1);
     const latestApplyIndex = toolResults.findLastIndex(({ name }) => name === "apply_app_creation");
@@ -694,7 +696,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       latestPlanIndex > latestStatusIndex ||
       (applications.length >= requiredResults && latestApplyIndex > latestStatusIndex)
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -715,10 +717,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "apply_app_creation",
             input: {
               expectedProposalDigest: stale ? "0".repeat(64) : proposalDigest,
             },
+            name: "apply_app_creation",
           },
         ],
       };
@@ -764,12 +766,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return {
       toolCalls: [
         {
-          name: "record_prototype_artifact",
           input: {
-            path: "prototype/expense-review/app-spec.md",
-            mediaType: "text/markdown",
             content,
+            mediaType: "text/markdown",
+            path: "prototype/expense-review/app-spec.md",
           },
+          name: "record_prototype_artifact",
         },
       ],
     };
@@ -782,7 +784,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale apply digest");
     const lostResponse = message.includes("lost response");
     const validations = toolResults.filter(({ name }) => name === "validate_app_creation");
-    const requiredResults = stale ? 3 : lostResponse ? 2 : 1;
+    let requiredResults = 1;
+    if (lostResponse) requiredResults = 2;
+    if (stale) requiredResults = 3;
     const statusResults = toolResults.filter(({ name }) => name === "workspace_status");
     const latestStatus = statusResults.at(-1);
     const latestValidationIndex = toolResults.findLastIndex(
@@ -793,7 +797,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       latestStatus === undefined ||
       (validations.length >= requiredResults && latestValidationIndex > latestStatusIndex)
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -813,10 +817,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "validate_app_creation",
             input: {
               expectedApplyDigest: stale ? "0".repeat(64) : applyDigest,
             },
+            name: "validate_app_creation",
           },
         ],
       };
@@ -844,7 +848,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const stale = message.includes("stale change set");
     const retry = message.includes("retry change-set acceptance");
     const accepted = toolResults.filter(({ name }) => name === "accept_change_set");
-    const requiredAccepts = stale ? 3 : retry ? 2 : 1;
+    let requiredAccepts = 1;
+    if (retry) requiredAccepts = 2;
+    if (stale) requiredAccepts = 3;
     const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     const latestStatus = status?.output as
       | { phase?: string; validation?: { digest?: string } }
@@ -853,16 +859,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status === undefined ||
       (latestStatus?.phase !== "validated" && latestStatus?.phase !== "reviewed")
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const proposal = [...toolResults].toReversed().find(({ name }) => name === "change_set_status");
     if (proposal === undefined)
       return {
         toolCalls: [
           {
-            name: "change_set_status",
             input: {
               expectedValidationDigest: latestStatus.validation?.digest,
             },
+            name: "change_set_status",
           },
         ],
       };
@@ -881,8 +887,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "accept_change_set",
             input: {},
+            name: "accept_change_set",
           },
         ],
       };
@@ -918,21 +924,21 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "fresh_bootstrap_status",
             input: {
+              destinationPath,
+              expectedPrestate: message.includes("exact-empty") ? "empty-directory" : "absent",
               expectedReviewDigest: message.includes("stale review")
                 ? "0".repeat(64)
                 : review.digest,
-              destinationPath,
-              expectedPrestate: message.includes("exact-empty") ? "empty-directory" : "absent",
               repositoryIdentity: {
-                initialBranch: "main",
-                authorName: "Autograph App Builder",
                 authorEmail: "app-builder@users.noreply.github.com",
+                authorName: "Autograph App Builder",
                 commitMessage: "Bootstrap repository",
                 commitTimestamp: "2026-08-25T12:00:00-04:00",
+                initialBranch: "main",
               },
             },
+            name: "fresh_bootstrap_status",
           },
         ],
       };
@@ -950,8 +956,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "publish_fresh_repository",
             input: { publication },
+            name: "publish_fresh_repository",
           },
         ],
       };
@@ -972,12 +978,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ({ name }) => name === "artifact_workflow_status",
     );
     if (message.includes("lost response") && latestRecoveryIndex > latestStatusIndex)
-      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     const status = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "artifact_workflow_status");
     if (status === undefined)
-      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     const workflow = status.output as
       | {
           phase?: string;
@@ -997,11 +1003,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "recover_fresh_repository",
             input: {
               expectedJournalDigest: workflow.freshBootstrap.digest,
               expectedProposalDigest: workflow.freshBootstrap.proposalDigest,
             },
+            name: "recover_fresh_repository",
           },
         ],
       };
@@ -1022,7 +1028,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       .toReversed()
       .find(({ name }) => name === "artifact_workflow_status");
     if (status === undefined)
-      return { toolCalls: [{ name: "artifact_workflow_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     const reviewDigest = (status.output as { review?: { digest?: string } } | undefined)?.review
       ?.digest;
     if (reviewDigest === undefined)
@@ -1053,8 +1059,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "branch_worktree_publication_status",
             input: { expectedReviewDigest: reviewDigest },
+            name: "branch_worktree_publication_status",
           },
         ],
       };
@@ -1099,11 +1105,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return {
           toolCalls: [
             {
-              name: "recover_branch_worktree_publication",
               input: {
-                publication: proposal,
                 expectedJournalDigest: output.digest,
+                publication: proposal,
               },
+              name: "recover_branch_worktree_publication",
             },
           ],
         };
@@ -1115,12 +1121,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return message.includes("retry branch worktree publication")
         ? "The exact durable branch-worktree publication receipt was verified and reused; no operation was redispatched."
         : "The separately approved reviewed change set was applied only in a new deterministic branch worktree. The original checkout was unchanged, and no commit, push, GitHub, provider, deployment, or release operation ran.";
-    if (output.status === "pending" || output.status === "failed")
-      return message.includes("retry branch worktree publication")
-        ? "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically."
-        : output.status === "failed"
-          ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
-          : "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically.";
+    if (output.status === "pending" || output.status === "failed") {
+      if (message.includes("retry branch worktree publication"))
+        return "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically.";
+      if (output.status === "failed")
+        return "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried.";
+      return "The durable branch-worktree publication attempt is recovery-required and was not redispatched automatically.";
+    }
     if (latestMutation?.isError === true && latestMutationIndex < latestBranchStatusIndex)
       return stale
         ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
@@ -1129,10 +1136,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "publish_reviewed_change_set_to_branch_worktree",
             input: {
               publication: stale ? { ...proposal, sourceStatusDigest: "0".repeat(64) } : proposal,
             },
+            name: "publish_reviewed_change_set_to_branch_worktree",
           },
         ],
       };
@@ -1167,7 +1174,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         workflow?.phase ?? "",
       )
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const source = [...toolResults].toReversed().find(({ name }) => name === "inspect_source");
     const destinationPath = (source?.output as { sourcePath?: string } | undefined)?.sourcePath;
     if (destinationPath === undefined || workflow.review?.digest === undefined)
@@ -1176,7 +1183,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const publicationResults = toolResults.filter(
       ({ name }) => name === "publish_reviewed_change_set",
     );
-    const required = stale ? 4 : retry ? 3 : afterCancellation ? 2 : 1;
+    let required = 1;
+    if (afterCancellation) required = 2;
+    if (retry) required = 3;
+    if (stale) required = 4;
     const publicationStatuses = toolResults.filter(
       ({ name }) => name === "local_publication_status",
     );
@@ -1190,11 +1200,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "local_publication_status",
             input: {
               destinationPath,
               expectedReviewDigest: reviewDigest,
             },
+            name: "local_publication_status",
           },
         ],
       };
@@ -1205,11 +1215,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "local_publication_status",
             input: {
               destinationPath,
               expectedReviewDigest: reviewDigest,
             },
+            name: "local_publication_status",
           },
         ],
       };
@@ -1218,11 +1228,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "local_publication_status",
             input: {
               destinationPath,
               expectedReviewDigest: reviewDigest,
             },
+            name: "local_publication_status",
           },
         ],
       };
@@ -1297,8 +1307,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "publish_reviewed_change_set",
             input: { publication: publicationProposal },
+            name: "publish_reviewed_change_set",
           },
         ],
       };
@@ -1306,7 +1316,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "publish_reviewed_change_set",
             input: {
               publication: stale
                 ? {
@@ -1315,6 +1324,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
                   }
                 : publicationProposal,
             },
+            name: "publish_reviewed_change_set",
           },
         ],
       };
@@ -1326,11 +1336,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const output = result?.output as
       | { reused?: boolean; terminalizedFailure?: boolean }
       | undefined;
-    return output?.terminalizedFailure === true
-      ? "The exact durable local-publication failure was terminalized without redispatching destination mutation."
-      : output?.reused === true
-        ? "The lost-response retry reused the exact durable local-publication receipt after postimage readback."
-        : "The separately approved reviewed change set was applied only to the named existing local checkout. No commit, branch, GitHub publication, provider, deployment, or release action ran.";
+    if (output?.terminalizedFailure === true)
+      return "The exact durable local-publication failure was terminalized without redispatching destination mutation.";
+    if (output?.reused === true)
+      return "The lost-response retry reused the exact durable local-publication receipt after postimage readback.";
+    return "The separately approved reviewed change set was applied only to the named existing local checkout. No commit, branch, GitHub publication, provider, deployment, or release action ran.";
   }
   if (message.includes("read recorded prototype artifact")) {
     const stale = message.includes("stale digest");
@@ -1356,11 +1366,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return {
       toolCalls: [
         {
-          name: "get_prototype_artifact",
           input: {
-            path: stale ? "prototype/expense-review/app-spec.md" : artifact?.path,
             digest: stale ? "0".repeat(64) : artifact?.digest,
+            path: stale ? "prototype/expense-review/app-spec.md" : artifact?.path,
           },
+          name: "get_prototype_artifact",
         },
       ],
     };
@@ -1368,19 +1378,19 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   if (message.includes("assess workspace readiness before planning")) {
     const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
     if (status === undefined || (status.output as { phase?: string }).phase === "empty")
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const readiness = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "workspace_readiness_status");
     if (readiness === undefined)
-      return { toolCalls: [{ name: "workspace_readiness_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_readiness_status" }] };
     return "The workspace readiness receipt is not ready for target execution, and no target command was run.";
   }
   if (message.includes("assess target command readiness")) {
     const statusResult = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "workspace_status");
-    if (statusResult === undefined) return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    if (statusResult === undefined) return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = statusResult.output as
       | { phase?: string; proposal?: { digest?: string } }
       | undefined;
@@ -1392,7 +1402,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       status?.phase !== "validation_failed" &&
       status?.phase !== "validated"
     )
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const readinessResult = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "target_execution_status");
@@ -1404,8 +1414,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "target_execution_status",
             input: { expectedProposalDigest: digest },
+            name: "target_execution_status",
           },
         ],
       };
@@ -1421,7 +1431,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const result = toolResults.find(({ name }) => name === "inspect_sandbox_toolchain");
     if (result === undefined)
       return {
-        toolCalls: [{ name: "inspect_sandbox_toolchain", input: {} }],
+        toolCalls: [{ input: {}, name: "inspect_sandbox_toolchain" }],
       };
     return result.isError
       ? "Sandbox toolchain inspection failed."
@@ -1429,7 +1439,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   }
   if (message.includes("attempt appspec mutation after publication")) {
     const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
-    if (status === undefined) return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    if (status === undefined) return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const workflow = status.output as
       | {
           phase?: string;
@@ -1451,16 +1461,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "accept_app_spec",
             input: {
               appId: workflow?.appSpec?.appId,
               expectedArtifactDigest: workflow?.appSpec?.digest,
               expectedArtifactRevision: workflow?.appSpec?.artifactRevision,
+              expectedEligibilityDigest: workflow?.workspace?.eligibilityDigest,
               expectedSourceSha: workflow?.workspace?.sourceSha,
               expectedSourceTree: workflow?.workspace?.sourceTree,
-              expectedEligibilityDigest: workflow?.workspace?.eligibilityDigest,
               expectedWorkspaceDigest: workflow?.workspace?.workspaceDigest,
             },
+            name: "accept_app_spec",
           },
         ],
       };
@@ -1476,7 +1486,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const [, appId, appSpec] = appSpecMatch;
     if (appId === undefined || appSpec === undefined) return "The AppSpec request is malformed.";
     const statusResult = toolResults.find(({ name }) => name === "workspace_status");
-    if (statusResult === undefined) return { toolCalls: [{ name: "workspace_status", input: {} }] };
+    if (statusResult === undefined) return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     const status = statusResult.output as
       | {
           workspace?: {
@@ -1497,12 +1507,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return {
           toolCalls: [
             {
-              name: "record_prototype_artifact",
               input: {
-                path: `prototype/${appId}/app-spec.md`,
-                mediaType: "text/markdown",
                 content: appSpec,
+                mediaType: "text/markdown",
+                path: `prototype/${appId}/app-spec.md`,
               },
+              name: "record_prototype_artifact",
             },
           ],
         };
@@ -1519,12 +1529,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "accept_app_spec",
             input: {
               appId,
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
             },
+            name: "accept_app_spec",
           },
         ],
       };
@@ -1549,7 +1559,6 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "inspect_source",
             input:
               sourceKind === "fresh-template"
                 ? {
@@ -1559,9 +1568,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
                       : {}),
                   }
                 : {
-                    path: developmentInspectionPath({ requestedPath: path! }),
+                    path:
+                      path === undefined ? "" : developmentInspectionPath({ requestedPath: path }),
                     sourceKind,
                   },
+            name: "inspect_source",
           },
         ],
       };
@@ -1580,15 +1591,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "approve_source_acquisition",
             input: { expectedSourceReceiptDigest: inspected.digest },
+            name: "approve_source_acquisition",
           },
         ],
       };
     }
     if (acquisitionResult?.isError) {
       const sourceStatus = toolResults.find(({ name }) => name === "source_status");
-      if (sourceStatus === undefined) return { toolCalls: [{ name: "source_status", input: {} }] };
+      if (sourceStatus === undefined) return { toolCalls: [{ input: {}, name: "source_status" }] };
       return "Fresh-template acquisition was canceled or became stale; no workspace was materialized.";
     }
     const preparationResult = toolResults.find(({ name }) => name === "prepare_workspace");
@@ -1599,15 +1610,15 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return {
         toolCalls: [
           {
-            name: "prepare_workspace",
             input: {},
+            name: "prepare_workspace",
           },
         ],
       };
     }
     const statusResult = toolResults.find(({ name }) => name === "workspace_status");
     if (statusResult === undefined) {
-      return { toolCalls: [{ name: "workspace_status", input: {} }] };
+      return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
     if (statusResult.isError) {
       return "The workspace status could not be verified.";

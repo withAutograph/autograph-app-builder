@@ -37,23 +37,23 @@ test("the builder direct load has a branded static shell", async ({ page, baseUR
 for (const { path, title, region } of [
   {
     path: "/auth/sign-in?callbackURL=%2F",
-    title: "Sign in to Autograph",
     region: "Authentication form loading",
+    title: "Sign in to Autograph",
   },
   {
     path: "/github/installations",
-    title: "Connect a GitHub App installation",
     region: "Provider connection loading",
+    title: "Connect a GitHub App installation",
   },
   {
     path: "/vercel/installations",
-    title: "Connect a Vercel team",
     region: "Provider connection loading",
+    title: "Connect a Vercel team",
   },
   {
     path: "/handoff/00000000-0000-4000-8000-000000000001",
-    title: "Continue your app",
     region: "Handoff loading",
+    title: "Continue your app",
   },
 ]) {
   test(`${path} has its destination shell before request data`, async ({ page, baseURL }) => {
@@ -61,7 +61,7 @@ for (const { path, title, region } of [
       page,
       async () => {
         await page.goto(path);
-        await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+        await expect(page.getByRole("heading", { exact: true, name: title })).toBeVisible();
         await expect(page.getByRole("region", { name: region })).toBeVisible();
         await expect(page.getByText("Autograph", { exact: true })).toBeVisible();
       },
@@ -98,7 +98,7 @@ for (const { label, pathname } of [
     await page.goto("/?mode=anonymous");
     await expect(page.getByLabel("What should this app do?")).toBeEnabled();
     await instant(page, async () => {
-      await page.getByRole("link", { name: label, exact: true }).click();
+      await page.getByRole("link", { exact: true, name: label }).click();
       await page.waitForURL((url) => url.pathname === pathname);
       await expect(
         page

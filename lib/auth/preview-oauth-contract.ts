@@ -17,8 +17,8 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["issuer"],
         message: "Preview OAuth requires HTTPS or HTTP localhost.",
+        path: ["issuer"],
       });
     }
     if (
@@ -30,8 +30,8 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["issuer"],
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
+        path: ["issuer"],
       });
     }
     if (
@@ -43,15 +43,15 @@ const previewOAuthConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["resource"],
         message: "Preview OAuth resource must be the exact /mcp URL.",
+        path: ["resource"],
       });
     }
     if (issuer.origin !== resource.origin) {
       context.addIssue({
         code: "custom",
-        path: ["resource"],
         message: "Preview OAuth issuer and resource must share one origin.",
+        path: ["resource"],
       });
     }
   });
@@ -98,67 +98,21 @@ export function buildPreviewMcpOAuthOptions(input: {
   const config = previewOAuthConfigSchema.parse(input.config);
   const now = input.now ?? Date.now;
   return {
-    resource: config.resource,
-    loginPage: "/auth/sign-in",
-    consentPage: "/auth/consent",
-    scopes: [...previewOAuthScopes],
-    grantTypes: ["authorization_code", "refresh_token"],
     accessTokenExpiresIn: 300,
-    refreshTokenExpiresIn: refreshTokenLifetimeSeconds,
-    resources: [
-      {
-        identifier: config.resource,
-        accessTokenTtl: 300,
-        refreshTokenTtl: refreshTokenLifetimeSeconds,
-        allowedScopes: [...previewOAuthScopes],
-        signingAlgorithm: "ES256",
-      },
-    ],
-    resourceSeedMode: "overwrite",
-    clientRegistrationDefaultResources: [config.resource],
-    clientRegistrationAllowedResources: [],
-    clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
-    clientRegistrationAllowedScopes: previewOAuthScopes.slice(1),
-    clientRegistrationRequirePKCE: true,
-    allowPublicClientPrelogin: true,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    clientPrivileges: async () => false,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    resourcePrivileges: async () => false,
     // Preview clients are resolved through CIMD. Dynamic registration remains
     // disabled, but activating CIMD can still persist discovery-owned client
     // records and therefore requires separate mutation authority.
     allowDynamicClientRegistration: false,
+    allowPublicClientPrelogin: true,
     allowUnauthenticatedClientRegistration: false,
-    postLogin: {
-      // Better Auth nests consent reference binding under postLogin. Returning
-      // false keeps consent as the one user confirmation instead of adding a
-      // second workspace-selection continuation when only one workspace is
-      // eligible.
-      page: "/auth/consent",
-      shouldRedirect: async ({ user }) => {
-        const workspaceId = await input.membership.activeWorkspaceForUser({
-          issuer: config.issuer,
-          audience: config.resource,
-          ownerUserId: user.id,
-        });
-        if (workspaceId === undefined) {
-          throw new Error("Preview OAuth requires exactly one active workspace membership.");
-        }
-        return false;
-      },
-      consentReferenceId: async ({ user }) => {
-        const workspaceId = await input.membership.activeWorkspaceForUser({
-          issuer: config.issuer,
-          audience: config.resource,
-          ownerUserId: user.id,
-        });
-        if (workspaceId === undefined) {
-          throw new Error("Preview OAuth requires exactly one active workspace membership.");
-        }
-        return workspaceId;
-      },
-    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    clientPrivileges: async () => false,
+    clientRegistrationAllowedResources: [],
+    clientRegistrationAllowedScopes: previewOAuthScopes.slice(1),
+    clientRegistrationDefaultResources: [config.resource],
+    clientRegistrationDefaultScopes: ["autograph:session", "offline_access"],
+    clientRegistrationRequirePKCE: true,
+    consentPage: "/auth/consent",
     customAccessTokenClaims: async ({ user, referenceId, resources }) => {
       if (
         user === null ||
@@ -167,10 +121,10 @@ export function buildPreviewMcpOAuthOptions(input: {
         resources?.length !== 1 ||
         resources[0] !== config.resource ||
         !(await input.membership.isActiveMember({
-          issuer: config.issuer,
           audience: config.resource,
-          workspaceId: referenceId,
+          issuer: config.issuer,
           ownerUserId: user.id,
+          workspaceId: referenceId,
         }))
       ) {
         throw new Error("Preview OAuth membership is not active.");
@@ -180,6 +134,52 @@ export function buildPreviewMcpOAuthOptions(input: {
         workspace_id: referenceId,
       };
     },
+    grantTypes: ["authorization_code", "refresh_token"],
+    loginPage: "/auth/sign-in",
+    postLogin: {
+      consentReferenceId: async ({ user }) => {
+        const workspaceId = await input.membership.activeWorkspaceForUser({
+          audience: config.resource,
+          issuer: config.issuer,
+          ownerUserId: user.id,
+        });
+        if (workspaceId === undefined) {
+          throw new Error("Preview OAuth requires exactly one active workspace membership.");
+        }
+        return workspaceId;
+      },
+      // Better Auth nests consent reference binding under postLogin. Returning
+      // false keeps consent as the one user confirmation instead of adding a
+      // second workspace-selection continuation when only one workspace is
+      // eligible.
+      page: "/auth/consent",
+      shouldRedirect: async ({ user }) => {
+        const workspaceId = await input.membership.activeWorkspaceForUser({
+          audience: config.resource,
+          issuer: config.issuer,
+          ownerUserId: user.id,
+        });
+        if (workspaceId === undefined) {
+          throw new Error("Preview OAuth requires exactly one active workspace membership.");
+        }
+        return false;
+      },
+    },
+    refreshTokenExpiresIn: refreshTokenLifetimeSeconds,
+    resource: config.resource,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    resourcePrivileges: async () => false,
+    resourceSeedMode: "overwrite",
+    resources: [
+      {
+        accessTokenTtl: 300,
+        allowedScopes: [...previewOAuthScopes],
+        identifier: config.resource,
+        refreshTokenTtl: refreshTokenLifetimeSeconds,
+        signingAlgorithm: "ES256",
+      },
+    ],
+    scopes: [...previewOAuthScopes],
   };
 }
 

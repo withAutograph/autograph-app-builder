@@ -1,18 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import path from "node:path";
 
 const candidateInput = process.argv[process.argv.indexOf("--candidate-root") + 1];
-if (!candidateInput || !isAbsolute(candidateInput))
+if (!candidateInput || !path.isAbsolute(candidateInput))
   throw new Error("Usage: --candidate-root /absolute/proven/candidate");
-const candidate = await realpath(resolve(candidateInput));
+const candidate = await realpath(path.resolve(candidateInput));
 const info = await lstat(candidate);
 // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
 if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0)
   throw new Error("Release candidate root was unsafe.");
 const promotion = JSON.parse(
-  await readFile(join(candidate, "promotion-receipt.json"), "utf-8"),
+  await readFile(path.join(candidate, "promotion-receipt.json"), "utf-8"),
 ) as {
   format: string;
   digest: string;
@@ -35,7 +35,7 @@ const { digest, ...unsigned } = promotion;
 const sha256 = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
 if (digest !== sha256(JSON.stringify(unsigned)))
   throw new Error("Promotion receipt digest drifted.");
-const packageRoot = join(candidate, "package");
+const packageRoot = path.join(candidate, "package");
 const files = [
   promotion.package.archive,
   promotion.package.marketplaceArchive,
@@ -44,27 +44,25 @@ const files = [
   "promotion-receipt.json",
 ];
 for (const file of files) {
-  if (basename(file) !== file) throw new Error("Release asset path was unsafe.");
+  if (path.basename(file) !== file) throw new Error("Release asset path was unsafe.");
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const bytes = await readFile(
-    file === "promotion-receipt.json" ? join(candidate, file) : join(packageRoot, file),
+    file === "promotion-receipt.json" ? path.join(candidate, file) : path.join(packageRoot, file),
   );
-  const expected =
-    file === "promotion-receipt.json"
-      ? undefined
-      : file === promotion.package.archive
-        ? promotion.package.archiveSha256
-        : file === promotion.package.marketplaceArchive
-          ? promotion.package.marketplaceArchiveSha256
-          : file === promotion.package.checksums
-            ? promotion.package.checksumsSha256
-            : promotion.package.receiptSha256;
+  let expected: string | undefined;
+  if (file !== "promotion-receipt.json") {
+    if (file === promotion.package.archive) expected = promotion.package.archiveSha256;
+    else if (file === promotion.package.marketplaceArchive)
+      expected = promotion.package.marketplaceArchiveSha256;
+    else if (file === promotion.package.checksums) expected = promotion.package.checksumsSha256;
+    else expected = promotion.package.receiptSha256;
+  }
   if (expected && sha256(bytes) !== expected)
     throw new Error(`Release asset bytes drifted: ${file}`);
 }
 const tag = `v${promotion.package.version}`;
 const gh = process.env.APP_BUILDER_RELEASE_GH_BIN;
-if (!gh || !isAbsolute(gh)) throw new Error("mise must supply the gh executable.");
+if (!gh || !path.isAbsolute(gh)) throw new Error("mise must supply the gh executable.");
 const githubToken = process.env.APP_BUILDER_RELEASE_GITHUB_TOKEN;
 if (!githubToken) throw new Error("The release workflow must supply its scoped GitHub token.");
 execFileSync(
@@ -74,7 +72,7 @@ execFileSync(
     "create",
     tag,
     ...files.map((file) =>
-      file === "promotion-receipt.json" ? join(candidate, file) : join(packageRoot, file),
+      file === "promotion-receipt.json" ? path.join(candidate, file) : path.join(packageRoot, file),
     ),
     "--repo",
     "withAutograph/autograph-app-builder",
@@ -87,7 +85,7 @@ execFileSync(
     "--prerelease",
   ],
   {
-    stdio: "inherit",
     env: { ...process.env, GH_TOKEN: githubToken },
+    stdio: "inherit",
   },
 );

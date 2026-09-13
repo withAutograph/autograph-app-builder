@@ -67,13 +67,13 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
         }
         const start = source.getLineAndCharacterOfPosition(node.getStart(source));
         candidates.push({
-          tag: node.tagName.text.toLowerCase(),
           classes,
           source: {
-            path: file.path,
-            line: start.line + 1,
             column: start.character + 1,
+            line: start.line + 1,
+            path: file.path,
           },
+          tag: node.tagName.text.toLowerCase(),
         });
       }
       ts.forEachChild(node, visit);
@@ -95,12 +95,12 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
     const start = source.getLineAndCharacterOfPosition(node.getStart(source));
     for (const token of value.trim().split(/\s+/u).filter(Boolean))
       candidates.push({
-        token,
         source: {
-          path: source.fileName,
-          line: start.line + 1,
           column: start.character + 1,
+          line: start.line + 1,
+          path: source.fileName,
         },
+        token,
       });
   };
   for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
@@ -176,7 +176,7 @@ export function signatureAttribution(
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactClassSelector(selector: string | undefined) {
-  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) return undefined;
+  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) return;
   return selector.trim().slice(1);
 }
 
@@ -192,30 +192,32 @@ export function generatedSignatureSelector(
 /** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function escapedTailwindClassToken(selector: string | undefined) {
-  if (!selector?.startsWith(".")) return undefined;
+  if (!selector?.startsWith(".")) return;
   let token = "";
   let index = 1;
   for (; index < selector.length; index += 1) {
-    const character = selector[index]!;
+    const character = selector[index];
+    if (!character) return;
     if (character === "\\") {
       const escaped = selector[index + 1];
-      if (!escaped) return undefined;
+      if (!escaped) return;
       token += escaped;
       index += 1;
     } else if (character === "[") break;
     else if (/[A-Za-z0-9_-]/u.test(character)) token += character;
-    else return undefined;
+    else return;
   }
-  if (!token) return undefined;
+  if (!token) return;
   while (index < selector.length) {
-    if (selector[index] !== "[") return undefined;
+    if (selector[index] !== "[") return;
     index += 1;
     let quote: string | undefined;
     let closed = false;
     for (; index < selector.length; index += 1) {
-      const character = selector[index]!;
+      const character = selector[index];
+      if (!character) return;
       if (character === "\\") {
-        if (index + 1 >= selector.length) return undefined;
+        if (index + 1 >= selector.length) return;
         index += 1;
         continue;
       }
@@ -232,9 +234,9 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         index += 1;
         break;
       }
-      if (character === "[") return undefined;
+      if (character === "[") return;
     }
-    if (!closed || quote) return undefined;
+    if (!closed || quote) return;
   }
   return token;
 }
@@ -250,7 +252,8 @@ export function classTokenAttribution(
   const generatedMatches = generated.filter((candidate) => candidate.token === token);
   const sharedMatches = shared.filter((candidate) => candidate.token === token);
   if (generatedMatches.length + sharedMatches.length !== 1) return { provenance: "unknown" };
-  const match = generatedMatches[0] ?? sharedMatches[0]!;
+  const match = generatedMatches[0] ?? sharedMatches[0];
+  if (!match) return { provenance: "unknown" };
   return {
     provenance: generatedMatches.length ? "generated" : "shared",
     source: match.source,

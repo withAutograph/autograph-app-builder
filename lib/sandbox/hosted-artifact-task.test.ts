@@ -1,24 +1,24 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
+const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createTaskFixture() {
-  const root = mkdtempSync(join(tmpdir(), "hosted-artifact-task-"));
-  const bin = join(root, "bin");
-  const launcher = join(root, ".config/mise/scripts/trusted-node-launcher");
-  const calls = join(root, "mise-calls");
+  const root = mkdtempSync(path.join(tmpdir(), "hosted-artifact-task-"));
+  const bin = path.join(root, "bin");
+  const launcher = path.join(root, ".config/mise/scripts/trusted-node-launcher");
+  const calls = path.join(root, "mise-calls");
   mkdirSync(bin, { recursive: true });
-  mkdirSync(join(root, ".config/mise/scripts"), { recursive: true });
+  mkdirSync(path.join(root, ".config/mise/scripts"), { recursive: true });
   writeFileSync(launcher, "#!/bin/sh\nexit 0\n");
   chmodSync(launcher, 0o700);
   writeFileSync(
-    join(bin, "mise"),
+    path.join(bin, "mise"),
     `#!/bin/sh
 set -eu
 if [ "$#" -eq 2 ] && [ "$1" = "which" ] && [ "$2" = "node" ]; then
@@ -29,9 +29,8 @@ printf '%s\\n' CALL >> "$MISE_CALLS"
 printf '%s\\n' "$@" >> "$MISE_CALLS"
 `,
   );
-  chmodSync(join(bin, "mise"), 0o700);
+  chmodSync(path.join(bin, "mise"), 0o700);
   return {
-    root,
     calls,
     environment: {
       LANG: "C",
@@ -39,12 +38,13 @@ printf '%s\\n' "$@" >> "$MISE_CALLS"
       NODE_ENV: "test" as const,
       PATH: `${bin}:/usr/bin:/bin`,
     },
+    root,
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function readCalls(path: string) {
-  return readFileSync(path, "utf-8").trim().split("\n");
+function readCalls(callsFile: string) {
+  return readFileSync(callsFile, "utf-8").trim().split("\n");
 }
 
 describe("hosted artifact mise task contract", () => {
@@ -60,7 +60,7 @@ describe("hosted artifact mise task contract", () => {
     ];
     try {
       const result = spawnSync(
-        join(repositoryRoot, ".config/mise/tasks/test/hosted-sandbox"),
+        path.join(repositoryRoot, ".config/mise/tasks/test/hosted-sandbox"),
         args,
         {
           cwd: fixture.root,
@@ -87,7 +87,7 @@ describe("hosted artifact mise task contract", () => {
     const fixture = createTaskFixture();
     try {
       const result = spawnSync(
-        join(repositoryRoot, ".config/mise/tasks/hosted/artifact-prove-typed"),
+        path.join(repositoryRoot, ".config/mise/tasks/hosted/artifact-prove-typed"),
         [
           "--image",
           "example.invalid/eve@sha256:digest",
@@ -131,7 +131,7 @@ describe("hosted artifact mise task contract", () => {
         ".config/mise/tasks/test/hosted-sandbox",
         ".config/mise/tasks/hosted/artifact-prove-typed",
       ]) {
-        const result = spawnSync(join(repositoryRoot, task), [], {
+        const result = spawnSync(path.join(repositoryRoot, task), [], {
           cwd: fixture.root,
           encoding: "utf-8",
           env: fixture.environment,

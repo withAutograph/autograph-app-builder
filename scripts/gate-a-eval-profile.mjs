@@ -1,5 +1,7 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
+
+const { isAbsolute, relative, resolve, sep } = nodePath;
 
 export const gateAEvalProfileKey = "__appBuilderAuthorizedGateAEvalProfileV1";
 
@@ -63,13 +65,13 @@ function observeRoot(path, repositoryRoot) {
     )
       fail("root");
     return Object.freeze({
-      path: canonical,
       device: String(state.dev),
       inode: String(state.ino),
-      uid: String(state.uid),
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
+      path: canonical,
+      uid: String(state.uid),
     });
   } catch {
     fail("root");
@@ -96,13 +98,13 @@ function observeReadOnlyRoot(path, repositoryRoot) {
     )
       fail("source root");
     return Object.freeze({
-      path: canonical,
       device: String(state.dev),
       inode: String(state.ino),
-      uid: String(state.uid),
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (state.mode & 0o777n).toString(8),
       nlink: String(state.nlink),
+      path: canonical,
+      uid: String(state.uid),
     });
   } catch {
     fail("source root");
@@ -137,9 +139,9 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     if (input.localPublication !== "1" && input.localPublication !== "0")
       fail("local publication profile");
     return Object.freeze({
-      version: 1,
-      profile: "general",
       localPublication: input.localPublication,
+      profile: "general",
+      version: 1,
     });
   }
   if (
@@ -152,11 +154,11 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     if (within(stateRoot.path, allowedRoot.path) || within(allowedRoot.path, stateRoot.path))
       fail("fresh roots");
     return Object.freeze({
-      version: 1,
-      profile: "fresh",
-      stateRoot,
       allowedRoot,
       fault: input.fault,
+      profile: "fresh",
+      stateRoot,
+      version: 1,
     });
   }
   if (
@@ -170,10 +172,10 @@ export function createGateAEvalProfile(input, repositoryRoot) {
       fail("sandbox image");
     const sourceRoot = observeReadOnlyRoot(input.sourceRoot, repositoryRoot);
     return Object.freeze({
-      version: 1,
-      profile: input.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       image: input.image,
+      profile: input.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       sourceRoot,
+      version: 1,
     });
   }
   fail("profile");
@@ -184,7 +186,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
   if (typeof value !== "object" || value === null || value.version !== 1) fail("profile envelope");
   if (value.profile === "general" && exactKeys(value, ["version", "profile", "localPublication"]))
     return createGateAEvalProfile(
-      { profile: "general", localPublication: value.localPublication },
+      { localPublication: value.localPublication, profile: "general" },
       repositoryRoot,
     );
   if (
@@ -197,11 +199,11 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
       fail("fresh roots");
     if (value.fault !== null && value.fault !== "after-stage") fail("fresh fault");
     return Object.freeze({
-      version: 1,
-      profile: "fresh",
-      stateRoot,
       allowedRoot,
       fault: value.fault,
+      profile: "fresh",
+      stateRoot,
+      version: 1,
     });
   }
   if (
@@ -214,10 +216,10 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
     )
       fail("sandbox image");
     return Object.freeze({
-      version: 1,
-      profile: value.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       image: value.image,
+      profile: value.profile === "sandbox" ? "sandbox" : "hosted-artifact",
       sourceRoot: validateReadOnlyRootIdentity(value.sourceRoot, repositoryRoot),
+      version: 1,
     });
   }
   fail("profile envelope");

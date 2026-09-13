@@ -8,12 +8,12 @@ import { request } from "node:http";
 import { connect, createServer } from "node:net";
 import type { Duplex } from "node:stream";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const source = resolve(import.meta.dirname, "..");
+const source = path.resolve(import.meta.dirname, "..");
 const docker = process.argv.at(3) ?? "";
 const dockerHost = process.argv.at(5) ?? "";
 if (
@@ -26,37 +26,37 @@ if (
 }
 // Deliberately do not inherit credentials, deployment metadata or Node preloads.
 const environment: NodeJS.ProcessEnv = {
-  PATH: process.env.PATH,
-  HOME: process.env.HOME,
-  TMPDIR: process.env.TMPDIR,
   CI: process.env.CI,
+  HOME: process.env.HOME,
   LANG: process.env.LANG,
-  NODE_ENV: "production",
   NEXT_TELEMETRY_DISABLED: "1",
+  NODE_ENV: "production",
+  PATH: process.env.PATH,
+  TMPDIR: process.env.TMPDIR,
 };
-const scratch = await mkdtemp(join(tmpdir(), "autograph-navigation-"));
+const scratch = await mkdtemp(path.join(tmpdir(), "autograph-navigation-"));
 console.log(`Production navigation workspace: ${scratch}`);
-const snapshot = join(scratch, "source");
+const snapshot = path.join(scratch, "source");
 const id = randomBytes(8).toString("hex");
 const databaseName = `autograph_navigation_${id}`;
 const container = `autograph-navigation-${id}`;
 console.log(`Production navigation database: ${container}`);
-const artifactDirectory = join(source, ".artifacts/production-navigation");
+const artifactDirectory = path.join(source, ".artifacts/production-navigation");
 const children = new Set<ChildProcess>();
 let databaseStarted = false;
 let cancelled = false;
 const upgradedSockets = new Set<Duplex>();
 
-function assertRunning() {
+const assertRunning = () => {
   if (cancelled) throw new Error("Production navigation was cancelled.");
-}
+};
 
-async function runDocker(args: string[]) {
+const runDocker = async (args: string[]) => {
   assertRunning();
   return await execute(docker, ["--host", dockerHost, ...args]);
-}
+};
 
-async function stopChild(child: ChildProcess) {
+const stopChild = async (child: ChildProcess) => {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const closed = once(child, "close");
   child.kill("SIGTERM");
@@ -66,9 +66,9 @@ async function stopChild(child: ChildProcess) {
   } finally {
     clearTimeout(force);
   }
-}
+};
 
-async function run(command: string, args: string[], input?: string) {
+const run = async (command: string, args: string[], input?: string) => {
   assertRunning();
   const child = spawn(command, args, {
     cwd: snapshot,
@@ -83,9 +83,9 @@ async function run(command: string, args: string[], input?: string) {
   } finally {
     children.delete(child);
   }
-}
+};
 
-async function freePort() {
+const freePort = async () => {
   const server = createServer();
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -94,14 +94,14 @@ async function freePort() {
   server.close();
   await once(server, "close");
   return address.port;
-}
+};
 
 const appPort = await freePort();
 const tls = createHttpsServer();
-async function interrupt() {
+const interrupt = async () => {
   cancelled = true;
   await Promise.allSettled([...children].map(stopChild));
-}
+};
 // Both mise and its launcher may forward a signal; repeated delivery must not
 // restore the default immediate exit while cleanup is still in progress.
 process.on("SIGINT", interrupt);
@@ -126,28 +126,28 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
-      const info = await lstat(join(source, file)).catch((error: NodeJS.ErrnoException) => {
+      const info = await lstat(path.join(source, file)).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") return null;
         throw error;
       });
       if (!info || info.isDirectory()) return;
-      await mkdir(dirname(join(snapshot, file)), { recursive: true });
-      await cp(join(source, file), join(snapshot, file), { dereference: false });
+      await mkdir(path.dirname(path.join(snapshot, file)), { recursive: true });
+      await cp(path.join(source, file), path.join(snapshot, file), { dereference: false });
     }),
   );
   const failedCopy = copies.find((copy) => copy.status === "rejected");
   if (failedCopy?.status === "rejected") throw failedCopy.reason;
   assertRunning();
-  await symlink(join(source, "node_modules"), join(snapshot, "node_modules"), "dir");
+  await symlink(path.join(source, "node_modules"), path.join(snapshot, "node_modules"), "dir");
   // This marker is never written to the checkout or a deployable artifact.
   await writeFile(
-    join(snapshot, "lib/testing/production-navigation-artifact.ts"),
+    path.join(snapshot, "lib/testing/production-navigation-artifact.ts"),
     "export const productionNavigationArtifact: boolean = true;\n",
   );
-  await mkdir(join(snapshot, "app/production-cache-probe"), { recursive: true });
+  await mkdir(path.join(snapshot, "app/production-cache-probe"), { recursive: true });
   await cp(
-    join(snapshot, "e2e/production-navigation/cache-probe.route.ts"),
-    join(snapshot, "app/production-cache-probe/route.ts"),
+    path.join(snapshot, "e2e/production-navigation/cache-probe.route.ts"),
+    path.join(snapshot, "app/production-cache-probe/route.ts"),
   );
   await execute("/usr/bin/openssl", [
     "req",
@@ -156,9 +156,9 @@ try {
     "rsa:2048",
     "-nodes",
     "-keyout",
-    join(scratch, "key.pem"),
+    path.join(scratch, "key.pem"),
     "-out",
-    join(scratch, "cert.pem"),
+    path.join(scratch, "cert.pem"),
     "-days",
     "1",
     "-subj",
@@ -167,17 +167,17 @@ try {
     "subjectAltName=DNS:localhost,IP:127.0.0.1",
   ]);
   tls.setSecureContext({
-    key: await readFile(join(scratch, "key.pem")),
-    cert: await readFile(join(scratch, "cert.pem")),
+    cert: await readFile(path.join(scratch, "cert.pem")),
+    key: await readFile(path.join(scratch, "key.pem")),
   });
   tls.on("request", (incoming, outgoing) => {
     const upstream = request(
       {
-        hostname: "127.0.0.1",
-        port: appPort,
-        path: incoming.url,
-        method: incoming.method,
         headers: incoming.headers,
+        hostname: "127.0.0.1",
+        method: incoming.method,
+        path: incoming.url,
+        port: appPort,
       },
       (response) => {
         outgoing.writeHead(response.statusCode ?? 502, response.headers);
@@ -255,7 +255,8 @@ try {
       await delay(500);
     }
   }
-  const mapping = (await runDocker(["port", container, "5432/tcp"])).stdout.trim();
+  const dockerPort = await runDocker(["port", container, "5432/tcp"]);
+  const mapping = dockerPort.stdout.trim();
   const databasePort = Number(mapping.split(":").at(-1));
   if (!Number.isInteger(databasePort)) throw new Error("Missing database port.");
   const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/${databaseName}`;
@@ -263,19 +264,19 @@ try {
   const flagsSecret = randomBytes(32).toString("base64url");
   Object.assign(environment, {
     APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN: origin,
-    BETTER_AUTH_URL: `${origin}/api/auth`,
-    MCP_RESOURCE_URL: `${origin}/mcp`,
     BETTER_AUTH_SECRET: secret,
+    BETTER_AUTH_URL: `${origin}/api/auth`,
     DATABASE_URL: databaseUrl,
     FLAGS_SECRET: flagsSecret,
     GITHUB_CLIENT_ID: "navigation-github-client",
     GITHUB_CLIENT_SECRET: "navigation-github-secret",
+    MCP_RESOURCE_URL: `${origin}/mcp`,
     VERCEL_AUTH_CLIENT_ID: "navigation-vercel-client",
     VERCEL_AUTH_CLIENT_SECRET: "navigation-vercel-secret",
   });
   await writeFile(
-    join(snapshot, ".navigation-fixture.json"),
-    JSON.stringify({ origin, databaseUrl, secret, flagsSecret }),
+    path.join(snapshot, ".navigation-fixture.json"),
+    JSON.stringify({ databaseUrl, flagsSecret, origin, secret }),
     { mode: 0o600 },
   );
   await run(
@@ -334,7 +335,7 @@ try {
     if (databaseStarted) await execute(docker, ["--host", dockerHost, "rm", "-f", container]);
     await mkdir(artifactDirectory, { recursive: true });
     try {
-      await cp(join(snapshot, "test-results/production-navigation"), artifactDirectory, {
+      await cp(path.join(snapshot, "test-results/production-navigation"), artifactDirectory, {
         recursive: true,
       });
     } catch {
@@ -342,6 +343,6 @@ try {
     }
   } finally {
     // Only remove the exact task-owned temporary directory returned by mkdtemp.
-    await rm(scratch, { recursive: true, force: true });
+    await rm(scratch, { force: true, recursive: true });
   }
 }

@@ -26,7 +26,7 @@ try {
   privateKey = await readFile(keyPath, "utf-8");
 } catch {
   privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
-    .privateKey.export({ type: "pkcs1", format: "pem" })
+    .privateKey.export({ format: "pem", type: "pkcs1" })
     .toString();
   await writeFile(keyPath, privateKey, { mode: 0o600 });
 }
@@ -46,18 +46,19 @@ try {
 }
 let authSecret: string;
 try {
-  authSecret = (await readFile(authSecretPath, "utf-8")).trim();
+  const existingAuthSecret = await readFile(authSecretPath, "utf-8");
+  authSecret = existingAuthSecret.trim();
 } catch {
   authSecret = randomBytes(32).toString("base64url");
   await writeFile(authSecretPath, authSecret, { mode: 0o600 });
 }
 const config = providerEmulationSeed({
-  origin: appOrigin.origin,
   githubAppPrivateKey: privateKey,
   githubClientId: "Iv1_local_app_client",
   githubClientSecret: "local-github-client-secret-value",
+  origin: appOrigin.origin,
+  strictGitHubOAuth: true,
   vercelClientId: "local-vercel-client",
   vercelClientSecret: "local-vercel-client-secret",
-  strictGitHubOAuth: true,
 });
 await writeFile(configPath, YAML.stringify(config), { mode: 0o600 });

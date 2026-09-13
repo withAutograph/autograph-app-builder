@@ -77,20 +77,20 @@ export function recordPrototypeArtifactRevision(input: {
     throw new Error("This app build already owns a different prototype app.");
 
   const digest = sha256(input.content);
-  const revision = sha256(JSON.stringify({ path: input.path, mediaType: input.mediaType, digest }));
+  const revision = sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
   if (prior?.revision === revision)
     return { artifact: prior, artifacts: input.artifacts, reused: true };
 
   const artifact: PrototypeArtifact = {
     appId,
-    path: input.path,
-    mediaType: input.mediaType,
     content: input.content,
     digest,
+    mediaType: input.mediaType,
+    path: input.path,
+    recordedByCallId: input.callId,
     revision,
     sessionId: input.sessionId,
-    recordedByCallId: input.callId,
   };
   return {
     artifact,
@@ -181,39 +181,39 @@ export function recordPrototypeArtifactBundle(input: {
   let reused = true;
   for (const artifact of [
     {
-      path: `prototype/${input.appId}/index.html`,
-      mediaType: "text/html" as const,
       content: input.indexHtml,
+      mediaType: "text/html" as const,
+      path: `prototype/${input.appId}/index.html`,
     },
     {
-      path: `prototype/${input.appId}/decisions.md`,
-      mediaType: "text/markdown" as const,
       content: input.decisionsMarkdown,
+      mediaType: "text/markdown" as const,
+      path: `prototype/${input.appId}/decisions.md`,
     },
     {
-      path: `prototype/${input.appId}/app-spec.md`,
-      mediaType: "text/markdown" as const,
       content: appSpecMarkdown,
+      mediaType: "text/markdown" as const,
+      path: `prototype/${input.appId}/app-spec.md`,
     },
   ]) {
     const recorded = recordPrototypeArtifactRevision({
       artifacts,
       ...artifact,
-      sessionId: input.sessionId,
       callId: input.callId,
       expectedAppId: input.expectedAppId,
+      sessionId: input.sessionId,
     });
     ({ artifacts } = recorded);
     reused &&= recorded.reused;
   }
   const appSpec = completeBuildReadyPrototypeAppSpec({
-    artifacts,
     appId: input.appId,
+    artifacts,
   });
   if (appSpec === undefined) {
     const validation = validateBuildReadyAppSpec(appSpecMarkdown);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     throw new Error("The prototype bundle must contain a complete build-ready AppSpec.");
   }
-  return { artifacts, appSpec, reused };
+  return { appSpec, artifacts, reused };
 }

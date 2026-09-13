@@ -147,33 +147,33 @@ export function createBranchWorktreePublicationProposal(input: {
   if (overlap !== undefined)
     throw new Error(`The source has dirty overlap with approved path ${overlap.path}.`);
   const publicationIdentityDigest = branchPublicationIdentity({
-    sourceReceiptDigest: sourceReceipt.digest,
     reviewDigest: review.digest,
+    sourceReceiptDigest: sourceReceipt.digest,
   });
   const unsigned = {
-    version: BRANCH_WORKTREE_PUBLICATION_VERSION,
-    sourcePath: source.canonicalPath,
-    sourceRootIdentity: source.rootIdentity,
-    sourceGitDirectoryPath: source.gitDirectoryPath,
-    sourceGitDirectoryIdentity: source.gitDirectoryIdentity,
-    publicationRootPath: input.publicationRootPath,
-    publicationRootIdentity: input.publicationRootIdentity,
-    sourceReceiptDigest: sourceReceipt.digest,
-    sourceTree: sourceReceipt.sourceTree,
-    contractDigest: sourceReceipt.contractDigest,
+    approvedPaths: review.approvedPaths,
     baseSha: sourceReceipt.sourceSha,
+    branchName: branchNameForIdentity(publicationIdentityDigest),
+    changeSetDigest: review.changeSetDigest,
+    changes: review.changes,
+    contractDigest: sourceReceipt.contractDigest,
+    intendedOutcome: "create-reviewed-branch-worktree" as const,
+    publicationIdentityDigest,
+    publicationRootIdentity: input.publicationRootIdentity,
+    publicationRootPath: input.publicationRootPath,
+    reviewDigest: review.digest,
+    sourceGitDirectoryIdentity: source.gitDirectoryIdentity,
+    sourceGitDirectoryPath: source.gitDirectoryPath,
     sourceHeadReference: source.headReference,
     sourceIndexFileDigest: source.indexFileDigest,
+    sourcePath: source.canonicalPath,
+    sourceReceiptDigest: sourceReceipt.digest,
     sourceRemoteDigest: source.remoteDigest,
+    sourceRootIdentity: source.rootIdentity,
     sourceStatusDigest: source.statusDigest,
-    reviewDigest: review.digest,
-    changeSetDigest: review.changeSetDigest,
-    approvedPaths: review.approvedPaths,
-    changes: review.changes,
-    branchName: branchNameForIdentity(publicationIdentityDigest),
+    sourceTree: sourceReceipt.sourceTree,
+    version: BRANCH_WORKTREE_PUBLICATION_VERSION,
     worktreePath: input.worktreePath,
-    publicationIdentityDigest,
-    intendedOutcome: "create-reviewed-branch-worktree" as const,
   };
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
@@ -187,8 +187,8 @@ export function assertExactBranchWorktreeProposal(
   if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
     throw new Error("The branch-worktree publication digest is malformed.");
   const identity = branchPublicationIdentity({
-    sourceReceiptDigest: proposal.sourceReceiptDigest,
     reviewDigest: proposal.reviewDigest,
+    sourceReceiptDigest: proposal.sourceReceiptDigest,
   });
   if (
     proposal.publicationIdentityDigest !== identity ||

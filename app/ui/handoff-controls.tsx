@@ -38,13 +38,13 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
   )
     throw new Error("handoff-response-invalid");
   return {
-    version: 1,
-    handoffId,
-    expiresAt: value.expiresAt,
-    status: value.status,
-    destination: value.destination,
     cursorInstallReady: value.cursorInstallReady,
+    destination: value.destination,
+    expiresAt: value.expiresAt,
+    handoffId,
     mcpUrl: value.mcpUrl,
+    status: value.status,
+    version: 1,
   };
 }
 
@@ -72,8 +72,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
   const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
-  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
-  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
+  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(
+    undefined as undefined,
+  );
+  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined as undefined);
   const runRenewalAction = useCallback(
     async (
       previous: HandoffRenewalActionState | undefined,
@@ -88,7 +90,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     },
     [],
   );
-  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(
+    runRenewalAction,
+    undefined as undefined,
+  );
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
@@ -153,10 +158,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     };
     const visibilityChanged = () => {
       stop();
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") refresh();
     };
     document.addEventListener("visibilitychange", visibilityChanged);
-    void refresh();
+    refresh();
     return () => {
       disposed = true;
       clearTimeout(timer);
@@ -207,26 +212,66 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       }
     }
     setRenewalNotice("");
+    const request = renewalRequest.current;
+    if (!request) return;
     startTransition(() =>
       dispatchRenewal({
+        creationRequestId: request.id,
         handoffId: data.handoffId,
-        creationRequestId: renewalRequest.current!.id,
       }),
     );
   };
 
+  let statusMessage =
+    "Your app is prepared. Open your client, then review and send the prompt to continue.";
+  if (data.status === "expired")
+    statusMessage =
+      "This handoff has expired. Renew it to continue with your saved brief and resources.";
+  if (data.status === "continued")
+    statusMessage = "Continued in your app. You can reopen this handoff in either client.";
+  if (access === "unavailable")
+    statusMessage =
+      "This handoff is unavailable. Use the same Autograph account and workspace as the web form.";
+  if (access === "sign-in") statusMessage = "Sign in to continue your saved app.";
+
+  const setupInstructions = (() => {
+    if (destination === "codex")
+      return (
+        <>
+          <p>
+            Required App Builder connection endpoint: <code>{data.mcpUrl}</code>. Before sending,
+            confirm your plugin connection targets this endpoint. The official release plugin may
+            target Production; local and Preview handoffs need a matching configured App Builder
+            plugin connection.
+          </p>
+          <p>
+            Install the official App Builder plugin in Codex, enable it, and connect to Autograph.
+            If prompted to reload, open a fresh task and resend the prepared prompt.
+          </p>
+          <pre style={{ whiteSpace: "pre-wrap" }}>
+            <code>{codexInstallCommand}</code>
+          </pre>
+        </>
+      );
+    if (installUrl)
+      return (
+        <>
+          <a href={installUrl}>Add Autograph to Cursor</a>
+          <p>Approve the connection in Cursor, then return here and open your prepared prompt.</p>
+        </>
+      );
+    return (
+      <p>
+        Cursor connection setup is not available in this environment yet. If Autograph is already
+        connected, open the prompt above; otherwise use Codex or return later.
+      </p>
+    );
+  })();
+
   return (
     <section aria-label="Continue your app" className={handoffStyles.controls}>
       <p role="status" aria-live="polite" className={styles.continueStatus}>
-        {access === "sign-in"
-          ? "Sign in to continue your saved app."
-          : access === "unavailable"
-            ? "This handoff is unavailable. Use the same Autograph account and workspace as the web form."
-            : data.status === "continued"
-              ? "Continued in your app. You can reopen this handoff in either client."
-              : data.status === "expired"
-                ? "This handoff has expired. Renew it to continue with your saved brief and resources."
-                : "Your app is prepared. Open your client, then review and send the prompt to continue."}
+        {statusMessage}
       </p>
       {access === "ready" ? null : <a href={signInUrl}>Sign in with the same account</a>}
       <fieldset disabled={!isClientReady || renewalPending}>
@@ -321,36 +366,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
               client may ask you to allow Autograph once. Your saved GitHub and Vercel connections
               are reused.
             </p>
-            {destination === "codex" ? (
-              <>
-                <p>
-                  Required App Builder connection endpoint: <code>{data.mcpUrl}</code>. Before
-                  sending, confirm your plugin connection targets this endpoint. The official
-                  release plugin may target Production; local and Preview handoffs need a matching
-                  configured App Builder plugin connection.
-                </p>
-                <p>
-                  Install the official App Builder plugin in Codex, enable it, and connect to
-                  Autograph. If prompted to reload, open a fresh task and resend the prepared
-                  prompt.
-                </p>
-                <pre style={{ whiteSpace: "pre-wrap" }}>
-                  <code>{codexInstallCommand}</code>
-                </pre>
-              </>
-            ) : installUrl ? (
-              <>
-                <a href={installUrl}>Add Autograph to Cursor</a>
-                <p>
-                  Approve the connection in Cursor, then return here and open your prepared prompt.
-                </p>
-              </>
-            ) : (
-              <p>
-                Cursor connection setup is not available in this environment yet. If Autograph is
-                already connected, open the prompt above; otherwise use Codex or return later.
-              </p>
-            )}
+            {setupInstructions}
           </details>
         </>
       ) : null}

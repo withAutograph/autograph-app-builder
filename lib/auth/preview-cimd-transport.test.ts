@@ -1,5 +1,5 @@
 import type { LookupAddress, LookupOptions } from "node:dns";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import type { RequestOptions } from "node:https";
 import { Readable } from "node:stream";
@@ -15,20 +15,26 @@ const publicAddresses: LookupAddress[] = [
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runLookup(options: LookupOptions) {
-  return new Promise<{
-    address: string | LookupAddress[];
-    family?: number;
-  }>((resolve, reject) => {
-    createPinnedPreviewLookup(publicAddresses)(
-      "client.example.com",
-      options,
-      // Node's dns.lookup contract is callback-based.
-      // oxlint-disable-next-line promise/prefer-await-to-callbacks
-      (error, address, family) => {
-        if (error) reject(error);
-        else resolve({ address, family });
-      },
-    );
+  const lookup = new EventTarget();
+  let lookupAddress: string | LookupAddress[] | undefined;
+  let lookupError: Error | null = null;
+  let lookupFamily: number | undefined;
+  const result = once(lookup, "result");
+  createPinnedPreviewLookup(publicAddresses)(
+    "client.example.com",
+    options,
+    // Node's dns.lookup contract is callback-based.
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
+    (error, address, family) => {
+      lookupAddress = address;
+      lookupError = error;
+      lookupFamily = family;
+      lookup.dispatchEvent(new Event("result"));
+    },
+  );
+  return result.then(() => {
+    if (lookupError) throw lookupError;
+    return { address: lookupAddress as string | LookupAddress[], family: lookupFamily };
   });
 }
 
@@ -44,8 +50,10 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
       const request = new EventEmitter() as ClientRequest;
       request.end = () => {
         // Node's dns.lookup contract is callback-based.
+        const { lookup } = options;
+        if (!lookup) throw new Error("Expected the transport to provide a DNS lookup function.");
         // oxlint-disable-next-line promise/prefer-await-to-callbacks
-        options.lookup!(url.hostname, input.lookupOptions, (error, address) => {
+        lookup(url.hostname, input.lookupOptions, (error, address) => {
           if (error) {
             request.emit("error", error);
             return;
@@ -91,8 +99,8 @@ describe("Preview CIMD transport", () => {
       const resolveHostname = vi.fn(async () => publicAddresses);
       const fixture = requestFixture({ lookupOptions });
       const fetchMetadata = createPreviewCimdTransport({
-        resolveHostname,
         requestHttps: fixture.requestHttps,
+        resolveHostname,
       });
 
       const response = await fetchMetadata("https://client.example.com:8443/metadata.json", {
@@ -118,12 +126,12 @@ describe("Preview CIMD transport", () => {
   it("rejects a private DNS answer before opening a connection", async () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
+      requestHttps,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => [
         publicAddresses[0],
         { address: "169.254.169.254", family: 4 },
       ]),
-      requestHttps,
     });
 
     await expect(fetchMetadata("https://client.example.com/metadata.json")).rejects.toThrow(
@@ -137,8 +145,8 @@ describe("Preview CIMD transport", () => {
     const timeoutSignal = vi.fn(() => timeout.signal);
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
-      resolveHostname: vi.fn(() => new Promise<LookupAddress[]>(() => {})),
       requestHttps,
+      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
       timeoutSignal,
     });
 
@@ -156,8 +164,8 @@ describe("Preview CIMD transport", () => {
     const controller = new AbortController();
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
-      resolveHostname: vi.fn(() => new Promise<LookupAddress[]>(() => {})),
       requestHttps,
+      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
     });
 
     const rejection = expect(
@@ -176,9 +184,9 @@ describe("Preview CIMD transport", () => {
     async (input) => {
       const requestHttps = vi.fn();
       const fetchMetadata = createPreviewCimdTransport({
+        requestHttps,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         resolveHostname: vi.fn(async () => publicAddresses),
-        requestHttps,
       });
       const request =
         input === "POST"
@@ -198,9 +206,9 @@ describe("Preview CIMD transport", () => {
       responseStatus: 302,
     });
     const fetchMetadata = createPreviewCimdTransport({
+      requestHttps: fixture.requestHttps,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => publicAddresses),
-      requestHttps: fixture.requestHttps,
     });
 
     const response = await fetchMetadata("https://client.example.com/metadata.json");

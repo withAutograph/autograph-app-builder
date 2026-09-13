@@ -13,32 +13,32 @@ describe("AI Gateway model catalog", () => {
             id: "openai/gpt-5.6-terra",
             name: "GPT 5.6 Terra",
             owned_by: "openai",
+            tags: ["tool-use"],
             type: "language",
             zdr: "all",
-            tags: ["tool-use"],
           },
           {
             id: "openai/embedding",
             name: "Embedding",
             owned_by: "openai",
+            tags: [],
             type: "embedding",
             zdr: "all",
-            tags: [],
           },
         ],
       }),
     );
     const result = await loadGatewayModels({
-      fetch: request,
       defaultModelId: "openai/gpt-5.6-terra",
+      fetch: request,
     });
     expect(result.status).toBe("ready");
     expect(result.entries).toEqual([
       {
+        capabilities: ["tool-use"],
         id: "openai/gpt-5.6-terra",
         name: "GPT 5.6 Terra",
         provider: "openai",
-        capabilities: ["tool-use"],
         zdr: "all",
       },
     ]);
@@ -54,9 +54,9 @@ describe("AI Gateway model catalog", () => {
               id: "openai/gpt-5.6-terra",
               name: "GPT 5.6 Terra",
               owned_by: "openai",
+              tags: [],
               type: "language",
               zdr: "some",
-              tags: [],
             },
           ],
         }),
@@ -74,9 +74,9 @@ describe("AI Gateway model catalog", () => {
       fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 })),
     });
     expect(result).toEqual({
-      status: "unavailable",
-      entries: [],
       cached: false,
+      entries: [],
+      status: "unavailable",
     });
   });
 
@@ -92,15 +92,19 @@ describe("AI Gateway model catalog", () => {
               id: "openai/gpt-5.6-terra",
               name: "Terra",
               owned_by: "openai",
-              type: "language",
               tags: [],
+              type: "language",
             },
           ],
         }),
       );
-    expect((await loadGatewayModels({ fetch: request })).status).toBe("unavailable");
-    expect((await loadGatewayModels({ fetch: request })).status).toBe("ready");
-    expect((await loadGatewayModels({ fetch: request })).cached).toBe(false);
+    const unavailableResult = await loadGatewayModels({ fetch: request });
+    const readyResult = await loadGatewayModels({ fetch: request });
+    const cachedResult = await loadGatewayModels({ fetch: request });
+
+    expect(unavailableResult.status).toBe("unavailable");
+    expect(readyResult.status).toBe("ready");
+    expect(cachedResult.cached).toBe(false);
     expect(request).toHaveBeenCalledTimes(3);
   });
 });

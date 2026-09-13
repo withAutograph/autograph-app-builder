@@ -1,21 +1,25 @@
 import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { resolve as pathResolve } from "node:path";
+import { once } from "node:events";
+import path from "node:path";
 import type { Duplex } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { describe, expect, it } from "vitest";
 
-const repositoryRoot = pathResolve(import.meta.dirname, "..");
-const preload = pathToFileURL(pathResolve(import.meta.dirname, "test-capability-preload.mjs")).href;
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const preload = pathToFileURL(
+  path.resolve(import.meta.dirname, "test-capability-preload.mjs"),
+).href;
 const workerFixture = pathToFileURL(
-  pathResolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
+  path.resolve(import.meta.dirname, "test-capability-worker-fixture.mjs"),
 );
 const timeoutWorkerFixture = pathToFileURL(
-  pathResolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
+  path.resolve(import.meta.dirname, "test-capability-worker-timeout-fixture.mjs"),
 );
-const registryPath = pathResolve(repositoryRoot, "lib/testing/test-capability-registry.cjs");
+const registryPath = path.resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs");
 const capabilityExpression = `createRequire(import.meta.url)(${JSON.stringify(registryPath)}).current(process)`;
 const inspectionSource = `
   const { createRequire } = await import("node:module");
@@ -47,54 +51,53 @@ describe("test capability preload", () => {
       | { id: string; version: number; capabilities: string[] }
       | undefined;
     expect(capability).toMatchObject({
-      version: 1,
       capabilities: fullCapabilities,
+      version: 1,
     });
     const worker = new Worker(workerFixture, {
-      workerData: { spawnNested: true },
       env: {
         ...process.env,
+        APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
+        APP_BUILDER_BRANCH_WORKTREE_ROOT: "",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_LOCAL_PUBLICATION: "1",
+        APP_BUILDER_SANDBOX_IMAGE: "",
+        EVE_AGENT_HOST: "http://127.0.0.1:9999",
         EVE_DEV: "1",
+        EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
         EVE_DEV_WORKER_APP_ROOT: "/hostile/app-root",
+        EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
+        EVE_EVALUATION: "1",
+        EVE_EVALUATION_RUN_ID: "hostile-evaluation",
+        PORT: "43123",
+        REPOSITORY_LOCAL_ROOTS: "/hostile",
         WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
         WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile-timeout",
         WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile-timeout",
-        PORT: "43123",
-        EVE_DEV_WORKFLOW_TRANSPORT_SECRET: "hostile-secret",
-        EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile-sandbox",
-        EVE_EVALUATION: "1",
-        EVE_EVALUATION_RUN_ID: "hostile-evaluation",
-        APP_BUILDER_LOCAL_PUBLICATION: "1",
-        APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
-        APP_BUILDER_BRANCH_WORKTREE_ROOT: "",
-        APP_BUILDER_SANDBOX_IMAGE: "",
-        APP_BUILDER_LOCAL_ADAPTER: "1",
-        EVE_AGENT_HOST: "http://127.0.0.1:9999",
-        REPOSITORY_LOCAL_ROOTS: "/hostile",
       },
+      workerData: { spawnNested: true },
     });
-    const result = await new Promise<{
-      capability: typeof capability;
-      appRoot: string | null;
-      eveDev: string | null;
-      nestedCapability: typeof capability;
-      nestedAppRoot: string | null;
-      nestedEveDev: string | null;
-      nestedWorkflowBodyTimeout: string | null;
-      nestedWorkflowHeadersTimeout: string | null;
-      workflowBaseUrl: string | null;
-      workflowBodyTimeout: string | null;
-      workflowHeadersTimeout: string | null;
-      port: string | null;
-      hasTransportSecret: boolean;
-      sandboxRunId: string | null;
-      evaluation: string | null;
-      evaluationRunId: string | null;
-      hasGateAEnvironment: boolean;
-    }>((resolve, reject) => {
-      worker.once("message", resolve);
-      worker.once("error", reject);
-    });
+    const [result] = (await once(worker, "message")) as [
+      {
+        capability: typeof capability;
+        appRoot: string | null;
+        eveDev: string | null;
+        nestedCapability: typeof capability;
+        nestedAppRoot: string | null;
+        nestedEveDev: string | null;
+        nestedWorkflowBodyTimeout: string | null;
+        nestedWorkflowHeadersTimeout: string | null;
+        workflowBaseUrl: string | null;
+        workflowBodyTimeout: string | null;
+        workflowHeadersTimeout: string | null;
+        port: string | null;
+        hasTransportSecret: boolean;
+        sandboxRunId: string | null;
+        evaluation: string | null;
+        evaluationRunId: string | null;
+        hasGateAEnvironment: boolean;
+      },
+    ];
     await worker.terminate();
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);
@@ -119,10 +122,7 @@ describe("test capability preload", () => {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const hostileResult = await new Promise<{ eveDev: string | null }>((resolve, reject) => {
-        hostileWorker.once("message", resolve);
-        hostileWorker.once("error", reject);
-      });
+      const [hostileResult] = (await once(hostileWorker, "message")) as [{ eveDev: string | null }];
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
@@ -136,13 +136,8 @@ describe("test capability preload", () => {
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
-    const timeoutExit = await new Promise<number>((resolve, reject) => {
-      timeoutWorker.once("exit", resolve);
-      timeoutWorker.once("error", reject);
-    });
-    await new Promise((resolve) => {
-      setTimeout(resolve, 25);
-    });
+    const [timeoutExit] = (await once(timeoutWorker, "exit")) as [number];
+    await delay(25);
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
     expect(afterPorts).toBeLessThanOrEqual(beforePorts);
@@ -152,9 +147,9 @@ describe("test capability preload", () => {
     expect(
       inspectAmbientPreload({
         ...process.env,
-        NODE_OPTIONS: `--import=${preload}`,
-        APP_BUILDER_TEST_MODEL: "1",
         APP_BUILDER_TEST_CAPABILITY_ID: "a".repeat(64),
+        APP_BUILDER_TEST_MODEL: "1",
+        NODE_OPTIONS: `--import=${preload}`,
       }),
     ).toEqual({ capability: null, nodeOptions: null });
   });
@@ -210,21 +205,19 @@ describe("test capability preload", () => {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const child = spawn(process.execPath, ["-e", source], {
         cwd: repositoryRoot,
+        env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "pipe", "pipe"],
-        env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
       });
       const authorization = child.stdio[3] as Duplex;
       const authorizationErrors: string[] = [];
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
       });
-      const authorizationClosed = new Promise<void>((resolve) => {
-        authorization.once("close", resolve);
-      });
+      const authorizationClosed = once(authorization, "close");
       authorization.end(
         `${JSON.stringify({
-          version: 2,
           publicKey: attackerPublicKey,
+          version: 2,
         })}\n`,
       );
       let stdout = "";
@@ -232,10 +225,7 @@ describe("test capability preload", () => {
       child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
       child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const status = await new Promise<number | null>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("exit", resolve);
-      });
+      const [status] = (await once(child, "exit")) as [number | null];
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await authorizationClosed;
       expect(status, stderr).toBe(0);
@@ -262,7 +252,7 @@ describe("test capability preload", () => {
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
       encoding: "utf-8",
-      env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
+      env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       timeout: 5000,
     });
     expect(result.status, result.stderr).toBe(0);

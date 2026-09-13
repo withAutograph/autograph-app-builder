@@ -25,7 +25,7 @@ function canonicalSelector(value: string) {
   let pendingSpace = false;
   let quote: string | undefined;
   for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]!;
+    const char = value.charAt(index);
     if (quote) {
       output += char;
       if (char === quote && value[index - 1] !== "\\") quote = undefined;
@@ -96,11 +96,11 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
         const start = declaration.source?.start;
         if (!start) continue;
         evidence.push({
-          selector: canonicalSelector(rule.selector),
           property: declaration.prop,
-          value: normal(declaration.value),
-          source: { path: file.path, line: start.line, column: start.column },
           ruleSignature: signature,
+          selector: canonicalSelector(rule.selector),
+          source: { column: start.column, line: start.line, path: file.path },
+          value: normal(declaration.value),
         });
       }
     });
@@ -125,9 +125,9 @@ export function generatedCssRule(
   const actual = ruleSignature(
     selector,
     declarations.map((declaration) => ({
+      important: declaration.important,
       prop: declaration.name,
       value: declaration.value,
-      important: declaration.important,
     })),
   );
   const loaded = actual ? matchingGenerated.filter((rule) => rule.ruleSignature === actual) : [];

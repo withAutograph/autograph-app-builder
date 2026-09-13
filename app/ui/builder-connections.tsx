@@ -28,11 +28,11 @@ export const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage 
 const connectionKind = new Map<string, string>(featuredConnections);
 
 const connectionDescriptions: Record<string, string> = {
+  NetSuite: "Import vendor data from a NetSuite account",
   QuickBooks: "Import mapped vendors, bills, and vendor credits",
   Ramp: "Import authorized transactions and vendor data",
-  NetSuite: "Import vendor data from a NetSuite account",
-  Xero: "Import suppliers, invoices, and credit data",
   "Sage Intacct": "Import vendor data from a Sage Intacct company",
+  Xero: "Import suppliers, invoices, and credit data",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -44,14 +44,15 @@ function connectionDescription(name: string) {
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   const icons = {
     quickbooks: SiQuickbooks,
-    xero: SiXero,
     "sage-intacct": SiSage,
+    xero: SiXero,
   };
   const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span className={styles.connectionIcon} data-kind={kind} data-name={name} aria-hidden="true">
-      {Icon ? <Icon size={18} /> : hasBrandAsset ? null : <Globe size={18} />}
+      {Icon ? <Icon size={18} /> : null}
+      {!Icon && !hasBrandAsset ? <Globe size={18} /> : null}
     </span>
   );
 }

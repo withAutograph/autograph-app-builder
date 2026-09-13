@@ -50,17 +50,17 @@ export async function loadBuilderIntegrationState(
   });
   if (!input.authenticated) {
     return builderIntegrationStateSchema.parse({
-      vercel: { status: "disconnected", scopes: [] },
-      github: { status: "disconnected", scopes: [] },
+      github: { scopes: [], status: "disconnected" },
       models: await modelsPromise,
+      vercel: { scopes: [], status: "disconnected" },
     });
   }
 
   // Keep the state helper local to the integration boundary.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const unavailable = (reason: "configuration-unavailable") => ({
-    status: "unavailable" as const,
     scopes: [],
+    status: "unavailable" as const,
     unavailableReason: reason,
   });
 
@@ -71,17 +71,17 @@ export async function loadBuilderIntegrationState(
     database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
-      vercel: unavailable("configuration-unavailable"),
       github: unavailable("configuration-unavailable"),
       models: await modelsPromise,
+      vercel: unavailable("configuration-unavailable"),
     });
   }
 
   const authority = {
-    issuer: preview.issuer,
     audience: preview.resource,
-    workspaceId: input.workspaceId,
+    issuer: preview.issuer,
     ownerUserId: input.userId,
+    workspaceId: input.workspaceId,
   };
 
   const githubPromise = (async (): Promise<BuilderIntegrationState["github"]> => {
@@ -95,12 +95,12 @@ export async function loadBuilderIntegrationState(
       const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
         .filter((binding) => binding.active)
         .map((binding) => ({
-          installationId: binding.installationId,
-          status: "connected" as const,
           accountLogin: binding.accountLogin,
           accountType: binding.accountType,
+          installationId: binding.installationId,
+          status: "connected" as const,
         }));
-      return { status: scopes.length ? "connected" : "disconnected", scopes };
+      return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
       return unavailable("configuration-unavailable");
     }
@@ -110,19 +110,19 @@ export async function loadBuilderIntegrationState(
     try {
       const config = readVercelIntegrationEnvironment(environment);
       const bindings = await createPostgresVercelInstallationStore({
-        database,
         config,
+        database,
       }).list(authority);
       const scopes = bindings
         .filter((binding) => binding.active)
         .map((binding) => ({
-          installationId: binding.installationId,
-          status: "connected" as const,
           displayName: binding.displayName,
-          slug: binding.slug,
+          installationId: binding.installationId,
           plan: binding.plan,
+          slug: binding.slug,
+          status: "connected" as const,
         }));
-      return { status: scopes.length ? "connected" : "disconnected", scopes };
+      return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
       return unavailable("configuration-unavailable");
     }
@@ -131,8 +131,8 @@ export async function loadBuilderIntegrationState(
   const [github, vercel, models] = await Promise.all([githubPromise, vercelPromise, modelsPromise]);
 
   return builderIntegrationStateSchema.parse({
-    vercel,
     github,
     models,
+    vercel,
   });
 }

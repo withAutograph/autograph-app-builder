@@ -17,12 +17,9 @@ const mixedResult = sessionResult([
   authorizationRequest,
 ]);
 const meta = {
-  title: "MCP/Inputs/Input Batch",
-  component: SessionAppView,
   args: {
     canCallTools: true,
     canOpenLinks: true,
-    result: mixedResult,
     onOpenLink: fn(async () => {
       // Story fixture callback.
     }),
@@ -32,8 +29,11 @@ const meta = {
     onRespond: fn(async () => {
       // Story fixture callback.
     }),
+    result: mixedResult,
   },
+  component: SessionAppView,
   parameters: { layout: "fullscreen" },
+  title: "MCP/Inputs/Input Batch",
 } satisfies Meta<typeof SessionAppView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -47,7 +47,7 @@ export const MixedRequests: Story = {
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {
-    result: { ...mixedResult, status: "working", inputRequests: undefined },
+    result: { ...mixedResult, inputRequests: undefined, status: "working" },
   },
 };
 export const CompleteBatchAction: Story = {
@@ -97,13 +97,11 @@ export const RepositoryScopeKeyboardSelection: Story = {
 };
 export const SubmittingAndDuplicateProtection: Story = {
   args: {
+    onRespond: fn(async () => {
+      // Keep the pending state visible in the story.
+      await new ReadableStream().getReader().read();
+    }),
     result: sessionResult([choiceRequest]),
-    onRespond: fn(
-      () =>
-        new Promise<void>(() => {
-          // Keep the pending state visible in the story.
-        }),
-    ),
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
@@ -116,11 +114,11 @@ export const SubmittingAndDuplicateProtection: Story = {
 };
 export const ActionableFailure: Story = {
   args: {
-    result: sessionResult([choiceRequest]),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     onRespond: fn(async () => {
       throw new Error("rejected");
     }),
+    result: sessionResult([choiceRequest]),
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

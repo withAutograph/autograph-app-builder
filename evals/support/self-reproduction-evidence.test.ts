@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -16,12 +16,12 @@ const directories: string[] = [];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function capture() {
-  const directory = mkdtempSync(join(tmpdir(), "self-reproduction-evidence-"));
+  const directory = mkdtempSync(path.join(tmpdir(), "self-reproduction-evidence-"));
   directories.push(directory);
-  const logPath = join(directory, "native.log");
-  const transcriptPath = join(directory, "transcript.jsonl");
+  const logPath = path.join(directory, "native.log");
+  const transcriptPath = path.join(directory, "transcript.jsonl");
   const records: Record<string, unknown>[] = [];
-  return { logPath, transcriptPath, records, sink: evidenceSink(logPath, transcriptPath, records) };
+  return { logPath, records, sink: evidenceSink(logPath, transcriptPath, records), transcriptPath };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -31,7 +31,7 @@ function receipt(record: unknown) {
 
 afterEach(() => {
   for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(directory, { force: true, recursive: true });
 });
 
 describe("self-reproduction evidence completion", () => {
@@ -41,15 +41,15 @@ describe("self-reproduction evidence completion", () => {
 
   it("requires a completion receipt after transcript events", () => {
     expect(evidenceCompletion(0, [{ kind: "event", text: "Still working" }])).toMatchObject({
-      status: "failed",
       reason: expect.stringContaining("completion receipt"),
+      status: "failed",
     });
   });
 
   it("requires transcript or tool events even when a completion receipt exists", () => {
     expect(evidenceCompletion(0, [{ kind: "eval-completed" }])).toMatchObject({
-      status: "failed",
       reason: expect.stringContaining("transcript/tool events"),
+      status: "failed",
     });
   });
 
@@ -70,9 +70,9 @@ describe("self-reproduction evidence persistence", () => {
   it("sanitizes credentials split across stream chunks before writing either artifact", () => {
     const { sink, logPath, transcriptPath, records } = capture();
     const raw = receipt({
-      kind: "event",
       authorization: "Bearer private-bearer-value",
       continuationToken: "private-continuation-value",
+      kind: "event",
       message: "API_KEY=private-key-value https://example.test/?token=private-query-value",
       nested: { password: "private-password-value" },
     });
@@ -80,8 +80,8 @@ describe("self-reproduction evidence persistence", () => {
     for (const character of raw) sink.write(character);
     sink.end();
 
-    for (const path of [logPath, transcriptPath]) {
-      const persisted = readFileSync(path, "utf-8");
+    for (const artifactPath of [logPath, transcriptPath]) {
+      const persisted = readFileSync(artifactPath, "utf-8");
       for (const secret of [
         "private-bearer-value",
         "private-continuation-value",
@@ -134,45 +134,45 @@ describe("self-reproduction evidence persistence", () => {
   it("extracts only a valid reviewed candidate source export", () => {
     expect(
       candidateExportFromEvidence([
-        { kind: "event", event: { type: "action.result", data: { toolName: "other" } } },
+        { event: { data: { toolName: "other" }, type: "action.result" }, kind: "event" },
         {
-          kind: "event",
           event: {
-            type: "action.result",
             data: {
               result: {
-                toolName: "change_set_status",
                 output: {
                   exportFiles: [
-                    { path: "apps/replica/package.json", content: "{}\n" },
+                    { content: "{}\n", path: "apps/replica/package.json" },
                     {
-                      path: "apps/replica/app/page.tsx",
                       content: "export default function Page() {}\n",
+                      path: "apps/replica/app/page.tsx",
                     },
                   ],
                 },
+                toolName: "change-set-status",
               },
             },
+            type: "action.result",
           },
+          kind: "event",
         },
       ]),
     ).toEqual([
-      { path: "apps/replica/app/page.tsx", content: "export default function Page() {}\n" },
-      { path: "apps/replica/package.json", content: "{}\n" },
+      { content: "export default function Page() {}\n", path: "apps/replica/app/page.tsx" },
+      { content: "{}\n", path: "apps/replica/package.json" },
     ]);
     expect(
       candidateExportFromEvidence([
         {
-          kind: "event",
           event: {
-            type: "action.result",
             data: {
               result: {
-                toolName: "change_set_status",
-                output: { exportFiles: [{ path: "../reference", content: "leak" }] },
+                output: { exportFiles: [{ content: "leak", path: "../reference" }] },
+                toolName: "change-set-status",
               },
             },
+            type: "action.result",
           },
+          kind: "event",
         },
       ]),
     ).toBeUndefined();
@@ -183,16 +183,16 @@ describe("self-reproduction evidence persistence", () => {
       candidateExportProvenanceFromEvidence([
         {
           event: {
-            type: "action.result",
             data: {
               result: {
-                toolName: "change_set_status",
                 output: {
+                  exportFiles: [{ content: "failed", path: "apps/replica/app/page.tsx" }],
                   status: "validation_failed",
-                  exportFiles: [{ path: "apps/replica/app/page.tsx", content: "failed" }],
                 },
+                toolName: "change-set-status",
               },
             },
+            type: "action.result",
           },
         },
       ]),
@@ -204,25 +204,25 @@ describe("self-reproduction evidence persistence", () => {
       candidateExportFromEvidence([
         {
           event: {
-            type: "action.result",
             data: {
               result: {
-                toolName: "change_set_status",
                 output: {
                   exportFiles: [
-                    { path: "prototype/replica/app-spec.md", content: "# Replica" },
-                    { path: "apps/replica/next.config.ts", content: "export default {}" },
-                    { path: "apps/replica/app/page.tsx", content: "export default null" },
+                    { content: "# Replica", path: "prototype/replica/app-spec.md" },
+                    { content: "export default {}", path: "apps/replica/next.config.ts" },
+                    { content: "export default null", path: "apps/replica/app/page.tsx" },
                   ],
                 },
+                toolName: "change-set-status",
               },
             },
+            type: "action.result",
           },
         },
       ]),
     ).toEqual([
-      { path: "app/page.tsx", content: "export default null" },
-      { path: "next.config.ts", content: "export default {}" },
+      { content: "export default null", path: "app/page.tsx" },
+      { content: "export default {}", path: "next.config.ts" },
     ]);
   });
 
@@ -231,16 +231,16 @@ describe("self-reproduction evidence persistence", () => {
     const outcomes = [
       {
         kind: "event",
-        type: "tool-result",
-        toolName: "read_file",
         output: { path: "app/page.tsx", status: "ok" },
+        toolName: "read-file",
+        type: "tool-result",
       },
       {
-        kind: "event",
-        type: "tool-error",
-        toolName: "validate_app",
         error: "Typecheck failed",
         exitCode: 2,
+        kind: "event",
+        toolName: "validate_app",
+        type: "tool-error",
       },
     ];
     sink.write(`Native eval started\n${receipt(outcomes[0])}${receipt(outcomes[1]).trimEnd()}`);

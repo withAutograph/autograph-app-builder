@@ -66,9 +66,11 @@ export function BuilderContinuation({
         creationRequestId: string;
       }
     | undefined
-  >(undefined);
-  const completedHandoff = useRef<string | undefined>(undefined);
-  const savedContinuation = useRef<BuilderHandoffContinuationInput | undefined>(undefined);
+  >(globalThis.undefined);
+  const completedHandoff = useRef<string | undefined>(globalThis.undefined);
+  const savedContinuation = useRef<BuilderHandoffContinuationInput | undefined>(
+    globalThis.undefined,
+  );
   const [continuation, dispatchContinuation, continuationPending] = useActionState(
     async (
       previous: BuilderHandoffContinuationState | undefined,
@@ -82,7 +84,7 @@ export function BuilderContinuation({
         return { status: "error" };
       }
     },
-    undefined,
+    globalThis.undefined,
   );
 
   useEffect(() => {
@@ -131,20 +133,23 @@ export function BuilderContinuation({
             continuationRequest.current.intentKey !== intentKey
           ) {
             continuationRequest.current = {
+              creationRequestId: crypto.randomUUID(),
               draftId: draftCheckpoint.draftId,
               intentKey,
               requestId: crypto.randomUUID(),
-              creationRequestId: crypto.randomUUID(),
             };
           }
+          const request = continuationRequest.current;
+          if (!request) return;
           savedContinuation.current = {
-            version: 1,
-            requestId: continuationRequest.current!.requestId,
-            creationRequestId: continuationRequest.current!.creationRequestId,
-            provisioningEnabled,
+            creationRequestId: request.creationRequestId,
             draftCheckpoint,
+            provisioningEnabled,
+            requestId: request.requestId,
+            version: 1,
           };
-          startTransition(() => dispatchContinuation(savedContinuation.current!));
+          const input = savedContinuation.current;
+          if (input) startTransition(() => dispatchContinuation(input));
         }}
       >
         {children}
@@ -160,8 +165,8 @@ export function BuilderContinuation({
           <button
             type="button"
             onClick={() => {
-              if (savedContinuation.current)
-                startTransition(() => dispatchContinuation(savedContinuation.current!));
+              const input = savedContinuation.current;
+              if (input) startTransition(() => dispatchContinuation(input));
             }}
           >
             Retry saved handoff

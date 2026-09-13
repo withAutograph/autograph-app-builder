@@ -34,8 +34,8 @@ describe("hosted Arrusted artifact", () => {
 
   it("contains no production fixed-source receipt or materialization path", () => {
     for (const path of [
-      "agent/tools/inspect_source.ts",
-      "agent/tools/prepare_workspace.ts",
+      "agent/tools/inspect-source.ts",
+      "agent/tools/prepare-workspace.ts",
       "lib/sandbox/hosted-toolchain.ts",
     ]) {
       const definition = readFileSync(path, "utf-8");

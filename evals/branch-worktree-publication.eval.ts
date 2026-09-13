@@ -20,7 +20,7 @@ export default defineEval({
 
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
-      toolName: "publish_reviewed_change_set_to_branch_worktree",
+      toolName: "publish-reviewed-change-set_to_branch_worktree",
     });
     await t.respondAll("approve");
     t.succeeded();
@@ -35,6 +35,6 @@ export default defineEval({
       includes("app-builder/review-"),
     );
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

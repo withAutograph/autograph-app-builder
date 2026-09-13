@@ -12,16 +12,16 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(result.plugins).toEqual([]);
     expect(result.summary).toEqual({
       enabled: false,
-      plan: null,
       organizationAuthorityReady: true,
+      plan: null,
     });
   });
 
   it("enables only the Starter dashboard after organization authority is ready", () => {
     const result = resolveBetterAuthInfrastructure({
       environment: {
-        BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
         BETTER_AUTH_API_KEY: "test-infrastructure-key",
+        BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
       },
       organizationAuthorityReady: true,
     });
@@ -30,8 +30,8 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(result.plugins[0]?.id).toBe("dash");
     expect(result.summary).toEqual({
       enabled: true,
-      plan: "starter",
       organizationAuthorityReady: true,
+      plan: "starter",
     });
     expect(JSON.stringify(result.summary)).not.toContain("test-infrastructure-key");
   });
@@ -40,8 +40,8 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(() =>
       resolveBetterAuthInfrastructure({
         environment: {
-          BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
           BETTER_AUTH_API_KEY: "test-infrastructure-key",
+          BETTER_AUTH_INFRASTRUCTURE: "starter-dashboard-v1",
         },
         organizationAuthorityReady: false,
       }),
@@ -61,8 +61,8 @@ describe("resolveBetterAuthInfrastructure", () => {
     expect(() =>
       resolveBetterAuthInfrastructure({
         environment: {
-          BETTER_AUTH_INFRASTRUCTURE: "enabled",
           BETTER_AUTH_API_KEY: "test-infrastructure-key",
+          BETTER_AUTH_INFRASTRUCTURE: "enabled",
         },
         organizationAuthorityReady: true,
       }),

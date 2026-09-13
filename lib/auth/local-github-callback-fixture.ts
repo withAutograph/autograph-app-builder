@@ -1,14 +1,7 @@
 export const localGitHubCallbackFixtureCookie = "autograph-e2e-github-callback";
 
 const fixtures = {
-  extensions: [
-    ["iss", "https://github.com"],
-    ["iss", "https://provider-extension.invalid/again"],
-    ["future_provider_extension", "opaque-provider-value"],
-    ["future_provider_extension", "opaque-provider-value-2"],
-  ],
   "duplicate-code": [["code", "duplicate-app-owned-value"]],
-  "duplicate-state": [["state", "duplicate-app-owned-value"]],
   "duplicate-installation-id": [
     ["installation_id", "1001"],
     ["installation_id", "1001"],
@@ -18,6 +11,13 @@ const fixtures = {
     ["installation_id", "1001"],
     ["setup_action", "install"],
     ["setup_action", "install"],
+  ],
+  "duplicate-state": [["state", "duplicate-app-owned-value"]],
+  extensions: [
+    ["iss", "https://github.com"],
+    ["iss", "https://provider-extension.invalid/again"],
+    ["future_provider_extension", "opaque-provider-value"],
+    ["future_provider_extension", "opaque-provider-value-2"],
   ],
 } as const satisfies Record<string, readonly (readonly [string, string])[]>;
 

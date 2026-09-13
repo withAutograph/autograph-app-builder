@@ -17,13 +17,13 @@ const INTERNAL_EMAIL_DOMAIN = "passkey.autograph.invalid";
 
 const tokenPayloadSchema = z
   .object({
-    version: z.literal(TOKEN_VERSION),
-    nonce: z.string().uuid(),
-    userHandle: z.string().uuid(),
     deploymentId: z.string().min(1).max(256),
+    expiresAt: z.number().int().positive(),
+    nonce: z.string().uuid(),
     origin: z.string().url(),
     rpId: z.string().min(1).max(253),
-    expiresAt: z.number().int().positive(),
+    userHandle: z.string().uuid(),
+    version: z.literal(TOKEN_VERSION),
   })
   .strict();
 
@@ -113,9 +113,9 @@ export function readPasskeyOnboardingConfig(
       }
     }
     return {
+      deploymentId,
       origin,
       rpId: hostname,
-      deploymentId,
       secret,
       secureCookies: true,
     };
@@ -145,9 +145,9 @@ export function readPasskeyOnboardingConfig(
     );
   }
   return {
+    deploymentId: "local",
     origin,
     rpId: hostname,
-    deploymentId: "local",
     secret,
     secureCookies: isHttps,
   };
@@ -185,17 +185,17 @@ function personalWorkspaceSlug(userId: string, deploymentId: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPasskeyOnboardingToken(config: PasskeyOnboardingConfig, now = new Date()) {
   const payload = tokenPayloadSchema.parse({
-    version: TOKEN_VERSION,
-    nonce: randomUUID(),
-    userHandle: randomUUID(),
     deploymentId: config.deploymentId,
+    expiresAt: Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS,
+    nonce: randomUUID(),
     origin: config.origin,
     rpId: config.rpId,
-    expiresAt: Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS,
+    userHandle: randomUUID(),
+    version: TOKEN_VERSION,
   });
   const encodedPayload = encode(JSON.stringify(payload));
   const token = `${encodedPayload}.${sign(encodedPayload, config.secret)}`;
-  return { payload, token, digest: tokenDigest(token) };
+  return { digest: tokenDigest(token), payload, token };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -224,7 +224,7 @@ export function verifyPasskeyOnboardingToken(
     ) {
       return null;
     }
-    return { payload, digest: tokenDigest(token) };
+    return { digest: tokenDigest(token), payload };
   } catch {
     return null;
   }
@@ -278,18 +278,18 @@ export async function issuePasskeyOnboardingContext(
   });
   const issued = createPasskeyOnboardingToken(config, issuedAt);
   await adapter.create({
-    model: "passkeyOnboarding",
     data: {
-      id: issued.payload.nonce,
-      tokenDigest: issued.digest,
+      createdAt: issuedAt,
       deploymentId: issued.payload.deploymentId,
+      expiresAt: new Date(issued.payload.expiresAt * 1000),
+      id: issued.payload.nonce,
       origin: issued.payload.origin,
       rpId: issued.payload.rpId,
+      tokenDigest: issued.digest,
       userHandle: issued.payload.userHandle,
-      expiresAt: new Date(issued.payload.expiresAt * 1000),
-      createdAt: issuedAt,
     },
     forceAllowId: true,
+    model: "passkeyOnboarding",
   });
   return issued;
 }
@@ -302,7 +302,7 @@ export function authenticatedPasskeyRegistration(
 ) {
   if (!userId) return null;
   if (context) throw onboardingAlreadyAuthenticated();
-  return { userId, name: "Additional passkey" };
+  return { name: "Additional passkey", userId };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -313,54 +313,13 @@ export function createPasskeyOnboardingPlugin(input: {
 }): BetterAuthPlugin {
   const now = input.now ?? (() => new Date());
   return {
-    id: "autograph-passkey-onboarding",
-    init() {
-      return {
-        options: {
-          databaseHooks: {
-            session: {
-              create: {
-                async before(
-                  session: Record<string, unknown> & { userId: string },
-                  ctx: { path?: string; context: { adapter: unknown } } | null,
-                ) {
-                  if (ctx?.path !== "/passkey/verify-registration") return;
-                  const adapter = await getCurrentAdapter(
-                    ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
-                  );
-                  const memberships = await adapter.findMany<{
-                    organizationId: string;
-                  }>({
-                    model: "member",
-                    where: [{ field: "userId", value: session.userId }],
-                    limit: 2,
-                  });
-                  if (memberships.length !== 1 || !memberships[0]) {
-                    throw APIError.from("INTERNAL_SERVER_ERROR", {
-                      code: "PASSKEY_WORKSPACE_SETUP_FAILED",
-                      message: "Passkey workspace setup failed.",
-                    });
-                  }
-                  return {
-                    data: {
-                      ...session,
-                      activeOrganizationId: memberships[0].organizationId,
-                    },
-                  };
-                },
-              },
-            },
-          },
-        },
-      };
-    },
     endpoints: {
       createPasskeyOnboardingContext: createAuthEndpoint(
         "/passkey/onboarding-context",
         {
-          method: "POST",
           body: z.object({}).strict(),
           metadata: { noStore: true },
+          method: "POST",
         },
         async (ctx) => {
           const { config } = input;
@@ -383,7 +342,6 @@ export function createPasskeyOnboardingPlugin(input: {
     hooks: {
       before: [
         {
-          matcher: (ctx) => ctx.path === "/passkey/verify-registration",
           handler: createAuthMiddleware(async (ctx) => {
             // Better Auth keeps registration context in its challenge record;
             // createSession is the parsed verification-body marker that
@@ -392,9 +350,9 @@ export function createPasskeyOnboardingPlugin(input: {
             const session = await getSessionFromCtx(ctx);
             if (session?.user.id) throw onboardingAlreadyAuthenticated();
           }),
+          matcher: (ctx) => ctx.path === "/passkey/verify-registration",
         },
         {
-          matcher: (ctx) => ctx.path === "/passkey/delete-passkey",
           handler: createAuthMiddleware(async (ctx) => {
             const session = await getSessionFromCtx(ctx);
             if (!session?.user.id) return;
@@ -409,29 +367,71 @@ export function createPasskeyOnboardingPlugin(input: {
               });
             }
           }),
+          matcher: (ctx) => ctx.path === "/passkey/delete-passkey",
         },
       ],
     },
-    schema: {
-      passkeyOnboarding: {
-        fields: {
-          tokenDigest: { type: "string", required: true, unique: true },
-          deploymentId: { type: "string", required: true },
-          origin: { type: "string", required: true },
-          rpId: { type: "string", required: true },
-          userHandle: { type: "string", required: true, unique: true },
-          expiresAt: { type: "date", required: true },
-          createdAt: { type: "date", required: true },
+    id: "autograph-passkey-onboarding",
+    init() {
+      return {
+        options: {
+          databaseHooks: {
+            session: {
+              create: {
+                async before(
+                  session: Record<string, unknown> & { userId: string },
+                  ctx: { path?: string; context: { adapter: unknown } } | null,
+                ) {
+                  if (ctx?.path !== "/passkey/verify-registration") return;
+                  const adapter = await getCurrentAdapter(
+                    ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
+                  );
+                  const memberships = await adapter.findMany<{
+                    organizationId: string;
+                  }>({
+                    limit: 2,
+                    model: "member",
+                    where: [{ field: "userId", value: session.userId }],
+                  });
+                  if (memberships.length !== 1 || !memberships[0]) {
+                    throw APIError.from("INTERNAL_SERVER_ERROR", {
+                      code: "PASSKEY_WORKSPACE_SETUP_FAILED",
+                      message: "Passkey workspace setup failed.",
+                    });
+                  }
+                  return {
+                    data: {
+                      ...session,
+                      activeOrganizationId: memberships[0].organizationId,
+                    },
+                  };
+                },
+              },
+            },
+          },
         },
-      },
+      };
     },
     rateLimit: [
       {
+        max: input.onboardingContextRateLimitMax ?? 10,
         pathMatcher: (path) => path === "/passkey/onboarding-context",
         window: 60,
-        max: input.onboardingContextRateLimitMax ?? 10,
       },
     ],
+    schema: {
+      passkeyOnboarding: {
+        fields: {
+          createdAt: { required: true, type: "date" },
+          deploymentId: { required: true, type: "string" },
+          expiresAt: { required: true, type: "date" },
+          origin: { required: true, type: "string" },
+          rpId: { required: true, type: "string" },
+          tokenDigest: { required: true, type: "string", unique: true },
+          userHandle: { required: true, type: "string", unique: true },
+        },
+      },
+    },
   };
 }
 
@@ -444,19 +444,6 @@ export function createPasskeyPlugin(input: {
   return passkey({
     ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
     registration: {
-      requireSession: false,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-      async resolveUser({ context }) {
-        const { config } = input;
-        if (!config) throw onboardingUnavailable();
-        const verified = verifyPasskeyOnboardingToken(context, config, now());
-        if (!verified) throw invalidOnboardingAuthority();
-        return {
-          id: verified.payload.userHandle,
-          name: "Autograph passkey user",
-          displayName: "Autograph user",
-        };
-      },
       async afterVerification({ ctx, context }) {
         const existingSession = await getSessionFromCtx(ctx);
         const authenticatedRegistration = authenticatedPasskeyRegistration(
@@ -485,39 +472,52 @@ export function createPasskeyPlugin(input: {
         }
         const user = await ctx.context.internalAdapter.createUser(
           {
-            name: "Autograph user",
             email: `${verified.payload.userHandle}@${INTERNAL_EMAIL_DOMAIN}`,
             emailVerified: false,
+            name: "Autograph user",
           },
           { method: "passkey" },
         );
         const organizationId = randomUUID();
         const workspaceId = randomUUID();
         await adapter.create({
-          model: "organization",
           data: {
+            audience: `${config.origin}/mcp`,
+            createdAt: now(),
             id: organizationId,
+            issuer: `${config.origin}/api/auth`,
             name: "My Workspace",
             slug: personalWorkspaceSlug(user.id, config.deploymentId),
-            createdAt: now(),
-            issuer: `${config.origin}/api/auth`,
-            audience: `${config.origin}/mcp`,
             workspaceId,
           },
           forceAllowId: true,
+          model: "organization",
         });
         await adapter.create({
-          model: "member",
           data: {
+            createdAt: now(),
             id: randomUUID(),
             organizationId,
-            userId: user.id,
             role: "owner",
-            createdAt: now(),
+            userId: user.id,
           },
           forceAllowId: true,
+          model: "member",
         });
-        return { userId: user.id, name: "Primary passkey" };
+        return { name: "Primary passkey", userId: user.id };
+      },
+      requireSession: false,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+      async resolveUser({ context }) {
+        const { config } = input;
+        if (!config) throw onboardingUnavailable();
+        const verified = verifyPasskeyOnboardingToken(context, config, now());
+        if (!verified) throw invalidOnboardingAuthority();
+        return {
+          displayName: "Autograph user",
+          id: verified.payload.userHandle,
+          name: "Autograph passkey user",
+        };
       },
     },
   });

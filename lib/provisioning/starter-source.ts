@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import nodePath from "node:path";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 
@@ -24,7 +24,34 @@ const objectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
 export const starterSourceManifestSchema = z
   .object({
-    version: z.literal(1),
+    archive: z
+      .object({
+        bytes: z
+          .number()
+          .int()
+          .positive()
+          .max(100 * 1024 * 1024),
+        sha256: digest,
+        url: z.string().url().startsWith("https://"),
+      })
+      .strict(),
+    files: z
+      .array(
+        z
+          .object({
+            bytes: z
+              .number()
+              .int()
+              .nonnegative()
+              .max(10 * 1024 * 1024),
+            mode: z.enum(["100644", "100755"]),
+            path: z.string().min(1).max(512),
+            sha256: digest,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(10_000),
     source: z
       .object({
         repository: z.literal("https://github.com/withAutograph/arrusted-development"),
@@ -32,34 +59,7 @@ export const starterSourceManifestSchema = z
         tree: objectId,
       })
       .strict(),
-    archive: z
-      .object({
-        url: z.string().url().startsWith("https://"),
-        sha256: digest,
-        bytes: z
-          .number()
-          .int()
-          .positive()
-          .max(100 * 1024 * 1024),
-      })
-      .strict(),
-    files: z
-      .array(
-        z
-          .object({
-            path: z.string().min(1).max(512),
-            mode: z.enum(["100644", "100755"]),
-            sha256: digest,
-            bytes: z
-              .number()
-              .int()
-              .nonnegative()
-              .max(10 * 1024 * 1024),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(10_000),
+    version: z.literal(1),
   })
   .strict();
 
@@ -124,24 +124,24 @@ function restrictedGit(
     {
       encoding: "utf-8",
       env: {
-        NODE_ENV: process.env.NODE_ENV ?? "production",
-        PATH: "/usr/bin:/bin",
-        HOME: "/dev/null",
-        XDG_CONFIG_HOME: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: "/dev/null",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_ATTR_NOSYSTEM: "1",
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
         ...(askpass === undefined
           ? {}
           : {
               APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE: askpass.credentialFile,
             }),
-        SSH_ASKPASS: "/usr/bin/false",
+        GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_SYSTEM: "/dev/null",
         GIT_LFS_SKIP_SMUDGE: "1",
+        GIT_NO_LAZY_FETCH: "1",
+        GIT_TERMINAL_PROMPT: "0",
+        HOME: "/dev/null",
+        NODE_ENV: process.env.NODE_ENV ?? "production",
+        PATH: "/usr/bin:/bin",
+        SSH_ASKPASS: "/usr/bin/false",
+        XDG_CONFIG_HOME: "/dev/null",
       },
       maxBuffer: 2 * 1024 * 1024,
       timeout,
@@ -151,16 +151,16 @@ function restrictedGit(
 
 const starterConfigSchema = z
   .object({
-    manifestUrl: z.string().url().startsWith("https://"),
     manifestSha256: digest,
+    manifestUrl: z.string().url().startsWith("https://"),
   })
   .strict()
   .superRefine((value, context) => {
     if (!new URL(value.manifestUrl).pathname.includes(value.manifestSha256)) {
       context.addIssue({
         code: "custom",
-        path: ["manifestUrl"],
         message: "Starter manifest URL must be content addressed.",
+        path: ["manifestUrl"],
       });
     }
   });
@@ -214,9 +214,9 @@ function tarFiles(archive: Uint8Array) {
     const end = start + size;
     if (end > tar.byteLength) throw new Error("starter-archive-invalid");
     files.set(path, {
+      bytes: new Uint8Array(tar.subarray(start, end)),
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: rawMode & 0o111 ? "100755" : "100644",
-      bytes: new Uint8Array(tar.subarray(start, end)),
     });
     offset = start + Math.ceil(size / 512) * 512;
   }
@@ -280,20 +280,20 @@ export async function loadStarterSource(input: {
       sha256(file.bytes) !== entry.sha256
     )
       throw new Error("starter-file-mismatch");
-    return { path: entry.path, mode: entry.mode, bytes: file.bytes };
+    return { bytes: file.bytes, mode: entry.mode, path: entry.path };
   });
   if (files.size !== result.length) throw new Error("starter-tree-mismatch");
   return {
+    files: result,
     manifest,
     manifestSha256: config.manifestSha256,
     provenance: {
+      method: "starter-archive-v3",
+      ref: "refs/heads/main",
+      repository: manifest.source.repository,
       sourceSha: manifest.source.sha,
       sourceTree: manifest.source.tree,
-      repository: manifest.source.repository,
-      ref: "refs/heads/main",
-      method: "starter-archive-v3",
     },
-    files: result,
   };
 }
 
@@ -307,10 +307,10 @@ export async function cloneStarterSource(input?: {
   reader?: ArrustedTemplateReader;
 }): Promise<StarterSource> {
   const access = await (input?.reader ?? deploymentArrustedTemplateReader()).acquire();
-  const root = await mkdtemp(join(tmpdir(), "autograph-app-builder-starter-"));
-  const checkout = join(root, "repository");
-  const credentialFile = join(root, "git-credential");
-  const askpassFile = join(root, "git-askpass");
+  const root = await mkdtemp(nodePath.join(tmpdir(), "autograph-app-builder-starter-"));
+  const checkout = nodePath.join(root, "repository");
+  const credentialFile = nodePath.join(root, "git-credential");
+  const askpassFile = nodePath.join(root, "git-askpass");
   try {
     await writeFile(credentialFile, `${access.token}\n`, { mode: 0o600 });
     await writeFile(
@@ -338,7 +338,7 @@ export async function cloneStarterSource(input?: {
         checkout,
       ],
       60_000,
-      { credentialFile, askpassFile },
+      { askpassFile, credentialFile },
     );
     if (clone.stderr.length > 2 * 1024 * 1024)
       throw new Error("starter-source-clone-output-invalid");
@@ -346,19 +346,22 @@ export async function cloneStarterSource(input?: {
     const origin = await restrictedGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
     if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY)
       throw new Error("starter-source-origin-drifted");
-    const sha = (
-      await restrictedGit(["-C", checkout, "rev-parse", "refs/remotes/origin/main"])
-    ).stdout.trim();
+    const shaResult = await restrictedGit([
+      "-C",
+      checkout,
+      "rev-parse",
+      "refs/remotes/origin/main",
+    ]);
+    const sha = shaResult.stdout.trim();
     if (!/^[0-9a-f]{40}$/u.test(sha)) throw new Error("starter-source-ref-invalid");
     await restrictedGit(["-C", checkout, "checkout", "--detach", "--quiet", sha]);
-    const tree = (
-      await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`])
-    ).stdout.trim();
+    const treeResult = await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`]);
+    const tree = treeResult.stdout.trim();
     if (!/^[0-9a-f]{40}$/u.test(tree)) throw new Error("starter-source-tree-invalid");
     const readinessDigest = await templateReadinessAttestationDigest({
       sha,
-      tree,
       token: access.token,
+      tree,
     });
     const sourceReceipt = await inspectClonedTemplateSourceReceipt({
       path: checkout,
@@ -377,34 +380,34 @@ export async function cloneStarterSource(input?: {
     const files = await Promise.all(
       paths.map(async (path): Promise<StarterSourceFile> => {
         if (!safeSourcePath(path)) throw new Error("starter-source-path-invalid");
-        const filePath = join(checkout, path);
+        const filePath = nodePath.join(checkout, path);
         const stat = await lstat(filePath);
         if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES)
           throw new Error("starter-source-file-invalid");
         return {
-          path,
+          bytes: await readFile(filePath),
           // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           mode: stat.mode & 0o111 ? "100755" : "100644",
-          bytes: await readFile(filePath),
+          path,
         };
       }),
     );
     return {
+      files,
       provenance: {
-        sourceSha: sha,
-        sourceTree: tree,
-        repository: ARRUSTED_TEMPLATE_REPOSITORY,
-        ref: "refs/heads/main",
+        contractDigest: sourceReceipt.contractDigest,
+        eligibilityDigest: sourceReceipt.eligibilityDigest,
         method: "git-clone-v1",
         readinessDigest,
         receiptVersion: sourceReceipt.version,
+        ref: "refs/heads/main",
+        repository: ARRUSTED_TEMPLATE_REPOSITORY,
         sourceReceiptDigest: sourceReceipt.digest,
-        eligibilityDigest: sourceReceipt.eligibilityDigest,
-        contractDigest: sourceReceipt.contractDigest,
+        sourceSha: sha,
+        sourceTree: tree,
       },
-      files,
     };
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 }

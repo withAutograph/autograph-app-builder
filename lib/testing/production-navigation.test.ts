@@ -6,14 +6,14 @@ const artifact = vi.hoisted(() => ({ productionNavigationArtifact: false }));
 vi.mock("./production-navigation-artifact", () => artifact);
 
 const fixture = {
-  NODE_ENV: "production",
   APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN: "https://localhost:3107",
-  BETTER_AUTH_URL: "https://localhost:3107/api/auth",
-  MCP_RESOURCE_URL: "https://localhost:3107/mcp",
   BETTER_AUTH_SECRET: "production-navigation-fixture-secret-only",
+  BETTER_AUTH_URL: "https://localhost:3107/api/auth",
   DATABASE_URL: "postgresql://postgres@127.0.0.1:54321/autograph_navigation_fixture",
   GITHUB_CLIENT_ID: "navigation-github-client",
   GITHUB_CLIENT_SECRET: "navigation-github-secret",
+  MCP_RESOURCE_URL: "https://localhost:3107/mcp",
+  NODE_ENV: "production",
   VERCEL_AUTH_CLIENT_ID: "navigation-vercel-client",
   VERCEL_AUTH_CLIENT_SECRET: "navigation-vercel-secret",
 };
@@ -32,18 +32,18 @@ it("cannot be activated by environment variables in the committed artifact", () 
 it("admits only guarded disposable artifacts and returns real-session auth configuration", () => {
   artifact.productionNavigationArtifact = true;
   expect(readProductionNavigationRuntimeConfig(fixture)).toEqual({
-    hostedAdapter: "1",
-    environment: "local",
-    issuer: fixture.BETTER_AUTH_URL,
-    resource: fixture.MCP_RESOURCE_URL,
-    trustedOrigins: [fixture.APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN],
-    secret: fixture.BETTER_AUTH_SECRET,
     databaseUrl: fixture.DATABASE_URL,
+    environment: "local",
     githubClientId: fixture.GITHUB_CLIENT_ID,
     githubClientSecret: fixture.GITHUB_CLIENT_SECRET,
+    hostedAdapter: "1",
+    issuer: fixture.BETTER_AUTH_URL,
+    passkeyOnboarding: null,
+    resource: fixture.MCP_RESOURCE_URL,
+    secret: fixture.BETTER_AUTH_SECRET,
+    trustedOrigins: [fixture.APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN],
     vercelClientId: fixture.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: fixture.VERCEL_AUTH_CLIENT_SECRET,
-    passkeyOnboarding: null,
   });
 });
 

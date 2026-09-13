@@ -5,9 +5,8 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
 
 const meta = {
-  title: "MCP/Inputs/Freeform Request",
+  args: { onAnswer: fn(), request: freeformRequest },
   component: InputControl,
-  args: { request: freeformRequest, onAnswer: fn() },
   decorators: [
     (Story) => (
       <McpBlockStoryLayout>
@@ -15,6 +14,7 @@ const meta = {
       </McpBlockStoryLayout>
     ),
   ],
+  title: "MCP/Inputs/Freeform Request",
 } satisfies Meta<typeof InputControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -1,5 +1,5 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { validateBuildReadyAppSpec } from "../lib/agent/app-spec-validation";
 import {
@@ -19,15 +19,15 @@ import {
 } from "../evals/support/product-quality";
 import { ARRUSTED_COMPONENT_COMPOSITION_MANIFEST } from "../evals/support/supported-repository";
 
-const reportRoot = resolve(
+const reportRoot = path.resolve(
   process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ?? ".artifacts/product-quality",
 );
-const vendorEvidenceRoot = resolve(reportRoot, "vendor-onboarding");
+const vendorEvidenceRoot = path.resolve(reportRoot, "vendor-onboarding");
 const vendor = productQualityScenario("vendor-onboarding");
 const prototype = evaluatePrototypeQuality({
-  scenario: vendor,
-  html: vendorOnboardingPrototype,
   appSpec: vendorOnboardingCompleteAppSpec,
+  html: vendorOnboardingPrototype,
+  scenario: vendor,
 });
 const policy = bindArrustedComponentCompositionPolicy({
   content: ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
@@ -41,73 +41,73 @@ const composition = auditAppliedAppComposition({
   binding: policy.binding,
   files: [
     {
-      path: "apps/vendor-onboarding/app/page.tsx",
       content:
         'import { Button, KpiCard, PageHeader } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n',
+      path: "apps/vendor-onboarding/app/page.tsx",
     },
   ],
 });
 const report = {
-  version: 1,
-  suite: "app-builder-product-quality",
-  hardGates: {
-    eve: "validated by evals/product-quality.eval.ts",
-    prototype: prototype.hardFailures.length === 0 ? "passed" : "failed",
-    appSpec: validateBuildReadyAppSpec(vendorOnboardingCompleteAppSpec).valid ? "passed" : "failed",
-    componentComposition: composition.status,
-  },
-  scenarios: PRODUCT_QUALITY_SCENARIOS.map((scenario) => ({
-    id: scenario.id,
-    conversation: "validated by the Eve product-quality scenario",
-    requiredReplyOutcomes: scenario.expected.replyIncludes,
-  })),
   evidence: {
-    prototypePath: "prototype/vendor-onboarding/index.html",
     appSpecPath: "prototype/vendor-onboarding/app-spec.md",
     policy: {
-      path: "docs/component-composition.json",
       digest: policy.binding.policyDigest,
       fixtureSourceSha: policy.binding.sourceSha,
       fixtureSourceTree: policy.binding.sourceTree,
       note: "The Eve integration gate binds these fields to the selected Arrusted source before auditing an applied app.",
+      path: "docs/component-composition.json",
     },
+    prototypePath: "prototype/vendor-onboarding/index.html",
     visual: {
-      status: "reported by the Playwright product-quality visual test",
       note: "Recorded fixture interaction evidence only; use eval:design for generated UI quality.",
+      status: "reported by the Playwright product-quality visual test",
     },
+  },
+  hardGates: {
+    appSpec: validateBuildReadyAppSpec(vendorOnboardingCompleteAppSpec).valid ? "passed" : "failed",
+    componentComposition: composition.status,
+    eve: "validated by evals/product-quality.eval.ts",
+    prototype: prototype.hardFailures.length === 0 ? "passed" : "failed",
   },
   quality: {
-    prototype: prototype.score,
     conversation: "reported per scenario by the Eve suite; quality scores do not gate CI",
+    prototype: prototype.score,
   },
+  scenarios: PRODUCT_QUALITY_SCENARIOS.map((scenario) => ({
+    conversation: "validated by the Eve product-quality scenario",
+    id: scenario.id,
+    requiredReplyOutcomes: scenario.expected.replyIncludes,
+  })),
   source: {
     vendorOnboardingAppSpecBytes: Buffer.byteLength(vendorOnboardingAppSpec),
   },
+  suite: "app-builder-product-quality",
+  version: 1,
 };
 
 await mkdir(reportRoot, { recursive: true });
 await mkdir(vendorEvidenceRoot, { recursive: true });
-await writeFile(resolve(vendorEvidenceRoot, "index.html"), vendorOnboardingPrototype);
-await writeFile(resolve(vendorEvidenceRoot, "decisions.md"), vendorOnboardingDecisions);
-await writeFile(resolve(vendorEvidenceRoot, "app-spec.md"), vendorOnboardingCompleteAppSpec);
+await writeFile(path.resolve(vendorEvidenceRoot, "index.html"), vendorOnboardingPrototype);
+await writeFile(path.resolve(vendorEvidenceRoot, "decisions.md"), vendorOnboardingDecisions);
+await writeFile(path.resolve(vendorEvidenceRoot, "app-spec.md"), vendorOnboardingCompleteAppSpec);
 await writeFile(
-  resolve(vendorEvidenceRoot, "component-policy.json"),
+  path.resolve(vendorEvidenceRoot, "component-policy.json"),
   `${JSON.stringify(
     {
-      status: composition.status,
-      requiredPublicImports: policy.binding.policy.publicImports,
-      tokenEntrypoints: policy.binding.policy.tokenEntrypoints,
-      policyPath: "docs/component-composition.json",
-      policyDigest: policy.binding.policyDigest,
       fixtureSourceSha: policy.binding.sourceSha,
       fixtureSourceTree: policy.binding.sourceTree,
+      policyDigest: policy.binding.policyDigest,
+      policyPath: "docs/component-composition.json",
+      requiredPublicImports: policy.binding.policy.publicImports,
+      status: composition.status,
+      tokenEntrypoints: policy.binding.policy.tokenEntrypoints,
     },
     null,
     2,
   )}\n`,
 );
 await writeFile(
-  resolve(reportRoot, "product-quality-report.json"),
+  path.resolve(reportRoot, "product-quality-report.json"),
   `${JSON.stringify(report, null, 2)}\n`,
 );
 const summary = [

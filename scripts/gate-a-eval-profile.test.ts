@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -12,7 +12,7 @@ import {
 } from "./gate-a-eval-profile.mjs";
 import { gateAEvalWorkflowBodyTimeout } from "./run-with-test-capability.mts";
 
-const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostileEnvironment(): Record<string, string | undefined> {
@@ -21,12 +21,12 @@ function hostileEnvironment(): Record<string, string | undefined> {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshRoots() {
-  const owner = realpathSync(mkdtempSync(join(tmpdir(), "gate-a-eval-profile-")));
-  const stateRoot = join(owner, "state");
-  const allowedRoot = join(owner, "destinations");
+  const owner = realpathSync(mkdtempSync(path.join(tmpdir(), "gate-a-eval-profile-")));
+  const stateRoot = path.join(owner, "state");
+  const allowedRoot = path.join(owner, "destinations");
   mkdirSync(stateRoot, { mode: 0o700 });
   mkdirSync(allowedRoot, { mode: 0o700 });
-  return { owner, stateRoot, allowedRoot };
+  return { allowedRoot, owner, stateRoot };
 }
 
 describe("closed Gate A eval profile", () => {
@@ -35,7 +35,7 @@ describe("closed Gate A eval profile", () => {
     ["0", "0"],
   ])("installs only the general %s profile", (localPublication, expected) => {
     const profile = createGateAEvalProfile(
-      { profile: "general", localPublication },
+      { localPublication, profile: "general" },
       repositoryRoot,
     );
     const environment = hostileEnvironment();
@@ -54,10 +54,10 @@ describe("closed Gate A eval profile", () => {
     const roots = freshRoots();
     const profile = createGateAEvalProfile(
       {
-        profile: "fresh",
-        stateRoot: roots.stateRoot,
         allowedRoot: roots.allowedRoot,
         fault: "after-stage",
+        profile: "fresh",
+        stateRoot: roots.stateRoot,
       },
       repositoryRoot,
     );
@@ -65,18 +65,18 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
-      APP_BUILDER_LOCAL_PUBLICATION: "1",
       APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "1",
-      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "1",
-      APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT: roots.stateRoot,
       APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT: roots.allowedRoot,
+      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "1",
       APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT: "after-stage",
+      APP_BUILDER_FRESH_BOOTSTRAP_STATE_ROOT: roots.stateRoot,
+      APP_BUILDER_LOCAL_PUBLICATION: "1",
     });
   });
 
   it("installs an unconfigured sandbox with the image truly absent", () => {
     const profile = createGateAEvalProfile(
-      { profile: "sandbox", image: null, sourceRoot: null },
+      { image: null, profile: "sandbox", sourceRoot: null },
       repositoryRoot,
     );
     const environment = hostileEnvironment();
@@ -92,21 +92,21 @@ describe("closed Gate A eval profile", () => {
 
   it("projects the body timeout only from a closed sandbox launch profile", () => {
     const sandbox = createGateAEvalProfile(
-      { profile: "sandbox", image: null, sourceRoot: null },
+      { image: null, profile: "sandbox", sourceRoot: null },
       repositoryRoot,
     );
     const general = createGateAEvalProfile(
-      { profile: "general", localPublication: "0" },
+      { localPublication: "0", profile: "general" },
       repositoryRoot,
     );
     expect(gateAEvalWorkflowBodyTimeout(sandbox)).toBe("360000");
     expect(gateAEvalWorkflowBodyTimeout(general)).toBeUndefined();
     expect(
       gateAEvalWorkflowBodyTimeout({
-        version: 1,
-        profile: "sandbox",
         image: null,
+        profile: "sandbox",
         sourceRoot: null,
+        version: 1,
       }),
     ).toBeUndefined();
   });
@@ -116,7 +116,7 @@ describe("closed Gate A eval profile", () => {
     const environment: Record<string, string | undefined> = {};
     installGateAEvalProfile(
       environment,
-      createGateAEvalProfile({ profile: "sandbox", image, sourceRoot: null }, repositoryRoot),
+      createGateAEvalProfile({ image, profile: "sandbox", sourceRoot: null }, repositoryRoot),
       repositoryRoot,
     );
     expect(environment.APP_BUILDER_SANDBOX_IMAGE).toBe(image);
@@ -128,7 +128,7 @@ describe("closed Gate A eval profile", () => {
     ])
       expect(() =>
         createGateAEvalProfile(
-          { profile: "sandbox", image: hostile, sourceRoot: null },
+          { image: hostile, profile: "sandbox", sourceRoot: null },
           repositoryRoot,
         ),
       ).toThrow(/sandbox image/u);
@@ -139,8 +139,8 @@ describe("closed Gate A eval profile", () => {
     const image = `ghcr.io/example/toolchain@sha256:${"c".repeat(64)}`;
     const profile = createGateAEvalProfile(
       {
-        profile: "hosted-artifact",
         image,
+        profile: "hosted-artifact",
         sourceRoot: roots.allowedRoot,
       },
       repositoryRoot,
@@ -148,8 +148,8 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
-      APP_BUILDER_REAL_SANDBOX: "1",
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
+      APP_BUILDER_REAL_SANDBOX: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
@@ -161,7 +161,7 @@ describe("closed Gate A eval profile", () => {
     installGateAEvalProfile(
       ordinaryEnvironment,
       createGateAEvalProfile(
-        { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+        { image, profile: "sandbox", sourceRoot: roots.allowedRoot },
         repositoryRoot,
       ),
       repositoryRoot,
@@ -173,7 +173,7 @@ describe("closed Gate A eval profile", () => {
     const roots = freshRoots();
     const image = `ghcr.io/example/toolchain@sha256:${"b".repeat(64)}`;
     const profile = createGateAEvalProfile(
-      { profile: "sandbox", image, sourceRoot: roots.allowedRoot },
+      { image, profile: "sandbox", sourceRoot: roots.allowedRoot },
       repositoryRoot,
     );
     const environment = hostileEnvironment();
@@ -207,10 +207,10 @@ describe("closed Gate A eval profile", () => {
     expect(() =>
       validateGateAEvalProfile(
         {
-          version: 1,
-          profile: "general",
-          localPublication: "1",
           image: null,
+          localPublication: "1",
+          profile: "general",
+          version: 1,
         },
         repositoryRoot,
       ),
@@ -219,20 +219,20 @@ describe("closed Gate A eval profile", () => {
     expect(() =>
       createGateAEvalProfile(
         {
-          profile: "fresh",
-          stateRoot: roots.stateRoot,
           allowedRoot: roots.allowedRoot,
           fault: "before-write",
+          profile: "fresh",
+          stateRoot: roots.stateRoot,
         },
         repositoryRoot,
       ),
     ).toThrow(/fresh fault/u);
     const profile = createGateAEvalProfile(
       {
-        profile: "fresh",
-        stateRoot: roots.stateRoot,
         allowedRoot: roots.allowedRoot,
         fault: null,
+        profile: "fresh",
+        stateRoot: roots.stateRoot,
       },
       repositoryRoot,
     );
@@ -250,16 +250,16 @@ describe("closed Gate A eval profile", () => {
 
   it("rejects symlink roots without disclosing hostile values", () => {
     const roots = freshRoots();
-    const linked = join(roots.owner, "linked");
+    const linked = path.join(roots.owner, "linked");
     symlinkSync(roots.stateRoot, linked);
     let message = "";
     try {
       createGateAEvalProfile(
         {
-          profile: "fresh",
-          stateRoot: linked,
           allowedRoot: roots.allowedRoot,
           fault: null,
+          profile: "fresh",
+          stateRoot: linked,
         },
         repositoryRoot,
       );
@@ -268,14 +268,14 @@ describe("closed Gate A eval profile", () => {
     }
     expect(message).toBe("The trusted Gate A eval root was invalid.");
     expect(message).not.toContain(linked);
-    const missing = join(roots.owner, "do-not-disclose-missing-root");
+    const missing = path.join(roots.owner, "do-not-disclose-missing-root");
     try {
       createGateAEvalProfile(
         {
-          profile: "fresh",
-          stateRoot: missing,
           allowedRoot: roots.allowedRoot,
           fault: null,
+          profile: "fresh",
+          stateRoot: missing,
         },
         repositoryRoot,
       );

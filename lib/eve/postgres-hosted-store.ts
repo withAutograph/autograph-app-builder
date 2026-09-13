@@ -23,41 +23,41 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const sessionRowSchema = z
   .object({
-    issuer: z.string(),
-    audience: z.string(),
-    workspaceId: z.string(),
-    ownerUserId: z.string(),
-    sessionId: z.string(),
-    adapterSessionId: z.string(),
     adapterGeneration: z.number().int().nullable(),
-    title: z.string().nullable(),
-    stage: z.string().nullable(),
-    resumabilityState: z.string().nullable(),
+    adapterSessionId: z.string(),
+    audience: z.string(),
     checkpointDigest: z.string().nullable(),
     checkpointProgressDigest: z.string().nullable(),
-    parentSessionId: z.string().nullable(),
-    lastProgressAt: z.date().nullable(),
-    record: z.unknown(),
     createdAt: z.date(),
+    issuer: z.string(),
+    lastProgressAt: z.date().nullable(),
+    ownerUserId: z.string(),
+    parentSessionId: z.string().nullable(),
+    record: z.unknown(),
+    resumabilityState: z.string().nullable(),
+    sessionId: z.string(),
+    stage: z.string().nullable(),
+    title: z.string().nullable(),
     updatedAt: z.date(),
+    workspaceId: z.string(),
   })
   .strict();
 
 const operationRowSchema = z
   .object({
-    issuer: z.string(),
     audience: z.string(),
-    workspaceId: z.string(),
-    ownerUserId: z.string(),
-    operationId: z.string(),
-    sessionId: z.string().nullable(),
-    kind: z.string(),
     clientRequestId: z.string(),
-    requestDigest: z.string(),
-    state: z.string(),
-    record: z.unknown(),
     createdAt: z.date(),
+    issuer: z.string(),
+    kind: z.string(),
+    operationId: z.string(),
+    ownerUserId: z.string(),
+    record: z.unknown(),
+    requestDigest: z.string(),
+    sessionId: z.string().nullable(),
+    state: z.string(),
     updatedAt: z.date(),
+    workspaceId: z.string(),
   })
   .strict();
 
@@ -143,43 +143,43 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function operationValues(record: HostedOperationRecord) {
   return {
-    issuer: record.principal.issuer,
     audience: record.principal.audience,
-    workspaceId: record.principal.workspaceId,
-    ownerUserId: record.principal.ownerUserId,
-    operationId: record.operationId,
-    sessionId: record.sessionId ?? null,
-    kind: record.kind,
     clientRequestId: record.clientRequestId,
-    requestDigest: record.requestDigest,
-    state: record.state,
-    record,
     createdAt: new Date(record.createdAtEpochMs),
+    issuer: record.principal.issuer,
+    kind: record.kind,
+    operationId: record.operationId,
+    ownerUserId: record.principal.ownerUserId,
+    record,
+    requestDigest: record.requestDigest,
+    sessionId: record.sessionId ?? null,
+    state: record.state,
     updatedAt: new Date(record.updatedAtEpochMs),
+    workspaceId: record.principal.workspaceId,
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sessionValues(record: HostedSessionRecord) {
   return {
-    issuer: record.principal.issuer,
-    audience: record.principal.audience,
-    workspaceId: record.principal.workspaceId,
-    ownerUserId: record.principal.ownerUserId,
-    sessionId: record.sessionId,
-    adapterSessionId: record.adapterSessionId,
     adapterGeneration: record.version === 1 ? null : record.adapterGeneration,
-    title: record.version === 1 ? null : record.title,
-    stage: record.version === 1 ? null : record.stage,
-    resumabilityState: record.version === 1 ? null : record.resumability,
+    adapterSessionId: record.adapterSessionId,
+    audience: record.principal.audience,
     checkpointDigest: record.version === 1 ? null : (record.checkpointDigest ?? null),
     checkpointProgressDigest:
       record.version === 1 ? null : (record.checkpointProgressDigest ?? null),
-    parentSessionId: record.version === 1 ? null : (record.parentSessionId ?? null),
-    lastProgressAt: record.version === 1 ? null : new Date(record.lastProgressAtEpochMs),
-    record,
     createdAt: new Date(record.createdAtEpochMs),
+    issuer: record.principal.issuer,
+    lastProgressAt: record.version === 1 ? null : new Date(record.lastProgressAtEpochMs),
+    ownerUserId: record.principal.ownerUserId,
+    parentSessionId: record.version === 1 ? null : (record.parentSessionId ?? null),
+    record,
+    resumabilityState: record.version === 1 ? null : record.resumability,
+    sessionId: record.sessionId,
+    stage: record.version === 1 ? null : record.stage,
+    title: record.version === 1 ? null : record.title,
     updatedAt: new Date(record.updatedAtEpochMs),
+    workspaceId: record.principal.workspaceId,
   };
 }
 
@@ -269,6 +269,121 @@ function assertReserved(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedEveStore(database: Database): HostedEveStore {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async getSession(principalInput, sessionId) {
+      const principal = hostedPrincipalSchema.parse(principalInput);
+      return sessionById(database, principal, sessionId);
+    },
+
+    async listSessions(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const rows = await database
+        .select()
+        .from(agentSessions)
+        .where(sessionTenantPredicate(principal))
+        .orderBy(desc(agentSessions.updatedAt), desc(agentSessions.sessionId))
+        .offset(input.cursor)
+        .limit(input.limit);
+      return {
+        cursor: input.cursor + rows.length,
+        sessions: rows.map(parseHostedSessionRow),
+      };
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async observeSession(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return database.transaction(async (transaction) => {
+        const rows = await transaction
+          .select()
+          .from(agentSessions)
+          .where(
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
+          )
+          .limit(1)
+          .for("update");
+        if (rows[0] === undefined) {
+          throw new Error("Hosted session was not found.");
+        }
+        const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
+        const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
+        const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
+        const observed = durableHostedSessionRecordSchema.parse({
+          ...current,
+          checkpoint: input.checkpoint,
+          checkpointDigest,
+          checkpointProgressDigest,
+          ...(input.appId === undefined ? {} : { appId: input.appId }),
+          lastProgressAtEpochMs:
+            current.checkpointProgressDigest === checkpointProgressDigest
+              ? current.lastProgressAtEpochMs
+              : input.nowEpochMs,
+          resumability: input.resumability,
+          stage: input.stage,
+          status: input.checkpoint.status,
+          updatedAtEpochMs: input.nowEpochMs,
+        });
+        const updated = await transaction
+          .update(agentSessions)
+          .set(sessionValues(observed))
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
+            ),
+          )
+          .returning();
+        if (updated.length !== 1) {
+          throw new Error("Hosted session observation was not durable.");
+        }
+        return parseHostedSessionRow(updated[0]);
+      });
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async replaceSessionAdapter(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return database.transaction(async (transaction) => {
+        const row = await sessionById(transaction, principal, input.sessionId, true);
+        if (row === null) throw new Error("Hosted session was not found.");
+        const current = toDurableHostedSessionRecord(row);
+        if (
+          current.adapterGeneration !== input.expectedAdapterGeneration ||
+          current.checkpointDigest !== input.expectedCheckpointDigest
+        )
+          throw new Error("Hosted session recovery raced another continuation.");
+        const replaced = durableHostedSessionRecordSchema.parse({
+          ...current,
+          adapterGeneration: current.adapterGeneration + 1,
+          adapterSessionId: input.adapterSessionId,
+          checkpoint: input.checkpoint,
+          checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
+          checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
+          ...(input.appId === undefined ? {} : { appId: input.appId }),
+          lastProgressAtEpochMs: input.nowEpochMs,
+          resumability: input.resumability,
+          stage: input.stage,
+          status: input.checkpoint.status,
+          updatedAtEpochMs: input.nowEpochMs,
+        });
+        const updated = await transaction
+          .update(agentSessions)
+          .set(sessionValues(replaced))
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+              eq(agentSessions.adapterSessionId, current.adapterSessionId),
+              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
+            ),
+          )
+          .returning();
+        if (updated.length !== 1) throw new Error("Hosted session recovery was not durable.");
+        return parseHostedSessionRow(updated[0]);
+      });
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async reserveOperation(principalInput, candidateInput) {
       const principal = hostedPrincipalSchema.parse(principalInput);
@@ -395,9 +510,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const settled = hostedOperationRecordSchema.parse({
           ...operation,
-          state: "succeeded",
-          sessionId: result.sessionId,
           result,
+          sessionId: result.sessionId,
+          state: "succeeded",
           ...(session === undefined
             ? {}
             : {
@@ -442,8 +557,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         assertReserved(operation, input.requestDigest);
         const settled = hostedOperationRecordSchema.parse({
           ...operation,
-          state: input.state,
           safeErrorCode: input.safeErrorCode,
+          state: input.state,
           updatedAtEpochMs: input.nowEpochMs,
         });
         const updated = await transaction
@@ -466,118 +581,5 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async getSession(principalInput, sessionId) {
-      const principal = hostedPrincipalSchema.parse(principalInput);
-      return sessionById(database, principal, sessionId);
-    },
-
-    async listSessions(input) {
-      const principal = hostedPrincipalSchema.parse(input.principal);
-      const rows = await database
-        .select()
-        .from(agentSessions)
-        .where(sessionTenantPredicate(principal))
-        .orderBy(desc(agentSessions.updatedAt), desc(agentSessions.sessionId))
-        .offset(input.cursor)
-        .limit(input.limit);
-      return {
-        sessions: rows.map(parseHostedSessionRow),
-        cursor: input.cursor + rows.length,
-      };
-    },
-
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async observeSession(input) {
-      const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
-        const rows = await transaction
-          .select()
-          .from(agentSessions)
-          .where(
-            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
-          )
-          .limit(1)
-          .for("update");
-        if (rows[0] === undefined) {
-          throw new Error("Hosted session was not found.");
-        }
-        const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
-        const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
-        const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
-        const observed = durableHostedSessionRecordSchema.parse({
-          ...current,
-          status: input.checkpoint.status,
-          checkpoint: input.checkpoint,
-          checkpointDigest,
-          checkpointProgressDigest,
-          stage: input.stage,
-          resumability: input.resumability,
-          ...(input.appId === undefined ? {} : { appId: input.appId }),
-          lastProgressAtEpochMs:
-            current.checkpointProgressDigest === checkpointProgressDigest
-              ? current.lastProgressAtEpochMs
-              : input.nowEpochMs,
-          updatedAtEpochMs: input.nowEpochMs,
-        });
-        const updated = await transaction
-          .update(agentSessions)
-          .set(sessionValues(observed))
-          .where(
-            and(
-              sessionTenantPredicate(principal),
-              eq(agentSessions.sessionId, input.sessionId),
-              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
-            ),
-          )
-          .returning();
-        if (updated.length !== 1) {
-          throw new Error("Hosted session observation was not durable.");
-        }
-        return parseHostedSessionRow(updated[0]);
-      });
-    },
-
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async replaceSessionAdapter(input) {
-      const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
-        const row = await sessionById(transaction, principal, input.sessionId, true);
-        if (row === null) throw new Error("Hosted session was not found.");
-        const current = toDurableHostedSessionRecord(row);
-        if (
-          current.adapterGeneration !== input.expectedAdapterGeneration ||
-          current.checkpointDigest !== input.expectedCheckpointDigest
-        )
-          throw new Error("Hosted session recovery raced another continuation.");
-        const replaced = durableHostedSessionRecordSchema.parse({
-          ...current,
-          adapterSessionId: input.adapterSessionId,
-          adapterGeneration: current.adapterGeneration + 1,
-          status: input.checkpoint.status,
-          checkpoint: input.checkpoint,
-          checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
-          checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
-          stage: input.stage,
-          resumability: input.resumability,
-          ...(input.appId === undefined ? {} : { appId: input.appId }),
-          lastProgressAtEpochMs: input.nowEpochMs,
-          updatedAtEpochMs: input.nowEpochMs,
-        });
-        const updated = await transaction
-          .update(agentSessions)
-          .set(sessionValues(replaced))
-          .where(
-            and(
-              sessionTenantPredicate(principal),
-              eq(agentSessions.sessionId, input.sessionId),
-              eq(agentSessions.adapterSessionId, current.adapterSessionId),
-              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
-            ),
-          )
-          .returning();
-        if (updated.length !== 1) throw new Error("Hosted session recovery was not durable.");
-        return parseHostedSessionRow(updated[0]);
-      });
-    },
   };
 }

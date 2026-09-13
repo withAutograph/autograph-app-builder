@@ -5,8 +5,6 @@ import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { AuthorizationControl } from "./view";
 
 const meta = {
-  title: "MCP/Authorization/Authorization Request",
-  component: AuthorizationControl,
   args: {
     canOpen: true,
     canRefresh: true,
@@ -18,6 +16,7 @@ const meta = {
     }),
     request: authorizationRequest,
   },
+  component: AuthorizationControl,
   decorators: [
     (Story) => (
       <McpBlockStoryLayout>
@@ -25,6 +24,7 @@ const meta = {
       </McpBlockStoryLayout>
     ),
   ],
+  title: "MCP/Authorization/Authorization Request",
 } satisfies Meta<typeof AuthorizationControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -33,20 +33,20 @@ export const FirstConnection: Story = {
   args: {
     request: {
       ...authorizationRequest,
-      title: "Connect GitHub",
       authorization: {
         ...authorizationRequest.authorization,
         repositoryAccess: {
-          provider: "github",
           action: "connect",
+          provider: "github",
           repository: {
-            owner: "withAutograph",
-            name: "app-builder-dogfood",
             fullName: "withAutograph/app-builder-dogfood",
+            name: "app-builder-dogfood",
+            owner: "withAutograph",
           },
           scopes: [],
         },
       },
+      title: "Connect GitHub",
     },
   },
 };

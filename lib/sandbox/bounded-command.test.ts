@@ -15,15 +15,15 @@ const stream = (...chunks: string[]) =>
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function processFixture(stdout: string[], stderr: string[] = []) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const kill = vi.fn(async () => undefined);
+  const kill = vi.fn(async () => {});
   const process = {
-    stdout: stream(...stdout),
+    kill,
     stderr: stream(...stderr),
+    stdout: stream(...stdout),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     wait: vi.fn(async () => ({ exitCode: 0 })),
-    kill,
   } as unknown as SandboxProcess;
-  return { process, kill };
+  return { kill, process };
 }
 
 describe("bounded sandbox command", () => {
@@ -36,11 +36,11 @@ describe("bounded sandbox command", () => {
     });
     await expect(
       runBoundedSandboxCommand({ spawn }, { command: "mise run check" }),
-    ).resolves.toEqual({ exitCode: 0, stdout: "hello", stderr: "warning" });
+    ).resolves.toEqual({ exitCode: 0, stderr: "warning", stdout: "hello" });
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: "mise run check",
         abortSignal: expect.any(AbortSignal),
+        command: "mise run check",
       }),
     );
   });
@@ -55,8 +55,8 @@ describe("bounded sandbox command", () => {
         { outputBytes: 6 },
       ),
     ).rejects.toMatchObject({
-      name: "SandboxCommandLimitError",
       code: "output-limit",
+      name: "SandboxCommandLimitError",
     });
     expect(fixture.kill).toHaveBeenCalledOnce();
   });
@@ -79,12 +79,15 @@ describe("bounded sandbox command", () => {
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const kill = vi.fn(async () => undefined);
+    const kill = vi.fn(async () => {});
     const process = {
-      stdout: idle(),
-      stderr: idle(),
-      wait: () => new Promise<never>(() => {}),
       kill,
+      stderr: idle(),
+      stdout: idle(),
+      wait: async () => {
+        await idle().getReader().read();
+        throw new Error("Unreachable");
+      },
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
@@ -107,12 +110,15 @@ describe("bounded sandbox command", () => {
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const idle = () => new ReadableStream<Uint8Array>({ start() {} });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const kill = vi.fn(async () => undefined);
+    const kill = vi.fn(async () => {});
     const process = {
-      stdout: oneThenIdle(),
-      stderr: idle(),
-      wait: () => new Promise<never>(() => {}),
       kill,
+      stderr: idle(),
+      stdout: oneThenIdle(),
+      wait: async () => {
+        await idle().getReader().read();
+        throw new Error("Unreachable");
+      },
     } as unknown as SandboxProcess;
     await expect(
       runBoundedSandboxCommand(
@@ -127,13 +133,16 @@ describe("bounded sandbox command", () => {
 
   it("does not let a hung provider kill replace the original limit error", async () => {
     const fixture = processFixture(["too much output"]);
-    fixture.process.kill = vi.fn(() => new Promise<never>(() => {}));
+    fixture.process.kill = vi.fn(async () => {
+      await new ReadableStream<never>().getReader().read();
+      throw new Error("Unreachable");
+    });
     await expect(
       runBoundedSandboxCommand(
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         { spawn: async () => fixture.process },
         { command: "generate" },
-        { outputBytes: 2, killCleanupTimeoutMs: 10 },
+        { killCleanupTimeoutMs: 10, outputBytes: 2 },
       ),
     ).rejects.toMatchObject({ code: "output-limit" });
   });

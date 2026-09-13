@@ -64,9 +64,9 @@ async function boundedResponse(response: Response): Promise<Response> {
     offset += chunk.byteLength;
   }
   return new Response(body, {
+    headers: response.headers,
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
   });
 }
 
@@ -99,13 +99,13 @@ export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
 function octokitClass(request: Fetch) {
   return Octokit.defaults({
     baseUrl: GITHUB_API_ORIGIN,
-    userAgent: USER_AGENT,
-    request: { fetch: createGuardedGitHubFetch(request) },
     headers: {
       accept: "application/vnd.github+json",
       "x-github-api-version": GITHUB_API_VERSION,
     },
     log: silentConsole,
+    request: { fetch: createGuardedGitHubFetch(request) },
+    userAgent: USER_AGENT,
   });
 }
 
@@ -154,23 +154,25 @@ export function createGitHubOAuthApp(input: {
     return request(resource, init);
   };
   return new OAuthApp({
-    clientType: "github-app",
+    Octokit: octokitClass(oauthFetch),
     clientId: input.clientId,
     clientSecret: input.clientSecret,
-    redirectUrl: input.redirectUrl,
-    Octokit: octokitClass(oauthFetch),
+    clientType: "github-app",
     log: silentConsole,
+    redirectUrl: input.redirectUrl,
   });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubApp(input: { appId: string; privateKey: string; fetch?: Fetch }) {
   return new App({
-    appId: input.appId,
-    privateKey: input.privateKey,
     Octokit: octokitClass(input.fetch ?? fetch),
+    appId: input.appId,
     log: {
       debug() {
+        // Keep the test logger silent.
+      },
+      error() {
         // Keep the test logger silent.
       },
       info() {
@@ -179,10 +181,8 @@ export function createGitHubApp(input: { appId: string; privateKey: string; fetc
       warn() {
         // Keep the test logger silent.
       },
-      error() {
-        // Keep the test logger silent.
-      },
     },
+    privateKey: input.privateKey,
   });
 }
 

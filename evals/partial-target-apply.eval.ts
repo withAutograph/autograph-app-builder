@@ -21,7 +21,7 @@ export default defineEval({
     t.check(t.reply, includes("couldn't finish preparing the app safely"));
     t.check(t.reply, includes("current plan remains available"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
@@ -33,6 +33,6 @@ export default defineEval({
     t.notEvent("input.requested");
     t.check(t.reply, includes("couldn't finish preparing the app safely"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

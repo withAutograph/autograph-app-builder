@@ -11,7 +11,7 @@ let upstreamCalls = 0;
 let revision = 1;
 let unavailable = false;
 
-function installCatalogFixture() {
+const installCatalogFixture = () => {
   if (!readProductionNavigationRuntimeConfig(process.env)) {
     throw new Error("The cache probe requires a guarded production-navigation artifact.");
   }
@@ -29,24 +29,24 @@ function installCatalogFixture() {
           id: "openai/gpt-5.6-terra",
           name: `Navigation catalog ${revision}`,
           owned_by: "openai",
+          tags: ["tool-use"],
           type: "language",
           zdr: "all",
-          tags: ["tool-use"],
         },
       ],
     });
   };
   installed = true;
-}
+};
 
-export async function GET() {
+export const GET = async () => {
   await connection();
   installCatalogFixture();
   const models = await loadNextGatewayModels();
   return Response.json({ models, upstreamCalls }, { headers: { "Cache-Control": "no-store" } });
-}
+};
 
-export async function POST(request: Request) {
+export const POST = async (request: Request) => {
   installCatalogFixture();
   const text = await request.text();
   if (text.length > 32) return new Response(null, { status: 400 });
@@ -79,4 +79,4 @@ export async function POST(request: Request) {
   // read a deterministic blocking refresh rather than background SWR.
   revalidateTag("public-ai-gateway-models", { expire: 0 });
   return new Response(null, { status: 204 });
-}
+};

@@ -31,9 +31,9 @@ function createAuthority(input?: { failure?: OrganizationProvisioningFailure }) 
 }
 
 const verifiedUser = {
-  id: "user_one",
   email: "Person@Example.com",
   emailVerified: true,
+  id: "user_one",
 };
 
 describe("Preview Better Auth user management", () => {
@@ -46,7 +46,7 @@ describe("Preview Better Auth user management", () => {
     };
 
     expect(schema.organization?.fields?.workspaceId).toEqual(
-      expect.objectContaining({ required: true, input: false }),
+      expect.objectContaining({ input: false, required: true }),
     );
     expect(schema.organization?.fields?.workspaceId?.fieldName).toBeUndefined();
   });
@@ -72,8 +72,8 @@ describe("Preview Better Auth user management", () => {
         { path: "/callback/github" },
       ),
     ).rejects.toMatchObject({
-      status: "FORBIDDEN",
       body: { code: "AUTOGRAPH_VERIFIED_IDENTITY_REQUIRED" },
+      status: "FORBIDDEN",
     });
     expect(authority.ensureOrganizationForVerifiedUser).not.toHaveBeenCalled();
   });
@@ -91,8 +91,8 @@ describe("Preview Better Auth user management", () => {
 
     await expect(
       lifecycle.beforeSessionCreate({
-        userId: verifiedUser.id,
         token: "session-token",
+        userId: verifiedUser.id,
       }),
     ).resolves.toEqual({
       data: {
@@ -124,12 +124,13 @@ describe("Preview Better Auth user management", () => {
     const database = new DatabaseSync(":memory:");
     const auth = betterAuth({
       baseURL: "http://localhost:3000",
-      secret: "better-auth-secret-that-is-long-enough-for-testing",
       database,
       emailAndPassword: { enabled: true },
       plugins: [...previewUserManagementPlugins(authority)],
+      secret: "better-auth-secret-that-is-long-enough-for-testing",
     });
-    await (await auth.$context).runMigrations();
+    const context = await auth.$context;
+    await context.runMigrations();
 
     await auth.api.signUpEmail({
       body: {
@@ -154,8 +155,8 @@ describe("Preview Better Auth user management", () => {
   ] as const)("maps %s to the product-facing %s error", async (failure, code, status) => {
     const lifecycle = createPreviewUserManagementLifecycle(createAuthority({ failure }));
     await expect(lifecycle.beforeSessionCreate({ userId: verifiedUser.id })).rejects.toMatchObject({
-      status,
       body: { code },
+      status,
     });
   });
 

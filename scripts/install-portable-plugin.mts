@@ -1,10 +1,10 @@
 import { cp, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import path from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return undefined;
+  if (index === -1) return;
   const value = process.argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
   return value;
@@ -16,19 +16,19 @@ if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes
   throw new Error(
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
   );
-const source = await realpath(resolve(sourceValue));
+const source = await realpath(path.resolve(sourceValue));
 const sourceStats = await lstat(source);
 if (!sourceStats.isDirectory()) throw new Error("Release root must be a real directory.");
-const requestedDestination = resolve(destinationValue);
-await mkdir(requestedDestination, { recursive: true, mode: 0o700 });
+const requestedDestination = path.resolve(destinationValue);
+await mkdir(requestedDestination, { mode: 0o700, recursive: true });
 const destination = await realpath(requestedDestination);
 await validateAgentPluginPackage({
-  pluginRoot: join(source, "app-builder"),
-  repositoryRoot: resolve("."),
-  release: true,
   packageKind: "generated-artifact",
+  pluginRoot: path.join(source, "app-builder"),
+  release: true,
+  repositoryRoot: path.resolve("."),
 });
-const clientRoot = join(destination, client as string);
+const clientRoot = path.join(destination, client as string);
 try {
   await lstat(clientRoot);
   throw new Error(`Client install already exists: ${clientRoot}`);
@@ -36,24 +36,27 @@ try {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
 await mkdir(clientRoot, { mode: 0o700 });
-await cp(join(source, "app-builder"), join(clientRoot, "app-builder"), {
+await cp(path.join(source, "app-builder"), path.join(clientRoot, "app-builder"), {
   recursive: true,
 });
 const harness = JSON.parse(
-  await readFile(join(source, "clients", `${client}.client-harness.json`), "utf-8"),
+  await readFile(path.join(source, "clients", `${client}.client-harness.json`), "utf-8"),
 );
 harness.pluginRoot = "./app-builder";
 harness.mcp = "./app-builder/mcp.json";
-await writeFile(join(clientRoot, "client-harness.json"), `${JSON.stringify(harness, null, 2)}\n`);
-const release = JSON.parse(await readFile(join(source, "release-receipt.json"), "utf-8"));
 await writeFile(
-  join(clientRoot, "installation-receipt.json"),
+  path.join(clientRoot, "client-harness.json"),
+  `${JSON.stringify(harness, null, 2)}\n`,
+);
+const release = JSON.parse(await readFile(path.join(source, "release-receipt.json"), "utf-8"));
+await writeFile(
+  path.join(clientRoot, "installation-receipt.json"),
   `${JSON.stringify(
     {
-      format: "agent-plugins-offline-installation-v1",
       client,
-      releaseArchive: release.archive,
+      format: "agent-plugins-offline-installation-v1",
       pluginRoot: "./app-builder",
+      releaseArchive: release.archive,
     },
     null,
     2,

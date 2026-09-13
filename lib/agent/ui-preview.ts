@@ -6,12 +6,10 @@ const previewPath = z.string().regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\
 const route = z.string().regex(/^\/[a-z0-9-]*(?:\/[a-z0-9-]+)*$/u);
 
 export const uiPreviewFileSchema = z.strictObject({
-  path: previewPath,
   content: z.string().min(1).max(262_144),
+  path: previewPath,
 });
 export const uiPreviewGapSchema = z.strictObject({
-  path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
-  reason: z.string().min(8).max(500),
   composes: z
     .array(
       z.strictObject({
@@ -21,6 +19,8 @@ export const uiPreviewGapSchema = z.strictObject({
     )
     .min(1)
     .max(32),
+  path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
+  reason: z.string().min(8).max(500),
   tokens: z
     .array(z.string().regex(/^--[a-z][a-z0-9-]*$/u))
     .min(1)
@@ -29,8 +29,8 @@ export const uiPreviewGapSchema = z.strictObject({
 
 const manifestItem = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  statement: z.string().min(3).max(1000),
   routes: z.array(route).min(1).max(16),
+  statement: z.string().min(3).max(1000),
 });
 const catalogElement = (source: z.ZodType<string>) =>
   z.strictObject({
@@ -39,34 +39,34 @@ const catalogElement = (source: z.ZodType<string>) =>
   });
 
 export const uiPreviewManifestSchema = z.strictObject({
-  version: z.literal(1),
+  assumptions: z.array(manifestItem).max(64),
+  decisions: z.array(manifestItem).max(64),
+  fixtureFacts: z.array(manifestItem).max(64),
+  implementationNotes: z
+    .array(
+      z.strictObject({
+        productionMeaning: z.string().min(3).max(1000),
+        routes: z.array(route).min(1).max(16),
+        visibleElement: z.string().min(3).max(300),
+      }),
+    )
+    .max(128),
+  openQuestions: z.array(manifestItem).max(32),
+  productionComponents: z.array(catalogElement(z.literal("@autograph/components"))).max(128),
+  productionCompositions: z.array(catalogElement(z.literal("@autograph/compositions"))).max(64),
+  productionIcons: z.array(catalogElement(z.literal("@autograph/icons"))).max(128),
   screens: z
     .array(
       z.strictObject({
-        id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-        title: z.string().min(1).max(120),
-        route,
         entry: previewPath,
+        id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+        route,
+        title: z.string().min(1).max(120),
       }),
     )
     .min(1)
     .max(16),
-  productionComponents: z.array(catalogElement(z.literal("@autograph/components"))).max(128),
-  productionCompositions: z.array(catalogElement(z.literal("@autograph/compositions"))).max(64),
-  productionIcons: z.array(catalogElement(z.literal("@autograph/icons"))).max(128),
-  fixtureFacts: z.array(manifestItem).max(64),
-  decisions: z.array(manifestItem).max(64),
-  assumptions: z.array(manifestItem).max(64),
-  openQuestions: z.array(manifestItem).max(32),
-  implementationNotes: z
-    .array(
-      z.strictObject({
-        visibleElement: z.string().min(3).max(300),
-        productionMeaning: z.string().min(3).max(1000),
-        routes: z.array(route).min(1).max(16),
-      }),
-    )
-    .max(128),
+  version: z.literal(1),
 });
 export const uiPreviewInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -74,10 +74,10 @@ export const uiPreviewInputSchema = z.strictObject({
     .string()
     .regex(/^[a-f0-9]{64}$/u)
     .optional(),
-  routes: z.array(route).min(1).max(16),
+  catalogGaps: z.array(uiPreviewGapSchema).max(16).default([]),
   files: z.array(uiPreviewFileSchema).min(1).max(32),
   manifest: uiPreviewManifestSchema,
-  catalogGaps: z.array(uiPreviewGapSchema).max(16).default([]),
+  routes: z.array(route).min(1).max(16),
 });
 
 export type UiPreviewInput = z.infer<typeof uiPreviewInputSchema>;
@@ -137,7 +137,7 @@ function imports(content: string) {
   return [
     ...content.matchAll(/(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu),
   ]
-    .map((match) => match[1]!)
+    .flatMap((match) => (match[1] === undefined ? [] : [match[1]]))
     .toSorted();
 }
 
@@ -270,11 +270,11 @@ export function validateUiPreview(input: UiPreviewInput): void {
 export function uiPreviewSourceDigest(input: UiPreviewInput) {
   return digest({
     appId: input.appId,
-    routes: [...input.routes].toSorted(),
-    files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
-    manifest: input.manifest,
     catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
       left.path.localeCompare(right.path),
     ),
+    files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
+    manifest: input.manifest,
+    routes: [...input.routes].toSorted(),
   });
 }

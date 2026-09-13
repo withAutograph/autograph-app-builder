@@ -3,8 +3,8 @@ import { loadBuilderIntegrationState } from "./builder-integration-deployment";
 
 const stores = vi.hoisted(() => ({
   listGitHub: vi.fn(),
-  readGitHub: vi.fn(),
   listVercel: vi.fn(),
+  readGitHub: vi.fn(),
 }));
 vi.mock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
 vi.mock("../auth/github-app-installation", () => ({
@@ -33,14 +33,14 @@ vi.mock("./local-provider-emulation", () => ({
 }));
 
 const request = {
-  environment: {},
   authenticated: true as const,
-  userId: "user",
+  environment: {},
   organizationId: "org",
+  userId: "user",
   workspaceId: "workspace",
 };
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-const models = async () => ({ status: "unavailable" as const, entries: [], cached: false });
+const models = async () => ({ cached: false, entries: [], status: "unavailable" as const });
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -56,10 +56,10 @@ it("starts independent reads before either provider settles and passes the same 
   expect(stores.readGitHub).toHaveBeenCalledOnce();
   expect(stores.listVercel).toHaveBeenCalledOnce();
   const authority = {
-    issuer: "issuer",
     audience: "audience",
-    workspaceId: "workspace",
+    issuer: "issuer",
     ownerUserId: "user",
+    workspaceId: "workspace",
   };
   expect(stores.listGitHub).toHaveBeenCalledWith(authority);
   expect(stores.readGitHub).toHaveBeenCalledWith(authority);
@@ -80,7 +80,7 @@ it("isolates provider failure without skipping the other provider", async () => 
 });
 
 it("does not read provider stores for an anonymous visitor", async () => {
-  await loadBuilderIntegrationState({ environment: {}, authenticated: false }, models);
+  await loadBuilderIntegrationState({ authenticated: false, environment: {} }, models);
   expect(stores.listGitHub).not.toHaveBeenCalled();
   expect(stores.listVercel).not.toHaveBeenCalled();
 });

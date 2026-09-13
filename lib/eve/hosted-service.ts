@@ -153,28 +153,28 @@ interface CheckpointInputProfile {
 
 const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
   {
-    titleBytes: 2048,
+    authorizationInstructionBytes: 1000,
     descriptionBytes: 4096,
     optionCount: 32,
     optionLabelBytes: 512,
-    authorizationInstructionBytes: 1000,
     repositoryScopeCount: 32,
+    titleBytes: 2048,
   },
   {
-    titleBytes: 512,
+    authorizationInstructionBytes: 512,
     descriptionBytes: 1024,
     optionCount: 16,
     optionLabelBytes: 256,
-    authorizationInstructionBytes: 512,
     repositoryScopeCount: 16,
+    titleBytes: 512,
   },
   {
-    titleBytes: 128,
+    authorizationInstructionBytes: 0,
     descriptionBytes: 0,
     optionCount: 4,
     optionLabelBytes: 64,
-    authorizationInstructionBytes: 0,
     repositoryScopeCount: 4,
+    titleBytes: 128,
   },
 ];
 
@@ -206,23 +206,14 @@ function checkpointInputRequest(
   const { authorization } = request;
   const repositoryAccess = authorization?.repositoryAccess;
   return publicInputRequestSchema.parse({
-    requestId: request.requestId,
-    kind: request.kind,
-    title: truncateUtf8(request.title, profile.titleBytes),
-    ...(profile.descriptionBytes === 0 || request.description === undefined
-      ? {}
-      : {
-          description: truncateUtf8(request.description, profile.descriptionBytes),
-        }),
-    ...(options === undefined || options.length === 0 ? {} : { options }),
     allowFreeform: request.allowFreeform,
-    ...(request.presentation === undefined ? {} : { presentation: request.presentation }),
     ...(authorization === undefined
       ? {}
       : {
           authorization: {
-            ...(authorization.url === undefined ? {} : { url: authorization.url }),
-            ...(authorization.userCode === undefined ? {} : { userCode: authorization.userCode }),
+            ...(authorization.displayName === undefined
+              ? {}
+              : { displayName: authorization.displayName }),
             ...(authorization.expiresAt === undefined
               ? {}
               : { expiresAt: authorization.expiresAt }),
@@ -235,9 +226,6 @@ function checkpointInputRequest(
                     profile.authorizationInstructionBytes,
                   ),
                 }),
-            ...(authorization.displayName === undefined
-              ? {}
-              : { displayName: authorization.displayName }),
             ...(repositoryAccess === undefined
               ? {}
               : {
@@ -246,8 +234,20 @@ function checkpointInputRequest(
                     scopes: repositoryAccess.scopes.slice(0, profile.repositoryScopeCount),
                   },
                 }),
+            ...(authorization.url === undefined ? {} : { url: authorization.url }),
+            ...(authorization.userCode === undefined ? {} : { userCode: authorization.userCode }),
           },
         }),
+    ...(profile.descriptionBytes === 0 || request.description === undefined
+      ? {}
+      : {
+          description: truncateUtf8(request.description, profile.descriptionBytes),
+        }),
+    kind: request.kind,
+    ...(options === undefined || options.length === 0 ? {} : { options }),
+    ...(request.presentation === undefined ? {} : { presentation: request.presentation }),
+    requestId: request.requestId,
+    title: truncateUtf8(request.title, profile.titleBytes),
   });
 }
 
@@ -282,24 +282,27 @@ function checkpointForSnapshot(
     });
     if (!parsed.success) continue;
     const event = parsed.data;
-    ring[publicEventCount % ring.length] =
-      event.type === "assistant_message"
-        ? { ...event, text: event.text.slice(-65_536) }
-        : event.type === "progress"
-          ? { ...event, label: event.label.slice(-4096) }
-          : event.type === "error"
-            ? {
-                ...event,
-                code: event.code.slice(0, 100),
-                message: event.message.slice(-65_536),
-              }
-            : event;
+    let boundedEvent = event;
+    if (event.type === "assistant_message") {
+      boundedEvent = { ...event, text: event.text.slice(-65_536) };
+    } else if (event.type === "progress") {
+      boundedEvent = { ...event, label: event.label.slice(-4096) };
+    } else if (event.type === "error") {
+      boundedEvent = {
+        ...event,
+        code: event.code.slice(0, 100),
+        message: event.message.slice(-65_536),
+      };
+    }
+    ring[publicEventCount % ring.length] = boundedEvent;
     publicEventCount += 1;
   }
   const retainedCount = Math.min(publicEventCount, ring.length);
   const events = Array.from({ length: retainedCount }, (_, index) => {
     const absoluteIndex = publicEventCount - retainedCount + index;
-    return ring[absoluteIndex % ring.length]!;
+    const event = ring[absoluteIndex % ring.length];
+    if (event === undefined) throw new HostedSessionRecoveryUnavailableError();
+    return event;
   });
   const outstandingRequests = outstandingInternalEveRequests(
     snapshot.events.filter(
@@ -323,25 +326,25 @@ function checkpointForSnapshot(
     while (lower <= upper) {
       const candidateCount = Math.floor((lower + upper) / 2);
       const retainedEvents = candidateCount === 0 ? [] : boundedEvents.slice(-candidateCount);
+      let truncatedBeforeIndex: number | undefined;
+      if (retainedEvents[0] === undefined) {
+        if (publicEventCount !== 0) truncatedBeforeIndex = publicEventCount;
+      } else if (retainedEvents[0].index !== 0) {
+        truncatedBeforeIndex = retainedEvents[0].index;
+      }
       const candidate = hostedSessionCheckpointSchema.safeParse({
-        version: 1,
-        status: snapshot.status,
+        capturedAtEpochMs,
         events: retainedEvents,
-        ...(retainedEvents[0] === undefined
-          ? publicEventCount === 0
-            ? {}
-            : { truncatedBeforeIndex: publicEventCount }
-          : retainedEvents[0].index === 0
-            ? {}
-            : { truncatedBeforeIndex: retainedEvents[0].index }),
+        ...(input.includeImplementationPlan && snapshot.implementationPlan !== undefined
+          ? { implementationPlan: snapshot.implementationPlan }
+          : {}),
         ...(inputRequests.length === 0 ? {} : { inputRequests }),
         ...(input.includePrototype && snapshot.prototype !== undefined
           ? { prototype: snapshot.prototype }
           : {}),
-        ...(input.includeImplementationPlan && snapshot.implementationPlan !== undefined
-          ? { implementationPlan: snapshot.implementationPlan }
-          : {}),
-        capturedAtEpochMs,
+        status: snapshot.status,
+        ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
+        version: 1,
       });
       if (candidate.success) {
         best = candidate.data;
@@ -355,18 +358,19 @@ function checkpointForSnapshot(
 
   for (const profile of checkpointInputProfiles) {
     const checkpoint = fitCheckpoint({
-      profile,
-      includePrototype: true,
       includeImplementationPlan: true,
+      includePrototype: true,
+      profile,
     });
     if (checkpoint !== undefined) return checkpoint;
   }
 
-  const minimalProfile = checkpointInputProfiles.at(-1)!;
+  const minimalProfile = checkpointInputProfiles.at(-1);
+  if (minimalProfile === undefined) throw new HostedSessionRecoveryUnavailableError();
   for (const artifactSelection of [
-    { includePrototype: false, includeImplementationPlan: true },
-    { includePrototype: true, includeImplementationPlan: false },
-    { includePrototype: false, includeImplementationPlan: false },
+    { includeImplementationPlan: true, includePrototype: false },
+    { includeImplementationPlan: false, includePrototype: true },
+    { includeImplementationPlan: false, includePrototype: false },
   ]) {
     const checkpoint = fitCheckpoint({
       profile: minimalProfile,
@@ -378,11 +382,11 @@ function checkpointForSnapshot(
   // A structurally valid fallback prevents an oversized transport snapshot
   // from turning an already-dispatched mutation into an unknown outcome.
   return {
-    version: 1,
-    status: snapshot.status,
-    events: [],
-    ...(publicEventCount === 0 ? {} : { truncatedBeforeIndex: publicEventCount }),
     capturedAtEpochMs,
+    events: [],
+    status: snapshot.status,
+    ...(publicEventCount === 0 ? {} : { truncatedBeforeIndex: publicEventCount }),
+    version: 1,
   };
 }
 
@@ -502,26 +506,32 @@ export function createHostedEveSessionService(input: {
       request: options.request,
       sessionId: options.sessionId,
     });
-    const operationId = stableId("op", {
-      tenant: [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
-      kind: options.kind,
-      clientRequestId: options.request.clientRequestId,
-    });
+    const operationId = stableId(
+      "op",
+      Object.fromEntries([
+        [
+          "tenant",
+          [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
+        ],
+        ["kind", options.kind],
+        ["clientRequestId", options.request.clientRequestId],
+      ]),
+    );
     const timestamp = now();
     const candidate = hostedOperationRecordSchema.parse({
-      version: 1,
+      clientRequestId: options.request.clientRequestId,
+      createdAtEpochMs: timestamp,
+      kind: options.kind,
       operationId,
       principal,
-      kind: options.kind,
-      clientRequestId: options.request.clientRequestId,
       requestDigest,
-      state: "reserved",
       ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
       ...(options.resumeSessionId === undefined
         ? {}
         : { resumeSessionId: options.resumeSessionId }),
-      createdAtEpochMs: timestamp,
+      state: "reserved",
       updatedAtEpochMs: timestamp,
+      version: 1,
     });
     let reservation: z.infer<typeof reserveOperationResultSchema>;
     try {
@@ -540,12 +550,12 @@ export function createHostedEveSessionService(input: {
       }
       case "reserved": {
         const operation = requireOwnedOperation(reservation.operation, {
+          clientRequestId: options.request.clientRequestId,
+          kind: options.kind,
           operationId,
           requestDigest,
-          kind: options.kind,
-          clientRequestId: options.request.clientRequestId,
-          sessionId: options.sessionId,
           resumeSessionId: options.resumeSessionId,
+          sessionId: options.sessionId,
         });
         if (operation.state !== "reserved") {
           throw new HostedSubmissionUnknownError();
@@ -554,12 +564,12 @@ export function createHostedEveSessionService(input: {
       }
       case "existing": {
         const operation = requireOwnedOperation(reservation.operation, {
+          clientRequestId: options.request.clientRequestId,
+          kind: options.kind,
           operationId,
           requestDigest,
-          kind: options.kind,
-          clientRequestId: options.request.clientRequestId,
-          sessionId: options.sessionId,
           resumeSessionId: options.resumeSessionId,
+          sessionId: options.sessionId,
         });
         switch (operation.state) {
           case "succeeded": {
@@ -597,20 +607,20 @@ export function createHostedEveSessionService(input: {
       let settlementVerified = false;
       try {
         const settled = await input.store.settleUnsuccessful({
-          principal,
-          operationId,
-          requestDigest,
-          state: rejected ? "rejected" : "submission_unknown",
-          safeErrorCode: rejected ? error.code : "submission_unknown",
           nowEpochMs: now(),
+          operationId,
+          principal,
+          requestDigest,
+          safeErrorCode: rejected ? error.code : "submission_unknown",
+          state: rejected ? "rejected" : "submission_unknown",
         });
         const verified = requireOwnedOperation(settled, {
+          clientRequestId: options.request.clientRequestId,
+          kind: options.kind,
           operationId,
           requestDigest,
-          kind: options.kind,
-          clientRequestId: options.request.clientRequestId,
-          sessionId: options.sessionId,
           resumeSessionId: options.resumeSessionId,
+          sessionId: options.sessionId,
         });
         const expectedState = rejected ? "rejected" : "submission_unknown";
         const expectedCode = rejected ? error.code : "submission_unknown";
@@ -641,20 +651,20 @@ export function createHostedEveSessionService(input: {
         throw new HostedSubmissionUnknownError();
       }
       const settled = await input.store.settleSucceeded({
-        principal,
+        nowEpochMs: now(),
         operationId,
+        principal,
         requestDigest,
         result: dispatchedResult,
         ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
-        nowEpochMs: now(),
       });
       const verified = requireOwnedOperation(settled, {
+        clientRequestId: options.request.clientRequestId,
+        kind: options.kind,
         operationId,
         requestDigest,
-        kind: options.kind,
-        clientRequestId: options.request.clientRequestId,
-        sessionId: options.sessionId,
         resumeSessionId: options.resumeSessionId,
+        sessionId: options.sessionId,
       });
       if (verified.state !== "succeeded") {
         throw new HostedSubmissionUnknownError();
@@ -705,15 +715,15 @@ export function createHostedEveSessionService(input: {
     const completeResult = projectSnapshot(sessionId, snapshot, 0, 100);
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, timestamp);
     await input.store.observeSession?.({
-      principal,
-      sessionId,
       checkpoint,
-      stage: stageForResult(completeResult),
-      resumability,
       ...(completeResult.implementationPlan?.appId === undefined
         ? {}
         : { appId: completeResult.implementationPlan.appId }),
       nowEpochMs: timestamp,
+      principal,
+      resumability,
+      sessionId,
+      stage: stageForResult(completeResult),
     });
     return completeResult;
   }
@@ -723,15 +733,15 @@ export function createHostedEveSessionService(input: {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
     await input.beforeRead?.({
+      adapterSessionId: session.adapterSessionId,
       principal,
       sessionId,
-      adapterSessionId: session.adapterSessionId,
       sourceHandoffId: session.sourceHandoffId,
     });
     try {
       const snapshot = await input.transport.get({
-        principal,
         adapterSessionId: session.adapterSessionId,
+        principal,
       });
       const observedAt = now();
       const observedCheckpoint = checkpointForSnapshot(sessionId, snapshot, observedAt);
@@ -743,13 +753,13 @@ export function createHostedEveSessionService(input: {
       ) {
         const checkpoint = session.checkpoint ?? observedCheckpoint;
         await input.store.observeSession?.({
-          principal,
-          sessionId,
-          checkpoint,
-          stage: session.stage,
-          resumability: "checkpoint",
           ...(session.appId === undefined ? {} : { appId: session.appId }),
+          checkpoint,
           nowEpochMs: observedAt,
+          principal,
+          resumability: "checkpoint",
+          sessionId,
+          stage: session.stage,
         });
         return resultFromHostedCheckpoint(sessionId, checkpoint, cursor, limit);
       }
@@ -759,19 +769,118 @@ export function createHostedEveSessionService(input: {
       if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
       if (session.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
       await input.store.observeSession?.({
-        principal,
-        sessionId,
-        checkpoint: session.checkpoint,
-        stage: session.stage,
-        resumability: "checkpoint",
         ...(session.appId === undefined ? {} : { appId: session.appId }),
+        checkpoint: session.checkpoint,
         nowEpochMs: now(),
+        principal,
+        resumability: "checkpoint",
+        sessionId,
+        stage: session.stage,
       });
       return resultFromHostedCheckpoint(sessionId, session.checkpoint, cursor, limit);
     }
   }
 
   return {
+    async cancel({ sessionId, turnId }) {
+      requireHostedOperationScope(principal, "cancel");
+      const session = await requireSession(sessionId);
+      let snapshot: HostedEngineSnapshot;
+      try {
+        snapshot = await input.transport.cancel({
+          adapterSessionId: session.adapterSessionId,
+          principal,
+          ...(turnId === undefined ? {} : { turnId }),
+        });
+      } catch (error) {
+        if (error instanceof SubmissionRejectedBeforeDispatchError)
+          throw new HostedRejectedOperationError(error.code);
+        throw error;
+      }
+      const result = projectSnapshot(sessionId, snapshot);
+      await observeSnapshot(sessionId, snapshot);
+      return result;
+    },
+    get({ sessionId, cursor, limit }) {
+      requireHostedOperationScope(principal, "get");
+      return readSession({ cursor, limit, sessionId });
+    },
+    async list({ cursor, limit }) {
+      requireHostedOperationScope(principal, "get");
+      const listed = await input.store.listSessions({
+        cursor,
+        limit,
+        principal,
+      });
+      return {
+        cursor: listed.cursor,
+        kind: "session_list",
+        sessions: listed.sessions.map(hostedSessionSummary),
+      };
+    }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async recoverStart(request) {
+      requireHostedOperationScope(principal, "start");
+      return readSession(request);
+    }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async respond(request) {
+      requireHostedOperationScope(principal, "respond");
+      const session = await requireSession(request.sessionId);
+      return mutate({
+        async dispatch(operationId) {
+          const before = await input.transport.get({
+            adapterSessionId: session.adapterSessionId,
+            principal,
+          });
+          const expected = outstandingInternalEveRequests(
+            before.events.filter(
+              (event): event is InternalEveEvent => event !== null && typeof event === "object",
+            ),
+          ).map(({ requestId }) => requestId);
+          if (
+            expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
+          )
+            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+          const snapshot = await input.transport.respond({
+            adapterSessionId: session.adapterSessionId,
+            operationId,
+            principal,
+            responses: request.responses,
+            ...(session.version === 2 && session.sourceHandoffId
+              ? { sourceHandoffId: session.sourceHandoffId }
+              : {}),
+          });
+          const result = projectSnapshot(request.sessionId, snapshot);
+          await observeSnapshot(request.sessionId, snapshot);
+          return { result };
+        },
+        kind: "respond",
+        request,
+        sessionId: request.sessionId,
+      });
+    },
+    async send(request) {
+      requireHostedOperationScope(principal, "send");
+      const session = await requireSession(request.sessionId);
+      return mutate({
+        async dispatch(operationId) {
+          const snapshot = await input.transport.send({
+            adapterSessionId: session.adapterSessionId,
+            message: request.message,
+            operationId,
+            principal,
+            ...(session.version === 2 && session.sourceHandoffId
+              ? { sourceHandoffId: session.sourceHandoffId }
+              : {}),
+          });
+          const result = projectSnapshot(request.sessionId, snapshot);
+          await observeSnapshot(request.sessionId, snapshot);
+          return { result };
+        },
+        kind: "send",
+        request,
+        sessionId: request.sessionId,
+      });
+    },
     async start(request) {
       requireHostedOperationScope(principal, "start");
       if (request.resumeSessionId !== undefined) {
@@ -780,8 +889,8 @@ export function createHostedEveSessionService(input: {
         if (stored.version === 1 && ["completed", "failed", "cancelled"].includes(stored.status)) {
           try {
             const snapshot = await input.transport.get({
-              principal,
               adapterSessionId: stored.adapterSessionId,
+              principal,
             });
             await observeSnapshot(stored.sessionId, snapshot);
             existing = toDurableHostedSessionRecord(await requireSession(stored.sessionId));
@@ -794,63 +903,65 @@ export function createHostedEveSessionService(input: {
         if (terminal || interrupted) {
           if (existing.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
           return mutate({
-            kind: "start",
-            request,
-            resumeSessionId: existing.sessionId,
             async dispatch(operationId) {
               const response = await input.transport.start({
-                principal,
                 operationId,
+                principal,
                 prompt: recoveryPrompt(existing),
                 ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
               });
-              const sessionId = stableId("ses", {
-                operationId,
-                adapterSessionId: response.adapterSessionId,
-              });
+              const sessionId = stableId(
+                "ses",
+                Object.fromEntries([
+                  ["operationId", operationId],
+                  ["adapterSessionId", response.adapterSessionId],
+                ]),
+              );
               const result = projectSnapshot(sessionId, response.snapshot);
               const timestamp = now();
               const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
+              const { appId: existingAppId } = existing;
+              const { appId: implementationAppId } = result.implementationPlan ?? {};
+              const appId = implementationAppId ?? existingAppId;
               return {
-                result,
                 newSession: durableHostedSessionRecordSchema.parse({
-                  version: 2,
-                  sessionId,
-                  principal,
-                  adapterSessionId: response.adapterSessionId,
-                  originAdapterSessionId: response.adapterSessionId,
                   adapterGeneration: 1,
-                  title: existing.title,
-                  ...(existing.sourceHandoffId
-                    ? { sourceHandoffId: existing.sourceHandoffId }
-                    : {}),
-                  ...(result.implementationPlan?.appId === undefined
-                    ? existing.appId === undefined
-                      ? {}
-                      : { appId: existing.appId }
-                    : { appId: result.implementationPlan.appId }),
-                  stage: stageForResult(result),
-                  status: result.status,
-                  resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                    ? "terminal"
-                    : "live",
+                  adapterSessionId: response.adapterSessionId,
+                  ...(appId === undefined ? {} : { appId }),
                   checkpoint,
                   checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
                   checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
-                  parentSessionId: existing.sessionId,
-                  lastProgressAtEpochMs: timestamp,
                   createdAtEpochMs: timestamp,
+                  lastProgressAtEpochMs: timestamp,
+                  originAdapterSessionId: response.adapterSessionId,
+                  parentSessionId: existing.sessionId,
+                  principal,
+                  resumability: ["completed", "failed", "cancelled"].includes(result.status)
+                    ? "terminal"
+                    : "live",
+                  sessionId,
+                  ...(existing.sourceHandoffId
+                    ? { sourceHandoffId: existing.sourceHandoffId }
+                    : {}),
+                  stage: stageForResult(result),
+                  status: result.status,
+                  title: existing.title,
                   updatedAtEpochMs: timestamp,
+                  version: 2,
                 }),
+                result,
               };
             },
+            kind: "start",
+            request,
+            resumeSessionId: existing.sessionId,
           });
         }
         if (!terminal) {
           try {
             const snapshot = await input.transport.get({
-              principal,
               adapterSessionId: existing.adapterSessionId,
+              principal,
             });
             return await observeSnapshot(existing.sessionId, snapshot);
           } catch (error) {
@@ -863,14 +974,13 @@ export function createHostedEveSessionService(input: {
           input.store.replaceSessionAdapter === undefined
         )
           throw new HostedSessionRecoveryUnavailableError();
+        const { replaceSessionAdapter } = input.store;
+        if (replaceSessionAdapter === undefined) throw new HostedSessionRecoveryUnavailableError();
         return mutate({
-          kind: "resume",
-          request,
-          sessionId: existing.sessionId,
           async dispatch(operationId) {
             const response = await input.transport.start({
-              principal,
               operationId,
+              principal,
               prompt: recoveryPrompt(existing),
               ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
             });
@@ -882,21 +992,21 @@ export function createHostedEveSessionService(input: {
               timestamp,
             );
             const replaced = hostedSessionRecordSchema.parse(
-              await input.store.replaceSessionAdapter!({
-                principal,
-                sessionId: existing.sessionId,
-                expectedAdapterGeneration: existing.adapterGeneration,
-                expectedCheckpointDigest: existing.checkpointDigest,
+              await replaceSessionAdapter.call(input.store, {
                 adapterSessionId: response.adapterSessionId,
-                checkpoint,
-                stage: stageForResult(result),
-                resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                  ? "terminal"
-                  : "live",
                 ...(result.implementationPlan?.appId === undefined
                   ? {}
                   : { appId: result.implementationPlan.appId }),
+                checkpoint,
+                expectedAdapterGeneration: existing.adapterGeneration,
+                expectedCheckpointDigest: existing.checkpointDigest,
                 nowEpochMs: timestamp,
+                principal,
+                resumability: ["completed", "failed", "cancelled"].includes(result.status)
+                  ? "terminal"
+                  : "live",
+                sessionId: existing.sessionId,
+                stage: stageForResult(result),
               }),
             );
             const durable = toDurableHostedSessionRecord(replaced);
@@ -908,159 +1018,63 @@ export function createHostedEveSessionService(input: {
               throw new HostedSubmissionUnknownError();
             return { result };
           },
+          kind: "resume",
+          request,
+          sessionId: existing.sessionId,
         });
       }
       if (request.prompt === undefined)
         throw new SubmissionRejectedBeforeDispatchError("prompt_required");
       const { prompt } = request;
       return mutate({
-        kind: "start",
-        request,
         async dispatch(operationId) {
           const response = await input.transport.start({
-            principal,
             operationId,
+            principal,
             prompt,
             ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
           });
-          const sessionId = stableId("ses", {
-            operationId,
-            adapterSessionId: response.adapterSessionId,
-          });
+          const sessionId = stableId(
+            "ses",
+            Object.fromEntries([
+              ["operationId", operationId],
+              ["adapterSessionId", response.adapterSessionId],
+            ]),
+          );
           const result = projectSnapshot(sessionId, response.snapshot);
           const timestamp = now();
           const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
           return {
-            result,
             newSession: durableHostedSessionRecordSchema.parse({
-              version: 2,
-              sessionId,
-              principal,
-              adapterSessionId: response.adapterSessionId,
-              originAdapterSessionId: response.adapterSessionId,
               adapterGeneration: 1,
-              title: titleFromPrompt(prompt),
-              ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
+              adapterSessionId: response.adapterSessionId,
               ...(result.implementationPlan?.appId === undefined
                 ? {}
                 : { appId: result.implementationPlan.appId }),
-              stage: stageForResult(result),
-              status: result.status,
-              resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                ? "terminal"
-                : "live",
               checkpoint,
               checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
               checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
-              lastProgressAtEpochMs: timestamp,
               createdAtEpochMs: timestamp,
+              lastProgressAtEpochMs: timestamp,
+              originAdapterSessionId: response.adapterSessionId,
+              principal,
+              resumability: ["completed", "failed", "cancelled"].includes(result.status)
+                ? "terminal"
+                : "live",
+              sessionId,
+              ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
+              stage: stageForResult(result),
+              status: result.status,
+              title: titleFromPrompt(prompt),
               updatedAtEpochMs: timestamp,
+              version: 2,
             }),
+            result,
           };
         },
-      });
-    },
-    async list({ cursor, limit }) {
-      requireHostedOperationScope(principal, "get");
-      const listed = await input.store.listSessions({
-        principal,
-        cursor,
-        limit,
-      });
-      return {
-        kind: "session_list",
-        cursor: listed.cursor,
-        sessions: listed.sessions.map(hostedSessionSummary),
-      };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async recoverStart(request) {
-      requireHostedOperationScope(principal, "start");
-      return readSession(request);
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async get({ sessionId, cursor, limit }) {
-      requireHostedOperationScope(principal, "get");
-      return readSession({ sessionId, cursor, limit });
-    },
-    async send(request) {
-      requireHostedOperationScope(principal, "send");
-      const session = await requireSession(request.sessionId);
-      return mutate({
-        kind: "send",
+        kind: "start",
         request,
-        sessionId: request.sessionId,
-        async dispatch(operationId) {
-          const snapshot = await input.transport.send({
-            principal,
-            operationId,
-            adapterSessionId: session.adapterSessionId,
-            message: request.message,
-            ...(session.version === 2 && session.sourceHandoffId
-              ? { sourceHandoffId: session.sourceHandoffId }
-              : {}),
-          });
-          const result = projectSnapshot(request.sessionId, snapshot);
-          await observeSnapshot(request.sessionId, snapshot);
-          return { result };
-        },
       });
-    },
-    async respond(request) {
-      requireHostedOperationScope(principal, "respond");
-      const session = await requireSession(request.sessionId);
-      return mutate({
-        kind: "respond",
-        request,
-        sessionId: request.sessionId,
-        async dispatch(operationId) {
-          const before = await input.transport.get({
-            principal,
-            adapterSessionId: session.adapterSessionId,
-          });
-          const expected = outstandingInternalEveRequests(
-            before.events.filter(
-              (event): event is InternalEveEvent => event !== null && typeof event === "object",
-            ),
-          ).map(({ requestId }) => requestId);
-          if (
-            expected.length !== request.responses.length ||
-            expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
-          )
-            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
-          const snapshot = await input.transport.respond({
-            principal,
-            operationId,
-            adapterSessionId: session.adapterSessionId,
-            responses: request.responses,
-            ...(session.version === 2 && session.sourceHandoffId
-              ? { sourceHandoffId: session.sourceHandoffId }
-              : {}),
-          });
-          const result = projectSnapshot(request.sessionId, snapshot);
-          await observeSnapshot(request.sessionId, snapshot);
-          return { result };
-        },
-      });
-    },
-    async cancel({ sessionId, turnId }) {
-      requireHostedOperationScope(principal, "cancel");
-      const session = await requireSession(sessionId);
-      let snapshot: HostedEngineSnapshot;
-      try {
-        snapshot = await input.transport.cancel({
-          principal,
-          adapterSessionId: session.adapterSessionId,
-          ...(turnId === undefined ? {} : { turnId }),
-        });
-      } catch (error) {
-        if (error instanceof SubmissionRejectedBeforeDispatchError)
-          throw new HostedRejectedOperationError(error.code);
-        throw error;
-      }
-      const result = projectSnapshot(sessionId, snapshot);
-      await observeSnapshot(sessionId, snapshot);
-      return result;
     },
   };
 }

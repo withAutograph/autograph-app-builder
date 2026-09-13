@@ -85,13 +85,14 @@ export interface GitHubPublicationRuntime {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
   return {
-    version: 3,
-    enabled,
     adapterConfigured: enabled,
     durableStoreConfigured: enabled,
+    enabled,
     genericShellAuthority: false,
     liveGitHubCallsAvailable: enabled,
-    supportedOperations,
+    reason: enabled
+      ? "The explicit installation adapter and durable PostgreSQL stores are configured."
+      : "A least-privilege GitHub App adapter and durable receipt store are not configured on this host.",
     releaseGate: {
       name: "REPOSITORY_RELEASE_ENABLED",
       policies: {
@@ -99,14 +100,13 @@ function runtimeStatus(enabled: boolean): GitHubPublicationRuntimeStatus {
           requiredConfiguredState: false,
         },
         "publish-approved-branch-and-draft-pull-request": {
-          requiredConfiguredState: "sealed-proposal-value",
           rejectsDrift: true,
+          requiredConfiguredState: "sealed-proposal-value",
         },
       },
     },
-    reason: enabled
-      ? "The explicit installation adapter and durable PostgreSQL stores are configured."
-      : "A least-privilege GitHub App adapter and durable receipt store are not configured on this host.",
+    supportedOperations,
+    version: 3,
   };
 }
 
@@ -120,8 +120,12 @@ const unavailable = (): never => {
 function disabledRuntime(): GitHubPublicationRuntime {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async status() {
-      return runtimeStatus(false);
+    async createFreshRepository() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async publishDraftPullRequest() {
+      return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource() {
@@ -132,12 +136,8 @@ function disabledRuntime(): GitHubPublicationRuntime {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async createFreshRepository() {
-      return unavailable();
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async publishDraftPullRequest() {
-      return unavailable();
+    async status() {
+      return runtimeStatus(false);
     },
   };
 }
@@ -169,39 +169,6 @@ export function composeGitHubPublicationRuntime(input: {
   const { proposals } = input;
   const { receipts } = input;
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async status() {
-      return runtimeStatus(true);
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async resolveImmutableSource(request) {
-      return resolveImmutableExistingSource({
-        adapter,
-        expectedInstallationId: request.expectedInstallationId,
-        repositoryId: request.repositoryId,
-        ref: request.ref,
-        expectedSha: request.expectedSha,
-        expectedTree: request.expectedTree,
-        resolvedByCallId: request.approvedByCallId,
-      });
-    },
-    async sealDraftPullRequestProposal(request) {
-      const repository = await adapter.inspectRepository({
-        operation: "publish-draft-pull-request",
-        repositoryId: request.githubSource.repository.repositoryId,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-      });
-      const installation = await adapter.inspectInstallation("publish-draft-pull-request");
-      const proposal = createDraftPullRequestProposal({
-        installation,
-        repository,
-        review: request.review,
-        changedPathsSinceBase: [],
-        title: request.title,
-      });
-      await proposals.save(proposal);
-      return proposal;
-    },
     async createFreshRepository(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
       if (
@@ -213,11 +180,11 @@ export function composeGitHubPublicationRuntime(input: {
       }
       return createApprovedFreshRepository({
         adapter,
-        store: receipts,
+        approvedByCallId: request.approvedByCallId,
+        contentSource: request.contentSource,
         proposal,
         review: request.review,
-        contentSource: request.contentSource,
-        approvedByCallId: request.approvedByCallId,
+        store: receipts,
       });
     },
     async publishDraftPullRequest(request) {
@@ -232,22 +199,55 @@ export function composeGitHubPublicationRuntime(input: {
       assertApprovalReceipt({
         actual: request.approvalReceipt,
         phase: "publication",
+        subjectDigest: proposal.digest,
         target: {
-          repositoryId: proposal.repositoryId,
-          repository: `${proposal.owner}/${proposal.name}`,
           baseRef: `refs/heads/${proposal.baseBranch}`,
           baseSha: proposal.baseSha,
+          repository: `${proposal.owner}/${proposal.name}`,
+          repositoryId: proposal.repositoryId,
         },
-        subjectDigest: proposal.digest,
       });
       return publishApprovedDraftPullRequest({
         adapter,
-        store: receipts,
+        approvedByCallId: request.approvedByCallId,
+        contentSource: request.contentSource,
         proposal,
         review: request.review,
-        contentSource: request.contentSource,
-        approvedByCallId: request.approvedByCallId,
+        store: receipts,
       });
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async resolveImmutableSource(request) {
+      return resolveImmutableExistingSource({
+        adapter,
+        expectedInstallationId: request.expectedInstallationId,
+        expectedSha: request.expectedSha,
+        expectedTree: request.expectedTree,
+        ref: request.ref,
+        repositoryId: request.repositoryId,
+        resolvedByCallId: request.approvedByCallId,
+      });
+    },
+    async sealDraftPullRequestProposal(request) {
+      const repository = await adapter.inspectRepository({
+        operation: "publish-draft-pull-request",
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+        repositoryId: request.githubSource.repository.repositoryId,
+      });
+      const installation = await adapter.inspectInstallation("publish-draft-pull-request");
+      const proposal = createDraftPullRequestProposal({
+        changedPathsSinceBase: [],
+        installation,
+        repository,
+        review: request.review,
+        title: request.title,
+      });
+      await proposals.save(proposal);
+      return proposal;
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async status() {
+      return runtimeStatus(true);
     },
   };
 }

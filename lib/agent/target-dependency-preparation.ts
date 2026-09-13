@@ -42,55 +42,55 @@ export async function prepareOrReuseDependencies(input: {
 
   if (current.phase !== "app_spec_accepted") {
     return {
-      state: current,
-      sandbox,
       receipt: current.dependencyReceipt,
       reused: true,
+      sandbox,
+      state: current,
     };
   }
   const unsigned = {
-    version: 2 as const,
-    sourceSha: current.workspace.sourceSha,
-    sourceTree: current.workspace.sourceTree,
-    sourceReceiptDigest: current.sourceReceipt.digest,
-    eligibilityDigest: current.workspace.eligibilityDigest,
-    workspaceDigest: current.workspace.workspaceDigest,
-    imageDigest: "vercel-sandbox",
-    dependencyCacheDigest: "checkout",
     appSpecDigest: current.appSpec.digest,
     artifactRevision: current.appSpec.artifactRevision,
-    targetSha: current.workspace.sourceSha,
-    targetTree: current.workspace.sourceTree,
-    cacheManifestDigest: "checkout",
     cacheContentDigest: "checkout",
+    cacheManifestDigest: "checkout",
+    dependencyCacheDigest: "checkout",
     dependencyLayout: {
-      version: 1 as const,
       kind: "checkout" as const,
       roots: [] as [],
+      version: 1 as const,
       workspaceLinks: [] as [],
     },
+    eligibilityDigest: current.workspace.eligibilityDigest,
+    imageDigest: "vercel-sandbox",
     preparedByCallId: input.callId,
+    sourceReceiptDigest: current.sourceReceipt.digest,
+    sourceSha: current.workspace.sourceSha,
+    sourceTree: current.workspace.sourceTree,
+    targetSha: current.workspace.sourceSha,
+    targetTree: current.workspace.sourceTree,
+    version: 2 as const,
+    workspaceDigest: current.workspace.workspaceDigest,
   };
   const dependencyReceipt = {
     ...unsigned,
     digest: sha256(JSON.stringify(unsigned)),
   };
   const preparedState: DependencyReadyState = {
-    version: APP_BUILDER_WORKFLOW_VERSION,
+    appSpec: current.appSpec,
+    artifacts: current.artifacts,
+    dependencyReceipt,
+    ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
     phase: "dependencies_prepared",
     preparedByCallId: current.preparedByCallId,
-    workspace: current.workspace,
     sourceReceipt: current.sourceReceipt,
-    ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-    artifacts: current.artifacts,
-    appSpec: current.appSpec,
-    dependencyReceipt,
+    version: APP_BUILDER_WORKFLOW_VERSION,
+    workspace: current.workspace,
   };
   appBuilderWorkflowState.update(() => preparedState);
   return {
-    state: preparedState,
-    sandbox,
     receipt: dependencyReceipt,
     reused: false,
+    sandbox,
+    state: preparedState,
   };
 }

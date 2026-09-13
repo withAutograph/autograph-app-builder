@@ -88,12 +88,12 @@ const bundledStyle = bundledCss.join("\\n").replace(/<\\/style/gi, "<\\\\/style"
 const script = js.replace(/<\\/script/gi, "<\\\\/script");
 await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + themeStyle + '</style><style>' + bundledStyle + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
   return {
-    root,
     files: [
       ...input.files,
-      { path: "entry.tsx", content: entry },
-      { path: "render.mts", content: renderer },
+      { content: entry, path: "entry.tsx" },
+      { content: renderer, path: "render.mts" },
     ],
+    root,
   };
 }
 
@@ -106,8 +106,8 @@ export async function renderUiPreview(
   for (const file of bundle.files)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await sandbox.writeTextFile({
-      path: `/workspace/repository/${bundle.root}/${file.path}`,
       content: file.content,
+      path: `/workspace/repository/${bundle.root}/${file.path}`,
     });
   // The command contains only a fixed executable and a builder-generated hex
   // directory. Submitted source is file content, never shell interpolation.

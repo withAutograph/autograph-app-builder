@@ -18,7 +18,7 @@ export default defineEval({
     });
     await t.send("Publish reviewed change set with stale branch preconditions.");
     t.requireInputRequest({
-      toolName: "publish_reviewed_change_set_to_branch_worktree",
+      toolName: "publish-reviewed-change-set_to_branch_worktree",
     });
     await t.respondAll("approve");
     t.succeeded();
@@ -37,8 +37,8 @@ export default defineEval({
       }) !== ""
     )
       throw new Error("A stale approval created a branch.");
-    t.notCalledTool("recover_branch_worktree_publication");
+    t.notCalledTool("recover-branch-worktree-publication");
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

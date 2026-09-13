@@ -37,7 +37,7 @@ Keep exactly the five public tools: `autograph_start`, `autograph_get`,
 
 ## Normal brief workflow
 
-Call `prepared_app_context` when continuing an app prepared on the web, including
+Call `prepared-app-context` when continuing an app prepared on the web, including
 after recovery. Reuse its brief, selected provider accounts, repository, and
 project. Ready access needs no new connection prompt; retry provider outages.
 If access was revoked, use the website connection flow for this same app and
@@ -78,7 +78,7 @@ outward effect such as changing a repository or opening a draft PR.
 
 Use `record_ui_preview` for visual creation in both local and hosted execution.
 Read current public exports, selected component implementations, and relevant
-stories with `inspect_repository({ paths: [...] })` before using their APIs.
+stories with `inspect-repository({ paths: [...] })` before using their APIs.
 This tool reads repository-relative files, including packages and documentation.
 Do not infer component props from another UI library.
 Use the repository's existing UI catalog and linked examples as a discovery
@@ -141,7 +141,7 @@ actions with a visible reason. Carry these behaviors into the implementation
 plan and focused product tests.
 
 Before authoring the first AppSpec artifact, load `design-app` and read its
-`references/app-spec.md` with `read_skill_reference`. Copy the complete canonical
+`references/app-spec.md` with `read-skill-reference`. Copy the complete canonical
 Markdown skeleton, fill every section from the brief and revisable defaults,
 and keep its exact final Build handoff block. Do not abbreviate or rename the
 headings. Keep provider names such as GitHub and Vercel in product prose; handoff

@@ -6,8 +6,6 @@ import { expect, within } from "storybook/test";
 import { ProviderConnection, ProviderConnectionNotice } from "./provider-connection";
 
 const meta = {
-  title: "Components/Connections/Provider Connection",
-  component: ProviderConnection,
   args: {
     action: "/github/installations/start",
     buttonLabel: "Install or update GitHub access",
@@ -15,11 +13,13 @@ const meta = {
     description:
       "Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here.",
     icon: <FaGithub size={23} />,
-    returnTo: "/",
     resumeKey: "resume-123",
+    returnTo: "/",
     title: "Connect a GitHub App installation",
   },
+  component: ProviderConnection,
   parameters: { layout: "fullscreen" },
+  title: "Components/Connections/Provider Connection",
 } satisfies Meta<typeof ProviderConnection>;
 
 export default meta;

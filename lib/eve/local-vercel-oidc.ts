@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
 
 interface LinkedVercelProject {
   projectId: string;
@@ -21,88 +21,88 @@ interface VercelOidcClaims {
   environment: string;
 }
 
-function closedObject(value: unknown, name: string): Record<string, unknown> {
+const closedObject = (value: unknown, name: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
   }
   return value as Record<string, unknown>;
-}
+};
 
-function assertOwnerNonWritable(path: string): void {
+const assertOwnerNonWritable = (path: string): void => {
   const stat = statSync(path);
   const ownerId = process.getuid?.();
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ownerId === undefined || stat.uid !== ownerId || (stat.mode & 0o022) !== 0) {
     throw new Error("Installed Eve input was not owner-bound.");
   }
-}
+};
 
-function assertOwnerBoundDirectory(path: string): void {
+const assertOwnerBoundDirectory = (path: string): void => {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error("Installed Eve input was not an owner-bound directory.");
   }
   assertOwnerNonWritable(path);
-}
+};
 
-function isContainedPath(parent: string, candidate: string): boolean {
-  const relativeCandidate = relative(parent, candidate);
+const isContainedPath = (parent: string, candidate: string): boolean => {
+  const relativeCandidate = nodePath.relative(parent, candidate);
   return (
     relativeCandidate.length > 0 &&
-    !isAbsolute(relativeCandidate) &&
+    !nodePath.isAbsolute(relativeCandidate) &&
     relativeCandidate !== ".." &&
-    !relativeCandidate.startsWith(`..${sep}`)
+    !relativeCandidate.startsWith(`..${nodePath.sep}`)
   );
-}
+};
 
-export function resolveInstalledEveCli(repositoryRootInput: string): string {
+export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const repositoryRoot = realpathSync(repositoryRootInput);
-  if (repositoryRoot !== resolve(repositoryRootInput)) {
+  if (repositoryRoot !== nodePath.resolve(repositoryRootInput)) {
     throw new Error("Repository root was not canonical.");
   }
-  const nodeModules = join(repositoryRoot, "node_modules");
-  const pnpmRoot = join(nodeModules, ".pnpm");
-  const packageLink = join(nodeModules, "eve");
+  const nodeModules = nodePath.join(repositoryRoot, "node_modules");
+  const pnpmRoot = nodePath.join(nodeModules, ".pnpm");
+  const packageLink = nodePath.join(nodeModules, "eve");
   assertOwnerBoundDirectory(nodeModules);
   assertOwnerBoundDirectory(pnpmRoot);
   const packageLinkStat = lstatSync(packageLink);
   if (
     !packageLinkStat.isSymbolicLink() ||
     packageLinkStat.uid !== process.getuid?.() ||
-    realpathSync(dirname(packageLink)) !== dirname(packageLink)
+    realpathSync(nodePath.dirname(packageLink)) !== nodePath.dirname(packageLink)
   ) {
     throw new Error("Installed Eve did not use the expected pnpm layout.");
   }
   const rawTarget = readlinkSync(packageLink, "utf-8");
   if (
-    isAbsolute(rawTarget) ||
+    nodePath.isAbsolute(rawTarget) ||
     rawTarget.split("/").includes("..") ||
     !/^\.pnpm\/eve@0\.44\.4(?:_[^/]+)?\/node_modules\/eve$/u.test(rawTarget)
   ) {
     throw new Error("Installed Eve package link was invalid.");
   }
   const packageRoot = realpathSync(packageLink);
-  const relativePackageRoot = relative(pnpmRoot, packageRoot);
+  const relativePackageRoot = nodePath.relative(pnpmRoot, packageRoot);
   if (
     !isContainedPath(pnpmRoot, packageRoot) ||
     !/^eve@0\.44\.4(?:_[^/]+)?\/node_modules\/eve$/u.test(relativePackageRoot)
   ) {
     throw new Error("Installed Eve resolved outside the pinned pnpm package.");
   }
-  const cli = join(packageRoot, "bin/eve.js");
-  const metadataPath = join(packageRoot, "package.json");
-  const packageNodeModules = dirname(packageRoot);
-  const packageStoreRoot = dirname(packageNodeModules);
-  for (const path of [
+  const cli = nodePath.join(packageRoot, "bin/eve.js");
+  const metadataPath = nodePath.join(packageRoot, "package.json");
+  const packageNodeModules = nodePath.dirname(packageRoot);
+  const packageStoreRoot = nodePath.dirname(packageNodeModules);
+  for (const directoryPath of [
     packageStoreRoot,
     packageNodeModules,
     packageRoot,
-    join(packageRoot, "bin"),
+    nodePath.join(packageRoot, "bin"),
   ]) {
-    assertOwnerBoundDirectory(path);
+    assertOwnerBoundDirectory(directoryPath);
   }
-  for (const path of [cli, metadataPath]) {
-    assertOwnerNonWritable(path);
+  for (const filePath of [cli, metadataPath]) {
+    assertOwnerNonWritable(filePath);
   }
   if (
     lstatSync(cli).isSymbolicLink() ||
@@ -121,7 +121,7 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Installed Eve package identity was invalid.");
   }
   const rootMetadata = closedObject(
-    JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf-8")) as unknown,
+    JSON.parse(readFileSync(nodePath.join(repositoryRoot, "package.json"), "utf-8")) as unknown,
     "Repository package",
   );
   const dependencies = closedObject(rootMetadata.dependencies, "Repository dependencies");
@@ -129,39 +129,39 @@ export function resolveInstalledEveCli(repositoryRootInput: string): string {
     throw new Error("Repository Eve dependency was not pinned to 0.44.4.");
   }
   return cli;
-}
+};
 
-function requiredString(value: Record<string, unknown>, key: string): string {
+const requiredString = (value: Record<string, unknown>, key: string): string => {
   const candidate = value[key];
   if (typeof candidate !== "string" || candidate.length === 0) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
   return candidate;
-}
+};
 
-function requiredInteger(value: Record<string, unknown>, key: string): number {
+const requiredInteger = (value: Record<string, unknown>, key: string): number => {
   const candidate = value[key];
   if (!Number.isSafeInteger(candidate)) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
   return candidate as number;
-}
+};
 
-export function parseLinkedVercelProject(source: string): LinkedVercelProject {
+export const parseLinkedVercelProject = (source: string): LinkedVercelProject => {
   const value = closedObject(JSON.parse(source) as unknown, "Vercel project");
   return {
-    projectId: requiredString(value, "projectId"),
     orgId: requiredString(value, "orgId"),
+    projectId: requiredString(value, "projectId"),
     projectName: requiredString(value, "projectName"),
   };
-}
+};
 
 const DEFAULT_OWNER_BOUND_FILE_INPUT = { confidential: false };
 
-export function readOwnerBoundLocalFile(
+export const readOwnerBoundLocalFile = (
   path: string,
   input: { confidential: boolean; ownerId?: number } = DEFAULT_OWNER_BOUND_FILE_INPUT,
-): string {
+): string => {
   const stat = lstatSync(path);
   const ownerId = input.ownerId ?? process.getuid?.();
   if (
@@ -176,14 +176,15 @@ export function readOwnerBoundLocalFile(
     throw new Error("Local credential input was not an owner-bound file.");
   }
   return readFileSync(path, "utf-8");
-}
+};
 
-export function parseLocalVercelOidcToken(source: string): string {
+export const parseLocalVercelOidcToken = (source: string): string => {
   const matches = source.split(/\r?\n/u).filter((line) => line.startsWith("VERCEL_OIDC_TOKEN="));
-  if (matches.length !== 1) {
+  const [match] = matches;
+  if (matches.length !== 1 || match === undefined) {
     throw new Error("Expected exactly one VERCEL_OIDC_TOKEN entry.");
   }
-  const encoded = matches[0]!.slice("VERCEL_OIDC_TOKEN=".length);
+  const encoded = match.slice("VERCEL_OIDC_TOKEN=".length);
   const token = encoded.startsWith('"') ? (JSON.parse(encoded) as unknown) : encoded;
   if (
     typeof token !== "string" ||
@@ -193,9 +194,9 @@ export function parseLocalVercelOidcToken(source: string): string {
     throw new Error("VERCEL_OIDC_TOKEN was not a bounded JWT.");
   }
   return token;
-}
+};
 
-function decodeClaims(token: string): VercelOidcClaims {
+const decodeClaims = (token: string): VercelOidcClaims => {
   const [, payload] = token.split(".");
   if (payload === undefined) throw new Error("OIDC payload was unavailable.");
   let decoded: unknown;
@@ -206,21 +207,21 @@ function decodeClaims(token: string): VercelOidcClaims {
   }
   const claims = closedObject(decoded, "OIDC claims");
   return {
-    iss: requiredString(claims, "iss"),
     aud: requiredString(claims, "aud"),
-    sub: requiredString(claims, "sub"),
-    iat: requiredInteger(claims, "iat"),
-    nbf: requiredInteger(claims, "nbf"),
+    environment: requiredString(claims, "environment"),
     exp: requiredInteger(claims, "exp"),
+    iat: requiredInteger(claims, "iat"),
+    iss: requiredString(claims, "iss"),
+    nbf: requiredInteger(claims, "nbf"),
     owner: requiredString(claims, "owner"),
     owner_id: requiredString(claims, "owner_id"),
     project: requiredString(claims, "project"),
     project_id: requiredString(claims, "project_id"),
-    environment: requiredString(claims, "environment"),
+    sub: requiredString(claims, "sub"),
   };
-}
+};
 
-export function validateLocalVercelOidcClaims(input: {
+export const validateLocalVercelOidcClaims = (input: {
   token: string;
   project: LinkedVercelProject;
   nowEpochSeconds: number;
@@ -235,7 +236,7 @@ export function validateLocalVercelOidcClaims(input: {
   issuedAt: number;
   notBefore: number;
   expiresAt: number;
-} {
+} => {
   const claims = decodeClaims(input.token);
   const expectedAudience = `https://vercel.com/${claims.owner}`;
   const expectedSubject = `owner:${claims.owner}:project:${input.project.projectName}:environment:development`;
@@ -264,23 +265,23 @@ export function validateLocalVercelOidcClaims(input: {
     throw new Error("OIDC token was not current and bounded.");
   }
   return {
-    issuerMode: claims.iss === "https://oidc.vercel.com" ? "global" : "team",
     audienceBound: true,
-    subjectBound: true,
+    environment: "development",
+    expiresAt: claims.exp,
+    issuedAt: claims.iat,
+    issuerMode: claims.iss === "https://oidc.vercel.com" ? "global" : "team",
+    notBefore: claims.nbf,
     ownerBound: true,
     projectBound: true,
-    environment: "development",
-    issuedAt: claims.iat,
-    notBefore: claims.nbf,
-    expiresAt: claims.exp,
+    subjectBound: true,
   };
-}
+};
 
-export function validateLocalVercelOidcToken(input: {
+export const validateLocalVercelOidcToken = (input: {
   token: string;
   project: LinkedVercelProject;
   nowEpochSeconds: number;
-}): string {
+}): string => {
   validateLocalVercelOidcClaims(input);
   return input.token;
-}
+};

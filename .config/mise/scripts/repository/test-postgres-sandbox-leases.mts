@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -43,23 +44,23 @@ const policyDigest = sandboxExecutionPolicyDigest();
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function principal(ownerUserId: string, workspaceId = "workspace_1") {
   return {
-    issuer: "https://builder.example.test/api/auth",
     audience: "https://builder.example.test/mcp",
-    workspaceId,
+    issuer: "https://builder.example.test/api/auth",
     ownerUserId,
     scopes: ["eve:start"],
+    workspaceId,
   } satisfies HostedPrincipal;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function acquire(owner: string, session: string, workspace = "workspace_1") {
   return store.acquire({
-    principal: principal(owner, workspace),
     adapterSessionId: session,
-    providerSandboxId: `sandbox_${session}`,
-    policy,
     // The PostgreSQL implementation must ignore application wall-clock input.
     nowEpochMs: 0,
+    policy,
+    principal: principal(owner, workspace),
+    providerSandboxId: `sandbox_${session}`,
   });
 }
 
@@ -79,9 +80,7 @@ async function waitForDatabase() {
     } catch (error) {
       lastError = error;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 100);
-      });
+      await setTimeout(100);
     }
   }
   throw lastError;
@@ -95,8 +94,8 @@ async function expire(lease: SandboxExecutionLease) {
   const record = {
     ...lease,
     acquiredAtEpochMs,
-    heartbeatAtEpochMs,
     expiresAtEpochMs,
+    heartbeatAtEpochMs,
   };
   await client`
     update sandbox_execution_lease
@@ -124,11 +123,11 @@ try {
   assert.ok(acquired?.disposition === "acquired");
   assert.ok(acquired.lease.acquiredAtEpochMs > Date.now() - 60_000);
   const replay = await store.acquire({
-    principal: acquired.lease.principal,
     adapterSessionId: acquired.lease.adapterSessionId,
-    providerSandboxId: acquired.lease.providerSandboxId,
-    policy,
     nowEpochMs: 0,
+    policy,
+    principal: acquired.lease.principal,
+    providerSandboxId: acquired.lease.providerSandboxId,
   });
   assert.equal(replay.disposition, "existing");
 
@@ -143,11 +142,11 @@ try {
   assert.ok(rollback.disposition === "acquired");
   await assert.rejects(
     store.acquire({
-      principal: rollback.lease.principal,
       adapterSessionId: rollback.lease.adapterSessionId,
-      providerSandboxId: "substituted_provider",
-      policy,
       nowEpochMs: 0,
+      policy,
+      principal: rollback.lease.principal,
+      providerSandboxId: "substituted_provider",
     }),
     /different inputs/u,
   );
@@ -158,44 +157,44 @@ try {
   `;
   assert.deepEqual(
     [...rollbackRows],
-    [{ provider_sandbox_id: "sandbox_rollback_session", epoch: 1 }],
+    [{ epoch: 1, provider_sandbox_id: "sandbox_rollback_session" }],
   );
 
   await client`select pg_sleep(0.02)`;
   const heartbeat = await store.heartbeat({
-    principal: rollback.lease.principal,
     adapterSessionId: rollback.lease.adapterSessionId,
     epoch: rollback.lease.epoch,
     nowEpochMs: 0,
+    principal: rollback.lease.principal,
   });
   assert.ok(heartbeat.heartbeatAtEpochMs > rollback.lease.heartbeatAtEpochMs);
   assert.equal(heartbeat.expiresAtEpochMs - heartbeat.heartbeatAtEpochMs, policy.lease.ttlMs);
 
   await expire(heartbeat);
-  const [claimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
+  const [claimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
   assert.ok(claimed);
   assert.equal(claimed.state, "orphaned");
   const stopFailed = await store.settleRecovery({
     lease: claimed,
-    providerOutcome: "stop-failed",
     nowEpochMs: 0,
+    providerOutcome: "stop-failed",
   });
   assert.equal(stopFailed?.state, "orphaned");
   assert.deepEqual(
     await Promise.all([
       store.acquire({
-        principal: claimed.principal,
         adapterSessionId: claimed.adapterSessionId,
-        providerSandboxId: claimed.providerSandboxId,
-        policy,
         nowEpochMs: 0,
+        policy,
+        principal: claimed.principal,
+        providerSandboxId: claimed.providerSandboxId,
       }),
       store.acquire({
-        principal: claimed.principal,
         adapterSessionId: claimed.adapterSessionId,
-        providerSandboxId: claimed.providerSandboxId,
-        policy,
         nowEpochMs: 0,
+        policy,
+        principal: claimed.principal,
+        providerSandboxId: claimed.providerSandboxId,
       }),
     ]),
     [
@@ -203,47 +202,47 @@ try {
       { disposition: "rejected", reason: "recovery-in-progress" },
     ],
   );
-  const [reclaimed] = await store.claimExpired({ nowEpochMs: 0, limit: 1 });
+  const [reclaimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
   assert.ok(reclaimed);
   assert.equal(reclaimed.epoch, claimed.epoch + 1);
   assert.deepEqual(
     await store.acquire({
-      principal: reclaimed.principal,
       adapterSessionId: reclaimed.adapterSessionId,
-      providerSandboxId: reclaimed.providerSandboxId,
-      policy,
       nowEpochMs: 0,
+      policy,
+      principal: reclaimed.principal,
+      providerSandboxId: reclaimed.providerSandboxId,
     }),
     { disposition: "rejected", reason: "recovery-in-progress" },
   );
   assert.equal(
     await store.settleRecovery({
       lease: claimed,
-      providerOutcome: "stopped",
       nowEpochMs: 0,
+      providerOutcome: "stopped",
     }),
     null,
   );
   const settled = await store.settleRecovery({
     lease: reclaimed,
-    providerOutcome: "stopped",
     nowEpochMs: 0,
+    providerOutcome: "stopped",
   });
   assert.equal(settled?.state, "released");
   const recovered = await store.acquire({
-    principal: reclaimed.principal,
     adapterSessionId: reclaimed.adapterSessionId,
-    providerSandboxId: reclaimed.providerSandboxId,
-    policy,
     nowEpochMs: 0,
+    policy,
+    principal: reclaimed.principal,
+    providerSandboxId: reclaimed.providerSandboxId,
   });
   assert.ok(recovered.disposition === "acquired");
   assert.equal(recovered.lease.epoch, reclaimed.epoch + 1);
   assert.equal(
     await store.settleRecovery({
       lease: claimed,
-      providerOutcome: "stopped",
       nowEpochMs: 0,
+      providerOutcome: "stopped",
     }),
     null,
   );
@@ -257,13 +256,13 @@ try {
   await expire(batchFailed.lease);
   await expire(batchStopped.lease);
   const batch = await reconcileExpiredSandboxLeases({
-    store,
+    nowEpochMs: 0,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
     async stopSandbox(providerSandboxId) {
       if (providerSandboxId === batchFailed.lease.providerSandboxId)
         throw new Error("provider unavailable");
     },
-    nowEpochMs: 0,
+    store,
   });
   assert.equal(batch.claimed, 2);
   assert.equal(batch.providerFailed.length, 1);
@@ -281,14 +280,14 @@ try {
   const stoppedReacquired = await acquire("user_stopped", "batch_stopped");
   assert.equal(stoppedReacquired.disposition, "acquired");
   const retry = await reconcileExpiredSandboxLeases({
-    store,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
-    stopSandbox: async () => undefined,
     nowEpochMs: 0,
+    stopSandbox: () => Promise.resolve(),
+    store,
   });
   assert.equal(retry.claimed, 1);
   assert.equal(retry.stopped.length, 1);
-  assert.equal((await acquire("user_failed", "batch_failed")).disposition, "acquired");
+  const failedReacquired = await acquire("user_failed", "batch_failed");
+  assert.equal(failedReacquired.disposition, "acquired");
 
   process.stdout.write(
     `${JSON.stringify({

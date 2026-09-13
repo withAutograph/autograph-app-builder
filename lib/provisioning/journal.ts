@@ -10,9 +10,16 @@ import type { BuilderProvisionRequest } from "./contracts";
 
 const storedRequestSchema = z
   .object({
-    version: z.literal(1),
-    requestId: z.string().uuid(),
     appName: z.string().trim().min(1).max(120),
+    providers: z
+      .object({
+        githubInstallationId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict(),
     repository: z
       .object({
         name: z
@@ -24,39 +31,32 @@ const storedRequestSchema = z
         private: z.boolean(),
       })
       .strict(),
-    providers: z
-      .object({
-        githubInstallationId: z
-          .string()
-          .regex(/^[1-9][0-9]*$/u)
-          .optional(),
-        vercelInstallationId: z.string().min(1).max(256).optional(),
-      })
-      .strict(),
+    requestId: z.string().uuid(),
+    version: z.literal(1),
   })
   .strict();
 
 const operationStateSchema = z
   .object({
+    absentCandidates: z.array(z.string().min(1).max(100)).max(5),
     attempted: z.boolean(),
     candidates: z.array(z.string().min(1).max(100)).max(5),
-    absentCandidates: z.array(z.string().min(1).max(100)).max(5),
-    leaseId: z.string().uuid().optional(),
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
+    leaseId: z.string().uuid().optional(),
   })
   .strict();
 
 export const builderProvisionJournalRecordSchema = z
   .object({
-    version: z.literal(1),
-    request: storedRequestSchema,
-    response: builderProvisionResponseSchema,
     operations: z
       .object({
         github: operationStateSchema,
         vercel: operationStateSchema,
       })
       .strict(),
+    request: storedRequestSchema,
+    response: builderProvisionResponseSchema,
+    version: z.literal(1),
   })
   .strict();
 
@@ -93,43 +93,46 @@ export interface BuilderProvisionJournalStore {
   }) => Promise<BuilderProvisionJournalRow | undefined>;
 }
 
-export function initialBuilderProvisionJournalRecord(
+export const initialBuilderProvisionJournalRecord = (
   requestInput: BuilderProvisionRequest,
   now: Date,
-): BuilderProvisionJournalRecord {
+): BuilderProvisionJournalRecord => {
   const request = builderProvisionRequestSchema.parse(requestInput);
   return builderProvisionJournalRecordSchema.parse({
-    version: 1,
+    operations: {
+      github: { absentCandidates: [], attempted: false, candidates: [] },
+      vercel: { absentCandidates: [], attempted: false, candidates: [] },
+    },
     request: {
-      version: request.version,
-      requestId: request.requestId,
       appName: request.appName,
-      repository: request.repository,
       providers: request.providers,
+      repository: request.repository,
+      requestId: request.requestId,
+      version: request.version,
     },
     response: initialBuilderProvisionResponse(request, now),
-    operations: {
-      github: { attempted: false, candidates: [], absentCandidates: [] },
-      vercel: { attempted: false, candidates: [], absentCandidates: [] },
-    },
+    version: 1,
   });
-}
+};
 
-function operationSettled(record: BuilderProvisionJournalRecord, operation: "github" | "vercel") {
+const operationSettled = (
+  record: BuilderProvisionJournalRecord,
+  operation: "github" | "vercel",
+) => {
   const selected =
     operation === "github"
       ? record.request.providers.githubInstallationId !== undefined
       : record.request.providers.vercelInstallationId !== undefined;
   return !selected || record.operations[operation].attempted;
-}
+};
 
-export async function updateBuilderProvisionJournal(input: {
+export const updateBuilderProvisionJournal = async (input: {
   store: BuilderProvisionJournalStore;
   authority: BuilderProvisionAuthority;
   requestId: string;
   now?: () => number;
   update: (current: BuilderProvisionJournalRecord) => BuilderProvisionJournalRecord;
-}): Promise<BuilderProvisionJournalRow> {
+}): Promise<BuilderProvisionJournalRow> => {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await input.store.read({
@@ -147,12 +150,12 @@ export async function updateBuilderProvisionJournal(input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await input.store.compareAndSet({
       authority: input.authority,
-      requestId: input.requestId,
       expectedRevision: current.revision,
-      record: next,
       now: updatedAt,
+      record: next,
+      requestId: input.requestId,
     });
     if (saved) return saved;
   }
   throw new Error("provision-journal-contention");
-}
+};

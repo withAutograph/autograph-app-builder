@@ -1,4 +1,5 @@
 import type { RuntimeSandboxSession } from "eve/sandbox";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
@@ -66,8 +67,6 @@ function hostedLeaseDatabase(environment: Readonly<Record<string, string | undef
 
 const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
-  store: (environment) =>
-    createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async isMember({ principal, workspaceId, environment }) {
     return createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
@@ -75,6 +74,8 @@ const defaultDependencies: RuntimeDependencies = {
       workspaceId,
     });
   },
+  store: (environment) =>
+    createPostgresSandboxExecutionLeaseStore(hostedLeaseDatabase(environment)),
 };
 
 let dependencies = defaultDependencies;
@@ -109,14 +110,14 @@ async function stopWithin(
   sandbox: Pick<RuntimeSandboxSession, "stop">,
   timeoutMs = SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
 ): Promise<SandboxCleanupEvidence> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutController = new AbortController();
   const stop = Promise.resolve(sandbox.stop());
   // Intentionally observe stop failure without awaiting it before the timeout race.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  stop.catch(() => undefined);
-  const timeout = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), timeoutMs);
-    timer.unref?.();
+  stop.catch(() => null);
+  const timeout = delay(timeoutMs, "timeout" as const, {
+    ref: false,
+    signal: timeoutController.signal,
   });
   try {
     const result = await Promise.race([
@@ -129,7 +130,7 @@ async function stopWithin(
       timedOut: result === "timeout",
     };
   } finally {
-    clearTimeout(timer);
+    timeoutController.abort();
   }
 }
 
@@ -155,20 +156,20 @@ export async function acquireHostedSandboxExecutionLease(input: {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
     if (
       !(await dependencies.isMember({
+        environment,
         principal,
         workspaceId: authority.workspaceId,
-        environment,
       }))
     ) {
       throw new Error("Hosted sandbox execution membership is not active.");
     }
     const store = dependencies.store(environment);
     const result = await store.acquire({
-      principal,
       adapterSessionId: input.sessionId,
-      providerSandboxId: input.sandbox.id,
-      policy: SANDBOX_EXECUTION_POLICY,
       nowEpochMs: input.nowEpochMs ?? Date.now(),
+      policy: SANDBOX_EXECUTION_POLICY,
+      principal,
+      providerSandboxId: input.sandbox.id,
     });
     if (result.disposition === "rejected") {
       throw new Error("Hosted sandbox recovery is still in progress.");
@@ -192,26 +193,26 @@ export async function assertHostedSandboxCommandAuthority(input: {
   nowEpochMs?: number;
 }) {
   const environment = input.environment ?? process.env;
-  if (!dependencies.enabled(environment)) return undefined;
+  if (!dependencies.enabled(environment)) return;
   const active = commandAuthorities.get(input.sessionId);
   if (active === undefined) {
     throw new Error("Hosted sandbox command authority is unavailable.");
   }
   const nowEpochMs = input.nowEpochMs ?? Date.now();
   let lease = await active.store.assertCurrent({
-    principal: active.lease.principal,
     adapterSessionId: active.lease.adapterSessionId,
-    providerSandboxId: active.lease.providerSandboxId,
     epoch: active.lease.epoch,
-    policyDigest: active.lease.policyDigest,
     nowEpochMs,
+    policyDigest: active.lease.policyDigest,
+    principal: active.lease.principal,
+    providerSandboxId: active.lease.providerSandboxId,
   });
   if (nowEpochMs - lease.heartbeatAtEpochMs >= SANDBOX_EXECUTION_POLICY.lease.heartbeatMs) {
     lease = await active.store.heartbeat({
-      principal: lease.principal,
       adapterSessionId: lease.adapterSessionId,
       epoch: lease.epoch,
       nowEpochMs,
+      principal: lease.principal,
     });
     commandAuthorities.set(input.sessionId, { ...active, lease });
   }
@@ -245,17 +246,17 @@ export async function releaseHostedSandboxExecutionLease(input: {
     );
   }
   const released = await dependencies.store(environment).releaseCurrent({
-    principal,
     adapterSessionId: input.sessionId,
-    providerSandboxId: input.sandbox.id,
-    policyDigest: sandboxExecutionPolicyDigest(),
-    reason: input.reason,
     nowEpochMs: input.nowEpochMs ?? Date.now(),
+    policyDigest: sandboxExecutionPolicyDigest(),
+    principal,
+    providerSandboxId: input.sandbox.id,
+    reason: input.reason,
   });
   commandAuthorities.delete(input.sessionId);
   return released === null
     ? ({ released: false } as const)
-    : ({ released: true, lease: released } as const);
+    : ({ lease: released, released: true } as const);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

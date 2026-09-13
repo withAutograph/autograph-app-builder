@@ -73,17 +73,17 @@ try {
       ORDER BY relation.relname, constraint_record.conname
     `;
     return {
-      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
-      migrations,
       columns,
-      indexes,
       constraints,
+      indexes,
+      migrations,
+      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
     };
   });
   const receipt = await verifyHostedStorageReadBack({
-    repositoryRoot: process.cwd(),
-    readBack,
     observedAt: new Date(),
+    readBack,
+    repositoryRoot: process.cwd(),
   });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 } finally {

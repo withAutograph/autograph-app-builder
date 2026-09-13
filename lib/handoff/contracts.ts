@@ -26,21 +26,14 @@ export const builderHandoffDestinationSchema = z.enum(["codex", "cursor"]);
 
 export const builderHandoffIntentSchema = z
   .object({
+    appId: builderAppIdSchema,
+    appName: z.string().trim().min(1).max(120),
+    brief: z.string().trim().min(1).max(32_000),
+    connections: z.array(z.string().trim().min(1).max(100)).max(50),
     // Keep legacy stored intents byte-compatible with their request digests.
     // Consumers interpret an omitted destination as Codex.
     destination: builderHandoffDestinationSchema.optional(),
-    appName: z.string().trim().min(1).max(120),
-    appId: builderAppIdSchema,
-    brief: z.string().trim().min(1).max(32_000),
-    repository: z
-      .object({
-        requestedName: repositoryName,
-        private: z.boolean(),
-        resolvedFullName: fullRepositoryName.optional(),
-      })
-      .strict(),
     modelId: activeBuilderModelIdSchema,
-    connections: z.array(z.string().trim().min(1).max(100)).max(50),
     providers: z
       .object({
         githubInstallationId: z
@@ -51,9 +44,16 @@ export const builderHandoffIntentSchema = z
       })
       .strict()
       .optional(),
-    provisioningRequestId: z.string().uuid().optional(),
-    provisioningRequestDigest: sha256.optional(),
     provisioning: builderProvisionResponseSchema.optional(),
+    provisioningRequestDigest: sha256.optional(),
+    provisioningRequestId: z.string().uuid().optional(),
+    repository: z
+      .object({
+        private: z.boolean(),
+        requestedName: repositoryName,
+        resolvedFullName: fullRepositoryName.optional(),
+      })
+      .strict(),
   })
   .strict()
   .superRefine((intent, context) => {
@@ -63,8 +63,8 @@ export const builderHandoffIntentSchema = z
     )
       context.addIssue({
         code: "custom",
-        path: ["provisioningRequestId"],
         message: "A provisioning request ID and digest must be recorded together.",
+        path: ["provisioningRequestId"],
       });
     if (
       intent.provisioning !== undefined &&
@@ -73,14 +73,14 @@ export const builderHandoffIntentSchema = z
     )
       context.addIssue({
         code: "custom",
-        path: ["provisioning"],
         message: "A provisioning outcome must match its exact server-owned request.",
+        path: ["provisioning"],
       });
     if (intent.provisioning === undefined && intent.provisioningRequestId !== undefined)
       context.addIssue({
         code: "custom",
-        path: ["provisioning"],
         message: "A referenced provisioning request requires its readback.",
+        path: ["provisioning"],
       });
   });
 
@@ -88,30 +88,30 @@ export type BuilderHandoffIntent = z.infer<typeof builderHandoffIntentSchema>;
 
 export const builderHandoffRecordSchema = z
   .object({
-    version: z.literal(1),
-    handoffId: builderHandoffIdSchema,
     authority: hostedTenantAuthoritySchema,
-    creationRequestId: z.string().uuid(),
-    requestDigest: sha256,
-    intent: builderHandoffIntentSchema,
     createdAt: z.date(),
+    creationRequestId: z.string().uuid(),
     expiresAt: z.date(),
+    handoffId: builderHandoffIdSchema,
+    intent: builderHandoffIntentSchema,
     redeemedAt: z.date().optional(),
+    requestDigest: sha256,
     sessionId: z.string().min(1).max(200).optional(),
+    version: z.literal(1),
   })
   .strict()
   .superRefine((record, context) => {
     if (record.expiresAt <= record.createdAt)
       context.addIssue({
         code: "custom",
-        path: ["expiresAt"],
         message: "A handoff must expire after it is created.",
+        path: ["expiresAt"],
       });
     if ((record.redeemedAt === undefined) !== (record.sessionId === undefined))
       context.addIssue({
         code: "custom",
-        path: ["sessionId"],
         message: "A redeemed handoff must bind exactly one session.",
+        path: ["sessionId"],
       });
     if (
       record.redeemedAt !== undefined &&
@@ -119,8 +119,8 @@ export const builderHandoffRecordSchema = z
     )
       context.addIssue({
         code: "custom",
-        path: ["redeemedAt"],
         message: "A handoff must be redeemed during its initial lifetime.",
+        path: ["redeemedAt"],
       });
   });
 
@@ -147,10 +147,10 @@ export function builderHandoffRequestDigest(input: {
   return createHash("sha256")
     .update(
       canonical({
-        version: 1,
         authority: hostedTenantAuthoritySchema.parse(input.authority),
         creationRequestId: z.string().uuid().parse(input.creationRequestId),
         intent: builderHandoffIntentSchema.parse(input.intent),
+        version: 1,
       }),
     )
     .digest("hex");

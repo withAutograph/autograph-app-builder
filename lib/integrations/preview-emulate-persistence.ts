@@ -86,6 +86,14 @@ export function createPostgresPreviewEmulateStateStore(
       `;
       return rows[0]?.state;
     },
+    async reset(namespace) {
+      const rows = await sql<{ namespace: string }[]>`
+        DELETE FROM "emulate_preview_state"
+        WHERE "namespace" = ${namespace}
+        RETURNING "namespace"
+      `;
+      return rows.length;
+    },
     async write(namespace, state, now) {
       await sql`
         INSERT INTO "emulate_preview_state" (
@@ -95,14 +103,6 @@ export function createPostgresPreviewEmulateStateStore(
           "state" = EXCLUDED."state",
           "updated_at" = EXCLUDED."updated_at"
       `;
-    },
-    async reset(namespace) {
-      const rows = await sql<{ namespace: string }[]>`
-        DELETE FROM "emulate_preview_state"
-        WHERE "namespace" = ${namespace}
-        RETURNING "namespace"
-      `;
-      return rows.length;
     },
   };
 }

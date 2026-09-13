@@ -1,26 +1,26 @@
 import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildAgentPluginPackage, validateAgentPluginPackage } from "./agent-plugin-package";
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
+const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
 
 const copyPortablePackage = async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-package-"));
+  const root = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-package-"));
   await Promise.all(
     portableEntries.map((entry) =>
-      cp(resolve(repositoryRoot, entry), resolve(root, entry), { recursive: true }),
+      cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), { recursive: true }),
     ),
   );
   return root;
 };
 
 const writeMcpHeaders = async (root: string, headers: Record<string, string>) => {
-  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf-8"));
+  const mcp = JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8"));
   mcp.mcpServers["app-builder"].headers = headers;
-  await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
+  await writeFile(path.resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
 const writeMcp = async (
@@ -29,53 +29,53 @@ const writeMcp = async (
     mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
   }) => void,
 ) => {
-  const mcp = JSON.parse(await readFile(resolve(repositoryRoot, "mcp.json"), "utf-8"));
+  const mcp = JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8"));
   mutation(mcp);
-  await writeFile(resolve(root, "mcp.json"), JSON.stringify(mcp));
+  await writeFile(path.resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
 const writePluginVersion = async (root: string, version: string) => {
-  const plugin = JSON.parse(await readFile(resolve(repositoryRoot, "plugin.json"), "utf-8"));
+  const plugin = JSON.parse(await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8"));
   plugin.version = version;
-  await writeFile(resolve(root, "plugin.json"), JSON.stringify(plugin));
+  await writeFile(path.resolve(root, "plugin.json"), JSON.stringify(plugin));
 };
 
 describe("Agent Plugins package", () => {
   it("builds and validates a client-neutral artifact", async () => {
-    const output = resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder-test");
-    await buildAgentPluginPackage({ repositoryRoot, outputRoot: output });
+    const output = path.resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder-test");
+    await buildAgentPluginPackage({ outputRoot: output, repositoryRoot });
     await expect(
       validateAgentPluginPackage({
+        packageKind: "generated-artifact",
         pluginRoot: output,
         repositoryRoot,
-        packageKind: "generated-artifact",
       }),
     ).resolves.toEqual({
       name: "app-builder",
-      version: "0.2.12",
-      specification: "1.0.0",
       packageKind: "generated-artifact",
+      specification: "1.0.0",
+      version: "0.2.12",
     });
-    await expect(readFile(resolve(output, "plugin.json"), "utf-8")).resolves.toBe(
-      await readFile(resolve(repositoryRoot, "plugin.json"), "utf-8"),
+    await expect(readFile(path.resolve(output, "plugin.json"), "utf-8")).resolves.toBe(
+      await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8"),
     );
-    await expect(readFile(resolve(output, ".codex-plugin/plugin.json"))).rejects.toThrow();
-    await expect(readFile(resolve(output, ".app.json"))).rejects.toThrow();
+    await expect(readFile(path.resolve(output, ".codex-plugin/plugin.json"))).rejects.toThrow();
+    await expect(readFile(path.resolve(output, ".app.json"))).rejects.toThrow();
   });
 
   it("separates source validation from generated artifact conformance", async () => {
     await expect(
       validateAgentPluginPackage({
+        packageKind: "source",
         pluginRoot: repositoryRoot,
         repositoryRoot,
-        packageKind: "source",
       }),
     ).resolves.toMatchObject({ packageKind: "source" });
     await expect(
       validateAgentPluginPackage({
+        packageKind: "generated-artifact",
         pluginRoot: repositoryRoot,
         repositoryRoot,
-        packageKind: "generated-artifact",
       }),
     ).rejects.toThrow("must contain exactly");
   });
@@ -84,8 +84,8 @@ describe("Agent Plugins package", () => {
     await expect(
       validateAgentPluginPackage({
         pluginRoot: repositoryRoot,
-        repositoryRoot,
         release: true,
+        repositoryRoot,
       }),
     ).rejects.toThrow("deployed HTTPS endpoint");
   });
@@ -126,8 +126,8 @@ describe("Agent Plugins package", () => {
     await expect(
       validateAgentPluginPackage({
         pluginRoot: root,
-        repositoryRoot,
         release: true,
+        repositoryRoot,
       }),
     ).rejects.toThrow();
   });
@@ -146,18 +146,21 @@ describe("Agent Plugins package", () => {
   });
 
   it("rejects package symlinks", async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-link-"));
-    await mkdir(resolve(root, "skills/autograph-app-builder"), {
+    const root = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-link-"));
+    await mkdir(path.resolve(root, "skills/autograph-app-builder"), {
       recursive: true,
     });
     await writeFile(
-      resolve(root, "plugin.json"),
-      await readFile(resolve(repositoryRoot, "plugin.json")),
+      path.resolve(root, "plugin.json"),
+      await readFile(path.resolve(repositoryRoot, "plugin.json")),
     );
-    await writeFile(resolve(root, "mcp.json"), await readFile(resolve(repositoryRoot, "mcp.json")));
+    await writeFile(
+      path.resolve(root, "mcp.json"),
+      await readFile(path.resolve(repositoryRoot, "mcp.json")),
+    );
     await symlink(
-      resolve(repositoryRoot, "skills/autograph-app-builder/SKILL.md"),
-      resolve(root, "skills/autograph-app-builder/SKILL.md"),
+      path.resolve(repositoryRoot, "skills/autograph-app-builder/SKILL.md"),
+      path.resolve(root, "skills/autograph-app-builder/SKILL.md"),
     );
     await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
       "regular file",
@@ -167,7 +170,7 @@ describe("Agent Plugins package", () => {
   it("parses quoted and multiline Agent Skills frontmatter", async () => {
     const root = await copyPortablePackage();
     await writeFile(
-      resolve(root, "skills/autograph-app-builder/SKILL.md"),
+      path.resolve(root, "skills/autograph-app-builder/SKILL.md"),
       `---
 name: "autograph-app-builder"
 description: >-
@@ -223,7 +226,7 @@ allowed-tools: "autograph_start autograph_get"
     ],
   ])("rejects %s", async (_name, skill, message) => {
     const root = await copyPortablePackage();
-    await writeFile(resolve(root, "skills/autograph-app-builder/SKILL.md"), skill);
+    await writeFile(path.resolve(root, "skills/autograph-app-builder/SKILL.md"), skill);
     await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
       message,
     );
@@ -263,18 +266,18 @@ allowed-tools: "autograph_start autograph_get"
   });
 
   it("rejects a linked artifact parent before removing output", async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "agent-plugin-output-"));
-    const outside = await mkdtemp(resolve(tmpdir(), "agent-plugin-outside-"));
+    const root = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-output-"));
+    const outside = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-outside-"));
     await Promise.all(
       portableEntries.map((entry) =>
-        cp(resolve(repositoryRoot, entry), resolve(root, entry), { recursive: true }),
+        cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), { recursive: true }),
       ),
     );
-    await symlink(outside, resolve(root, ".artifacts"));
+    await symlink(outside, path.resolve(root, ".artifacts"));
     await expect(
       buildAgentPluginPackage({
+        outputRoot: path.resolve(root, ".artifacts/agent-plugin/app-builder"),
         repositoryRoot: root,
-        outputRoot: resolve(root, ".artifacts/agent-plugin/app-builder"),
       }),
     ).rejects.toThrow("must be a real directory");
   });

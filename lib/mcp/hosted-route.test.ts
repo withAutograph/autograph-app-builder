@@ -8,17 +8,17 @@ import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from ".
 const nowEpochMs = Date.parse("2026-08-27T01:00:00.000Z");
 
 const environment = {
-  EVE_HOSTED_ADAPTER: "1",
-  VERCEL_ENV: "preview",
-  EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
-  EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
-  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
   DATABASE_URL: "postgresql://user:password@database.example.test/eve",
-  MCP_OAUTH_ISSUER: "https://builder.example.test/api/auth",
-  MCP_OAUTH_AUDIENCE: "https://builder.example.test/mcp",
-  MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
+  EVE_HOSTED_ADAPTER: "1",
+  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+  EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+  EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
   MCP_OAUTH_ALGORITHM: "ES256",
+  MCP_OAUTH_AUDIENCE: "https://builder.example.test/mcp",
+  MCP_OAUTH_ISSUER: "https://builder.example.test/api/auth",
+  MCP_OAUTH_JWKS_URL: "https://builder.example.test/api/auth/jwks",
   MCP_RESOURCE_URL: "https://builder.example.test/mcp",
+  VERCEL_ENV: "preview",
 };
 
 const workloadIdentity: HostedWorkloadIdentity = {
@@ -33,17 +33,17 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request() {
   return new Request(environment.MCP_RESOURCE_URL, {
-    method: "POST",
+    body: JSON.stringify({
+      id: 1,
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { arguments: {}, name: "autograph_get" },
+    }),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: "autograph_get", arguments: {} },
-    }),
+    method: "POST",
   });
 }
 
@@ -51,8 +51,8 @@ describe("hosted route composition", () => {
   it("accepts an exact Production runtime binding without changing its authority shape", () => {
     const productionEnvironment = {
       ...environment,
-      VERCEL_ENV: "production",
       EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+      VERCEL_ENV: "production",
     };
     const config = readHostedDeploymentConfig(productionEnvironment);
     expect(config.forwarderSubject).toBe(
@@ -64,9 +64,9 @@ describe("hosted route composition", () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     expect(openDatabase).not.toHaveBeenCalled();
@@ -88,9 +88,9 @@ describe("hosted route composition", () => {
         const openDatabase = vi.fn(() => ({}) as unknown as Database);
         const handler = createDeploymentMcpRequestHandler({
           environment: invalidEnvironment,
-          workloadIdentity,
-          openDatabase,
           now: () => nowEpochMs,
+          openDatabase,
+          workloadIdentity,
         });
         const response = await handler(request());
         expect(response.status).toBe(503);
@@ -106,37 +106,35 @@ describe("hosted route composition", () => {
     const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     const wrongOrigin = await handler(
       new Request("https://other.example.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          jsonrpc: "2.0",
           id: 1,
+          jsonrpc: "2.0",
           method: "tools/call",
-          params: { name: "autograph_get", arguments: {} },
+          params: { arguments: {}, name: "autograph_get" },
         }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
       }),
     );
     expect(wrongOrigin.status).toBe(503);
     expect(openDatabase).not.toHaveBeenCalled();
 
-    expect((await handler(request())).status).toBe(200);
+    const validRequest = await handler(request());
+    expect(validRequest.status).toBe(200);
     expect(openDatabase).toHaveBeenCalledTimes(1);
-    expect(
-      (
-        await handler(
-          new Request(`${environment.MCP_RESOURCE_URL}?unexpected=1`, {
-            method: "POST",
-          }),
-        )
-      ).status,
-    ).toBe(503);
+    const unexpectedQuery = await handler(
+      new Request(`${environment.MCP_RESOURCE_URL}?unexpected=1`, {
+        method: "POST",
+      }),
+    );
+    expect(unexpectedQuery.status).toBe(503);
     expect(openDatabase).toHaveBeenCalledTimes(1);
   });
 
@@ -146,9 +144,9 @@ describe("hosted route composition", () => {
     });
     const handler = createDeploymentMcpRequestHandler({
       environment,
-      workloadIdentity,
-      openDatabase,
       now: () => nowEpochMs,
+      openDatabase,
+      workloadIdentity,
     });
 
     const response = await handler(request());
@@ -179,8 +177,8 @@ describe("hosted route composition", () => {
     expect(() =>
       readHostedDeploymentConfig({
         ...environment,
-        MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
         MCP_OAUTH_AUDIENCE: "https://builder.example.test/not-mcp",
+        MCP_RESOURCE_URL: "https://builder.example.test/not-mcp",
       }),
     ).toThrow("resourceUrl must be the exact /mcp URL");
   });

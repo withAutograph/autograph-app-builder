@@ -9,20 +9,20 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { PasskeyButton } from "./passkey-button";
 
-const auth = vi.hoisted(() => ({ signIn: vi.fn(), navigate: vi.fn() }));
+const auth = vi.hoisted(() => ({ navigate: vi.fn(), signIn: vi.fn() }));
 vi.mock("@better-auth-ui/react", () => ({
   useAuth: () => ({
     authClient: {},
     localization: { auth: { continueWith: "Continue with {{provider}}" } },
-    redirectTo: "/",
     navigate: auth.navigate,
+    redirectTo: "/",
   }),
   useAuthPlugin: () => ({ localization: { passkey: "Passkey" } }),
 }));
 vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
-  useSignInPasskey: () => ({ mutateAsync: auth.signIn }),
   useAddPasskey: () => ({ mutateAsync: vi.fn() }),
   usePasskeyAutoFill: vi.fn(),
+  useSignInPasskey: () => ({ mutateAsync: auth.signIn }),
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -43,7 +43,8 @@ it.each(["signIn", "signUp"] as const)(
     container = document.createElement("div");
     container.innerHTML = renderToString(<PasskeyButton view={view} />);
     document.body.append(container);
-    const button = container.querySelector("button")!;
+    const button = container.querySelector("button");
+    if (!button) throw new Error("Expected passkey button to render");
     expect(button.disabled).toBe(true);
     button.click();
     expect(auth.signIn).not.toHaveBeenCalled();
@@ -65,8 +66,12 @@ it("shows an inline retry after a hydrated verification transport failure", asyn
   await act(async () => {
     root = hydrateRoot(container, <PasskeyButton view="signIn" />);
   });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => container.querySelector("button")!.click());
+  const button = container.querySelector("button");
+  if (!button) throw new Error("Expected passkey button to render");
+  await act(
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async () => button.click(),
+  );
   expect(auth.signIn).toHaveBeenCalledOnce();
   expect(container.querySelector("button")?.textContent).toContain("Passkey failed (try again)");
   expect(container.querySelector("button")?.disabled).toBe(false);

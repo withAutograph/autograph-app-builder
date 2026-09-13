@@ -17,24 +17,24 @@ describe("Vercel feature flags", () => {
     expect(builderConnectionsFlag.key).toBe("builder-connections");
     expect(builderConnectionsFlag.defaultValue).toBe(false);
     expect(builderConnectionsFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
     expect(builderComingSoonFlag.key).toBe("builder-coming-soon");
     expect(builderComingSoonFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.key).toBe("self-service-signup");
     expect(selfServiceSignupFlag.defaultValue).toBe(false);
     expect(selfServiceSignupFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
     expect(builderResourceProvisioningFlag.key).toBe("builder-resource-provisioning");
     expect(builderResourceProvisioningFlag.defaultValue).toBe(false);
     expect(passkeysFlag.key).toBe("passkeys");
     expect(passkeysFlag.defaultValue).toBe(false);
     expect(passkeysFlag.options).toEqual([
-      { value: false, label: "Disabled" },
-      { value: true, label: "Enabled" },
+      { label: "Disabled", value: false },
+      { label: "Enabled", value: true },
     ]);
   });
 

@@ -5,18 +5,18 @@ import { scoreAdherence } from "./evidence";
 describe("adherence report", () => {
   it("shows escaped case context without claiming intended outcomes passed", () => {
     const html = renderReport({
-      createdAt: "today",
-      source: {},
-      judge: {},
       captures: [],
       case: {
+        evidence: [{ path: "docs/example.md", repo: "ag2", status: "planned" }],
         id: "position-request",
-        title: "Position <request>",
         notes: "Synthetic only",
-        evidence: [{ repo: "ag2", path: "docs/example.md", status: "planned" }],
-        reviewQuestions: ["Can a user correct the form?"],
         outcomes: ["Save a draft"],
+        reviewQuestions: ["Can a user correct the form?"],
+        title: "Position <request>",
       },
+      createdAt: "today",
+      judge: {},
+      source: {},
     });
     expect(html).toContain("Position &lt;request&gt;");
     expect(html).toContain("docs/example.md");
@@ -25,33 +25,33 @@ describe("adherence report", () => {
   });
   it("links escaped source findings and annotated regions without changing screenshots", () => {
     const html = renderReport({
-      createdAt: "today",
-      source: {},
-      judge: { status: "not-run" },
-      sourceFiles: [{ path: "app.tsx", content: '<script>alert("x")</script>' }],
       adherence: scoreAdherence([
         {
-          id: "a",
-          dimension: "styling",
-          verdict: "nonconforming",
-          provenance: "generated",
-          evidence: "static",
-          summary: "<img onerror=bad>",
-          source: { path: "app.tsx", line: 1 },
           capture: "desktop-wide-0",
-          region: { x: 1, y: 2, width: 20, height: 10 },
+          dimension: "styling",
+          evidence: "static",
+          id: "a",
+          provenance: "generated",
+          region: { height: 10, width: 20, x: 1, y: 2 },
+          source: { line: 1, path: "app.tsx" },
+          summary: "<img onerror=bad>",
+          verdict: "nonconforming",
         },
       ]),
       captures: [
         {
+          height: 100,
+          interaction: {},
+          measurements: {},
           name: "desktop-wide-0",
           state: "initial",
           width: 100,
-          height: 100,
-          measurements: {},
-          interaction: {},
         },
       ],
+      createdAt: "today",
+      judge: { status: "not-run" },
+      source: {},
+      sourceFiles: [{ content: '<script>alert("x")</script>', path: "app.tsx" }],
     });
     expect(html).toContain('href="#source-0"');
     expect(html).toContain('href="#finding-0"');
@@ -62,7 +62,7 @@ describe("adherence report", () => {
     expect(html).toContain("0% (0/1)");
   });
   it("renders empty and historical evidence without inventing scores", () => {
-    const base = { createdAt: "today", source: {}, judge: {}, captures: [] };
+    const base = { captures: [], createdAt: "today", judge: {}, source: {} };
     expect(renderReport({ ...base, adherence: scoreAdherence([]) })).toContain(
       "Arrusted adherence: Not assessed",
     );
@@ -70,21 +70,21 @@ describe("adherence report", () => {
   });
   it("renders generated-source diagnostics with an escaped source location", () => {
     const html = renderReport({
+      captures: [],
       createdAt: "today",
+      judge: {},
       source: {
         implementationDiagnostics: [
           {
-            path: "src/Screen.tsx",
-            line: 2,
-            column: 8,
             code: 2532,
+            column: 8,
+            line: 2,
             message: "Object is possibly 'undefined'.",
+            path: "src/Screen.tsx",
           },
         ],
       },
-      sourceFiles: [{ path: "src/Screen.tsx", content: "first\nsecond" }],
-      judge: {},
-      captures: [],
+      sourceFiles: [{ content: "first\nsecond", path: "src/Screen.tsx" }],
     });
     expect(html).toContain("Generated-code implementation diagnostics (1)");
     expect(html).toContain("src/Screen.tsx:2:8");
@@ -93,25 +93,25 @@ describe("adherence report", () => {
   it("shows candidate provenance without giving it adherence credit", () => {
     const adherence = scoreAdherence([
       {
-        id: "candidate",
         dimension: "styling",
-        verdict: "unassessed",
-        provenance: "unknown",
         evidence: "browser",
-        summary: "Requires review",
+        id: "candidate",
         originCandidate: {
           provenance: "generated",
           reason: "May be shared <script>",
-          source: { path: "app.tsx", line: 4 },
+          source: { line: 4, path: "app.tsx" },
         },
+        provenance: "unknown",
+        summary: "Requires review",
+        verdict: "unassessed",
       },
     ]);
     const html = renderReport({
-      createdAt: "today",
-      source: {},
-      judge: {},
-      captures: [],
       adherence,
+      captures: [],
+      createdAt: "today",
+      judge: {},
+      source: {},
     });
     expect(adherence.score).toBeNull();
     expect(html).toContain("Possible generated source (unassessed): app.tsx:4");

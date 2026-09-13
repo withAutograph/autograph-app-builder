@@ -14,7 +14,7 @@ export const POST = (request: Request) => {
   } catch {
     return Response.json(
       { error: "github_webhook_unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      { headers: { "Cache-Control": "no-store" }, status: 503 },
     );
   }
 };

@@ -11,38 +11,38 @@ vi.mock("eve/context", () => ({
   }),
 }));
 const ready: ReadyRepositoryAccess = {
-  status: "ready",
   accessDigest: "a".repeat(64),
-  scope: {
-    installationId: "10",
-    accountLogin: "acme",
-    accountType: "Organization",
-  },
   repository: {
-    repositoryId: "20",
-    owner: "acme",
-    name: "stock",
+    archived: false,
     defaultBranch: "main",
     headSha: "1".repeat(40),
     headTree: "2".repeat(40),
-    archived: false,
-    visibility: "private",
+    name: "stock",
+    owner: "acme",
+    repositoryId: "20",
     repositoryVariableNames: [],
+    visibility: "private",
   },
+  scope: {
+    accountLogin: "acme",
+    accountType: "Organization",
+    installationId: "10",
+  },
+  status: "ready",
 };
-const reference = { owner: "acme", name: "stock", fullName: "acme/stock" };
+const reference = { fullName: "acme/stock", name: "stock", owner: "acme" };
 const input = { repository: reference.fullName };
 const ctx = {
-  session: { id: "ses_one", auth: {} },
   callId: "call_one",
   getToken: vi.fn(),
   requireAuth: vi.fn(),
+  session: { auth: {}, id: "ses_one" },
 } as unknown as ToolContext;
 const runtime = {
-  classify: vi.fn(),
   authorization: vi.fn(),
-  resumeAuthorizedForSession: vi.fn(),
+  classify: vi.fn(),
   prepareExistingSource: vi.fn(),
+  resumeAuthorizedForSession: vi.fn(),
 } satisfies RepositoryAccessRuntime;
 
 describe("repository access tool continuity", () => {
@@ -51,7 +51,7 @@ describe("repository access tool continuity", () => {
     runtime.classify.mockResolvedValue(ready);
     expect(await resolveRepositoryAccessForTool(input, ctx, runtime)).toMatchObject({
       kind: "ready",
-      receipt: { sessionId: "ses_one", scope: ready.scope },
+      receipt: { scope: ready.scope, sessionId: "ses_one" },
     });
     expect(runtime.classify).toHaveBeenCalledTimes(1);
     expect(runtime.authorization).not.toHaveBeenCalled();
@@ -60,8 +60,8 @@ describe("repository access tool continuity", () => {
   });
   it("retries an outage without entering authorization", async () => {
     runtime.classify.mockResolvedValue({
-      status: "provider-unavailable",
       repository: reference,
+      status: "provider-unavailable",
     });
     await expect(resolveRepositoryAccessForTool(input, ctx, runtime)).rejects.toMatchObject({
       reason: "provider_unavailable",
@@ -73,10 +73,10 @@ describe("repository access tool continuity", () => {
   it("parks missing access in the existing same-session authorization flow and rechecks it", async () => {
     runtime.classify
       .mockResolvedValueOnce({
-        status: "authorization-required",
         action: "update",
         repository: reference,
         scopes: [],
+        status: "authorization-required",
       })
       .mockResolvedValueOnce(ready);
     expect(await resolveRepositoryAccessForTool(input, ctx, runtime)).toMatchObject({
@@ -84,8 +84,8 @@ describe("repository access tool continuity", () => {
     });
     expect(runtime.authorization).toHaveBeenCalledWith({
       repository: reference.fullName,
-      sessionId: "ses_one",
       requestId: "call_one",
+      sessionId: "ses_one",
     });
     expect(ctx.getToken).toHaveBeenCalledOnce();
     expect(runtime.classify).toHaveBeenCalledTimes(2);
@@ -93,14 +93,14 @@ describe("repository access tool continuity", () => {
   it("does not record access when a post-authorization read is unavailable", async () => {
     runtime.classify
       .mockResolvedValueOnce({
-        status: "authorization-required",
         action: "update",
         repository: reference,
         scopes: [],
+        status: "authorization-required",
       })
       .mockResolvedValueOnce({
-        status: "provider-unavailable",
         repository: reference,
+        status: "provider-unavailable",
       });
     await expect(resolveRepositoryAccessForTool(input, ctx, runtime)).rejects.toMatchObject({
       reason: "provider_unavailable",

@@ -17,15 +17,15 @@ import { createRepositoryAccessRuntime } from "./deployment-repository-access-ru
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 };
 const principal = {
-  type: "user" as const,
   id: authority.ownerUserId,
   issuer: authority.issuer,
+  type: "user" as const,
 };
 const connection = { url: authority.audience };
 const continuationId = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
@@ -44,11 +44,6 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
 } {
   const records: RepositoryAccessContinuation[] = [];
   return {
-    records,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async create(record) {
-      records.push(record);
-    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
       const record = records.find(
@@ -58,7 +53,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) return;
       record.authorizedAt ??= input.now;
       return record;
     },
@@ -76,9 +71,13 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return undefined;
+      if (!record) return;
       record.consumedAt = input.now;
       return record;
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async create(record) {
+      records.push(record);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
@@ -91,15 +90,16 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.expiresAt > input.now,
       );
     },
+    records,
   };
 }
 
 const installation: HostedGitHubInstallationBinding = {
-  installationId: "10",
   accountId: "110",
   accountLogin: "withAutograph",
   accountType: "Organization",
   active: true,
+  installationId: "10",
   updatedAt: new Date("2026-09-01T12:00:00.000Z"),
 };
 
@@ -108,11 +108,11 @@ function installationStore(
   bindings: HostedGitHubInstallationBinding[],
 ): HostedGitHubInstallationStore {
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => undefined),
+    bind: vi.fn(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
-    bind: vi.fn(),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    read: vi.fn(async () => undefined as undefined),
   };
 }
 
@@ -122,28 +122,28 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectInstallation({ requestedPermissions }) {
       return {
-        installationId: installation.installationId,
         accountId: installation.accountId,
         accountLogin: installation.accountLogin,
         accountType: installation.accountType,
+        grantedPermissions: requestedPermissions,
+        installationId: installation.installationId,
         repositorySelection: "selected",
         selectedRepositoryIds: input.repositoryAvailable() ? ["200"] : [],
-        grantedPermissions: requestedPermissions,
       };
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectRepositoryByName() {
       return input.repositoryAvailable()
         ? {
-            repositoryId: "200",
-            owner: "withAutograph",
-            name: "app-builder-dogfood",
             archived: false,
-            visibility: "private",
             defaultBranch: "main",
             headSha: "1".repeat(40),
             headTree: "2".repeat(40),
+            name: "app-builder-dogfood",
+            owner: "withAutograph",
+            repositoryId: "200",
             repositoryVariableNames: [],
+            visibility: "private",
           }
         : undefined;
     },
@@ -160,26 +160,26 @@ function runtimeFixture(input?: {
   let available = input?.available ?? false;
   const continuationStore = memoryContinuationStore();
   const continuations = createRepositoryAccessContinuationService({
-    store: continuationStore,
     createId: () => continuationId,
     now: () => new Date("2026-09-01T12:00:00.000Z"),
+    store: continuationStore,
   });
   const runtime = createRepositoryAccessRuntime({
     authority,
-    origin: "https://builder.example",
+    continuations,
     installations: installationStore(input?.bindings ?? [installation]),
+    origin: "https://builder.example",
     providerFactory: mutableProvider({
       repositoryAvailable: () => available,
     }),
-    continuations,
   });
   return {
-    runtime,
-    continuations,
     continuationStore,
+    continuations,
     makeAvailable: () => {
       available = true;
     },
+    runtime,
   };
 }
 
@@ -189,25 +189,25 @@ describe("deployment repository access authorization", () => {
       repositoryAvailable: () => true,
     });
     const preparedIntent = {
+      providers: { githubInstallationId: "10" },
       repository: {
-        requestedName: "app-builder-dogfood",
         private: true,
+        requestedName: "app-builder-dogfood",
         resolvedFullName: repository,
       },
-      providers: { githubInstallationId: "10" },
     } as unknown as BuilderHandoffIntent;
     const runtime = createRepositoryAccessRuntime({
       authority,
-      origin: "https://builder.example",
-      installations: installationStore([installation, { ...installation, installationId: "11" }]),
-      providerFactory,
       continuations: runtimeFixture().continuations,
+      installations: installationStore([installation, { ...installation, installationId: "11" }]),
+      origin: "https://builder.example",
       preparedIntent,
+      providerFactory,
       returnTo: `/handoff/${continuationId}`,
     });
     expect(await runtime.classify({ repository })).toMatchObject({
-      status: "ready",
       scope: { installationId: "10" },
+      status: "ready",
     });
     expect(providerFactory).toHaveBeenCalledTimes(1);
     expect(providerFactory.mock.calls[0]?.[0]).toMatchObject({
@@ -216,19 +216,19 @@ describe("deployment repository access authorization", () => {
     });
     const authorization = runtime.authorization({
       repository,
-      sessionId: "ses_one",
       requestId: "call_one",
+      sessionId: "ses_one",
     });
-    expect(await authorization.getToken({ principal, connection })).toHaveProperty("token");
+    expect(await authorization.getToken({ connection, principal })).toHaveProperty("token");
     providerFactory.mockImplementation(mutableProvider({ repositoryAvailable: () => false }));
     const started = await authorization.startAuthorization({
-      principal,
-      connection,
       callbackUrl,
+      connection,
+      principal,
     });
-    expect(new URL(started.challenge.url!).searchParams.get("returnTo")).toBe(
-      `/handoff/${continuationId}`,
-    );
+    const challengeUrl = started.challenge.url;
+    if (!challengeUrl) throw new Error("Expected authorization challenge URL");
+    expect(new URL(challengeUrl).searchParams.get("returnTo")).toBe(`/handoff/${continuationId}`);
   });
 
   it.each([
@@ -240,19 +240,19 @@ describe("deployment repository access authorization", () => {
   ])("classifies installation HTTP %s with headers %j as %s", async (status, headers, expected) => {
     const runtime = createRepositoryAccessRuntime({
       authority,
-      origin: "https://builder.example",
-      installations: installationStore([installation]),
       continuations: runtimeFixture().continuations,
+      installations: installationStore([installation]),
+      origin: "https://builder.example",
       providerFactory: () => ({
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         inspectInstallation: async () => {
           throw Object.assign(new Error("installation inspection failed"), {
-            status,
             response: { headers },
+            status,
           });
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        inspectRepositoryByName: async () => undefined,
+        inspectRepositoryByName: async () => {},
       }),
     });
     expect(await runtime.classify({ repository, selectedInstallationId: "10" })).toMatchObject({
@@ -264,24 +264,24 @@ describe("deployment repository access authorization", () => {
     const fixture = runtimeFixture({ bindings: [] });
     const authorization = fixture.runtime.authorization({
       repository,
-      sessionId: "ses_one",
       requestId: "call_one",
+      sessionId: "ses_one",
     });
     const started = await authorization.startAuthorization({
-      principal,
-      connection,
       callbackUrl,
+      connection,
+      principal,
     });
     expect(started).toMatchObject({
       challenge: {
         displayName: "Connect GitHub",
         repositoryAccess: {
-          provider: "github",
           action: "connect",
+          provider: "github",
           repository: {
-            owner: "withAutograph",
-            name: "app-builder-dogfood",
             fullName: repository,
+            name: "app-builder-dogfood",
+            owner: "withAutograph",
           },
           scopes: [],
         },
@@ -297,26 +297,26 @@ describe("deployment repository access authorization", () => {
     const fixture = runtimeFixture();
     const authorization = fixture.runtime.authorization({
       repository,
+      requestId: "call_one",
       selectedInstallationId: "10",
       sessionId: "ses_one",
-      requestId: "call_one",
     });
     const started = await authorization.startAuthorization({
-      principal,
-      connection,
       callbackUrl,
+      connection,
+      principal,
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const complete = () =>
       authorization.completeAuthorization({
-        principal,
-        connection,
-        callbackUrl,
-        resume: started.resume,
         callback: {
           method: "GET",
           params: { provider: "github", status: "connected" },
         },
+        callbackUrl,
+        connection,
+        principal,
+        resume: started.resume,
       });
 
     await expect(complete()).rejects.toMatchObject({
@@ -336,13 +336,13 @@ describe("deployment repository access authorization", () => {
     const fixture = runtimeFixture();
     const authorization = fixture.runtime.authorization({
       repository,
-      sessionId: "ses_one",
       requestId: "call_one",
+      sessionId: "ses_one",
     });
     await authorization.startAuthorization({
-      principal,
-      connection,
       callbackUrl,
+      connection,
+      principal,
     });
     await fixture.continuations.authorize({ authority, continuationId });
     const fetchImplementation = vi.fn(
@@ -356,8 +356,8 @@ describe("deployment repository access authorization", () => {
 
     await expect(
       fixture.runtime.resumeAuthorizedForSession({
-        sessionId: "ses_one",
         fetchImplementation,
+        sessionId: "ses_one",
       }),
     ).resolves.toBe(0);
     expect(fetchImplementation).not.toHaveBeenCalled();
@@ -365,8 +365,8 @@ describe("deployment repository access authorization", () => {
     fixture.makeAvailable();
     await expect(
       fixture.runtime.resumeAuthorizedForSession({
-        sessionId: "ses_one",
         fetchImplementation,
+        sessionId: "ses_one",
       }),
     ).resolves.toBe(1);
     expect(fetchImplementation.mock.calls[0]?.[0]?.toString()).toBe(

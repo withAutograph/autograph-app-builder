@@ -1,5 +1,5 @@
 import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import path from "node:path";
 import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ afterEach(async () => {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "autograph-eve-cycle-")));
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-eve-cycle-")));
   roots.push(root);
   await chmod(root, 0o700);
   return root;
@@ -23,24 +23,24 @@ async function privateRoot() {
 describe("local Eve cycle binding", () => {
   it("atomically rotates one owner-only opaque cycle generation", async () => {
     const root = await privateRoot();
-    const path = join(root, "cycle");
-    const first = await rotateLocalEveCycleBinding(path);
-    const second = await rotateLocalEveCycleBinding(path);
+    const cyclePath = path.join(root, "cycle");
+    const first = await rotateLocalEveCycleBinding(cyclePath);
+    const second = await rotateLocalEveCycleBinding(cyclePath);
 
     expect(first).toMatch(/^[a-f0-9]{64}$/u);
     expect(second).toMatch(/^[a-f0-9]{64}$/u);
     expect(second).not.toBe(first);
-    expect(readLocalEveCycleBinding(path)).toBe(second);
+    expect(readLocalEveCycleBinding(cyclePath)).toBe(second);
   });
 
   it("rejects permissive or malformed cycle files", async () => {
     const root = await privateRoot();
-    const path = join(root, "cycle");
-    await writeFile(path, "not-a-cycle\n", { mode: 0o600 });
-    expect(() => readLocalEveCycleBinding(path)).toThrow("invalid");
+    const cyclePath = path.join(root, "cycle");
+    await writeFile(cyclePath, "not-a-cycle\n", { mode: 0o600 });
+    expect(() => readLocalEveCycleBinding(cyclePath)).toThrow("invalid");
 
-    await writeFile(path, `${"a".repeat(64)}\n`, { mode: 0o644 });
-    await chmod(path, 0o644);
-    expect(() => readLocalEveCycleBinding(path)).toThrow("owner-only");
+    await writeFile(cyclePath, `${"a".repeat(64)}\n`, { mode: 0o644 });
+    await chmod(cyclePath, 0o644);
+    expect(() => readLocalEveCycleBinding(cyclePath)).toThrow("owner-only");
   });
 });

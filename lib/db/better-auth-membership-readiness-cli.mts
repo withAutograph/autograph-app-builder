@@ -96,15 +96,15 @@ try {
       throw new Error("Better Auth membership counts were not readable.");
     }
     return {
-      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
       activeLegacyRows,
       migratedRows,
+      transactionReadOnly: mode[0]?.transactionReadOnly === "on",
       ...counts,
     };
   });
   const receipt = verifyBetterAuthMembershipReadBack({
-    readBack,
     observedAt: new Date(),
+    readBack,
   });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 } finally {

@@ -17,7 +17,6 @@ export default defineEval({
   description:
     "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
   tags: ["sandbox-image-proof", "reviewed-change-set"],
-  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
@@ -49,7 +48,7 @@ export default defineEval({
 
     await t.send("Inspect the validated change set.");
     t.succeeded();
-    t.calledTool("change_set_status", { count: 1 });
+    t.calledTool("change-set-status", { count: 1 });
 
     await t.send("Accept the displayed change set.");
     t.succeeded();
@@ -60,40 +59,41 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 1 });
+    t.calledTool("artifact-workflow-status", { count: 1 });
     t.check(t.reply, includes('"phase":"reviewed"'));
 
     for (const tool of [
-      "publish_reviewed_change_set",
-      "publish_reviewed_change_set_to_branch_worktree",
-      "publish_fresh_repository",
+      "publish-reviewed-change-set",
+      "publish-reviewed-change-set_to_branch_worktree",
+      "publish-fresh-repository",
       "publish_github_change_set",
       "bash",
-      "write_file",
+      "write-file",
     ])
       t.notCalledTool(tool);
 
     process.stdout.write(
       `${JSON.stringify({
-        version: 1,
-        terminalPhase: "reviewed",
         browserPreview: true,
-        sourceKind: "supported-existing-repository",
         publicationAttempted: false,
         requiredTools: [
-          "inspect_source",
-          "prepare_workspace",
-          "record_prototype_artifact",
-          "accept_app_spec",
-          "prepare_target_dependencies",
-          "plan_app_creation",
-          "apply_app_creation",
-          "validate_app_creation",
-          "change_set_status",
-          "accept_change_set",
-          "artifact_workflow_status",
+          "inspect-source",
+          "prepare-workspace",
+          "record-prototype-artifact",
+          "accept-app-spec",
+          "prepare-target-dependencies",
+          "plan-app-creation",
+          "apply-app-creation",
+          "validate-app-creation",
+          "change-set-status",
+          "accept-change-set",
+          "artifact-workflow-status",
         ],
+        sourceKind: "supported-existing-repository",
+        terminalPhase: "reviewed",
+        version: 1,
       })}\n`,
     );
   },
+  timeoutMs: 360_000,
 });

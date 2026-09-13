@@ -23,8 +23,8 @@ const implementationFilePathSchema = z
 export const implementationFilesSchema = z
   .array(
     z.strictObject({
-      path: implementationFilePathSchema,
       content: z.string(),
+      path: implementationFilePathSchema,
     }),
   )
   .superRefine((files, context) => {
@@ -33,8 +33,8 @@ export const implementationFilesSchema = z
       if (paths.has(file.path))
         context.addIssue({
           code: "custom",
-          path: [index, "path"],
           message: "Implementation file paths must be unique.",
+          path: [index, "path"],
         });
       paths.add(file.path);
     }
@@ -91,8 +91,8 @@ export function withImplementationFiles(
     for (const file of files)
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.sandbox.writeTextFile({
-        path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,
+        path: `${relativeApplyRoot}/${file.path}`,
       });
     return result;
   };

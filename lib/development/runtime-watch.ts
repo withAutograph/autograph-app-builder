@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import nodePath from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -58,13 +58,13 @@ async function runtimePaths(repositoryRoot: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function fingerprintDevelopmentRuntime(repositoryRoot: string) {
+export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Promise<string> {
   const hash = createHash("sha256");
   for (const path of await runtimePaths(repositoryRoot)) {
     let content: Buffer;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      content = await readFile(join(repositoryRoot, path));
+      content = await readFile(nodePath.join(repositoryRoot, path));
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live
       // edit is being saved. The next watcher pass observes the settled tree.
@@ -84,8 +84,9 @@ export function waitForDevelopmentRuntimeChange(input: {
   signal?: AbortSignal;
   debounceMs?: number;
   auditMs?: number;
-}) {
-  return new Promise<boolean>((resolve) => {
+}): Promise<boolean> {
+  const { promise, resolve } = Promise.withResolvers<boolean>();
+  {
     let watcher: FSWatcher | undefined;
     let checking = false;
     let pending = false;
@@ -140,7 +141,7 @@ export function waitForDevelopmentRuntimeChange(input: {
     };
     if (input.signal?.aborted) {
       finish(false);
-      return;
+      return promise;
     }
     input.signal?.addEventListener("abort", handlers.aborted, { once: true });
     try {
@@ -151,5 +152,6 @@ export function waitForDevelopmentRuntimeChange(input: {
     }
     audit = setInterval(schedule, input.auditMs ?? 30_000);
     schedule();
-  });
+  }
+  return promise;
 }
