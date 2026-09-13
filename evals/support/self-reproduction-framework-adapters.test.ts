@@ -18,7 +18,7 @@ const source = [
 ];
 
 describe("default framework adapter", () => {
-  it("fails clear missing Next source structure", async () => {
+  it("does not infer missing functionality from an incomplete source inventory", async () => {
     const adapter = createDefaultFrameworkAdapter({
       side: "candidate",
       files: [],
@@ -26,7 +26,7 @@ describe("default framework adapter", () => {
     });
     await expect(adapter.reviewSource("cache-components")).resolves.toMatchObject({
       ready: false,
-      disposition: "missing-functionality",
+      disposition: "not-run",
     });
   });
 
@@ -42,25 +42,52 @@ describe("default framework adapter", () => {
     });
   });
 
-  it("records only browser assertions it can observe", async () => {
+  it.each([
+    "server-first",
+    "narrow-client",
+    "server-writes",
+    "semantic-tokens",
+    "suspense",
+  ] as const)("does not award %s assertions from structural hints", async (requirement) => {
     const adapter = createDefaultFrameworkAdapter({
       side: "reference",
       files: source,
       baseURL: "http://reference",
     });
-    const page = {
-      goto: vi.fn(() => Promise.resolve()),
-      locator: () => ({
-        textContent: () =>
-          Promise.resolve(
-            "A useful application shell with enough rendered content for evaluation.",
-          ),
-        evaluate: () =>
-          Promise.resolve({ background: "rgb(255, 255, 255)", foreground: "rgb(17, 17, 17)" }),
-      }),
-    };
-    const observed = await adapter.exerciseBrowser(page as never, "server-first");
-    expect(observed.assertions.map((item) => item.id)).toEqual(["useful-server-shell"]);
-    expect(page.goto).toHaveBeenCalledWith("http://reference", { waitUntil: "domcontentloaded" });
+    expect(await adapter.reviewSource(requirement)).toMatchObject({
+      ready: false,
+      disposition: "not-run",
+    });
+    const page = { goto: vi.fn() };
+    expect(await adapter.exerciseBrowser(page as never, requirement)).toMatchObject({
+      disposition: "not-run",
+      assertions: [],
+    });
+    expect(page.goto).not.toHaveBeenCalled();
+  });
+
+  it("uses explicit evaluator-owned reviews and fixtures", async () => {
+    const sourceReview = vi
+      .fn()
+      .mockResolvedValue({
+        ready: true,
+        reason: "Reviewed actual import graph",
+        assertions: [],
+        artifacts: [],
+      });
+    const browserFixture = vi
+      .fn()
+      .mockResolvedValue({ reason: "Exercised request", assertions: [], artifacts: [] });
+    const adapter = createDefaultFrameworkAdapter({
+      side: "candidate",
+      files: source,
+      baseURL: "http://candidate",
+      sourceReview,
+      browserFixture,
+    });
+    await adapter.reviewSource("narrow-client");
+    await adapter.exerciseBrowser({} as never, "narrow-client");
+    expect(sourceReview).toHaveBeenCalledWith("narrow-client");
+    expect(browserFixture).toHaveBeenCalledWith({}, "narrow-client");
   });
 });

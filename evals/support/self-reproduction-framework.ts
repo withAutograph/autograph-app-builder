@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import type { Browser, BrowserContext, Page } from "playwright";
 
+import { sanitizeEvidence } from "./self-reproduction-evidence";
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { assertParityNavigation } from "./self-reproduction-navigation";
 import { frameworkMatrix, sides } from "./self-reproduction-parity";
@@ -25,7 +26,7 @@ type ReviewResult =
     }
   | {
       ready: false;
-      disposition: "missing-functionality" | "infrastructure-unavailable";
+      disposition: "missing-functionality" | "infrastructure-unavailable" | "not-run";
       reason: string;
       artifacts: string[];
     };
@@ -37,7 +38,12 @@ export interface TrustedFrameworkAdapter {
   exerciseBrowser: (
     page: Page,
     requirementId: Exclude<FrameworkId, "instant-navigation">,
-  ) => Promise<{ reason: string; assertions: AssertionResult[]; artifacts: string[] }>;
+  ) => Promise<{
+    disposition?: "not-run" | "infrastructure-unavailable";
+    reason: string;
+    assertions: AssertionResult[];
+    artifacts: string[];
+  }>;
   instantNavigationRecipe: () => Promise<
     | {
         ready: true;
@@ -76,6 +82,7 @@ export async function runTrustedFrameworkEvidence(input: {
       const adapter = input.adapters[side];
       let observation!: Observation;
       let context: BrowserContext | undefined;
+      let instantAssertionRunning = false;
       if (!adapter) {
         observation = {
           requirementId: requirement.id,
@@ -102,6 +109,7 @@ export async function runTrustedFrameworkEvidence(input: {
             const page = await context.newPage();
             let browserResult:
               | {
+                  disposition?: "not-run" | "infrastructure-unavailable";
                   reason: string;
                   assertions: AssertionResult[];
                   artifacts: string[];
@@ -120,7 +128,9 @@ export async function runTrustedFrameworkEvidence(input: {
                   assertions: source.assertions,
                 };
               } else {
+                instantAssertionRunning = true;
                 await runInstant(page, navigation.recipe);
+                instantAssertionRunning = false;
                 method = "@next/playwright/instant";
                 browserResult = {
                   reason:
@@ -139,7 +149,7 @@ export async function runTrustedFrameworkEvidence(input: {
               const artifacts = [receiptPath, ...source.artifacts, ...browserResult.artifacts];
               observation = {
                 requirementId: requirement.id,
-                disposition: "observed",
+                disposition: browserResult.disposition ?? "observed",
                 reason: `${source.reason} ${browserResult.reason}`,
                 method,
                 artifacts: [...new Set(artifacts)],
@@ -152,14 +162,30 @@ export async function runTrustedFrameworkEvidence(input: {
               };
             }
           }
-        } catch {
+        } catch (error) {
+          const diagnosticPath = `parity/framework/${requirement.id}/${side}-error.json`;
+          await mkdir(dirname(join(input.outputRoot, diagnosticPath)), { recursive: true });
+          await writeFile(
+            join(input.outputRoot, diagnosticPath),
+            JSON.stringify(
+              sanitizeEvidence({
+                name: error instanceof Error ? error.name : "Error",
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              }),
+              null,
+              2,
+            ),
+            { mode: 0o600 },
+          );
           observation = {
             requirementId: requirement.id,
-            disposition: "observed",
-            reason:
-              "Trusted source review or browser execution failed; inspect evaluator diagnostics.",
+            disposition: instantAssertionRunning ? "observed" : "infrastructure-unavailable",
+            reason: instantAssertionRunning
+              ? "Instant-navigation assertion failed; inspect sanitized evaluator diagnostics."
+              : "Trusted source review or browser execution threw; inspect sanitized evaluator diagnostics.",
             method: "source-and-browser",
-            artifacts: [receiptPath],
+            artifacts: [receiptPath, diagnosticPath],
             assertions: [
               {
                 id: "fixture-execution",
