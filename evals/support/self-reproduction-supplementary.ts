@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- preserve ordered evidence copies and deterministic merges. */
 import { copyFile, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   assessParity,
   observationSchema,
@@ -65,7 +65,13 @@ export async function writeSupplementaryAssessment(input: {
   outputDirectory: string;
   referenceCapturesDirectory?: string;
 }) {
-  const output = resolve(input.outputDirectory);
+  const output = join(
+    await realpath(dirname(resolve(input.outputDirectory))),
+    basename(input.outputDirectory),
+  );
+  const builderRoot = await realpath(resolve(import.meta.dirname, "../.."));
+  if (output === builderRoot || output.startsWith(`${builderRoot}${sep}`))
+    throw new Error("Supplementary output must be outside the App Builder source tree.");
   const roots = await Promise.all(
     [input.runDirectory, input.sourceReviewDirectory].map((path) => realpath(path)),
   );
@@ -81,8 +87,9 @@ export async function writeSupplementaryAssessment(input: {
     if (copied.has(target)) return target;
     try {
       const source = await realpath(join(root, artifact));
-      if (relative(root, source).startsWith("..") || !(await stat(source)).isFile())
-        throw new Error("Artifact is not a contained regular file.");
+      const metadata = await stat(source);
+      if (relative(root, source).startsWith("..") || !metadata.isFile() || metadata.size === 0)
+        throw new Error("Artifact is not a nonempty contained regular file.");
       await mkdir(dirname(join(output, target)), { recursive: true });
       await copyFile(source, join(output, target));
       copied.add(target);
@@ -176,9 +183,11 @@ export async function writeSupplementaryAssessment(input: {
       await readFile(join(captureRoot, "capture-provenance.json"), "utf-8"),
     );
     for (const capture of captureMetadata.captures ?? []) {
-      const artifact = safeRelative(relative(captureRoot, capture.path));
+      const artifact = safeRelative(relative(captureRoot, await realpath(capture.path)));
       const reference = await copy(captureRoot, artifact, "reference-captures");
-      const viewport = String(capture.name).replace(/-0$/u, "");
+      const viewport = String(
+        capture.viewport?.name ?? capture.name ?? basename(artifact, ".png"),
+      ).replace(/-0$/u, "");
       const candidate = `original/candidate-browser/${viewport}/root.png`;
       if (copied.has(candidate) && copied.has(reference))
         screenshotPairs.push({
@@ -222,9 +231,35 @@ export async function writeSupplementaryAssessment(input: {
   const escape = (text: string) =>
     text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
   const images = [...copied].filter((path) => path.endsWith(".png"));
+  const counts = sides
+    .map((side) => {
+      const sideRows = assessment.rows.filter((row) => row.side === side);
+      return `<tr><th>${side}</th>${["passed", "failed", "blocked", "unassessed"].map((status) => `<td>${sideRows.filter((row) => row.status === status).length}</td>`).join("")}</tr>`;
+    })
+    .join("");
+  const priorities = assessment.rows.filter(
+    (row) =>
+      row.side === "candidate" &&
+      row.status === "failed" &&
+      row.requirementId !== "anonymous-entry",
+  );
+  const pairMarkup = screenshotPairs
+    .map(
+      (pair) =>
+        `<section><h3>${escape(pair.viewport)}</h3><p class="qualification">${escape(pair.qualification)}</p><div class="pair"><figure><figcaption>Handwritten reference</figcaption><a href="${escape(pair.reference)}"><img src="${escape(pair.reference)}" alt="Reference initial screen"></a></figure><figure><figcaption>Generated candidate</figcaption><a href="${escape(pair.candidate)}"><img src="${escape(pair.candidate)}" alt="Candidate default screen"></a></figure></div></section>`,
+    )
+    .join("");
+  const findings = assessment.rows
+    .map(
+      (row) =>
+        `<tr><td>${escape(row.side)}</td><th>${escape(row.requirementId)}</th><td class="${row.status}">${row.status}</td><td>${escape(row.reason)}</td><td>${row.artifacts.map((path, index) => `<a href="${escape(path)}">Evidence ${index + 1}</a>`).join("<br>")}</td></tr>`,
+    )
+    .join("");
   await writeFile(
     join(output, "index.html"),
-    `<!doctype html><meta charset="utf-8"><title>Supplementary self-reproduction assessment</title><style>body{font:15px system-ui;margin:2rem}pre{white-space:pre-wrap}img{max-width:48%;vertical-align:top}</style><pre>${escape(md)}</pre><h2>Diagnostic initial pairs</h2>${screenshotPairs.map((pair) => `<section><h3>${escape(pair.viewport)}</h3><p>${escape(pair.qualification)}</p><img src="${escape(pair.reference)}" alt="Reference initial screen"><img src="${escape(pair.candidate)}" alt="Candidate default screen"></section>`).join("")}<h2>Other retained screenshots</h2>${images.map((path) => `<a href="${escape(path)}"><img src="${escape(path)}" alt="${escape(path)}"></a>`).join("")}`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Supplementary self-reproduction assessment</title><style>
+body{font:15px/1.5 system-ui,sans-serif;margin:32px auto;padding:0 24px;max-width:1500px;color:#202124;background:#fafafa}h1{font-size:28px;margin-bottom:8px}h2{margin-top:32px}a{color:#1555a3}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #ddd;vertical-align:top}thead{background:#eee}.summary{max-width:650px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}figure{margin:0;background:white;border:1px solid #ddd}figcaption{padding:10px;font-weight:600}img{display:block;width:100%;height:auto}.qualification{color:#555}.failed{color:#a12622;font-weight:600}.passed{color:#256029}.findings{overflow-x:auto}.provenance{display:flex;flex-wrap:wrap;gap:16px}.note{max-width:1000px}li{margin:6px 0}
+</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
   );
   return report;
 }

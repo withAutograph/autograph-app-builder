@@ -64,7 +64,34 @@ describe("supplementary assessment", () => {
         candidate: side,
       });
       await writeFile(join(run, "parity-evidence.json"), original);
-      await writeFile(join(run, "report.json"), "{}");
+      const captures = join(root, "captures");
+      await mkdir(captures);
+      const viewports = ["desktop", "desktop-wide", "desktop-window"];
+      await Promise.all(
+        viewports.map(async (name) => {
+          await mkdir(join(run, "candidate-browser", name), { recursive: true });
+          await writeFile(join(run, "candidate-browser", name, "root.png"), "candidate screenshot");
+          await writeFile(join(captures, `${name}-0.png`), "reference screenshot");
+        }),
+      );
+      await writeFile(
+        join(captures, "capture-provenance.json"),
+        JSON.stringify({
+          authenticated: true,
+          comparisonQualification:
+            "Authenticated reference; candidate has no authentication. Layout diagnostics only.",
+          captures: viewports.map((name) => ({
+            viewport: { name, width: 1440, height: 900 },
+            path: join(captures, `${name}-0.png`),
+          })),
+        }),
+      );
+      await writeFile(
+        join(run, "report.json"),
+        JSON.stringify({
+          captures: [{ files: viewports.map((name) => `candidate-browser/${name}/root.png`) }],
+        }),
+      );
       await writeFile(join(run, "revisions.json"), "{}");
       await writeFile(
         join(review, "observations.json"),
@@ -73,10 +100,12 @@ describe("supplementary assessment", () => {
           observations: { candidate: [observation(false, "source-review")] },
         }),
       );
+      await writeFile(join(review, "source-evidence.json"), "");
       const result = await writeSupplementaryAssessment({
         runDirectory: run,
         sourceReviewDirectory: review,
         outputDirectory: join(root, "out"),
+        referenceCapturesDirectory: captures,
       });
       expect(
         result.assessment.rows.find(
@@ -84,6 +113,29 @@ describe("supplementary assessment", () => {
         )?.status,
       ).toBe("unassessed");
       expect(await readFile(join(run, "parity-evidence.json"), "utf-8")).toBe(original);
+      expect(
+        result.missingEvidence.some((item) => item.includes("nonempty contained regular file")),
+      ).toBe(true);
+      await expect(
+        writeSupplementaryAssessment({
+          runDirectory: run,
+          sourceReviewDirectory: review,
+          outputDirectory: join(import.meta.dirname, "forbidden-report-output"),
+        }),
+      ).rejects.toThrow("outside the App Builder source tree");
+      expect(result.screenshotPairs.map(({ viewport }) => viewport)).toEqual(viewports);
+      expect(
+        result.screenshotPairs.every(({ qualification }) =>
+          qualification.includes("candidate has no authentication"),
+        ),
+      ).toBe(true);
+      const html = await readFile(join(root, "out", "index.html"), "utf-8");
+      expect(html.indexOf("Initial screen comparison")).toBeLessThan(
+        html.indexOf("All requirement outcomes"),
+      );
+      expect(html).not.toContain("<pre>");
+      expect(html).toContain('href="source-review/source-evidence.json"');
+
       await expect(
         writeSupplementaryAssessment({
           runDirectory: run,
