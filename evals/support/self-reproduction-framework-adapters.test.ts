@@ -67,14 +67,12 @@ describe("default framework adapter", () => {
   });
 
   it("uses explicit evaluator-owned reviews and fixtures", async () => {
-    const sourceReview = vi
-      .fn()
-      .mockResolvedValue({
-        ready: true,
-        reason: "Reviewed actual import graph",
-        assertions: [],
-        artifacts: [],
-      });
+    const sourceReview = vi.fn().mockResolvedValue({
+      ready: true,
+      reason: "Reviewed actual import graph",
+      assertions: [],
+      artifacts: [],
+    });
     const browserFixture = vi
       .fn()
       .mockResolvedValue({ reason: "Exercised request", assertions: [], artifacts: [] });

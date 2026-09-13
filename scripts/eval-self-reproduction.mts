@@ -49,6 +49,7 @@ import {
 } from "../evals/support/self-reproduction-runtime";
 import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
 import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
+import { mergeRuntimeEvidence } from "../evals/support/self-reproduction-runtime-evidence";
 import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
 import { startSelfReproductionReferenceRuntime } from "../evals/support/self-reproduction-reference-runtime";
 import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
@@ -670,46 +671,10 @@ async function saveReport() {
       : blockedFramework("candidate")),
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
-  const effectiveTrustedWorkflowReceipts = [
-    ...trustedWorkflowReceipts,
-    ...trustedFrameworkReceipts,
-  ].filter((receipt) => {
-    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return true;
-    const candidateReceipt = receipt as {
-      side?: unknown;
-      observation?: { disposition?: unknown; requirementId?: unknown };
-    };
-    if (candidateRuntime.status === "not-run") return true;
-    if (candidateRuntime.status === "available")
-      return !(
-        candidateReceipt.side === "candidate" &&
-        candidateReceipt.observation?.disposition === "not-run" &&
-        candidateReceipt.observation.requirementId === "documentation" &&
-        candidateRuntime.probes.some((probe) => probe.id === "documentation")
-      );
-    return !(
-      candidateReceipt.side === "candidate" &&
-      candidateReceipt.observation?.disposition === "not-run"
-    );
+  const runtimeReceipts = mergeRuntimeEvidence({
+    trustedReceipts: [...trustedWorkflowReceipts, ...trustedFrameworkReceipts],
+    candidateFallback: runtimeObservations(new Set()),
   });
-  const trustedIds = new Set(
-    effectiveTrustedWorkflowReceipts.flatMap((receipt) => {
-      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return [];
-      const { side, observation } = receipt as {
-        side?: unknown;
-        observation?: { requirementId?: unknown };
-      };
-      return side === "candidate" && typeof observation?.requirementId === "string"
-        ? [observation.requirementId]
-        : [];
-    }),
-  );
-  const legacyRuntimeReceipts = runtimeObservations(trustedIds).map((observation) => ({
-    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-    producer: "evaluator" as const,
-    side: "candidate" as const,
-    observation,
-  }));
   const completedCaptures = pairedCaptures;
   const observedCaptureReceipts =
     completedCaptures?.manifest.rows.flatMap((row) =>
@@ -762,7 +727,7 @@ async function saveReport() {
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
     },
-    runtimeReceipts: [...legacyRuntimeReceipts, ...effectiveTrustedWorkflowReceipts],
+    runtimeReceipts,
     captureReceipts,
   });
   await jsonFile("parity-evidence.json", parityEvidence);
