@@ -44,58 +44,26 @@ advisory, preserve partial results, and report remaining evidence gaps explicitl
 Anonymous entry is excluded from the current repair scope. Hosted publication
 and provisioning remain unverified unless separately authorized and exercised.
 
-## Existing diagnostic runner and retained evidence
+## Observation command and retained diagnostics
 
-The following commands describe the existing native Eve diagnostic harness.
-They remain useful for investigating gaps and replaying comparisons, but do not
-by themselves satisfy the product-level acceptance contract above. The current
-harness can clone the template for its own runtime; that is evaluator setup
-provenance, not evidence that the ordinary Builder performed the clone.
+The old staged native Eve driver and its self-hosted GitHub workflow are retired.
+`mise run eval:self-reproduction` no longer starts internal generation. Submit
+[the product brief](../../evals/self-reproduction/brief.md) through the normal
+App Builder entrypoint, retain the public conversation and unchanged output,
+then use `--report-only` for comparison. If the public connection is unavailable,
+report that blocker; do not substitute an internal agent runner.
 
-Run the opt-in native Eve diagnostic with the canonical Arrusted template:
+Historical native transcripts, source revisions, reports and setup probes remain
+useful diagnostics. They are not relabeled as product-level baseline evidence.
+A new public-flow result must identify its actual entrypoint, initial brief,
+ordinary replies, product outcome and any missing evidence. No such qualifying
+run has yet been established by the existing staged reports.
 
-```sh
-mise run eval:self-reproduction
-```
-
-The command retains strict native assertions. It does not publish or deploy.
-Project-scoped Vercel OIDC and the existing native Sandbox eval prerequisites
-must already be configured. Without an explicit checkout, the command clones
-canonical Arrusted `main` into `<output-dir>/runtime-source/arrusted-development`
-using Git's existing credential helper. Configure Git access to the template
-repository locally or in GitHub before running; no static credentials are added
-by the evaluator. The report records the resolved revision and remote.
-
-Use `--arrusted-root /absolute/path/to/arrusted-development` or
-`SELF_REPRODUCTION_ARRUSTED_ROOT` to reuse an explicit checkout without fetching
-or modifying it. `--report-only --candidate-runtime` also acquires the canonical
-template when no checkout is supplied because the runtime needs its workspace.
-Report-only runs without candidate runtime and custom generators without
-candidate runtime skip automatic cloning.
-
-The command prints a timestamped evidence directory beneath the system temporary
-directory. Use `--output-dir /absolute/external/evidence/run-name` or
-`SELF_REPRODUCTION_OUTPUT_DIR` to retain it in a longer-lived location. Output
-must be outside the App Builder source tree. GitHub uploads this same directory
-with `if: always()`; no second report-generation path is used.
-
-The bundle contains the unchanged brief and fixed answer sheet with hashes,
-model/configuration source snapshots, Git revisions and working-tree status,
-settings, sanitized incremental transcript and tool outcomes, native result JSON,
-diagnostics, elapsed time, candidate inventory, and JSON/Markdown/HTML reports.
-Initial reports are written before generation. Failure, missing native output,
-strict assertion failures, and incomplete transcripts cannot become generation
-success. Completed turns and in-flight event checkpoints survive failures;
-SIGINT/SIGTERM and the generation deadline terminate the launcher process group
-and finalize partial reports. A hard kill can leave the initial reports plus the
-incremental transcript for later inspection.
-
-Candidate export is evidence-aware. A passing run retains the complete reviewed
-application tree, including scaffold-owned package, Next, Turbo, and hk contracts,
-while excluding dependencies and build output. A validation failure retains the
-applied text source as explicitly unreviewed diagnostic evidence, so framework and
-implementation gaps can still be assessed without treating the candidate as
-successful. Binary artifacts are listed as omissions rather than decoded as text.
+Comparison output belongs outside the Builder source tree. Use
+`--output-dir /absolute/external/evidence/run-name` to choose its location.
+`--report-only --candidate-runtime` may acquire canonical Arrusted to start an
+unchanged exported candidate for independent inspection. This is observer setup
+and earns no credit for Builder cloning, installation, or generated behavior.
 
 To rebuild and start an independently exported candidate in a fresh,
 evaluator-owned Vercel Sandbox, using the same tracked Arrusted workspace and
@@ -121,8 +89,7 @@ candidate workflow and desktop interaction fixtures. Unknown generated layouts
 remain unassessed until an evaluator adapter is supplied. Documentation uses the
 actual visible navigation control; a guessed `/docs` response is diagnostic only.
 
-Native generation runs the reference's isolated production-navigation suite and
-retains its JSON reporter output. For report-only runs, opt in with
+To retain the reference's isolated production-navigation JSON evidence, opt in with
 `--reference-navigation`, or reuse an existing evaluator output directory with
 `--reference-navigation-evidence /absolute/path/to/reference-navigation`.
 Reused evidence retains its original source snapshot, revision, and timestamps;
@@ -186,17 +153,14 @@ when a later adapter or report step fails. Missing product behavior fails,
 unavailable fixture/browser infrastructure blocks, and omitted adapters remain
 unassessed.
 
-The self-hosted GitHub workflow uses the same checked-in adapter. Optional
-repository or environment variables `REFERENCE_URL` and `CANDIDATE_URL` become
-`SELF_REPRODUCTION_REFERENCE_URL` and
-`SELF_REPRODUCTION_CANDIDATE_URL`. `WORKFLOW_ADAPTER_MODULE` can select a custom
-module under `evals/`. The default native eval starts an isolated reference
-runtime when no reference URL is supplied and attempts the exported candidate
-in Vercel Sandbox. Local and GitHub runs use this same lifecycle. Report-only
-runs start those runtimes only when `--reference-runtime` or
-`--candidate-runtime` is requested; custom generators also require those flags.
-The reference runtime requires the mise-owned entrypoint and its local database
-prerequisites. Runtime startup errors remain visible in the retained report.
+For an observation run, `SELF_REPRODUCTION_REFERENCE_URL` and
+`SELF_REPRODUCTION_CANDIDATE_URL` can identify existing applications.
+`--workflow-adapter-module` selects an evaluator module under `evals/`.
+Only explicitly requested `--reference-runtime` and `--candidate-runtime`
+comparisons start observer-owned runtimes. The reference runtime uses the
+mise-owned entrypoint and its local database prerequisites. Runtime startup
+errors remain visible in the retained report. The retired self-hosted workflow
+is not an alternate route for generating the replica.
 
 The report labels an operator-supplied candidate separately from the live
 generation that produced it. Credentials and dependencies are never copied.
