@@ -40,21 +40,27 @@ if (values.help) {
   );
   process.exit(0);
 }
-if (!values.endpoint || !values["output-dir"])
+if (!values.endpoint || !values["output-dir"]) {
   throw new Error("--endpoint and --output-dir are required");
-if (values["message-file"] && !values.resume) throw new Error("--message-file requires --resume");
+}
+if (values["message-file"] && !values.resume) {
+  throw new Error("--message-file requires --resume");
+}
 validatePublicEndpoint(values.endpoint);
 const repo = realpathSync(resolve(import.meta.dirname, ".."));
 const output = resolve(values["output-dir"]);
 let existingParent = output;
-while (!existsSync(existingParent)) existingParent = pathModule.dirname(existingParent);
+while (!existsSync(existingParent)) {
+  existingParent = pathModule.dirname(existingParent);
+}
 const canonicalOutput = resolve(realpathSync(existingParent), relative(existingParent, output));
 const distance = relative(repo, canonicalOutput);
 if (
   !distance ||
   (distance !== ".." && !distance.startsWith(`..${pathModule.sep}`) && !isAbsolute(distance))
-)
+) {
   throw new Error("Evidence must be outside the reference source tree");
+}
 mkdirSync(output, { mode: 0o700, recursive: true });
 const timeoutMs = Number(values["timeout-ms"]);
 const pollMs = Number(values["poll-ms"]);
@@ -63,13 +69,15 @@ if (
   timeoutMs <= 0 ||
   !Number.isSafeInteger(pollMs) ||
   pollMs <= 0
-)
+) {
   throw new Error("Timeout and polling interval must be positive integer milliseconds");
+}
 const path = resolve(output, "state.json");
-if (existsSync(path) !== values.resume)
+if (existsSync(path) !== values.resume) {
   throw new Error(
     "Use a new output directory for one baseline, or --resume for its existing state",
   );
+}
 const state: PublicState = values.resume
   ? (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
   : {
@@ -92,7 +100,9 @@ if (!state.sourceRevision) {
     state.sourceRevision = "unavailable";
   }
 }
-if (state.endpoint !== values.endpoint) throw new Error("Resume must use the original endpoint");
+if (state.endpoint !== values.endpoint) {
+  throw new Error("Resume must use the original endpoint");
+}
 const save = () => {
   // Private continuation state preserves exact request IDs and pending replies; public reports are sanitized.
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });

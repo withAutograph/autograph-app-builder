@@ -100,7 +100,9 @@ describe("public self-reproduction driver", () => {
         ...options,
         transport: {
           call: async (name) => {
-            if (name === "autograph_respond") throw new Error("connection lost");
+            if (name === "autograph_respond") {
+              throw new Error("connection lost");
+            }
             return session("input_required", [approval]);
           },
         },
@@ -233,7 +235,9 @@ describe("public self-reproduction driver", () => {
         transport: {
           call: async (name, args) => {
             calls.push({ args, name });
-            if (name === "autograph_send") throw new Error("lost response");
+            if (name === "autograph_send") {
+              throw new Error("lost response");
+            }
             return session("waiting");
           },
         },
