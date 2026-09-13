@@ -134,11 +134,10 @@ when a later adapter or report step fails. Missing product behavior fails,
 unavailable fixture/browser infrastructure blocks, and omitted adapters remain
 unassessed.
 
-The self-hosted GitHub workflow uses the same checked-in adapter. Optional
-repository or environment variables `REFERENCE_URL` and `CANDIDATE_URL` become
-`SELF_REPRODUCTION_REFERENCE_URL` and
-`SELF_REPRODUCTION_CANDIDATE_URL`. `WORKFLOW_ADAPTER_MODULE` can select a custom
-module under `evals/`. The default native eval starts an isolated reference
+The GitHub workflow uses the [hosted controller](self-reproduction-hosted.md)
+with GitHub OIDC and an isolated Vercel Sandbox worker. It runs the same
+checked-in adapters; caller-selected URLs and modules are local options.
+The default native eval starts an isolated reference
 runtime when no reference URL is supplied and attempts the exported candidate
 in Vercel Sandbox. Local and GitHub runs use this same lifecycle. Report-only
 runs start those runtimes only when `--reference-runtime` or
