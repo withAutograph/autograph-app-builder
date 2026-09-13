@@ -203,30 +203,45 @@ export const createHostedSelfReproductionController = (input: {
     if (!(await input.store.compareAndSet(record.revision, lease)))
       return await readRecord(record.id);
     record = lease;
-    const artifacts: RetainedEvalArtifact[] = [];
-    const diagnostics = [...record.diagnostics];
+    const artifacts: RetainedEvalArtifact[] = [...record.artifacts];
+    const diagnostics = new Set(record.diagnostics);
+    const seen = new Set<string>();
     if (deadlineReached && observed.status === "running")
-      diagnostics.push("worker-cleanup-deadline-reached");
+      diagnostics.add("worker-cleanup-deadline-reached");
     for (const artifact of observed.artifacts) {
-      if (!artifactId.test(artifact.id) || artifacts.some(({ id }) => id === artifact.id)) {
-        diagnostics.push("worker-artifact-manifest-invalid");
+      if (!artifactId.test(artifact.id) || seen.has(artifact.id)) {
+        diagnostics.add("worker-artifact-manifest-invalid");
         continue;
       }
+      seen.add(artifact.id);
+      if (artifacts.some(({ id }) => id === artifact.id)) continue;
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- retain each partial artifact before cleanup
         const content = await input.worker.readArtifact(workerId(record), artifact.id);
         // oxlint-disable-next-line eslint/no-await-in-loop -- private storage writes are idempotent
         const storageKey = await input.artifacts.put(record.id, artifact, content);
         artifacts.push({ ...artifact, storageKey });
+        diagnostics.delete(`artifact-retention-failed:${artifact.id}`);
       } catch {
-        diagnostics.push(`artifact-retention-failed:${artifact.id}`);
+        diagnostics.add(`artifact-retention-failed:${artifact.id}`);
       }
+    }
+    const pendingRetention = [...diagnostics].some((item) =>
+      item.startsWith("artifact-retention-failed:"),
+    );
+    if (pendingRetention && input.now() < record.cleanupAt) {
+      return update(record, {
+        artifacts,
+        collectionLeaseUntil: input.now(),
+        diagnostics: [...diagnostics],
+        status: "collecting",
+      });
     }
     record = await update(record, {
       artifacts,
-      diagnostics,
+      diagnostics: [...diagnostics],
       resultStatus:
-        observed.status === "completed" && diagnostics.length === 0 ? "completed" : "failed",
+        observed.status === "completed" && diagnostics.size === 0 ? "completed" : "failed",
       status: "cleaning",
     });
     return record.status === "cleaning" ? clean(record) : record;

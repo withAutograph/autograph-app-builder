@@ -2,7 +2,11 @@
 import { expect, it, vi } from "vitest";
 import type { AuthorizedEvalRun } from "../eve/github-eval-oidc";
 import { createHostedSelfReproductionController } from "./hosted-self-reproduction-controller";
-import type { HostedEvalRecord, HostedEvalWorker } from "./hosted-self-reproduction-controller";
+import type {
+  HostedEvalArtifacts,
+  HostedEvalRecord,
+  HostedEvalWorker,
+} from "./hosted-self-reproduction-controller";
 
 const owner: AuthorizedEvalRun = {
   ref: "refs/heads/main",
@@ -25,13 +29,14 @@ const fixture = () => {
     start: vi.fn(async () => ({ workerId: "private-worker-id" })),
     stop: vi.fn(async () => {}),
   };
+  const put = vi.fn<HostedEvalArtifacts["put"]>(async (runId, artifact, content) => {
+    const key = `${runId}/${artifact.id}`;
+    files.set(key, content);
+    return key;
+  });
   const controller = createHostedSelfReproductionController({
     artifacts: {
-      put: async (runId, artifact, content) => {
-        const key = `${runId}/${artifact.id}`;
-        files.set(key, content);
-        return key;
-      },
+      put,
       read: async (key) => {
         const content = files.get(key);
         if (!content) throw new Error("not found");
@@ -67,6 +72,7 @@ const fixture = () => {
     },
     controller,
     files,
+    put,
     records,
     worker,
   };
@@ -120,12 +126,16 @@ it("retains partial failed-run artifacts before cleanup and serves them after cl
   });
   f.worker.readArtifact
     .mockResolvedValueOnce(new Uint8Array([1]))
-    .mockRejectedValueOnce(new Error("missing"));
+    .mockRejectedValue(new Error("missing"));
   const run = await f.controller.start("owner");
   f.worker.stop.mockImplementation(async () => {
     expect(f.records.get(run.id)?.artifacts).toHaveLength(1);
     expect(f.records.get(run.id)?.status).toBe("cleaning");
   });
+  const pending = await f.controller.status("owner", run.id);
+  expect(pending.status).toBe("collecting");
+  expect(f.worker.stop).not.toHaveBeenCalled();
+  f.advance();
   const result = await f.controller.status("owner", run.id);
   expect(result.status).toBe("failed");
   expect(result.cleanup).toBe("stopped");
@@ -219,3 +229,32 @@ it("retains a known worker after status advances a pending start reservation", a
   expect(f.worker.stop).toHaveBeenCalledWith("known-late-worker");
   expect(f.worker.start).toHaveBeenCalledOnce();
 });
+
+it.each(["read", "storage"])(
+  "retries transient %s retention before stopping and preserves already retained artifacts",
+  async (failure) => {
+    const f = fixture();
+    f.worker.inspect.mockResolvedValue({
+      artifacts: [
+        { contentType: "application/json", id: "report.json" },
+        { contentType: "text/plain", id: "worker.log" },
+      ],
+      status: "completed",
+    });
+    if (failure === "read")
+      f.worker.readArtifact.mockRejectedValueOnce(new Error("transient read"));
+    else f.put.mockRejectedValueOnce(new Error("transient storage"));
+    const run = await f.controller.start("owner");
+    const pending = await f.controller.status("owner", run.id);
+    expect(pending.status).toBe("collecting");
+    expect(pending.artifacts.map(({ id }) => id)).toEqual(["worker.log"]);
+    expect(pending.diagnostics).toContain("artifact-retention-failed:report.json");
+    expect(f.worker.stop).not.toHaveBeenCalled();
+    const completed = await f.controller.status("owner", run.id);
+    expect(completed.status).toBe("completed");
+    expect(completed.artifacts).toHaveLength(2);
+    expect(completed.diagnostics).not.toContain("artifact-retention-failed:report.json");
+    expect(f.worker.readArtifact).toHaveBeenCalledTimes(3);
+    expect(f.worker.stop).toHaveBeenCalledOnce();
+  },
+);
