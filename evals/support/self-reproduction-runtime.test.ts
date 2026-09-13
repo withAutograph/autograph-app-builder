@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { vercel } from "eve/sandbox/vercel";
 
 import {
   candidateRuntimeCaptureFailureObservations,
   candidateRuntimeFailureObservations,
   evaluateCandidateRuntime,
 } from "./self-reproduction-runtime";
+
+vi.mock("eve/sandbox/vercel", () => ({ vercel: vi.fn() }));
 
 function backend(results: { exitCode: number; stdout?: string; stderr?: string }[]) {
   const shutdown = vi.fn(() => Promise.resolve());
@@ -225,5 +228,56 @@ describe("self-reproduction candidate runtime", () => {
     expect(receipt.commands.at(-1)?.stdout).toContain("Diagnostic build complete");
     expect(fixture.spawn).not.toHaveBeenCalled();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
+  });
+  it("injects structured OIDC credentials and redacts raw split startup diagnostics", async () => {
+    const token = "raw-private-credential";
+    const fixture = backend([
+      { exitCode: 0, stdout: token },
+      ...Array.from({ length: 5 }, () => ({ exitCode: 0 })),
+      { exitCode: 0, stdout: "[]" },
+    ]);
+    fixture.spawn.mockImplementationOnce(() =>
+      Promise.resolve({
+        kill: () => Promise.resolve(),
+        wait: () => Promise.resolve({ exitCode: 0 }),
+        stderr: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(token.slice(0, 8)));
+            controller.enqueue(new TextEncoder().encode(token.slice(8)));
+            controller.close();
+          },
+        }),
+        stdout: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      }),
+    );
+    vi.mocked(vercel).mockReturnValueOnce(fixture.backend);
+    const receipt = await evaluateCandidateRuntime({
+      credentials: { token, teamId: "team", projectId: "project" },
+      candidateAppId: "candidate",
+      files: [],
+      publicBasePath: "/candidate",
+      workspaceArchive: Buffer.from("archive"),
+    });
+    expect(vercel).toHaveBeenLastCalledWith({
+      networkPolicy: "allow-all",
+      token,
+      teamId: "team",
+      projectId: "project",
+      env: {
+        VERCEL_OIDC_TOKEN: token,
+        VERCEL_TEAM_ID: "team",
+        VERCEL_PROJECT_ID: "project",
+      },
+    });
+    expect(JSON.stringify(receipt)).not.toContain(token);
+    expect(receipt.commands[0]?.stdout).toBe("[REDACTED]");
+    expect(receipt.commands.find((entry) => entry.command.includes(" start"))?.stderr).toBe(
+      "[REDACTED]",
+    );
+    expect(receipt.capabilities.childSandbox).toBe("configured-unverified");
   });
 });
