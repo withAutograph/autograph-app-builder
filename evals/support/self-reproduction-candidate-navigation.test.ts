@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/require-await -- Browser doubles preserve asynchronous Playwright operations. */
+import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import type { Page } from "playwright";
 import { expect, it, vi } from "vitest";
 import {
@@ -49,6 +50,19 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
       `return (${exerciseCandidateNavigation.toString()})`,
     )() as typeof exerciseCandidateNavigation;
     const result = await portable(page, "https://candidate/", capture);
+    result.artifacts = ["documentation.png", "back.png", "forward.png"];
+    const receipt = runtimeReceiptSchema.parse(candidateNavigationReceipt({ observation: result }));
+    expect(receipt.observation.assertions.map(({ passed }) => passed)).toEqual(
+      result.assertions.map(({ passed }) => passed),
+    );
+    for (const assertion of receipt.observation.assertions) {
+      expect(assertion.artifacts).toEqual([
+        "candidate-navigation.json",
+        "candidate-navigation/documentation.png",
+        "candidate-navigation/back.png",
+        "candidate-navigation/forward.png",
+      ]);
+    }
     expect(result.disposition).toBe(
       {
         history: "observed",

@@ -157,6 +157,17 @@ export const candidateNavigationReceipt = (output: { observation?: Observation }
   observation: output?.observation
     ? {
         ...output.observation,
+        assertions: output.observation.assertions.map((assertion) => ({
+          ...assertion,
+          artifacts: [
+            "candidate-navigation.json",
+            ...new Set(
+              [...output.observation!.artifacts, ...assertion.artifacts].map(
+                (path) => `candidate-navigation/${path}`,
+              ),
+            ),
+          ],
+        })),
         artifacts: [
           "candidate-navigation.json",
           ...output.observation.artifacts.map((path) => `candidate-navigation/${path}`),
