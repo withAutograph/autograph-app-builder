@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 import type { Page } from "playwright";
-import * as axe from "axe-core";
+import axe from "axe-core";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
