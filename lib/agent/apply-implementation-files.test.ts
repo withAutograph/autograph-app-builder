@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { implementationFilesSchema, withImplementationFiles } from "./apply-implementation-files";
+import {
+  assertImplementationArchitecture,
+  implementationFilesSchema,
+  withImplementationFiles,
+} from "./apply-implementation-files";
 
 describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
@@ -37,5 +41,40 @@ describe("approval-bound implementation files", () => {
     expect(
       implementationFilesSchema.safeParse([{ path: "../outside.ts", content: "nope" }]).success,
     ).toBe(false);
+  });
+
+  it("rejects client-only persistence for apps that own kernel data", () => {
+    expect(() =>
+      assertImplementationArchitecture(
+        [
+          {
+            path: "app/page.tsx",
+            content:
+              '"use client"; localStorage.setItem("draft", "value"); export default function Page() { return null; }',
+          },
+        ],
+        "kernel",
+      ),
+    ).toThrow(/no Server Action or route handler/u);
+  });
+
+  it("accepts a server route with a narrow interactive leaf for kernel data", () => {
+    expect(() =>
+      assertImplementationArchitecture(
+        [
+          {
+            path: "app/page.tsx",
+            content:
+              'import Form from "./form"; export default function Page() { return <Form />; }',
+          },
+          { path: "app/actions.ts", content: '"use server"; export async function save() {}' },
+          {
+            path: "app/form.tsx",
+            content: '"use client"; export default function Form() { return <button />; }',
+          },
+        ],
+        "kernel",
+      ),
+    ).not.toThrow();
   });
 });

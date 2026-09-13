@@ -8,6 +8,7 @@ import {
   compilerDiagnostics,
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
+  validationOutputExcerpt,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -78,7 +79,7 @@ function sandboxFixture() {
 }
 
 describe("target validation", () => {
-  it("reports a missing package script without echoing command output", async () => {
+  it("reports a missing package script with bounded sanitized command output", async () => {
     const { sandbox } = sandboxFixture();
     const result = await executeProposalBoundValidation({
       sandbox,
@@ -100,6 +101,19 @@ describe("target validation", () => {
     });
     expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
+  it("retains bounded repair diagnostics while redacting common credentials", () => {
+    const excerpt = validationOutputExcerpt(
+      `apps/example/app/page.tsx(4,2): error TS2304: MissingThing ${"x".repeat(7000)}`,
+      "Authorization: Bearer abc123\nAPI_KEY=super-secret\nCookie: session=private",
+    );
+    expect(excerpt.stdout).toContain("TS2304: MissingThing");
+    expect(excerpt.stdout).toContain("[output truncated]");
+    expect(excerpt.stderr).not.toContain("abc123");
+    expect(excerpt.stderr).not.toContain("super-secret");
+    expect(excerpt.stderr).not.toContain("session=private");
+    expect(excerpt.truncated).toBe(true);
+  });
+
   it("runs repository commands without receipt or source preflight", async () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };

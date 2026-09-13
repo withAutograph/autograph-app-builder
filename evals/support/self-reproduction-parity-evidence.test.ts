@@ -1,0 +1,152 @@
+import { describe, expect, it } from "vitest";
+
+import { assessParity, desktopViewports, requirements } from "./self-reproduction-parity";
+import {
+  captureReceiptSchema,
+  parityEvidenceFromReceipts,
+} from "./self-reproduction-parity-evidence";
+
+const artifactExists = () => Promise.resolve(true);
+const base = {
+  runId: "receipt-fixture",
+  reference: { output: "available" as const, reason: "ready", sourceRevision: "ref" },
+  candidate: { output: "available" as const, reason: "ready", sourceRevision: "candidate" },
+};
+
+function runtimeReceipt(
+  requirementId: string,
+  disposition: "observed" | "missing-functionality" | "infrastructure-unavailable" | "not-run",
+  passed = true,
+) {
+  const row = requirements.find((item) => item.id === requirementId)!;
+  return {
+    schemaVersion: "self-reproduction-runtime-receipt/v1",
+    producer: "evaluator",
+    side: "candidate",
+    observation: {
+      requirementId,
+      disposition,
+      reason: "Evaluator fixture receipt.",
+      method: row.kind === "framework" ? "source-and-browser" : "browser",
+      artifacts: ["parity/runtime/result.json"],
+      assertions: row.assertions.map((id) => ({
+        id,
+        passed,
+        detail: passed ? "Observed." : "Expected transition did not occur.",
+        artifacts: ["parity/runtime/result.json"],
+      })),
+    },
+  };
+}
+
+describe("parity receipt ingestion", () => {
+  it("maps evaluator runtime receipts to passed, failed, blocked and unassessed reason codes", async () => {
+    const evidence = parityEvidenceFromReceipts({
+      ...base,
+      runtimeReceipts: [
+        runtimeReceipt("durable-draft", "observed"),
+        runtimeReceipt("provider-return-success", "observed", false),
+        runtimeReceipt("app-creation", "infrastructure-unavailable"),
+        runtimeReceipt("retry", "not-run"),
+      ],
+    });
+    const rows = (await assessParity(evidence, artifactExists)).rows.filter(
+      (row) => row.side === "candidate",
+    );
+    expect(rows.find((row) => row.requirementId === "durable-draft")).toMatchObject({
+      status: "passed",
+      reasonCode: "observed-complete",
+    });
+    expect(rows.find((row) => row.requirementId === "provider-return-success")).toMatchObject({
+      status: "failed",
+      reasonCode: "assertion-failed",
+    });
+    expect(rows.find((row) => row.requirementId === "app-creation")).toMatchObject({
+      status: "blocked",
+      reasonCode: "observation-infrastructure-unavailable",
+    });
+    expect(rows.find((row) => row.requirementId === "retry")).toMatchObject({
+      status: "unassessed",
+      reasonCode: "observation-not-run",
+    });
+    expect(rows.find((row) => row.requirementId === "documentation")).toMatchObject({
+      status: "unassessed",
+      reasonCode: "observation-missing",
+    });
+  });
+
+  it("maps missing output to failed and unavailable infrastructure to blocked", async () => {
+    const missing = parityEvidenceFromReceipts({
+      ...base,
+      candidate: { ...base.candidate, output: "missing" },
+    });
+    const unavailable = parityEvidenceFromReceipts({
+      ...base,
+      candidate: { ...base.candidate, output: "infrastructure-unavailable" },
+    });
+    const missingRow = (await assessParity(missing, artifactExists)).rows.find(
+      (row) => row.side === "candidate" && row.requirementId === "durable-draft",
+    );
+    const unavailableRow = (await assessParity(unavailable, artifactExists)).rows.find(
+      (row) => row.side === "candidate" && row.requirementId === "durable-draft",
+    );
+    expect(missingRow).toMatchObject({ status: "failed", reasonCode: "output-missing" });
+    expect(unavailableRow).toMatchObject({
+      status: "blocked",
+      reasonCode: "output-infrastructure-unavailable",
+    });
+  });
+
+  it("ingests capture receipts only when viewport, state and requirement agree", async () => {
+    const [viewport] = desktopViewports;
+    const requirementId = `capture/${viewport.name}/keyboard`;
+    const row = requirements.find((item) => item.id === requirementId)!;
+    const receipt = {
+      side: "candidate",
+      viewport,
+      state: "keyboard",
+      requirementId,
+      disposition: "observed",
+      reason: "Keyboard path exercised.",
+      method: "browser",
+      artifacts: ["parity/captures/keyboard.png", "parity/captures/keyboard.json"],
+      assertions: row.assertions.map((id) => ({
+        id,
+        passed: true,
+        detail: "Observed.",
+        artifacts: ["parity/captures/keyboard.json"],
+      })),
+    };
+    const evidence = parityEvidenceFromReceipts({ ...base, captureReceipts: [receipt] });
+    const assessed = (await assessParity(evidence, artifactExists)).rows.find(
+      (item) => item.side === "candidate" && item.requirementId === requirementId,
+    );
+    expect(assessed).toMatchObject({ status: "passed", reasonCode: "observed-complete" });
+    expect(
+      captureReceiptSchema.safeParse({
+        ...receipt,
+        requirementId: "capture/desktop/error",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects candidate-authored and duplicate authoritative receipts", () => {
+    expect(() =>
+      parityEvidenceFromReceipts({
+        ...base,
+        runtimeReceipts: [
+          { ...runtimeReceipt("durable-draft", "observed"), producer: "candidate" },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      parityEvidenceFromReceipts({
+        ...base,
+        runtimeReceipts: [
+          runtimeReceipt("durable-draft", "observed"),
+          runtimeReceipt("durable-draft", "observed"),
+        ],
+      }),
+    ).toThrow();
+  });
+});

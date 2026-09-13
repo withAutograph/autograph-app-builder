@@ -94,7 +94,25 @@ app-owned files and reuse the same component-backed preview flow.
    walkthrough, adapting preview hash routes to the generated app's actual
    router. Test visible state changes, form validation/cancellation, and
    cross-screen consistency; do not replace working prototype actions with
-   inert buttons or toast-only success. Pass those
+   inert buttons or toast-only success.
+
+   Keep the scaffolded repository infrastructure authoritative. Do not include
+   `package.json`, lockfiles, `next.config.*`, `tsconfig.json`, Turbo config, or
+   duplicate frontend entrypoints in `implementationFiles` for a new app. Use
+   the dependency versions and scripts already present in the prepared
+   workspace; never guess or pin framework versions from model knowledge.
+   Implement production workflows as production behavior: durable drafts and
+   recovery use server-owned storage and Server Actions or route handlers;
+   provider returns use real callback routes and the repository's emulator or
+   provider boundary; creation, cancellation, retry, and preview access use the
+   app's real orchestration path. Browser storage, timers, and local state may
+   support transient presentation, but never stand in for those outcomes.
+   Keep route pages and layouts as Server Components and put `"use client"`
+   only on the smallest interactive leaves. A single client component that
+   owns routing, persistence, provider state, and the whole application shell
+   is not an acceptable implementation.
+
+   Pass those
    model-authored files as `implementationFiles` to `apply_app_creation` with
    the concise product summary. For an existing-app iteration, the planned
    changes already carry the implementation and `implementationFiles` may be
@@ -102,6 +120,7 @@ app-owned files and reuse the same component-backed preview flow.
    session work, source access, inspection, design, prototypes, internal
    drafting, or planning. Never invoke the target command through generic shell
    access.
+
 7. Treat approval of **Build this app?** as permission to edit and validate only
    the private App Builder checkout. It is not permission to create or modify a
    repository, push a branch, open a pull request, deploy, provision resources,

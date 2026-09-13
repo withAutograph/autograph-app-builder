@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop -- paired browser states must execute sequentially to preserve isolation and deterministic evidence. */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { captureStates, desktopViewports, sides } from "./self-reproduction-parity";
 import type { Observation } from "./self-reproduction-parity";
@@ -16,7 +17,7 @@ export interface CaptureAdapter {
     | { ready: true }
     | {
         ready: false;
-        disposition: "missing-functionality" | "infrastructure-unavailable";
+        disposition: "missing-functionality" | "infrastructure-unavailable" | "not-run";
         reason: string;
       }
   >;
@@ -34,6 +35,82 @@ export interface CaptureAdapter {
       detail: string;
     }[]
   >;
+}
+
+export interface PairedCaptureManifestRow {
+  requirementId: string;
+  state: CaptureState;
+  viewport: (typeof desktopViewports)[number];
+  reference: { disposition: Observation["disposition"]; png?: string; receipt?: string };
+  candidate: { disposition: Observation["disposition"]; png?: string; receipt?: string };
+}
+
+export interface PairedCaptureRun {
+  observations: Record<(typeof sides)[number], Observation[]>;
+  manifest: {
+    schemaVersion: "self-reproduction-captures/v1";
+    visualScoresAdvisory: true;
+    rows: PairedCaptureManifestRow[];
+  };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function unavailableCaptureObservations(reason: string): PairedCaptureRun["observations"] {
+  return Object.fromEntries(
+    sides.map((side) => [
+      side,
+      desktopViewports.flatMap((viewport) =>
+        captureStates.map((state): Observation => ({
+          requirementId: `capture/${viewport.name}/${state}`,
+          disposition: "infrastructure-unavailable",
+          reason,
+          method: "none",
+          artifacts: [],
+          assertions: [],
+        })),
+      ),
+    ]),
+  ) as PairedCaptureRun["observations"];
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function writePairedCaptureManifest(
+  outputRoot: string,
+  observations: PairedCaptureRun["observations"],
+): Promise<PairedCaptureRun["manifest"]> {
+  const rows = desktopViewports.flatMap((viewport) =>
+    captureStates.map((state): PairedCaptureManifestRow => {
+      const requirementId = `capture/${viewport.name}/${state}`;
+      const pair = Object.fromEntries(
+        sides.map((side) => {
+          const observation = observations[side].find(
+            (item) => item.requirementId === requirementId,
+          );
+          const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
+          return [
+            side,
+            {
+              disposition: observation?.disposition ?? "not-run",
+              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
+              ...(observation?.artifacts.includes(`${prefix}.json`)
+                ? { receipt: `${prefix}.json` }
+                : {}),
+            },
+          ];
+        }),
+      ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
+      return { requirementId, viewport, state, ...pair };
+    }),
+  );
+  const manifest: PairedCaptureRun["manifest"] = {
+    schemaVersion: "self-reproduction-captures/v1",
+    visualScoresAdvisory: true,
+    rows,
+  };
+  const manifestPath = join(outputRoot, "parity/captures/manifest.json");
+  await mkdir(dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  return manifest;
 }
 
 /** Uses an already available browser; never starts a server or provider job. */
@@ -137,4 +214,31 @@ export async function captureParity(input: {
         output[side].push(result);
       }
   return output;
+}
+
+/**
+ * Owns one headless browser for the complete paired capture matrix and writes a
+ * deterministic manifest that report renderers can display side by side. The
+ * manifest records evidence locations only; it never turns visual similarity
+ * into functional credit.
+ */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function runPairedCaptureEvidence(input: {
+  outputRoot: string;
+  adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
+  launch?: () => Promise<Browser>;
+}): Promise<PairedCaptureRun> {
+  const browser = await (input.launch ?? (() => chromium.launch({ headless: true })))();
+  let observations: Record<(typeof sides)[number], Observation[]>;
+  try {
+    observations = await captureParity({
+      browser,
+      outputRoot: input.outputRoot,
+      adapters: input.adapters,
+    });
+  } finally {
+    await browser.close();
+  }
+  const manifest = await writePairedCaptureManifest(input.outputRoot, observations);
+  return { observations, manifest };
 }

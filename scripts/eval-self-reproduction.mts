@@ -1,12 +1,20 @@
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { existsSync } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { create as createTar } from "tar";
 import { activeBuilderModelId } from "../lib/integrations/active-model";
+import {
+  parseLinkedVercelProject,
+  parseLocalVercelOidcToken,
+  readOwnerBoundLocalFile,
+  validateLocalVercelOidcClaims,
+} from "../lib/eve/local-vercel-oidc";
 
 import {
   auditFramework,
@@ -15,7 +23,7 @@ import {
   prioritizedGaps,
   readSource,
 } from "../evals/support/self-reproduction";
-import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
+import type { WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   candidateExportFromEvidence,
   candidateExportProvenanceFromEvidence,
@@ -24,6 +32,30 @@ import {
   evidenceSink,
   sanitizeEvidence,
 } from "../evals/support/self-reproduction-evidence";
+import {
+  assessParity,
+  captureStates,
+  desktopViewports,
+  workflowMatrix,
+} from "../evals/support/self-reproduction-parity";
+import type {
+  Assessment,
+  Observation,
+  ParityEvidence,
+} from "../evals/support/self-reproduction-parity";
+import {
+  candidateRuntimeCaptureFailureObservations,
+  candidateRuntimeFailureObservations,
+} from "../evals/support/self-reproduction-runtime";
+import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
+import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
+import type { TrustedBrowserWorkflowAdapter } from "../evals/support/self-reproduction-workflow-adapters";
+import {
+  runPairedCaptureEvidence,
+  unavailableCaptureObservations,
+  writePairedCaptureManifest,
+} from "../evals/support/self-reproduction-captures";
+import type { CaptureAdapter, PairedCaptureRun } from "../evals/support/self-reproduction-captures";
 
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
@@ -31,7 +63,10 @@ const { values } = parseArgs({
     "candidate-root": { type: "string" },
     "arrusted-root": { type: "string" },
     "candidate-url": { type: "string" },
+    "candidate-runtime": { type: "boolean" },
     "reference-url": { type: "string" },
+    "capture-adapter": { type: "string" },
+    "workflow-adapter-module": { type: "string" },
     "output-dir": { type: "string" },
     "generation-timeout-ms": { type: "string" },
     "report-only": { type: "boolean" },
@@ -61,11 +96,205 @@ let settings: Record<string, unknown> = {};
 let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let workflowEvidence: WorkflowEvidence | undefined;
+let parityAssessment: Assessment | undefined;
+let pairedCaptures: PairedCaptureRun | undefined;
+let trustedWorkflowReceipts: unknown[] = [];
+let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
+  status: "not-run",
+  reason: "Candidate runtime evaluation was not requested.",
+};
 let candidate: Record<string, unknown> = {
   status: "unavailable",
   reason: "No candidate export has been supplied.",
 };
 const errors: string[] = [];
+
+async function runConfiguredPairedCaptures() {
+  const adapterFile =
+    values["capture-adapter"] ??
+    (values["reference-url"] && values["candidate-url"]
+      ? join(root, "evals/self-reproduction/default-capture-adapter.ts")
+      : undefined);
+  if (!adapterFile) return;
+  if (!values["reference-url"] || !values["candidate-url"])
+    throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");
+  const evaluatorRoot = await realpath(join(root, "evals"));
+  const resolvedAdapter = await realpath(resolve(adapterFile));
+  const adapterRelative = relative(evaluatorRoot, resolvedAdapter);
+  if (
+    !adapterRelative ||
+    adapterRelative === ".." ||
+    adapterRelative.startsWith(`..${sep}`) ||
+    adapterRelative.startsWith(sep)
+  )
+    throw new Error("Capture adapter must be an evaluator-owned module under evals/.");
+  const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
+    createCaptureAdapters?: (input: {
+      referenceURL: string;
+      candidateURL: string;
+    }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
+  };
+  if (typeof loaded.createCaptureAdapters !== "function")
+    throw new Error("Capture adapter must export createCaptureAdapters().");
+  const adapters = await loaded.createCaptureAdapters({
+    referenceURL: values["reference-url"],
+    candidateURL: values["candidate-url"],
+  });
+  try {
+    pairedCaptures = await runPairedCaptureEvidence({ outputRoot: output, adapters });
+  } catch {
+    const observations = unavailableCaptureObservations(
+      "The evaluator could not launch or retain its paired browser capture runtime.",
+    );
+    pairedCaptures = {
+      observations,
+      manifest: await writePairedCaptureManifest(output, observations),
+    };
+  }
+  captures.push({
+    label: "paired-state-manifest",
+    files: ["parity/captures/manifest.json"],
+    status: "captured",
+  });
+}
+
+type WorkflowAdapterFactory = (input: {
+  referenceUrl?: string;
+  candidateUrl?: string;
+  outputRoot: string;
+}) =>
+  | Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>>
+  | Promise<Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>>>;
+
+function within(parent: string, child: string) {
+  const path = relative(parent, child);
+  return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
+}
+
+async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) {
+  const adapterFile =
+    values["workflow-adapter-module"] ??
+    process.env.SELF_REPRODUCTION_WORKFLOW_ADAPTER_MODULE ??
+    join(root, "evals/self-reproduction/workflow-adapter.ts");
+  const resolvedAdapter = await realpath(resolve(adapterFile));
+  const evaluatorRoot = await realpath(join(root, "evals"));
+  if (
+    !within(evaluatorRoot, resolvedAdapter) ||
+    within(output, resolvedAdapter) ||
+    (candidateRoot && within(candidateRoot, resolvedAdapter))
+  )
+    throw new Error("Workflow adapter module must be evaluator-owned and under evals/.");
+  const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
+    createWorkflowAdapters?: WorkflowAdapterFactory;
+  };
+  if (typeof loaded.createWorkflowAdapters !== "function")
+    throw new Error("Workflow adapter module must export createWorkflowAdapters().");
+  const referenceUrl = values["reference-url"] ?? process.env.SELF_REPRODUCTION_REFERENCE_URL;
+  const candidateUrl = values["candidate-url"] ?? process.env.SELF_REPRODUCTION_CANDIDATE_URL;
+  const adapters = await loaded.createWorkflowAdapters({
+    ...(referenceUrl ? { referenceUrl } : {}),
+    ...(candidateUrl ? { candidateUrl } : {}),
+    outputRoot: output,
+  });
+  const adapterSides = (["reference", "candidate"] as const).filter((side) => adapters[side]);
+  if (adapterSides.length === 0) {
+    trustedWorkflowReceipts = (["reference", "candidate"] as const).flatMap((side) =>
+      workflowMatrix
+        .filter((workflow) => workflow.id !== "anonymous-entry")
+        .map((workflow) => ({
+          schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+          producer: "evaluator" as const,
+          side,
+          observation: {
+            requirementId: workflow.id,
+            disposition: "not-run" as const,
+            reason: "The checked-in evaluator adapter has no runtime binding for this side.",
+            method: "none" as const,
+            artifacts: [],
+            assertions: [],
+          },
+        })),
+    );
+    // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
+    await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+    return;
+  }
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const { runTrustedBrowserWorkflows } =
+      await import("../evals/support/self-reproduction-workflow-adapters");
+    const run = await runTrustedBrowserWorkflows({ browser, outputRoot: output, adapters });
+    trustedWorkflowReceipts = run.receipts;
+  } finally {
+    await browser.close();
+    // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
+    await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+  }
+}
+
+function loadProjectOidc(): { token: string; teamId: string; projectId: string } {
+  const token = parseLocalVercelOidcToken(
+    readOwnerBoundLocalFile(join(root, ".env.local"), { confidential: true }),
+  );
+  const project = parseLinkedVercelProject(
+    readOwnerBoundLocalFile(join(root, ".vercel/project.json"), { confidential: false }),
+  );
+  validateLocalVercelOidcClaims({
+    token,
+    project,
+    nowEpochSeconds: Math.floor(Date.now() / 1000),
+  });
+  return { token, teamId: project.orgId, projectId: project.projectId };
+}
+
+async function readCandidateSource(
+  directory: string,
+  current = directory,
+): Promise<Awaited<ReturnType<typeof readSource>>> {
+  const entries = await readdir(current, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      if ([".git", ".next", "node_modules", "coverage"].includes(entry.name)) return [];
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) return readCandidateSource(directory, path);
+      if (
+        !entry.isFile() ||
+        !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|pkl|toml|ya?ml))$/u.test(entry.name)
+      )
+        return [];
+      return [{ path: relative(directory, path), content: await readFile(path, "utf-8") }];
+    }),
+  );
+  return nested.flat();
+}
+
+async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
+  const tracked = execFileSync("git", ["ls-files", "-z"], {
+    cwd: directory,
+    encoding: "utf-8",
+    maxBuffer: 16 * 1024 * 1024,
+  })
+    .split("\0")
+    .filter(Boolean);
+  const chunks: Buffer[] = [];
+  const archive = createTar({ cwd: directory, portable: true, noMtime: true }, tracked);
+  for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+function candidateAppId(files: Awaited<ReturnType<typeof readSource>>): string {
+  const contract = files.find((file) => file.path === "app.contract.json");
+  if (contract)
+    try {
+      const parsed = JSON.parse(contract.content) as { appId?: unknown };
+      if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId))
+        return parsed.appId;
+    } catch {
+      /* Runtime readiness reports malformed candidate metadata as a failure. */
+    }
+  return "/";
+}
 
 async function artifactFile(name: string, content: string) {
   const path = join(output, name);
@@ -105,14 +334,14 @@ function revision(directory: string | undefined) {
   }
 }
 
-function requirementRow(requirement: Requirement) {
-  return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.title)}</th><td>${escape(requirement.expected)}</td><td>${escape(requirement.evidence.join(" "))}</td><td>${escape(requirement.likelyLayer)}</td><td>${escape(requirement.recommendation)}</td></tr>`;
+function requirementRow(requirement: Assessment["rows"][number]) {
+  return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
 }
 
 function reportHtml(report: {
   createdAt: string;
   generation: Record<string, unknown>;
-  requirements: Requirement[];
+  requirements: Assessment["rows"];
   gaps: Record<string, unknown>[];
   captures: { label: string; files: string[]; status: string }[];
 }) {
@@ -126,7 +355,7 @@ function reportHtml(report: {
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Expected</th><th>Evidence</th><th>Layer</th><th>Recommended repair</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -317,8 +546,74 @@ const blockedFramework = (side: "reference" | "candidate") =>
     evidence: [`${side} source was unavailable.`],
   }));
 
+function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Observation[] {
+  if (candidateRuntime.status === "not-run") return [];
+  if (candidateRuntime.status !== "available")
+    return candidateRuntimeFailureObservations({
+      receipt: candidateRuntime,
+      existingRequirementIds,
+    });
+  const artifact = "candidate-runtime.json";
+  const notRun = workflowMatrix
+    .filter((row) => row.id !== "anonymous-entry" && row.id !== "documentation")
+    .map((row): Observation => ({
+      requirementId: row.id,
+      disposition: "not-run",
+      reason:
+        candidateRuntime.status === "available"
+          ? "Candidate runtime started, but no trusted workflow adapter exists for this behavior."
+          : `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+      assertions: [],
+      artifacts: [artifact],
+      method: "none",
+    }));
+  if (!("probes" in candidateRuntime)) return notRun;
+  const docs = candidateRuntime.probes.find((probe) => probe.id === "documentation");
+  if (!docs)
+    return [
+      ...notRun,
+      {
+        requirementId: "documentation",
+        disposition: "not-run",
+        reason: `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+        assertions: [],
+        artifacts: [artifact],
+        method: "none",
+      },
+    ];
+  return [
+    ...notRun,
+    {
+      requirementId: "documentation",
+      disposition:
+        docs.disposition === "infrastructure-unavailable"
+          ? "infrastructure-unavailable"
+          : docs.passed
+            ? "observed"
+            : "missing-functionality",
+      reason: docs.detail,
+      assertions: [
+        {
+          id: "docs-readable",
+          passed: docs.passed,
+          detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
+          artifacts: [artifact],
+        },
+        {
+          id: "return-navigation-works",
+          passed: docs.passed,
+          detail: docs.detail,
+          artifacts: [artifact],
+        },
+      ],
+      artifacts: [artifact],
+      method: "browser",
+    },
+  ];
+}
+
 async function saveReport() {
-  const requirements = [
+  const diagnosticRequirements = [
     ...buildRequirements(candidateFiles, workflowEvidence),
     ...(referenceFiles
       ? frameworkRequirements(auditFramework(referenceFiles), "reference")
@@ -327,6 +622,103 @@ async function saveReport() {
       ? frameworkRequirements(auditFramework(candidateFiles), "candidate")
       : blockedFramework("candidate")),
   ];
+  const candidateOutput = candidate.status === "available" ? "available" : "missing";
+  const effectiveTrustedWorkflowReceipts = trustedWorkflowReceipts.filter((receipt) => {
+    if (candidateRuntime.status === "available" || candidateRuntime.status === "not-run")
+      return true;
+    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return true;
+    const candidateReceipt = receipt as {
+      side?: unknown;
+      observation?: { disposition?: unknown };
+    };
+    return !(
+      candidateReceipt.side === "candidate" &&
+      candidateReceipt.observation?.disposition === "not-run"
+    );
+  });
+  const trustedIds = new Set(
+    effectiveTrustedWorkflowReceipts.flatMap((receipt) => {
+      if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return [];
+      const { side, observation } = receipt as {
+        side?: unknown;
+        observation?: { requirementId?: unknown };
+      };
+      return side === "candidate" && typeof observation?.requirementId === "string"
+        ? [observation.requirementId]
+        : [];
+    }),
+  );
+  const legacyRuntimeReceipts = runtimeObservations(trustedIds).map((observation) => ({
+    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+    producer: "evaluator" as const,
+    side: "candidate" as const,
+    observation,
+  }));
+  const completedCaptures = pairedCaptures;
+  const observedCaptureReceipts =
+    completedCaptures?.manifest.rows.flatMap((row) =>
+      (["reference", "candidate"] as const).flatMap((side) => {
+        const observation = completedCaptures.observations[side].find(
+          (item) => item.requirementId === row.requirementId,
+        );
+        return observation
+          ? [{ side, viewport: row.viewport, state: row.state, ...observation }]
+          : [];
+      }),
+    ) ?? [];
+  const observedCandidateCaptureIds = new Set(
+    observedCaptureReceipts
+      .filter((receipt) => receipt.side === "candidate")
+      .map((receipt) => receipt.requirementId),
+  );
+  const failedRuntimeCaptureReceipts = candidateRuntimeCaptureFailureObservations({
+    receipt: candidateRuntime,
+    existingRequirementIds: observedCandidateCaptureIds,
+  }).map((observation) => {
+    const [, viewportName, stateName] = observation.requirementId.split("/");
+    const viewport = desktopViewports.find((item) => item.name === viewportName);
+    const state = captureStates.find((item) => item === stateName);
+    if (!viewport || !state)
+      throw new Error(
+        `Invalid candidate runtime capture requirement ${observation.requirementId}.`,
+      );
+    return { side: "candidate" as const, viewport, state, ...observation };
+  });
+  const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
+  const parityEvidence: ParityEvidence = parityEvidenceFromReceipts({
+    runId: basename(output),
+    reference: {
+      output: referenceFiles ? "available" : "missing",
+      reason: referenceFiles
+        ? "Reference source is available; behavioral parity observations have not run."
+        : "Reference source is unavailable.",
+      sourceRevision: String(
+        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
+      ),
+    },
+    candidate: {
+      output: candidateOutput,
+      reason:
+        candidateOutput === "available"
+          ? "Candidate source is available; behavioral parity observations have not run."
+          : String(candidate.reason ?? "Candidate output is unavailable."),
+      sourceRevision: String(
+        (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
+      ),
+    },
+    runtimeReceipts: [...legacyRuntimeReceipts, ...effectiveTrustedWorkflowReceipts],
+    captureReceipts,
+  });
+  await jsonFile("parity-evidence.json", parityEvidence);
+  parityAssessment = await assessParity(parityEvidence, async (path) => {
+    try {
+      const info = await stat(join(output, path));
+      return info.isFile() && info.size > 0;
+    } catch {
+      return false;
+    }
+  });
+  await jsonFile("parity-assessment.json", parityAssessment);
   const receipt = {
     version: 1,
     createdAt: now,
@@ -344,6 +736,7 @@ async function saveReport() {
       .filter((record) => record.kind === "turn-completed")
       .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
     candidate,
+    candidateRuntime,
     errors,
   };
   const report = {
@@ -351,14 +744,28 @@ async function saveReport() {
     reference: referenceFiles
       ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
       : { status: "unavailable" },
-    requirements,
-    gaps: prioritizedGaps(requirements),
+    requirements: parityAssessment.rows,
+    diagnostics: {
+      sourceScans: diagnosticRequirements,
+      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
+      note: "Source scans are diagnostic only and never award parity credit.",
+    },
+    gaps: parityAssessment.rows
+      .filter((row) => row.status !== "passed")
+      .map((row) => ({
+        priority: row.status === "failed" ? "high" : "medium",
+        title: `${row.side}: ${row.requirementId}`,
+        expected: "Evaluator-owned behavioral evidence for every required assertion.",
+        recommendation: row.reason,
+        confirmed: row.status === "failed",
+      })),
     captures: captures.length
       ? captures
       : [
           { label: "reference", files: [], status: "unassessed: capture has not run" },
           { label: "candidate", files: [], status: "unassessed: capture has not run" },
         ],
+    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
     limitations: [
       "No deployment, provider publication, or provisioning is performed by this report pipeline.",
       "The native eval retains reviewed sandbox status but does not export a candidate tree; supply --candidate-root with --report-only for an independently exported tree.",
@@ -398,12 +805,18 @@ async function saveReport() {
 async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
-  [--reference-url URL] [--candidate-url URL] [--generation-timeout-ms N]
+  [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
+  [--candidate-runtime]
+  [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
 Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
+--candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
+and retains build, readiness, and public documentation probe receipts.
+--capture-adapter loads an evaluator-owned module under evals/ and executes the
+complete paired desktop state matrix against both supplied URLs.
 --generator FILE and repeatable --generator-arg VALUE select a test launcher.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
@@ -419,6 +832,8 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     status: "unavailable",
     reason: "Native eval has not completed.",
   });
+  await jsonFile("candidate-runtime.json", candidateRuntime);
+  await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
   await jsonFile("settings.json", {
     status: "unavailable",
     reason: "Settings have not been read.",
@@ -479,7 +894,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     const candidateRoot = values["candidate-root"] ? resolve(values["candidate-root"]) : undefined;
     if (candidateRoot) {
       try {
-        candidateFiles = await readSource(candidateRoot);
+        candidateFiles = await readCandidateSource(candidateRoot);
         if (!candidateFiles.length)
           throw new Error("Candidate contains no application source files.");
         // Persist the audited source bytes, never the candidate's credentials or dependency tree.
@@ -536,12 +951,50 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         };
     }
     await saveReport();
+    if (values["candidate-runtime"]) {
+      const credentials = loadProjectOidc();
+      const { evaluateCandidateRuntime } =
+        await import("../evals/support/self-reproduction-runtime");
+      const workspaceArchive = arrustedRoot
+        ? await trackedWorkspaceArchive(arrustedRoot)
+        : undefined;
+      candidateRuntime =
+        candidateFiles && workspaceArchive
+          ? await evaluateCandidateRuntime({
+              files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
+              workspaceArchive,
+              candidateAppId: candidateAppId(candidateFiles),
+              publicBasePath: `/${candidateAppId(candidateFiles)}`,
+              credentials,
+              appRoot: "/workspace",
+            })
+          : {
+              status: "failed",
+              reason:
+                candidateFiles === undefined
+                  ? "Candidate output was unavailable, so its runtime could not start."
+                  : "The Arrusted workspace source was unavailable, so workspace dependencies could not be resolved.",
+            };
+      await jsonFile("candidate-runtime.json", candidateRuntime);
+    }
     captures.push(
       ...(await Promise.all([
         capture("reference", values["reference-url"], root),
         capture("candidate", values["candidate-url"], candidateRoot),
       ])),
     );
+    try {
+      await runConfiguredWorkflowAdapters(candidateRoot);
+    } catch (error) {
+      errors.push(
+        `Trusted workflow adapter failed: ${String(
+          sanitizeEvidence(error instanceof Error ? error.message : String(error)),
+        )}`,
+      );
+      await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+    }
+    await saveReport();
+    await runConfiguredPairedCaptures();
   } catch (error) {
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
     generation = { ...generation, status: "failed" };

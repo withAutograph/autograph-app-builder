@@ -9,12 +9,12 @@ describe("reviewed candidate export", () => {
     "apps/replica/next.config.mjs",
     "apps/replica/Dockerfile",
     "apps/replica/.gitignore",
+    "apps/replica/hk.pkl",
   ])("includes auditable text source %s", (path) => {
     expect(isCandidateExportTextPath(path)).toBe(true);
   });
 
   it.each([
-    "apps/replica/hk.pkl",
     "apps/replica/public/logo.png",
     "apps/replica/font.woff2",
     "apps/replica/.next/server/app/page.js",

@@ -80,6 +80,7 @@ export default defineTool({
         reason: result.receipt.reason,
         commandFailure: result.receipt.commandFailure,
         diagnostics: result.receipt.diagnostics ?? [],
+        output: result.receipt.output,
         reused: false,
       };
     }

@@ -52,7 +52,10 @@ function run(script: string) {
     "revisions.json",
     "native-result.json",
     "candidate-inventory.json",
+    "candidate-runtime.json",
     "generation-transcript.jsonl",
+    "parity-evidence.json",
+    "parity-assessment.json",
   ])
     expect(() => readFileSync(join(output, path))).not.toThrow();
   for (const path of ["brief.md", "answers.json"])
@@ -78,11 +81,13 @@ describe("native self-reproduction report orchestration", () => {
     expect(report.generation.status).toBe("failed");
     expect(report.candidate.status).toBe("unavailable");
     expect(report.transcript.status).toBe("unavailable");
+    expect(report.requirements).toHaveLength(76);
     expect(
       report.requirements
-        .filter((item: { id: string }) => !item.id.startsWith("reference-"))
-        .every((item: { status: string }) => item.status === "blocked"),
+        .filter((item: { side: string }) => item.side === "candidate")
+        .every((item: { status: string }) => item.status === "failed"),
     ).toBe(true);
+    expect(report.diagnostics.note).toContain("never award parity credit");
   });
 
   it("retains tool errors, settings, and reports after a partial native failure", () => {

@@ -229,6 +229,18 @@ export const parityEvidenceSchema = z
 export type ParityEvidence = z.infer<typeof parityEvidenceSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type Status = "passed" | "failed" | "blocked" | "unassessed";
+export const parityReasonCodes = [
+  "observed-complete",
+  "output-missing",
+  "output-infrastructure-unavailable",
+  "missing-functionality",
+  "assertion-failed",
+  "observation-infrastructure-unavailable",
+  "observation-not-run",
+  "observation-missing",
+  "evidence-incomplete",
+] as const;
+export type ParityReasonCode = (typeof parityReasonCodes)[number];
 
 export const parityAssessmentSchema = z
   .object({
@@ -242,6 +254,7 @@ export const parityAssessmentSchema = z
           requirementId: z.enum(requirements.map((row) => row.id)),
           kind: z.enum(["workflow", "framework", "capture"]),
           status: z.enum(["passed", "failed", "blocked", "unassessed"]),
+          reasonCode: z.enum(parityReasonCodes),
           reason: z.string(),
           artifacts: z.array(artifactPath),
         })
@@ -264,6 +277,7 @@ export async function assessParity(
     for (const requirement of requirements) {
       const observation = bundle.observations.find((item) => item.requirementId === requirement.id);
       let status: Status = "unassessed";
+      let reasonCode: ParityReasonCode = "observation-missing";
       let reason = observation?.reason ?? "No evaluator observation supplied.";
       const artifacts = [
         ...new Set([
@@ -273,11 +287,21 @@ export async function assessParity(
       ];
       if (bundle.output !== "available") {
         status = bundle.output === "missing" ? "failed" : "blocked";
+        reasonCode =
+          bundle.output === "missing" ? "output-missing" : "output-infrastructure-unavailable";
         ({ reason } = bundle);
-      } else if (observation?.disposition === "missing-functionality") status = "failed";
-      else if (observation?.assertions.some((assertion) => !assertion.passed)) status = "failed";
-      else if (observation?.disposition === "infrastructure-unavailable") status = "blocked";
-      else if (observation?.disposition === "observed") {
+      } else if (observation?.disposition === "missing-functionality") {
+        status = "failed";
+        reasonCode = "missing-functionality";
+      } else if (observation?.assertions.some((assertion) => !assertion.passed)) {
+        status = "failed";
+        reasonCode = "assertion-failed";
+      } else if (observation?.disposition === "infrastructure-unavailable") {
+        status = "blocked";
+        reasonCode = "observation-infrastructure-unavailable";
+      } else if (observation?.disposition === "not-run") {
+        reasonCode = "observation-not-run";
+      } else if (observation?.disposition === "observed") {
         const complete = requirement.assertions.every((id) =>
           observation.assertions.some((item) => item.id === id && item.passed),
         );
@@ -295,15 +319,20 @@ export async function assessParity(
         const instant =
           requirement.id !== "instant-navigation" ||
           observation.method === "@next/playwright/instant";
-        if (complete && retained && screenshot && behavioral && instant) status = "passed";
-        else
+        if (complete && retained && screenshot && behavioral && instant) {
+          status = "passed";
+          reasonCode = "observed-complete";
+        } else {
+          reasonCode = "evidence-incomplete";
           reason = `Incomplete evidence: assertions=${complete}, retained=${retained}, capture=${screenshot}, behavioral=${behavioral}, instant=${instant}. ${reason}`;
+        }
       }
       rows.push({
         side,
         requirementId: requirement.id,
         kind: requirement.kind,
         status,
+        reasonCode,
         reason,
         artifacts,
       });

@@ -12,7 +12,11 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
-        /(?<prefix>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)|authorization|cookie|continuationToken)["']?\s*[:=]\s*["']?)[^\s"',}]+/giu,
+        /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
+        "$<prefix>[REDACTED]",
+      )
+      .replaceAll(
+        /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
         "$<prefix>[REDACTED]",
       )
       .replaceAll(
