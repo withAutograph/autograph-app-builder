@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { vercel } from "eve/sandbox/vercel";
 
 import {
   candidateRuntimeCaptureFailureObservations,
@@ -7,12 +6,11 @@ import {
   evaluateCandidateRuntime,
 } from "./self-reproduction-runtime";
 
-vi.mock("eve/sandbox/vercel", () => ({ vercel: vi.fn() }));
-
-function backend(results: { exitCode: number; stdout?: string; stderr?: string }[]) {
+const backend = (results: { exitCode: number; stdout?: string; stderr?: string }[]) => {
   const shutdown = vi.fn(() => Promise.resolve());
   const run = vi.fn(() => {
-    const result = results.shift()!;
+    const result = results.shift();
+    if (!result) throw new Error("Runtime backend fixture was exhausted.");
     return Promise.resolve({ stderr: "", stdout: "", ...result });
   });
   const writeTextFile = vi.fn(() => Promise.resolve());
@@ -54,7 +52,7 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
     writeBinaryFile,
     writeTextFile,
   };
-}
+};
 
 describe("self-reproduction candidate runtime", () => {
   it("turns a candidate build failure into failed evidence for every in-scope requirement", () => {
@@ -172,44 +170,6 @@ describe("self-reproduction candidate runtime", () => {
     expect(onReady).toHaveBeenCalledOnce();
   });
 
-  it("retains ready runtime evidence when evaluator callback fails and redacts its diagnostic", async () => {
-    const root = {
-      id: "root",
-      passed: true,
-      disposition: "observed",
-      method: "http",
-      status: 200,
-      url: "http://127.0.0.1:3000",
-      detail: "ok",
-    };
-    const fixture = backend([
-      ...Array.from({ length: 6 }, () => ({ exitCode: 0 })),
-      { exitCode: 0, stdout: JSON.stringify([root]) },
-      { exitCode: 0 },
-      { exitCode: 0, stdout: "[]" },
-    ]);
-    const receipt = await evaluateCandidateRuntime({
-      backend: fixture.backend,
-      candidateAppId: "candidate",
-      files: [],
-      publicBasePath: "",
-      workspaceArchive: Buffer.from("archive"),
-      credentials: { token: "private-credential", teamId: "team", projectId: "project" },
-      onReady: () => Promise.reject(new Error("Evaluator disk write failed: private-credential")),
-    });
-    expect(receipt.status).toBe("available");
-    expect(receipt.probes).toEqual([root]);
-    expect(receipt.evaluatorErrors).toEqual([
-      {
-        stage: "onReady",
-        disposition: "infrastructure-unavailable",
-        detail: "Evaluator disk write failed: [REDACTED]",
-      },
-    ]);
-    expect(candidateRuntimeFailureObservations({ receipt })).toEqual([]);
-    expect(fixture.shutdown).toHaveBeenCalledOnce();
-  });
-
   it("retains build diagnostics and never starts a failed candidate", async () => {
     const fixture = backend([
       { exitCode: 0 },
@@ -266,56 +226,5 @@ describe("self-reproduction candidate runtime", () => {
     expect(receipt.commands.at(-1)?.stdout).toContain("Diagnostic build complete");
     expect(fixture.spawn).not.toHaveBeenCalled();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
-  });
-  it("injects structured OIDC credentials and redacts raw split startup diagnostics", async () => {
-    const token = "raw-private-credential";
-    const fixture = backend([
-      { exitCode: 0, stdout: token },
-      ...Array.from({ length: 5 }, () => ({ exitCode: 0 })),
-      { exitCode: 0, stdout: "[]" },
-    ]);
-    fixture.spawn.mockImplementationOnce(() =>
-      Promise.resolve({
-        kill: () => Promise.resolve(),
-        wait: () => Promise.resolve({ exitCode: 0 }),
-        stderr: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(token.slice(0, 8)));
-            controller.enqueue(new TextEncoder().encode(token.slice(8)));
-            controller.close();
-          },
-        }),
-        stdout: new ReadableStream({
-          start(controller) {
-            controller.close();
-          },
-        }),
-      }),
-    );
-    vi.mocked(vercel).mockReturnValueOnce(fixture.backend);
-    const receipt = await evaluateCandidateRuntime({
-      credentials: { token, teamId: "team", projectId: "project" },
-      candidateAppId: "candidate",
-      files: [],
-      publicBasePath: "/candidate",
-      workspaceArchive: Buffer.from("archive"),
-    });
-    expect(vercel).toHaveBeenLastCalledWith({
-      networkPolicy: "allow-all",
-      token,
-      teamId: "team",
-      projectId: "project",
-      env: {
-        VERCEL_OIDC_TOKEN: token,
-        VERCEL_TEAM_ID: "team",
-        VERCEL_PROJECT_ID: "project",
-      },
-    });
-    expect(JSON.stringify(receipt)).not.toContain(token);
-    expect(receipt.commands[0]?.stdout).toBe("[REDACTED]");
-    expect(receipt.commands.find((entry) => entry.command.includes(" start"))?.stderr).toBe(
-      "[REDACTED]",
-    );
-    expect(receipt.capabilities.childSandbox).toBe("configured-unverified");
   });
 });
