@@ -1,0 +1,123 @@
+import { randomUUID } from "node:crypto";
+import { strict as assert } from "node:assert";
+import type {
+  HostedEvalArtifacts,
+  HostedEvalRecord,
+  HostedEvalStore,
+} from "../../lib/evals/hosted-self-reproduction-controller";
+
+interface Storage {
+  store: HostedEvalStore;
+  artifacts: HostedEvalArtifacts;
+}
+
+/** Opt-in acceptance against a disposable real database; caller owns migration and cleanup. */
+export async function exerciseHostedPostgresStorage(input: {
+  connect: () => Promise<{ storage: Storage; disconnect: () => Promise<void> }>;
+}) {
+  const prefix = randomUUID();
+  const record: HostedEvalRecord = {
+    id: `${prefix}:1:1`,
+    identity: {
+      repositoryId: prefix,
+      runId: "1",
+      runAttempt: "1",
+      ref: "refs/heads/main",
+      workflowRef: "synthetic/repo/.github/workflows/eval.yml@refs/heads/main",
+    },
+    revision: 0,
+    status: "starting",
+    operationId: randomUUID(),
+    cleanupAt: Date.now() + 60_000,
+    artifacts: [],
+    diagnostics: [],
+    cleanup: "pending",
+  };
+  const first = await input.connect();
+  const second = await input.connect().catch(async (error) => {
+    await first.disconnect();
+    throw error;
+  });
+  let retainedKey = "";
+  const expected = new TextEncoder().encode('{"status":"partial","evidence":"original"}');
+  try {
+    const reservations = await Promise.all([
+      first.storage.store.reserve(record),
+      second.storage.store.reserve({ ...record, operationId: randomUUID() }),
+    ]);
+    assert.equal(
+      reservations.filter((result) => result.created).length,
+      1,
+      "Concurrent reservation must create exactly one run",
+    );
+    const persisted = reservations[0].record;
+    assert.equal(
+      reservations[1].record.operationId,
+      persisted.operationId,
+      "Both reservations must observe one durable identity",
+    );
+    const results = await Promise.all([
+      first.storage.store.compareAndSet(0, { ...persisted, revision: 1, status: "running" }),
+      second.storage.store.compareAndSet(0, { ...persisted, revision: 1, status: "interrupted" }),
+    ]);
+    assert.equal(
+      results.filter(Boolean).length,
+      1,
+      "Only one concurrent revision update may succeed",
+    );
+    assert.equal(
+      await first.storage.store.compareAndSet(0, { ...persisted, revision: 1, status: "failed" }),
+      false,
+      "A stale update must be rejected",
+    );
+    const other = { ...record, id: `${prefix}:2:1`, identity: { ...record.identity, runId: "2" } };
+    await first.storage.store.reserve(other);
+    const artifact = { id: "report.json", contentType: "application/json" };
+    retainedKey = await first.storage.artifacts.put(record.id, artifact, expected);
+    assert.equal(
+      await second.storage.artifacts.put(
+        record.id,
+        artifact,
+        new TextEncoder().encode("replacement"),
+      ),
+      retainedKey,
+    );
+    const otherKey = await second.storage.artifacts.put(
+      other.id,
+      artifact,
+      new TextEncoder().encode("other run"),
+    );
+    assert.notEqual(otherKey, retainedKey, "Artifact identity must include run identity");
+    assert.deepEqual(
+      await first.storage.artifacts.read(retainedKey),
+      expected,
+      "Retry must never replace original artifact",
+    );
+  } finally {
+    await Promise.all([first.disconnect(), second.disconnect()]);
+  }
+  const fresh = await input.connect();
+  try {
+    assert.equal(
+      (await fresh.storage.store.read(record.id))?.revision,
+      1,
+      "A fresh adapter must recover persisted state",
+    );
+    assert.deepEqual(
+      await fresh.storage.artifacts.read(retainedKey),
+      expected,
+      "Retained artifact must survive worker/client lifetime",
+    );
+  } finally {
+    await fresh.disconnect();
+  }
+  return {
+    concurrentReservation: "passed",
+    concurrentCompareAndSet: "passed",
+    staleCompareAndSet: "passed",
+    immutableArtifact: "passed",
+    perRunIsolation: "passed",
+    freshAdapterRecovery: "passed",
+    applicationFunctionalCredit: false,
+  };
+}
