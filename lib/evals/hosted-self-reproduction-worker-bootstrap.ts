@@ -23,7 +23,7 @@ export const runHostedEvalWorker = async () => {
     templateToken ? Buffer.from(`x-access-token:${templateToken}`).toString("base64") : undefined,
   ].filter(Boolean) as string[];
   let log = "";
-  let phase = "toolchain";
+  let phase = "os-prerequisites";
   let exitCode = 1;
   const sanitize = (text: string) => {
     let sanitized = text;
@@ -35,11 +35,13 @@ export const runHostedEvalWorker = async () => {
   };
   const run = (cmd: string, args: string[], env = process.env) =>
     // oxlint-disable-next-line promise/avoid-new -- bridge child process events into a single completion
-    new Promise<void>((resolve, reject) => {
+    new Promise<string>((resolve, reject) => {
       const child = spawn(cmd, args, { cwd: repository, env, stdio: ["ignore", "pipe", "pipe"] });
       let diagnostic = "";
+      let stdout = "";
       child.stdout.on("data", (chunk) => {
         diagnostic += chunk.toString();
+        stdout += chunk.toString();
       });
       child.stderr.on("data", (chunk) => {
         diagnostic += chunk.toString();
@@ -47,11 +49,54 @@ export const runHostedEvalWorker = async () => {
       child.on("error", () => reject(new Error(`${phase}: command could not start`)));
       child.on("close", (code) => {
         log += `${phase}: exit=${code}\n${sanitize(diagnostic).slice(-16_000)}\n`;
-        if (code === 0) resolve();
+        if (code === 0) resolve(stdout);
         else reject(new Error(`${phase}: command exit ${code}`));
       });
     });
   try {
+    const os = await readFile("/etc/os-release", "utf-8");
+    if (/^ID=(?:"?)(?:ubuntu|debian)(?:"?)$/mu.test(os)) {
+      await run("sudo", ["apt-get", "update"]);
+      await run("sudo", [
+        "apt-get",
+        "install",
+        "-y",
+        "git",
+        "tar",
+        "gzip",
+        "xz-utils",
+        "unzip",
+        "python3",
+        "postgresql",
+        "libpq-dev",
+      ]);
+    } else if (/^ID=(?:"?)amzn(?:"?)$/mu.test(os)) {
+      await run("sudo", [
+        "dnf",
+        "install",
+        "-y",
+        "git",
+        "tar",
+        "gzip",
+        "xz",
+        "unzip",
+        "python3",
+        "postgresql16-server",
+        "postgresql16-devel",
+      ]);
+    } else throw new Error("Sandbox OS package installer is unavailable.");
+    await run("sudo", [
+      "install",
+      "-d",
+      "-m",
+      "0755",
+      "-o",
+      String(process.getuid?.()),
+      "-g",
+      String(process.getgid?.()),
+      "/workspace",
+    ]);
+    phase = "toolchain";
     await run("bash", ["-c", config.toolchain]);
     const environment = {
       ...process.env,
@@ -94,7 +139,16 @@ export const runHostedEvalWorker = async () => {
       environment,
     );
     phase = "postgres-tools";
-    await run("sudo", ["dnf", "install", "-y", "postgresql16-server"], environment);
+    const postgresReadback = await run("pg_config", ["--bindir"], environment);
+    const postgresBin = postgresReadback.trim();
+    if (!postgresBin) throw new Error("PostgreSQL binary directory readback was empty.");
+    environment.PATH = `${postgresBin}:${environment.PATH}`;
+    phase = "browser-tools";
+    await run(
+      "/workspace/.app-builder/toolchain/bin/mise",
+      ["run", "storybook:install-browser"],
+      environment,
+    );
     phase = "evaluation";
     await run(
       "/workspace/.app-builder/toolchain/bin/mise",
@@ -103,6 +157,10 @@ export const runHostedEvalWorker = async () => {
         "eval:self-reproduction",
         "--",
         "--hosted-oidc",
+        "--candidate-runtime",
+        "--candidate-capability-probe",
+        "--reference-runtime",
+        "--reference-navigation",
         "--arrusted-root",
         template,
         "--output-dir",
@@ -125,6 +183,8 @@ export const runHostedEvalWorker = async () => {
     "candidate-navigation",
     "captures",
     "parity",
+    "reference-navigation",
+    "reference-service-diagnostics",
   ]);
   const retained: string[] = [];
   const walk = async (directory: string, relative = "") => {
@@ -136,7 +196,7 @@ export const runHostedEvalWorker = async () => {
       if (info.isSymbolicLink()) continue;
       if (info.isDirectory() && (relative || permittedDirectories.has(entry.name)))
         await walk(path.join(directory, entry.name), relativePath);
-      else if (info.isFile() && (relative || /\.(?:json|jsonl|md|html)$/u.test(entry.name)))
+      else if (info.isFile() && (relative || /\.(?:json|jsonl|md|html|log)$/u.test(entry.name)))
         retained.push(relativePath);
     }
   };

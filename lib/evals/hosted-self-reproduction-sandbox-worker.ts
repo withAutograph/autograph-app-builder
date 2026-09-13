@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 import { acquireHostedEvalOidc } from "../eve/hosted-eval-oidc";
 import type { HostedEvalWorker, EvalArtifact } from "./hosted-self-reproduction-controller";
@@ -17,6 +18,8 @@ const decodeWorker = (value: string): { sandboxName: string; commandId: string }
 
 /** Source access is deployment-owned; GitHub App keys never leave its reader. */
 export const createHostedEvalSandboxWorker = (input: {
+  /** Deployment-owned revision, never accepted from a start request. */
+  builderRevision: string;
   scope: { projectId: string; teamId: string; environment: string };
   templateReader: { acquire: () => Promise<{ token: string }> };
   sdk?: Pick<typeof Sandbox, "create" | "get">;
@@ -25,10 +28,28 @@ export const createHostedEvalSandboxWorker = (input: {
 }): HostedEvalWorker => {
   const sdk = input.sdk ?? Sandbox;
   const credentials = () => (input.acquireOidc ?? acquireHostedEvalOidc)(input.scope);
-  const identityFile = (auth: Awaited<ReturnType<typeof acquireHostedEvalOidc>>) => ({
+  const identityFile = (auth: Awaited<ReturnType<typeof acquireHostedEvalOidc>>, path: string) => ({
     content: Buffer.from(JSON.stringify({ ...auth, environment: input.scope.environment })),
-    path: hostedEvalIdentityPath,
+    path,
   });
+  const writeIdentity = async (
+    sandbox: Sandbox,
+    auth: Awaited<ReturnType<typeof acquireHostedEvalOidc>>,
+  ) => {
+    const temporary = `${hostedEvalIdentityPath}.${randomUUID()}`;
+    await sandbox.writeFiles([identityFile(auth, temporary)]);
+    const permissions = await sandbox.runCommand({
+      args: ["600", temporary],
+      cmd: "chmod",
+    });
+    if (permissions.exitCode !== 0)
+      throw new Error("Hosted workload identity file permissions failed.");
+    const promoted = await sandbox.runCommand({
+      args: ["-f", temporary, hostedEvalIdentityPath],
+      cmd: "mv",
+    });
+    if (promoted.exitCode !== 0) throw new Error("Hosted workload identity refresh failed.");
+  };
   const reconnect = async (workerId: string, refreshIdentity = true) => {
     const identity = decodeWorker(workerId);
     const auth = await credentials();
@@ -40,15 +61,15 @@ export const createHostedEvalSandboxWorker = (input: {
       token: auth.token,
     });
     if (refreshIdentity) {
-      await sandbox.writeFiles([identityFile(auth)]);
-      await sandbox.runCommand({ args: ["600", hostedEvalIdentityPath], cmd: "chmod" });
+      await writeIdentity(sandbox, auth);
     }
     return { identity, sandbox };
   };
   return {
     // The SDK does not provide an idempotent create receipt lookup by our operation ID.
     // An interrupted start remains unknown; controller never launches a replacement.
-    find: () => Promise.resolve<{ workerId: string } | undefined>(),
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- typed Promise overload requires explicit undefined
+    find: () => Promise.resolve<{ workerId: string } | undefined>(undefined),
     async inspect(workerId) {
       const { sandbox, identity } = await reconnect(workerId);
       const buffer = await sandbox.readFileToBuffer({
@@ -88,7 +109,7 @@ export const createHostedEvalSandboxWorker = (input: {
         projectId: auth.projectId,
         runtime: "node24",
         source: {
-          revision: "main",
+          revision: input.builderRevision,
           type: "git",
           url: "https://github.com/withAutograph/autograph-app-builder.git",
         },
@@ -97,8 +118,8 @@ export const createHostedEvalSandboxWorker = (input: {
         token: auth.token,
       });
       try {
-        await sandbox.writeFiles([...hostedEvalBootstrapFiles(), identityFile(auth)]);
-        await sandbox.runCommand({ args: ["600", hostedEvalIdentityPath], cmd: "chmod" });
+        await sandbox.writeFiles(hostedEvalBootstrapFiles());
+        await writeIdentity(sandbox, auth);
         const command = await sandbox.runCommand({
           args: [
             "/tmp/self-reproduction-worker-bootstrap.mjs",

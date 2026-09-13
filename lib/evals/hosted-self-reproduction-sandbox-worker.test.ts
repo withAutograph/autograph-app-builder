@@ -9,7 +9,7 @@ const fixture = () => {
     getCommand: vi.fn(async () => ({ exitCode: null as number | null })),
     name: "sandbox-1",
     readFileToBuffer: vi.fn(async (): Promise<Buffer | null> => null),
-    runCommand: vi.fn(async () => ({ cmdId: "command-1" })),
+    runCommand: vi.fn(async () => ({ cmdId: "command-1", exitCode: 0 })),
     stop: vi.fn(async () => {}),
     writeFiles: vi.fn(async (_files: { path: string; content: Buffer }[]) => {}),
   };
@@ -23,6 +23,7 @@ const fixture = () => {
   const reader = { acquire: vi.fn(async () => ({ token: "read-only-template-token" })) };
   const worker = createHostedEvalSandboxWorker({
     acquireOidc,
+    builderRevision: "deployment-revision",
     now: () => 1000,
     scope: { environment: "production", projectId: "project", teamId: "team" },
     sdk: sdk as never,
@@ -42,7 +43,7 @@ it("creates the fixed public source and detached trusted bootstrap without passi
       networkPolicy: "allow-all",
       persistent: false,
       source: {
-        revision: "main",
+        revision: "deployment-revision",
         type: "git",
         url: "https://github.com/withAutograph/autograph-app-builder.git",
       },
@@ -87,7 +88,7 @@ it("reacquires project identity for polling and restricts artifact reads to fixe
   expect(f.sandbox.writeFiles).toHaveBeenLastCalledWith([
     expect.objectContaining({
       content: expect.any(Buffer),
-      path: "/tmp/self-reproduction-identity.json",
+      path: expect.stringMatching(/^\/tmp\/self-reproduction-identity\.json\.[a-f0-9-]+$/u),
     }),
   ]);
   await expect(f.worker.readArtifact(workerId, "../.env")).rejects.toThrow("unavailable");

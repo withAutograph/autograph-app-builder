@@ -16,9 +16,13 @@ vi.mock("node:fs/promises", () => ({
     isSymbolicLink: () => path.endsWith("linked.json"),
   }),
   mkdir: async () => {},
-  readFile: async () => JSON.stringify({ environment: {}, toolchain: "trusted-toolchain" }),
+  readFile: async (path: string) =>
+    path === "/etc/os-release"
+      ? "ID=ubuntu\n"
+      : JSON.stringify({ environment: {}, toolchain: "trusted-toolchain" }),
   readdir: async () => [
     { name: "report.json" },
+    { name: "eval-output.log" },
     { name: ".env.local" },
     { name: "runtime-source" },
     { name: "linked.json" },
@@ -39,6 +43,7 @@ vi.mock("node:child_process", () => ({
       stdout: new EventEmitter(),
     });
     queueMicrotask(() => {
+      if (cmd === "pg_config") child.stdout.emit("data", "/usr/lib/postgresql/16/bin\n");
       child.stderr.emit(
         "data",
         `secret-template ${Buffer.from("x-access-token:secret-template").toString("base64")} secret-oidc`,
@@ -64,15 +69,28 @@ it("executes fixed hosted task with process PostgreSQL and keeps clone credentia
     Buffer.from("x-access-token:secret-template").toString("base64"),
   );
   const evaluation = state.commands.find(({ args }) => args.includes("eval:self-reproduction"));
-  expect(evaluation?.args).toContain("--hosted-oidc");
+  expect(evaluation?.args).toEqual(
+    expect.arrayContaining([
+      "--hosted-oidc",
+      "--candidate-runtime",
+      "--candidate-capability-probe",
+      "--reference-runtime",
+      "--reference-navigation",
+    ]),
+  );
   expect(evaluation?.args.slice(-2)).toEqual(["--postgres-backend", "process"]);
   expect(evaluation?.env.APP_BUILDER_TEMPLATE_READ_TOKEN).toBeUndefined();
   expect(evaluation?.env.GIT_CONFIG_VALUE_0).toBeUndefined();
+  expect(evaluation?.env.PATH).toMatch(/^\/usr\/lib\/postgresql\/16\/bin:/u);
+  expect(
+    state.commands.find(({ args }) => args.includes("storybook:install-browser")),
+  ).toBeDefined();
   expect(state.files.get("/tmp/self-reproduction-worker/worker.log")).not.toMatch(
     /secret-template|secret-oidc|eC1hY2Nlc3M/u,
   );
   const archive = state.commands.find(({ cmd }) => cmd === "tar");
   expect(archive?.args).toContain("report.json");
+  expect(archive?.args).toContain("eval-output.log");
   expect(archive?.args).not.toContain(".env.local");
   expect(archive?.args).not.toContain("runtime-source");
   expect(archive?.args).not.toContain("linked.json");
