@@ -196,7 +196,7 @@ export function ensureLocalDevelopmentOidc(input: {
       executable: input.miseExecutable,
       args: ["run", "local:install-oidc"],
       cwd: repositoryRoot,
-      environment: childEnvironment,
+      environment: { ...childEnvironment, MISE_BIN_PATH: input.miseExecutable },
       operation: "owner-bind",
     });
   } catch {

@@ -9,5 +9,5 @@ if [ "$#" -ne 0 ]; then
 fi
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" --import tsx \
+  "$("${MISE_BIN_PATH:-mise}" which node)" --import tsx \
   .config/mise/scripts/repository/install-local-vercel-oidc.ts
