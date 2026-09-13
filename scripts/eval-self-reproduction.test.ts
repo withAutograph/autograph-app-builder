@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -62,6 +62,10 @@ function run(script: string) {
     expect(readFileSync(join(output, "generator-input", path), "utf-8")).toBe(
       readFileSync(resolve("evals/self-reproduction", path), "utf-8"),
     );
+  expect(existsSync(join(output, "runtime-source"))).toBe(false);
+  expect(JSON.parse(readFileSync(join(output, "revisions.json"), "utf-8")).arrusted.status).toBe(
+    "unavailable",
+  );
   return { result, report, output };
 }
 

@@ -1,15 +1,25 @@
 # Self-reproduction evidence
 
-Run the opt-in native Eve benchmark with the canonical Arrusted checkout:
+Run the opt-in native Eve benchmark with the canonical Arrusted template:
 
 ```sh
-mise run eval:self-reproduction -- --arrusted-root /absolute/path/to/arrusted-development
+mise run eval:self-reproduction
 ```
 
 The command retains strict native assertions. It does not publish or deploy.
 Project-scoped Vercel OIDC and the existing native Sandbox eval prerequisites
-must already be configured. `SELF_REPRODUCTION_ARRUSTED_ROOT` can supply the
-checkout instead of the argument.
+must already be configured. Without an explicit checkout, the command clones
+canonical Arrusted `main` into `<output-dir>/runtime-source/arrusted-development`
+using Git's existing credential helper. Configure Git access to the template
+repository locally or in GitHub before running; no static credentials are added
+by the evaluator. The report records the resolved revision and remote.
+
+Use `--arrusted-root /absolute/path/to/arrusted-development` or
+`SELF_REPRODUCTION_ARRUSTED_ROOT` to reuse an explicit checkout without fetching
+or modifying it. `--report-only --candidate-runtime` also acquires the canonical
+template when no checkout is supplied because the runtime needs its workspace.
+Report-only runs without candidate runtime and custom generators without
+candidate runtime skip automatic cloning.
 
 The command prints a timestamped evidence directory beneath the system temporary
 directory. Use `--output-dir /absolute/external/evidence/run-name` or

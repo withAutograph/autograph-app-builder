@@ -2,12 +2,12 @@
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
-import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { create as createTar } from "tar";
+import { prepareSelfReproductionTemplateSource } from "../evals/support/self-reproduction-template-source";
 import { activeBuilderModelId } from "../lib/integrations/active-model";
 import {
   parseLinkedVercelProject,
@@ -393,13 +393,25 @@ function reportHtml(report: {
   const gaps = report.gaps.length
     ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Confirmed source gap" : "Blocked; cause not established"))}</small></li>`).join("")}</ol>`
     : "<p>No failed or blocked requirements were recorded.</p>";
+  const diagnosticPairs = desktopViewports
+    .map(({ name }) => {
+      const reference = report.captures
+        .find((item) => item.label === "reference")
+        ?.files.find((file) => file.endsWith(`/${name}.png`));
+      const candidate = report.captures
+        .find((item) => item.label === "candidate diagnostic routes")
+        ?.files.find((file) => file.endsWith(`/${name}/root.png`));
+      if (!reference || !candidate) return "";
+      return `<section><h3>${escape(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escape(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escape(candidate)}" alt="Candidate initial route"></figure></div></section>`;
+    })
+    .join("");
   const captureItems = report.captures
     .map(
       (item) =>
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -562,6 +574,7 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
       output: destination,
       tokens: {},
       scenarios: [],
+      ignoreHTTPSErrors: label === "reference" && referenceFixtureRoot !== undefined,
       generatedSourcePaths: sourceRoot
         ? (await readSource(sourceRoot)).map((file) => file.path)
         : [],
@@ -571,7 +584,20 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
       files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
       status: "captured",
     };
-  } catch {
+  } catch (error) {
+    await mkdir(destination, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(destination, "capture-error.json"),
+      JSON.stringify(
+        sanitizeEvidence({
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    );
     return {
       label,
       files: await readdir(destination)
@@ -644,13 +670,13 @@ function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Obser
       assertions: [
         {
           id: "docs-readable",
-          passed: docs.passed,
+          passed: docs.readable ?? docs.passed,
           detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
           artifacts: [artifact],
         },
         {
           id: "return-navigation-works",
-          passed: docs.passed,
+          passed: docs.returned ?? docs.passed,
           detail: docs.detail,
           artifacts: [artifact],
         },
@@ -871,14 +897,24 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   await writeFile(join(output, "eval-output.log"), "", { mode: 0o600 });
   await saveReport();
   try {
-    const arrustedRoot =
-      values["arrusted-root"] ??
-      process.env.SELF_REPRODUCTION_ARRUSTED_ROOT ??
-      [
-        resolve(root, "..", "arrusted-development"),
-        join(homedir(), "Documents/GitHub/withAutograph/arrusted-development"),
-      ].find((directory) => existsSync(directory));
-    revisions = { builder: revision(root), arrusted: revision(arrustedRoot) };
+    const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
+    const templateSource =
+      providedCheckout ||
+      values["candidate-runtime"] ||
+      (!values["report-only"] && !values.generator)
+        ? await prepareSelfReproductionTemplateSource({
+            outputDirectory: output,
+            providedCheckout,
+          })
+        : undefined;
+    const arrustedRoot = templateSource?.sourcePath;
+    revisions = {
+      builder: revision(root),
+      arrusted: {
+        ...revision(arrustedRoot),
+        ...(templateSource ? { acquisition: templateSource } : {}),
+      },
+    };
     await jsonFile("revisions.json", revisions);
     await mkdir(join(output, "generator-input"), { mode: 0o700, recursive: true });
     const inputs: Record<string, unknown> = {};
@@ -1030,6 +1066,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   await mkdir(resolve(target, ".."), { recursive: true });
                   await writeFile(target, artifact.content, { mode: 0o600 });
                 }
+                captures.push({
+                  label: "candidate diagnostic routes",
+                  files: artifacts.map(({ path }) => `candidate-browser/${path}`),
+                  status: `${comparison.status}; unseeded captures do not establish workflow-state parity`,
+                });
               },
             })
           : {
@@ -1069,7 +1110,8 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
   } catch (error) {
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
-    generation = { ...generation, status: "failed" };
+    if (generation.status === "pending" || generation.status === "running")
+      generation = { ...generation, status: "failed" };
   } finally {
     try {
       await saveReport();

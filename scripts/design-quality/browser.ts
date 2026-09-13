@@ -987,6 +987,8 @@ export async function capturePreview(input: {
   generatedCssSourceFiles?: { path: string; content: string }[];
   sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
+  /** For evaluator-owned local HTTPS fixtures with self-signed certificates. */
+  ignoreHTTPSErrors?: boolean;
 }) {
   const browser = await chromium.launch();
   const captures = [];
@@ -996,6 +998,7 @@ export async function capturePreview(input: {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
         deviceScaleFactor: 1,
+        ignoreHTTPSErrors: input.ignoreHTTPSErrors ?? false,
       });
       // tsx preserves local function names using this helper when serializing
       // page.evaluate callbacks. Install it only in this disposable QA context.

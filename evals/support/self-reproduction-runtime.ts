@@ -30,6 +30,8 @@ export interface CandidateRuntimeReceipt {
     detail: string;
     method: "http" | "browser";
     disposition: "observed" | "infrastructure-unavailable";
+    readable?: boolean;
+    returned?: boolean;
   }[];
 }
 
@@ -156,12 +158,13 @@ let result;
 try {
   await page.goto(baseURL, { waitUntil: "domcontentloaded" });
   const rootURL = page.url();
+  const rootText = (await page.locator("body").innerText()).trim();
   const response = await page.goto(baseURL + "/docs", { waitUntil: "domcontentloaded" });
   const body = (await page.locator("body").innerText()).trim();
   await page.goBack({ waitUntil: "domcontentloaded" });
   const returned = page.url() === rootURL;
-  const readable = (response?.status() ?? 0) < 400 && body.length > 40;
-  result = { id: "documentation", url: baseURL + "/docs", status: response?.status() ?? null, passed: readable && returned, detail: readable && returned ? "Public documentation rendered and browser back-navigation returned to the original page." : "Documentation readable=" + readable + "; return-navigation=" + returned + ".", method: "browser", disposition: "observed" };
+  const readable = (response?.status() ?? 0) >= 200 && (response?.status() ?? 0) < 400 && body.length > 40 && body !== rootText;
+  result = { id: "documentation", url: baseURL + "/docs", status: response?.status() ?? null, passed: readable && returned, readable, returned, detail: readable && returned ? "Public documentation rendered and browser back-navigation returned to the original page." : "Documentation readable=" + readable + "; return-navigation=" + returned + ".", method: "browser", disposition: "observed" };
 } catch (error) {
   result = { id: "documentation", url: baseURL + "/docs", status: null, passed: false, detail: error instanceof Error ? error.message : "Browser probe failed.", method: "browser", disposition: "observed" };
 } finally {
