@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import type { SandboxBackend, SandboxBackendHandle, SandboxSeedFile } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
+import {
+  DEVELOPMENT_SANDBOX_ENVIRONMENT,
+  developmentPinnedToolchainCommand,
+} from "../../lib/sandbox/development-toolchain";
 
 export interface RuntimeCommandReceipt {
   command: string;
@@ -142,11 +146,7 @@ export async function evaluateCandidateRuntime(input: {
         }),
       ),
     );
-    const runtime = await command(
-      handle,
-      "npm install --prefix .self-reproduction-runtime bun@1.3.14",
-      controller.signal,
-    );
+    const runtime = await command(handle, developmentPinnedToolchainCommand(), controller.signal);
     commands.push(runtime);
     if (runtime.exitCode !== 0)
       return {
@@ -157,7 +157,10 @@ export async function evaluateCandidateRuntime(input: {
         commands,
         probes: [],
       };
-    const bun = "PATH=/workspace/.self-reproduction-runtime/node_modules/.bin:$PATH bun";
+    const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
+      .map(([name, value]) => `${name}=${value}`)
+      .join(" ");
+    const bun = `${runtimeEnvironment} bun`;
     const install = await command(handle, `${bun} install --no-save`, controller.signal);
     commands.push(install);
     if (install.exitCode !== 0)
@@ -190,7 +193,7 @@ export async function evaluateCandidateRuntime(input: {
     });
     const probe = await command(
       handle,
-      `node --input-type=module --eval ${JSON.stringify(readinessScript(input.publicBasePath))}`,
+      `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(readinessScript(input.publicBasePath))}`,
       controller.signal,
     );
     commands.push(probe);
@@ -201,7 +204,7 @@ export async function evaluateCandidateRuntime(input: {
     if (root?.passed === true) {
       const browser = await command(
         handle,
-        `node --input-type=module --eval ${JSON.stringify(browserProbeScript(input.publicBasePath))}`,
+        `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(browserProbeScript(input.publicBasePath))}`,
         controller.signal,
       );
       commands.push(browser);
