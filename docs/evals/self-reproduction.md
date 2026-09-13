@@ -28,28 +28,40 @@ SIGINT/SIGTERM and the generation deadline terminate the launcher process group
 and finalize partial reports. A hard kill can leave the initial reports plus the
 incremental transcript for later inspection.
 
-Candidate export is evidence-aware. A passing run retains the reviewed sandbox
-change set. A validation failure retains the applied text source as explicitly
-unreviewed diagnostic evidence, so framework and implementation gaps can still
-be assessed without treating the candidate as successful. Binary artifacts are
-listed as omissions rather than decoded as text.
+Candidate export is evidence-aware. A passing run retains the complete reviewed
+application tree, including scaffold-owned package, Next, Turbo, and hk contracts,
+while excluding dependencies and build output. A validation failure retains the
+applied text source as explicitly unreviewed diagnostic evidence, so framework and
+implementation gaps can still be assessed without treating the candidate as
+successful. Binary artifacts are listed as omissions rather than decoded as text.
 
-For an independently exported candidate and running reference/candidate runtimes:
+To rebuild and start an independently exported candidate in a fresh,
+evaluator-owned Vercel Sandbox, using the same tracked Arrusted workspace and
+project-scoped Development OIDC boundary:
 
 ```sh
 mise run eval:self-reproduction -- --report-only \
   --candidate-root /absolute/path/to/exported-candidate \
-  --reference-url http://localhost:3000 \
-  --candidate-url http://localhost:3001 \
+  --arrusted-root /absolute/path/to/arrusted-development \
+  --candidate-runtime \
   --output-dir /absolute/external/evidence/comparison
 ```
 
-The report retains the audited candidate source files, labels them as an
-operator-supplied export, and optionally reads
-`self-reproduction.workflow-results.json`. Audited files are a source snapshot,
-not a complete runnable export. Credentials, dependencies, and hidden files are
-not copied. Runtime workflow claims still require corresponding evidence;
-static source matches and paired screenshots do not prove those claims.
+The runtime phase uses allow-all networking for toolchain and dependency setup,
+runs the repository-owned application build, starts the production candidate,
+and probes its declared base path and documentation route from inside the
+sandbox. It records bounded command output in `candidate-runtime.json`. Runtime
+startup is a prerequisite, not workflow credit. Deeper workflows remain
+unassessed until trusted browser adapters exercise them.
+
+For already-running reference and candidate URLs, add `--reference-url` and
+`--candidate-url` to retain generic design captures.
+
+The report labels an operator-supplied candidate separately from the live
+generation that produced it. Credentials and dependencies are never copied.
+Runtime workflow claims require evaluator-owned receipts; candidate-authored
+workflow summaries, static source matches, configuration flags, and generic
+screenshots do not prove them.
 
 Paired captures require both URLs and installed Playwright Chromium. The command
 captures the existing comparison viewports and retains partial capture files if
